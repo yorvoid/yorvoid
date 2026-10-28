@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         cacheDirectory="var/cache/phpunit"
+         colors="true"
+         executionOrder="random"
+         failOnDeprecation="true"
+         failOnNotice="true"
+         failOnPhpunitDeprecation="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         beStrictAboutOutputDuringTests="true"
+         beStrictAboutCoverageMetadata="false"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerNotices="true"
+         displayDetailsOnTestsThatTriggerWarnings="true">
+    <php>
+        <ini name="error_reporting" value="-1"/>
+        <ini name="memory_limit" value="256M"/>
+        <ini name="zend.assertions" value="1"/>
+        <ini name="assert.exception" value="1"/>
+    </php>
+
+    <testsuites>
+        <testsuite name="YorvoID">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+
+    <source ignoreSuppressionOfDeprecations="true">
+        <include>
+            <directory>packages/*/src</directory>
+        </include>
+    </source>
+</phpunit>

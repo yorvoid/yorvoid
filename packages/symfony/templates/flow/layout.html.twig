@@ -1,0 +1,33 @@
+{# The page every flow step is shown in. Override it, or a block of it, to give the pages your look:
+   templates/bundles/YorvoIDBundle/flow/layout.html.twig. Change the wording through translations. #}
+<!DOCTYPE html>
+<html lang="{{ locale }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{% endblock %}</title>
+    {% block head %}{% endblock %}
+</head>
+<body data-yorvoid-flow="{{ flow }}">
+<main>
+    {% block main %}
+        <h1>{{ block('title') }}</h1>
+        {% block problems %}
+            {% if problems is not empty %}
+                <div role="alert" tabindex="-1" data-yorvoid-problems>
+                    <ul>
+                        {% for problem in problems %}
+                            <li>{% if problem.field %}<a href="#yorvoid-{{ problem.field }}">{{ problem.message }}</a>{% else %}{{ problem.message }}{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        {% endblock %}
+        {% block content %}{% endblock %}
+    {% endblock %}
+</main>
+{% block scripts %}
+    <script type="module" src="{{ script }}"></script>
+{% endblock %}
+</body>
+</html>

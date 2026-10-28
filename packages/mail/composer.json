@@ -1,0 +1,35 @@
+{
+    "name": "yorvoid/mail",
+    "type": "library",
+    "description": "YorvoID's emails: built from structured content, rendered as plain text and accessible HTML without a template engine, delivered through an interface.",
+    "keywords": [
+        "email",
+        "mail",
+        "notifications",
+        "accessibility"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "ext-mbstring": "*",
+        "yorvoid/core": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Mail\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}

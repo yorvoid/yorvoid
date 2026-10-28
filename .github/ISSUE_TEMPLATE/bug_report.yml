@@ -1,0 +1,52 @@
+name: Bug report
+description: Something doesn't work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please search the [existing issues](https://github.com/yorvoid/yorvoid/issues) first.
+        **Security issues don't belong here:** a bug that lets someone sign in, gain authority, or read what they shouldn't is a security issue. Report it privately, as described in the [security policy](https://github.com/yorvoid/yorvoid/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest way to see the problem, ideally a failing test or a small script.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: YorvoID version
+      description: The version of the package concerned (`composer show 'yorvoid/yorvoid-*'`), or the commit if you run from `main`.
+    validations:
+      required: true
+  - type: dropdown
+    id: setup
+    attributes:
+      label: Where do you use YorvoID?
+      options:
+        - In a Symfony application
+        - In a Laravel application
+        - In another framework, or none
+        - Inside a library embedded in an application (e.g. Quire)
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: PHP and database versions
+      placeholder: PHP 8.5.12, PostgreSQL 18.1
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or logs
+      description: The full error. Remove secrets, tokens, keys, passwords and personal data.
+      render: text

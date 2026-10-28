@@ -1,0 +1,38 @@
+{
+    "name": "yorvoid/throttle",
+    "type": "library",
+    "description": "YorvoID's throttle: at most so many attempts per period, per key, shared by every server through the database, atomic under concurrent requests.",
+    "keywords": [
+        "throttling",
+        "rate-limiting",
+        "gcra",
+        "brute-force",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "doctrine/dbal": "^4.3",
+        "psr/clock": "^1.0",
+        "symfony/clock": "^8.1",
+        "yorvoid/core": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Throttle\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}

@@ -1,0 +1,404 @@
+[
+    {
+        "template": "passkey",
+        "state": "default",
+        "flow": "yorvoid.sign_in",
+        "view": {
+            "options": {
+                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
+                "rpId": "example.com",
+                "allowCredentials": [],
+                "userVerification": "required",
+                "timeout": 300000
+            }
+        },
+        "problems": []
+    },
+    {
+        "template": "passkey",
+        "state": "problems",
+        "flow": "yorvoid.sign_in",
+        "view": {
+            "options": {
+                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
+                "rpId": "example.com",
+                "allowCredentials": [],
+                "userVerification": "required",
+                "timeout": 300000
+            }
+        },
+        "problems": [
+            {
+                "message": "yorvoid.passkey.not_working",
+                "parameters": [],
+                "field": null,
+                "reason": null
+            }
+        ]
+    },
+    {
+        "template": "setup_code",
+        "state": "default",
+        "flow": "yorvoid.setup",
+        "view": [],
+        "problems": []
+    },
+    {
+        "template": "setup_code",
+        "state": "problems",
+        "flow": "yorvoid.setup",
+        "view": [],
+        "problems": [
+            {
+                "message": "yorvoid.flow.setup_code.invalid",
+                "parameters": [],
+                "field": "code",
+                "reason": null
+            },
+            {
+                "message": "yorvoid.flow.email.invalid",
+                "parameters": [],
+                "field": "email",
+                "reason": null
+            }
+        ]
+    },
+    {
+        "template": "passkey_registration",
+        "state": "default",
+        "flow": "yorvoid.setup",
+        "view": {
+            "options": {
+                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
+                "rp": {
+                    "id": "example.com",
+                    "name": "example.com"
+                },
+                "user": {
+                    "id": "c2FtcGxl",
+                    "name": "ana@example.com",
+                    "displayName": "ana@example.com"
+                },
+                "pubKeyCredParams": [
+                    {
+                        "type": "public-key",
+                        "alg": -7
+                    }
+                ],
+                "excludeCredentials": [],
+                "timeout": 300000
+            },
+            "can_skip": false
+        },
+        "problems": []
+    },
+    {
+        "template": "passkey_registration",
+        "state": "can_skip",
+        "flow": "yorvoid.recover_with_code",
+        "view": {
+            "options": {
+                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
+                "rp": {
+                    "id": "example.com",
+                    "name": "example.com"
+                },
+                "user": {
+                    "id": "c2FtcGxl",
+                    "name": "ana@example.com",
+                    "displayName": "ana@example.com"
+                },
+                "pubKeyCredParams": [
+                    {
+                        "type": "public-key",
+                        "alg": -7
+                    }
+                ],
+                "excludeCredentials": [],
+                "timeout": 300000
+            },
+            "can_skip": true
+        },
+        "problems": []
+    },
+    {
+        "template": "passkey_registration",
+        "state": "problems",
+        "flow": "yorvoid.setup",
+        "view": {
+            "options": {
+                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
+                "rp": {
+                    "id": "example.com",
+                    "name": "example.com"
+                },
+                "user": {
+                    "id": "c2FtcGxl",
+                    "name": "ana@example.com",
+                    "displayName": "ana@example.com"
+                },
+                "pubKeyCredParams": [
+                    {
+                        "type": "public-key",
+                        "alg": -7
+                    }
+                ],
+                "excludeCredentials": [],
+                "timeout": 300000
+            },
+            "can_skip": false
+        },
+        "problems": [
+            {
+                "message": "yorvoid.passkey.already_registered",
+                "parameters": [],
+                "field": null,
+                "reason": null
+            }
+        ]
+    },
+    {
+        "template": "passkey_registration",
+        "state": "signed_out",
+        "flow": "yorvoid.add_passkey",
+        "view": {
+            "options": null,
+            "can_skip": false
+        },
+        "problems": []
+    },
+    {
+        "template": "recovery_codes",
+        "state": "default",
+        "flow": "yorvoid.setup",
+        "view": {
+            "codes": [
+                "7KQ2M-9XHAB-C3DEF-G4HJK-MNPQ5",
+                "RS6TV-W7XYZ-AB8CD-EF9GH-JK0MN",
+                "PQ1RS-TV2WX-YZ3AB-CD4EF-GH5JK",
+                "MN6PQ-RS7TV-WX8YZ-AB9CD-EF0GH",
+                "JK1MN-PQ2RS-TV3WX-YZ4AB-CD5EF",
+                "GH6JK-MN7PQ-RS8TV-WX9YZ-AB0CD",
+                "EF1GH-JK2MN-PQ3RS-TV4WX-YZ5AB",
+                "CD6EF-GH7JK-MN8PQ-RS9TV-WX0YZ",
+                "AB1CD-EF2GH-JK3MN-PQ4RS-TV5WX",
+                "YZ6AB-CD7EF-GH8JK-MN9PQ-RS0TV"
+            ]
+        },
+        "problems": []
+    },
+    {
+        "template": "recovery_codes",
+        "state": "problems",
+        "flow": "yorvoid.setup",
+        "view": {
+            "codes": [
+                "7KQ2M-9XHAB-C3DEF-G4HJK-MNPQ5",
+                "RS6TV-W7XYZ-AB8CD-EF9GH-JK0MN",
+                "PQ1RS-TV2WX-YZ3AB-CD4EF-GH5JK",
+                "MN6PQ-RS7TV-WX8YZ-AB9CD-EF0GH",
+                "JK1MN-PQ2RS-TV3WX-YZ4AB-CD5EF",
+                "GH6JK-MN7PQ-RS8TV-WX9YZ-AB0CD",
+                "EF1GH-JK2MN-PQ3RS-TV4WX-YZ5AB",
+                "CD6EF-GH7JK-MN8PQ-RS9TV-WX0YZ",
+                "AB1CD-EF2GH-JK3MN-PQ4RS-TV5WX",
+                "YZ6AB-CD7EF-GH8JK-MN9PQ-RS0TV"
+            ]
+        },
+        "problems": [
+            {
+                "message": "yorvoid.flow.recovery_codes.not_saved",
+                "parameters": [],
+                "field": "saved",
+                "reason": null
+            }
+        ]
+    },
+    {
+        "template": "invitation",
+        "state": "default",
+        "flow": "yorvoid.invitation",
+        "view": {
+            "email": "ana@example.com"
+        },
+        "problems": []
+    },
+    {
+        "template": "invitation",
+        "state": "not_working",
+        "flow": "yorvoid.invitation",
+        "view": {
+            "email": null
+        },
+        "problems": []
+    },
+    {
+        "template": "recovery_code",
+        "state": "default",
+        "flow": "yorvoid.recover_with_code",
+        "view": [],
+        "problems": []
+    },
+    {
+        "template": "recovery_code",
+        "state": "problems",
+        "flow": "yorvoid.recover_with_code",
+        "view": [],
+        "problems": [
+            {
+                "message": "yorvoid.flow.recovery_code.invalid",
+                "parameters": [],
+                "field": "code",
+                "reason": null
+            }
+        ]
+    },
+    {
+        "template": "recovery_code",
+        "state": "too_many_attempts",
+        "flow": "yorvoid.recover_with_code",
+        "view": [],
+        "problems": [
+            {
+                "message": "yorvoid.flow.too_many_attempts",
+                "parameters": {
+                    "minutes": 15
+                },
+                "field": null,
+                "reason": null
+            }
+        ]
+    },
+    {
+        "template": "recovery_link",
+        "state": "default",
+        "flow": "yorvoid.recover_with_link",
+        "view": [],
+        "problems": []
+    },
+    {
+        "template": "step_up",
+        "state": "default",
+        "flow": "yorvoid.step_up",
+        "view": {
+            "options": {
+                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
+                "rpId": "example.com",
+                "allowCredentials": [],
+                "userVerification": "required",
+                "timeout": 300000
+            },
+            "operation": "acme.site.remove"
+        },
+        "problems": []
+    },
+    {
+        "template": "step_up",
+        "state": "problems",
+        "flow": "yorvoid.step_up",
+        "view": {
+            "options": {
+                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
+                "rpId": "example.com",
+                "allowCredentials": [],
+                "userVerification": "required",
+                "timeout": 300000
+            },
+            "operation": "acme.site.remove"
+        },
+        "problems": [
+            {
+                "message": "yorvoid.passkey.not_verified",
+                "parameters": [],
+                "field": null,
+                "reason": null
+            }
+        ]
+    },
+    {
+        "template": "step_up",
+        "state": "signed_out",
+        "flow": "yorvoid.step_up",
+        "view": {
+            "options": null,
+            "operation": "acme.site.remove"
+        },
+        "problems": []
+    },
+    {
+        "template": "confirm",
+        "state": "default",
+        "flow": "yorvoid.sign_intent",
+        "view": {
+            "summary": "Remove the site jane.example",
+            "parameters": {
+                "site": "jane.example",
+                "keep backups": "no"
+            },
+            "options": {
+                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
+                "rpId": "example.com",
+                "allowCredentials": [],
+                "userVerification": "required",
+                "timeout": 300000
+            },
+            "expires_at": "2026-10-28T18:05:00+00:00"
+        },
+        "problems": []
+    },
+    {
+        "template": "confirm",
+        "state": "problems",
+        "flow": "yorvoid.sign_intent",
+        "view": {
+            "summary": "Remove the site jane.example",
+            "parameters": {
+                "site": "jane.example"
+            },
+            "options": {
+                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
+                "rpId": "example.com",
+                "allowCredentials": [],
+                "userVerification": "required",
+                "timeout": 300000
+            },
+            "expires_at": "2026-10-28T18:05:00+00:00"
+        },
+        "problems": [
+            {
+                "message": "yorvoid.passkey.not_working",
+                "parameters": [],
+                "field": null,
+                "reason": null
+            }
+        ]
+    },
+    {
+        "template": "failed",
+        "state": "default",
+        "flow": "yorvoid.invitation",
+        "view": null,
+        "problems": [
+            {
+                "message": "yorvoid.flow.invitation.not_working",
+                "parameters": [],
+                "field": null,
+                "reason": null
+            }
+        ]
+    },
+    {
+        "template": "expired",
+        "state": "default",
+        "flow": "yorvoid.sign_in",
+        "view": null,
+        "problems": [
+            {
+                "message": "yorvoid.flow.expired",
+                "parameters": [],
+                "field": null,
+                "reason": null
+            }
+        ]
+    }
+]

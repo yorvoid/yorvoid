@@ -1,0 +1,24 @@
+{# Form fields with their labels and problems. #}
+{% macro input(name, label, type, autocomplete, field_problems, attributes = {}, hint = null) %}
+    {% set described = [hint ? 'yorvoid-' ~ name ~ '-hint', field_problems[name] is defined ? 'yorvoid-' ~ name ~ '-problem']|filter(id => id) %}
+    <p>
+        <label for="yorvoid-{{ name }}">{{ label }}</label>
+        {% if hint %}<span id="yorvoid-{{ name }}-hint">{{ hint }}</span>{% endif %}
+        {% if field_problems[name] is defined %}<strong id="yorvoid-{{ name }}-problem">{{ field_problems[name] }}</strong>{% endif %}
+        <input id="yorvoid-{{ name }}" name="{{ name }}" type="{{ type }}" autocomplete="{{ autocomplete }}"
+            {%- if described is not empty %} aria-describedby="{{ described|join(' ') }}"{% endif %}
+            {%- if field_problems[name] is defined %} aria-invalid="true"{% endif %}
+            {%- for attribute, value in attributes %} {{ attribute }}="{{ value }}"{% endfor %}>
+    </p>
+{% endmacro %}
+
+{# A passkey ceremony: the browser client runs it when the form is sent, and sends its answer. #}
+{% macro ceremony(kind, options, client_messages, conditional = false) %}
+    data-yorvoid-ceremony="{{ kind }}" data-yorvoid-options="{{ options }}" data-yorvoid-messages="{{ client_messages|json_encode }}"{% if conditional %} data-yorvoid-conditional{% endif %}
+{% endmacro %}
+
+{% macro ceremony_fields() %}
+    <input type="hidden" name="response">
+    <p role="alert" data-yorvoid-error hidden></p>
+    <noscript><p>{{ 'yorvoid.ui.needs_javascript'|yorvoid_trans }}</p></noscript>
+{% endmacro %}

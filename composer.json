@@ -1,0 +1,108 @@
+{
+    "name": "yorvoid/yorvoid",
+    "type": "project",
+    "description": "YorvoID development monorepo: every package, their tests, and the tools that check them.",
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "path",
+            "url": "packages/*",
+            "options": {
+                "versions": {
+                    "yorvoid/authn": "0.1.x-dev",
+                    "yorvoid/core": "0.1.x-dev",
+                    "yorvoid/flows": "0.1.x-dev",
+                    "yorvoid/intent-verifier": "0.1.x-dev",
+                    "yorvoid/mail": "0.1.x-dev",
+                    "yorvoid/passkeys": "0.1.x-dev",
+                    "yorvoid/symfony": "0.1.x-dev",
+                    "yorvoid/throttle": "0.1.x-dev",
+                    "yorvoid/translation": "0.1.x-dev"
+                }
+            }
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "yorvoid/authn": "^0.1",
+        "yorvoid/core": "^0.1",
+        "yorvoid/flows": "^0.1",
+        "yorvoid/intent-verifier": "^0.1",
+        "yorvoid/mail": "^0.1",
+        "yorvoid/passkeys": "^0.1",
+        "yorvoid/symfony": "^0.1",
+        "yorvoid/throttle": "^0.1",
+        "yorvoid/translation": "^0.1"
+    },
+    "require-dev": {
+        "deptrac/deptrac": "^4.7",
+        "doctrine/doctrine-bundle": "^3.3",
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "infection/infection": "^0.35.8",
+        "innmind/black-box": "^7.0",
+        "nikic/php-fuzzer": "^0.0.11",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.3",
+        "phpstan/phpstan-phpunit": "^2.1",
+        "phpstan/phpstan-strict-rules": "^2.1",
+        "phpunit/phpunit": "^13.4",
+        "spaze/phpstan-disallowed-calls": "^4.15",
+        "symfony/browser-kit": "^8.1",
+        "symfony/css-selector": "^8.1",
+        "symfony/framework-bundle": "^8.1",
+        "symfony/mailer": "^8.1",
+        "symfony/security-bundle": "^8.1",
+        "symfony/translation": "^8.1",
+        "symfony/twig-bundle": "^8.1",
+        "symfony/yaml": "^8.1"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "YorvoID\\E2e\\": "e2e/app/src/",
+            "YorvoID\\Tests\\": "tests/",
+            "YorvoID\\Tools\\PHPStan\\": "tools/phpstan/src/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "infection/extension-installer": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "scripts": {
+        "cs": "php-cs-fixer fix --dry-run --diff",
+        "cs-fix": "php-cs-fixer fix",
+        "phpstan": "phpstan analyse --memory-limit=1G",
+        "deptrac": "deptrac analyse --no-progress",
+        "test": "phpunit",
+        "infection": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php -d memory_limit=1G vendor/bin/infection --threads=max --show-mutations"
+        ],
+        "qa": [
+            "@composer validate --strict --no-check-publish",
+            "@cs",
+            "@phpstan",
+            "@deptrac",
+            "@test"
+        ],
+        "fuzz": [
+            "Composer\\Config::disableProcessTimeout",
+            "sh fuzz/run.sh"
+        ]
+    },
+    "scripts-descriptions": {
+        "cs": "Checks the coding style",
+        "cs-fix": "Fixes the coding style",
+        "phpstan": "Static analysis at the maximum level",
+        "deptrac": "Checks the dependency rules between packages",
+        "test": "Runs the tests",
+        "infection": "Mutation testing",
+        "qa": "Everything CI checks, in order",
+        "fuzz": "Fuzzes the parsers; any crash fails"
+    }
+}

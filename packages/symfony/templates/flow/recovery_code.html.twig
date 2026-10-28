@@ -1,0 +1,14 @@
+{# Recovering with a recovery code. View: RecoveryCodeView. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+{% import '@YorvoID/flow/fields.html.twig' as fields %}
+
+{% block title %}{{ 'yorvoid.ui.recovery_code.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    <p>{{ 'yorvoid.ui.recovery_code.intro'|yorvoid_trans }}</p>
+    <form method="post" action="{{ action }}">
+        {{ fields.input('email', 'yorvoid.ui.recovery_code.email'|yorvoid_trans, 'email', 'username', field_problems, {required: 'required'}) }}
+        {{ fields.input('code', 'yorvoid.ui.recovery_code.code'|yorvoid_trans, 'text', 'off', field_problems, {autocapitalize: 'characters', spellcheck: 'false', required: 'required'}) }}
+        <p><button type="submit">{{ 'yorvoid.ui.recovery_code.submit'|yorvoid_trans }}</button></p>
+    </form>
+{% endblock %}

@@ -1,0 +1,11 @@
+[
+    {"path": "packages/authn", "repository": "yorvoid/authn"},
+    {"path": "packages/core", "repository": "yorvoid/core"},
+    {"path": "packages/flows", "repository": "yorvoid/flows"},
+    {"path": "packages/intent-verifier", "repository": "yorvoid/intent-verifier"},
+    {"path": "packages/mail", "repository": "yorvoid/mail"},
+    {"path": "packages/passkeys", "repository": "yorvoid/passkeys"},
+    {"path": "packages/symfony", "repository": "yorvoid/symfony"},
+    {"path": "packages/throttle", "repository": "yorvoid/throttle"},
+    {"path": "packages/translation", "repository": "yorvoid/translation"}
+]

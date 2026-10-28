@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest something YorvoID should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        YorvoID has extension points (flows, credential types, fact sources, rules, templates), so many needs can be met without changing it; see the [documentation](https://github.com/yorvoid/yorvoid/tree/main/docs). Requests that need changes to YorvoID itself are welcome here.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would it solve?
+      description: Describe what you're trying to do and what stands in the way, rather than a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: E.g. an extension point, or a workaround you use today.

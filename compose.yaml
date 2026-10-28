@@ -1,0 +1,90 @@
+# Development and CI: `docker compose up -d --wait`, then `docker compose exec php composer qa`.
+services:
+  php:
+    # Named, so that images built by `docker buildx bake` (CI) are the ones `docker compose up` runs.
+    image: ${IMAGES_PREFIX:-}yorvoid-php-dev
+    build: .
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - .:/app
+    command: ["sleep", "infinity"]
+    init: true
+    environment:
+      YORVOID_TEST_POSTGRES_URL: "pdo-pgsql://yorvoid:yorvoid@postgres:5432/yorvoid"
+      # Here, PostgreSQL tests must run: a missing database fails them instead of skipping them.
+      YORVOID_TEST_REQUIRE_DATABASES: "postgresql"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-18}-alpine
+    environment:
+      POSTGRES_DB: yorvoid
+      POSTGRES_USER: yorvoid
+      POSTGRES_PASSWORD: yorvoid
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "yorvoid", "-U", "yorvoid"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql
+
+  # The browser client's toolchain: `docker compose run --rm node npm run qa`.
+  node:
+    image: ${IMAGES_PREFIX:-}yorvoid-node
+    build: packages/browser
+    profiles: [node]
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app/packages/browser
+    volumes:
+      - .:/app
+    environment:
+      HOME: /tmp
+
+  # The browser tests: `docker compose --profile e2e up -d --wait e2e-app`, then
+  # `docker compose run --rm e2e npx playwright test`.
+  e2e-app:
+    image: ${IMAGES_PREFIX:-}yorvoid-php-dev
+    profiles: [e2e]
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      PHP_CLI_SERVER_WORKERS: "4"
+    # A fresh container each start: the app isn't in debug mode, so it wouldn't see YorvoID's code change.
+    command: ["sh", "-c", "rm -rf var/e2e/cache && mkdir -p var/e2e/sessions && exec php -S 0.0.0.0:8000 e2e/app/router.php"]
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://localhost:8000/') === false ? 1 : 0);"]
+      interval: 2s
+      timeout: 10s
+      retries: 30
+
+  # In the app's network, so the browser reaches it at http://localhost:8000: a secure context, as
+  # passkeys need, without TLS.
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.64.1-noble
+    profiles: [e2e]
+    network_mode: service:e2e-app
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - .:/app
+    working_dir: /app/e2e
+    environment:
+      HOME: /tmp
+    depends_on:
+      e2e-app:
+        condition: service_healthy
+
+  # The formal models' checkers: `docker compose run --rm spec ./check.sh`.
+  spec:
+    image: ${IMAGES_PREFIX:-}yorvoid-spec
+    build: spec
+    profiles: [spec]
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./spec:/spec
+    environment:
+      HOME: /tmp

@@ -1,0 +1,46 @@
+{
+    "name": "yorvoid/passkeys",
+    "type": "library",
+    "description": "YorvoID's passkeys: WebAuthn registration and sign-in, user-verification policy, and passkey management.",
+    "keywords": [
+        "iam",
+        "authentication",
+        "passkeys",
+        "webauthn",
+        "fido2",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "doctrine/dbal": "^4.3",
+        "psr/clock": "^1.0",
+        "psr/event-dispatcher": "^1.0",
+        "symfony/clock": "^8.1",
+        "symfony/translation-contracts": "^3.6",
+        "web-auth/webauthn-lib": "^5.3.9",
+        "yorvoid/authn": "^0.1",
+        "yorvoid/core": "^0.1",
+        "yorvoid/flows": "^0.1",
+        "yorvoid/intent-verifier": "^0.1",
+        "yorvoid/throttle": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Passkeys\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}

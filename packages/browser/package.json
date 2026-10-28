@@ -1,0 +1,54 @@
+{
+  "name": "@yorvoid/browser",
+  "version": "0.0.0",
+  "description": "YorvoID's browser client: passkey sign-in with autofill, adding passkeys, step-up, signing intents, the WebAuthn signal API, and errors as codes to translate. No dependencies.",
+  "keywords": [
+    "passkeys",
+    "webauthn",
+    "authentication",
+    "iam",
+    "security"
+  ],
+  "homepage": "https://github.com/yorvoid/yorvoid",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yorvoid/yorvoid.git",
+    "directory": "packages/browser"
+  },
+  "license": "Apache-2.0",
+  "author": "Darko Poposki <poposki.darko@gmail.com>",
+  "type": "module",
+  "sideEffects": [
+    "./dist/forms.js"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./forms": {
+      "types": "./dist/forms.d.ts",
+      "default": "./dist/forms.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --test-reporter=dot \"tests/**/*.test.ts\"",
+    "coverage": "node --test --test-reporter=dot --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"tests/**/*.test.ts\"",
+    "mutation": "stryker run",
+    "qa": "npm run typecheck && npm run coverage && npm run build",
+    "assets": "npm run build && rm -rf ../symfony/public/browser && mkdir -p ../symfony/public/browser && cp dist/*.js ../symfony/public/browser/"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "10.1.1",
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}

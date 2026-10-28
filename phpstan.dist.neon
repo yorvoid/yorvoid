@@ -1,0 +1,61 @@
+parameters:
+    level: max
+    paths:
+        - packages/
+        - tests/
+        - tools/
+        - e2e/app/
+    excludePaths:
+        - packages/*/vendor/*
+        - packages/*/node_modules/*
+        # Code that breaks the rules on purpose, to test them.
+        - tests/Tools/PHPStan/data/*
+    tmpDir: var/cache/phpstan
+
+    # Secrets come only from a cryptographically secure generator (PLT-053). These functions are
+    # predictable, so YorvoID's code never calls them, not even for things that look harmless.
+    disallowedFunctionCalls:
+        -
+            function:
+                - 'rand()'
+                - 'mt_rand()'
+                - 'mt_srand()'
+                - 'srand()'
+                - 'lcg_value()'
+                - 'uniqid()'
+                - 'array_rand()'
+                - 'shuffle()'
+                - 'str_shuffle()'
+            message: 'is predictable; use random_bytes() or random_int() (PLT-053)'
+        -
+            function:
+                - 'md5()'
+                - 'sha1()'
+                - 'crc32()'
+            message: 'is not a secure hash; use hash() with SHA-256 or stronger, or hash_hmac() (D-13)'
+        -
+            function:
+                - 'var_dump()'
+                - 'print_r()'
+                - 'error_log()'
+            message: 'can leak secrets into output or logs; use a PSR-3 logger and never log secrets (AUD-004)'
+            # Tests use them to check that secrets stay hidden.
+            allowIn:
+                - tests/*
+        -
+            function:
+                - 'strcmp()'
+                - 'strcasecmp()'
+                - 'strncmp()'
+                - 'strncasecmp()'
+            message: 'compares in variable time; use hash_equals() for anything secret, or === otherwise (PLT-053)'
+
+    ignoreErrors:
+        -
+            # BlackBox's Set::either() declares a type parameter per possible argument, which PHPStan
+            # can't resolve when fewer are passed; a limitation of its annotations, not of our tests.
+            identifier: argument.templateType
+            path: tests/Properties/*
+
+rules:
+    - YorvoID\Tools\PHPStan\SecretComparisonRule

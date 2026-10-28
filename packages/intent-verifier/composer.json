@@ -1,0 +1,40 @@
+{
+    "name": "yorvoid/intent-verifier",
+    "type": "library",
+    "description": "YorvoID's intent verifier: runs a privileged operation only after a passkey signed exactly that operation, checked against keys the verifier holds itself. Stands alone: no framework, no database layer.",
+    "keywords": [
+        "passkeys",
+        "webauthn",
+        "signed-intents",
+        "transaction-signing",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "ext-mbstring": "*",
+        "psr/clock": "^1.0",
+        "spomky-labs/cbor-php": "^3.4",
+        "symfony/serializer": "^8.1",
+        "symfony/uid": "^8.1",
+        "web-auth/webauthn-lib": "^5.3.9"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\IntentVerifier\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}

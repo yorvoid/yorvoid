@@ -1,0 +1,10 @@
+It's you? Bad byte: ?( end.
+
+When: 28 Oct 2026, 18:00 UTC
+Device: Firefox
+
+This wasn't me:
+https://example.com/not-me?token=a&b=c
+
+-- 
+Small print.

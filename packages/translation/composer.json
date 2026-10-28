@@ -1,0 +1,36 @@
+{
+    "name": "yorvoid/translation",
+    "type": "library",
+    "description": "YorvoID's translator: ICU messages from catalogues that packages ship, behind Symfony's translation contracts.",
+    "keywords": [
+        "translation",
+        "i18n",
+        "icu",
+        "messageformat"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "ext-intl": "*",
+        "symfony/translation-contracts": "^3.6",
+        "yorvoid/core": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Translation\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}

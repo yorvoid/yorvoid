@@ -1,0 +1,15 @@
+{# Accepting an invitation. View: InvitationView. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+
+{% block title %}{{ 'yorvoid.ui.invitation.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    {% if view.email is null %}
+        <p>{{ 'yorvoid.flow.invitation.not_working'|yorvoid_trans }}</p>
+    {% else %}
+        <p>{{ 'yorvoid.ui.invitation.intro'|yorvoid_trans({email: view.email}) }}</p>
+        <form method="post" action="{{ action }}">
+            <p><button type="submit">{{ 'yorvoid.ui.invitation.submit'|yorvoid_trans }}</button></p>
+        </form>
+    {% endif %}
+{% endblock %}

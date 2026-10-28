@@ -1,0 +1,63 @@
+{
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    "source": {
+        "directories": ["packages"],
+        "excludes": ["vendor", "node_modules"]
+    },
+    "timeout": 30,
+    "logs": {
+        "text": "var/infection/infection.log",
+        "summary": "var/infection/summary.log"
+    },
+    "tmpDir": "var/cache/infection",
+    // Collecting coverage of the whole suite needs more than PHP's default 128 MB.
+    "initialTestsPhpOptions": "-d memory_limit=1G",
+    "mutators": {
+        "@default": true,
+        // assert() only tells static analysis what a value's type is; mutating it tests nothing.
+        "global-ignoreSourceCodeByRegex": [
+            "\\\\assert\\(.*"
+        ],
+        "UnwrapFinally": {
+            "ignore": [
+                // Equivalent: PHP closes the file, and so releases its lock, as soon as an exception
+                // leaves the function, finally or not.
+                "YorvoID\\IntentVerifier\\Storage\\LockedFile::run"
+            ]
+        },
+        "FunctionCallRemoval": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: the pause between attempts to take the migrations' lock only saves CPU.
+                ".*usleep\\(100_000\\).*"
+            ]
+        },
+        "DecrementInteger": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: the same pause; and a different default wait can't be observed without
+                // waiting that long.
+                ".*usleep\\(100_000\\).*",
+                ".*Duration::minutes\\(1\\);.*"
+            ]
+        },
+        "LessThan": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: two readings of a microsecond clock are never exactly equal in practice.
+                ".*microtime\\(true\\) < \\$deadline.*"
+            ]
+        },
+        "IncrementInteger": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: asset names have at most one dot, and only the start of the name is
+                // compared, so a higher limit can't change the result.
+                ".*explode\\('\\.', \\$assetName, 2\\).*",
+                // Equivalent: see DecrementInteger.
+                ".*usleep\\(100_000\\).*",
+                ".*Duration::minutes\\(1\\);.*"
+            ]
+        }
+    },
+    // Security-critical code needs ≥ 95 % of covered mutants killed, the rest ≥ 80 % (08 §4).
+    // These global floors rise as the security-critical packages arrive.
+    "minCoveredMsi": 95,
+    "minMsi": 90
+}

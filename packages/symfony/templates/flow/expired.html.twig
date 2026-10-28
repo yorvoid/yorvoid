@@ -1,0 +1,10 @@
+{# A flow that took too long, finished already, or never began here. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+
+{% block title %}{{ 'yorvoid.ui.expired.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    {% if start %}<p><a href="{{ start }}">{{ 'yorvoid.ui.start_again'|yorvoid_trans }}</a></p>{% endif %}
+{% endblock %}
+
+{% block scripts %}{% endblock %}

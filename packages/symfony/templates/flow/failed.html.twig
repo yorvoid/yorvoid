@@ -1,0 +1,10 @@
+{# A flow that couldn't go on, e.g. an invitation that doesn't work any more. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+
+{% block title %}{{ 'yorvoid.ui.failed.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    {% if start %}<p><a href="{{ start }}">{{ 'yorvoid.ui.start_again'|yorvoid_trans }}</a></p>{% endif %}
+{% endblock %}
+
+{% block scripts %}{% endblock %}

@@ -1,0 +1,22 @@
+# EditorConfig helps developers define and maintain consistent
+# coding styles between different editors and IDEs
+# editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+end_of_line = lf
+indent_style = space
+indent_size = 4
+
+[**/{Dockerfile,*.sh}]
+indent_style = tab
+
+[{compose*.yaml,deptrac.yaml,.github/**/*.{yaml,yml}}]
+indent_size = 2
+
+[**.md]
+indent_size = unset
+indent_style = unset

@@ -1,0 +1,7 @@
+var/
+vendor/
+.php-cs-fixer.cache
+/compose.override.yaml
+.deptrac.cache
+/spec/_apalache-out/
+/crash-*.txt

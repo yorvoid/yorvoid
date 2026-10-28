@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "mutate_comment": "Mutation testing, like Infection for the PHP packages: every mutant should be killed.",
+  "mutate": ["src/**/*.ts", "!src/index.ts"],
+  "testRunner": "command",
+  "commandRunner": { "command": "node --test --test-reporter=dot \"tests/**/*.test.ts\"" },
+  "coverageAnalysis": "off",
+  "tsconfigFile_comment": "Node runs the tests on the sources as they are, so Stryker has no tsconfig to rewrite; and TypeScript 7 has no JavaScript API for it to read one with.",
+  "tsconfigFile": "none",
+  "concurrency": 4,
+  "timeoutMS": 10000,
+  "thresholds": { "high": 100, "low": 95, "break": 95 },
+  "reporters": ["clear-text", "progress"],
+  "clearTextReporter": { "allowColor": false, "logTests": false },
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": "always"
+}

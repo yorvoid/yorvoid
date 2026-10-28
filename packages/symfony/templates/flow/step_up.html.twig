@@ -1,0 +1,17 @@
+{# Confirming it's the person, with a passkey. View: StepUpView. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+{% import '@YorvoID/flow/fields.html.twig' as fields %}
+
+{% block title %}{{ 'yorvoid.ui.step_up.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    {% if view.options is null %}
+        <p>{{ 'yorvoid.ui.signed_out'|yorvoid_trans }}</p>
+    {% else %}
+        <p>{{ 'yorvoid.ui.step_up.intro'|yorvoid_trans }}</p>
+        <form method="post" action="{{ action }}" {{ fields.ceremony('get', view.options, client_messages) }}>
+            {{ fields.ceremony_fields() }}
+            <p><button type="submit">{{ 'yorvoid.ui.step_up.submit'|yorvoid_trans }}</button></p>
+        </form>
+    {% endif %}
+{% endblock %}

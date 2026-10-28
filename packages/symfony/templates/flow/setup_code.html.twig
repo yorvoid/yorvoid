@@ -1,0 +1,14 @@
+{# Claiming a fresh installation. View: SetupCodeView. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+{% import '@YorvoID/flow/fields.html.twig' as fields %}
+
+{% block title %}{{ 'yorvoid.ui.setup_code.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    <p>{{ 'yorvoid.ui.setup_code.intro'|yorvoid_trans }}</p>
+    <form method="post" action="{{ action }}">
+        {{ fields.input('code', 'yorvoid.ui.setup_code.code'|yorvoid_trans, 'text', 'one-time-code', field_problems, {autocapitalize: 'characters', spellcheck: 'false', required: 'required'}) }}
+        {{ fields.input('email', 'yorvoid.ui.setup_code.email'|yorvoid_trans, 'email', 'email', field_problems, {required: 'required'}) }}
+        <p><button type="submit">{{ 'yorvoid.ui.setup_code.submit'|yorvoid_trans }}</button></p>
+    </form>
+{% endblock %}

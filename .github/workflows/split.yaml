@@ -1,0 +1,63 @@
+---
+name: Split
+
+# Copies each package (see .github/split.json) to its own read-only repository, which Packagist
+# installs it from: main to their main, and each version tag to every repository (all packages are
+# released together, with the same version).
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+# One at a time, in order, so that a repository never goes back to an older commit.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  split:
+    name: Split packages
+    if: github.repository == 'yorvoid/yorvoid'
+    # Holds the GitHub App's credentials, which only main and version tags can use. A job's "if" can't
+    # see the environment's variables, so their absence fails the job below rather than skipping it.
+    environment: split
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the split app is configured
+        env:
+          CLIENT_ID: ${{ vars.SPLIT_APP_CLIENT_ID }}
+          PRIVATE_KEY_SET: ${{ secrets.SPLIT_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ "$PRIVATE_KEY_SET" != true ]; then
+            echo "::error::The split app isn't configured: set the variable SPLIT_APP_CLIENT_ID and the secret SPLIT_APP_PRIVATE_KEY, in the repository or in its \"split\" environment."
+            exit 1
+          fi
+      - name: List the repositories
+        id: repositories
+        run: echo "names=$(jq -r 'map(.repository | split("/")[1]) | join(",")' .github/split.json)" >> "$GITHUB_OUTPUT"
+      # A GitHub App of the organisation, installed on those repositories, with permission to write
+      # their contents and workflows. Its token lasts an hour and can't write anywhere else.
+      - name: Get a token for the repositories
+        id: token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.SPLIT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SPLIT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.repositories.outputs.names }}
+          permission-contents: write
+          permission-workflows: write
+      - name: Split and push
+        run: .github/split.sh "$GITHUB_REF" --push
+        env:
+          GIT_TOKEN: ${{ steps.token.outputs.token }}

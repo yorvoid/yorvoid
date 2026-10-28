@@ -1,0 +1,41 @@
+{
+    "name": "yorvoid/core",
+    "type": "library",
+    "description": "YorvoID's core: principals, realms, decisions and evidence, the security log, keys and storage.",
+    "keywords": [
+        "iam",
+        "identity",
+        "authentication",
+        "authorization",
+        "security",
+        "agents"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "ext-mbstring": "*",
+        "doctrine/dbal": "^4.3",
+        "psr/clock": "^1.0",
+        "psr/event-dispatcher": "^1.0",
+        "symfony/clock": "^8.1",
+        "symfony/uid": "^8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Core\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}

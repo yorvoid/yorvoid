@@ -1,0 +1,26 @@
+{# Confirming a signed operation: the only place the person sees what they sign, so every parameter is
+   shown in full. Keep both blocks if you override it. View: IntentConfirmationView. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+{% import '@YorvoID/flow/fields.html.twig' as fields %}
+
+{% block title %}{{ 'yorvoid.ui.confirm.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    <p>{{ 'yorvoid.ui.confirm.intro'|yorvoid_trans }}</p>
+    {% block summary %}
+        <p data-yorvoid-summary><strong>{{ view.summary }}</strong></p>
+    {% endblock %}
+    {% block parameters %}
+        <h2>{{ 'yorvoid.ui.confirm.details'|yorvoid_trans }}</h2>
+        <dl data-yorvoid-parameters>
+            {% for name, value in view.parameters %}<dt>{{ name }}</dt><dd>{{ value }}</dd>{% endfor %}
+        </dl>
+    {% endblock %}
+    {% if view.expiresAt %}
+        <p><time datetime="{{ view.expiresAt }}">{{ 'yorvoid.ui.confirm.expires'|yorvoid_trans({time: view.expiresAt|date('H:i', 'UTC')}) }}</time></p>
+    {% endif %}
+    <form method="post" action="{{ action }}" {{ fields.ceremony('get', view.options, client_messages) }}>
+        {{ fields.ceremony_fields() }}
+        <p><button type="submit">{{ 'yorvoid.ui.confirm.submit'|yorvoid_trans }}</button></p>
+    </form>
+{% endblock %}

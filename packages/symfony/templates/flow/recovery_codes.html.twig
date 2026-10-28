@@ -1,0 +1,21 @@
+{# New recovery codes, shown once. View: RecoveryCodesView. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+{% import '@YorvoID/flow/fields.html.twig' as fields %}
+
+{% block title %}{{ 'yorvoid.ui.recovery_codes.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    <p>{{ 'yorvoid.ui.recovery_codes.intro'|yorvoid_trans }}</p>
+    <ol data-yorvoid-recovery-codes>
+        {% for code in view.codes %}<li><code>{{ code }}</code></li>{% endfor %}
+    </ol>
+    <form method="post" action="{{ action }}">
+        <p>
+            <input id="yorvoid-saved" name="saved" type="checkbox" value="1" required
+                {%- if field_problems.saved is defined %} aria-invalid="true" aria-describedby="yorvoid-saved-problem"{% endif %}>
+            <label for="yorvoid-saved">{{ 'yorvoid.ui.recovery_codes.saved'|yorvoid_trans }}</label>
+            {% if field_problems.saved is defined %}<strong id="yorvoid-saved-problem">{{ field_problems.saved }}</strong>{% endif %}
+        </p>
+        <p><button type="submit">{{ 'yorvoid.ui.recovery_codes.submit'|yorvoid_trans }}</button></p>
+    </form>
+{% endblock %}

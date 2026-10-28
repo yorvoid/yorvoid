@@ -1,0 +1,39 @@
+{
+    "name": "yorvoid/flows",
+    "type": "library",
+    "description": "YorvoID's flows: sign-in, recovery, enrolment and other journeys as server-side steps that applications insert into, replace or remove, rendered by templates or the browser client.",
+    "keywords": [
+        "iam",
+        "authentication",
+        "flows",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "psr/clock": "^1.0",
+        "psr/event-dispatcher": "^1.0",
+        "symfony/clock": "^8.1",
+        "yorvoid/authn": "^0.1",
+        "yorvoid/core": "^0.1",
+        "yorvoid/throttle": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Flows\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}

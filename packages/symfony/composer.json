@@ -1,0 +1,57 @@
+{
+    "name": "yorvoid/symfony",
+    "type": "symfony-bundle",
+    "description": "YorvoID for Symfony: configuration, services, authenticators for any firewall, the user provider and checker, console commands, and the mailer, translator and event glue.",
+    "keywords": [
+        "symfony",
+        "bundle",
+        "iam",
+        "authentication",
+        "passkeys",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "doctrine/dbal": "^4.3",
+        "symfony/config": "^8.1",
+        "symfony/console": "^8.1",
+        "symfony/dependency-injection": "^8.1",
+        "symfony/http-foundation": "^8.1",
+        "symfony/http-kernel": "^8.1",
+        "sebastian/diff": "^7.0 || ^8.0 || ^9.0",
+        "symfony/routing": "^8.1",
+        "symfony/security-bundle": "^8.1",
+        "yorvoid/authn": "^0.1",
+        "yorvoid/core": "^0.1",
+        "yorvoid/flows": "^0.1",
+        "yorvoid/mail": "^0.1",
+        "yorvoid/passkeys": "^0.1",
+        "yorvoid/throttle": "^0.1",
+        "yorvoid/translation": "^0.1"
+    },
+    "suggest": {
+        "doctrine/doctrine-bundle": "Adds YorvoID's transaction middleware to the DBAL connection for you",
+        "symfony/mailer": "Sends YorvoID's emails through Symfony Mailer",
+        "symfony/translation": "Translates YorvoID's messages with Symfony's translator",
+        "symfony/twig-bundle": "Renders the flows' reference pages"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Symfony\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}

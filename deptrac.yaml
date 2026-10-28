@@ -1,0 +1,77 @@
+# The dependency rules between YorvoID's packages (05 §2 of the requirements). A package may use only
+# the packages listed under it. Each package gets its layer when it's added to the repository.
+deptrac:
+  paths:
+    - ./packages
+  exclude_files:
+    - '#.*/vendor/.*#'
+    - '#.*/node_modules/.*#'
+  layers:
+    - name: Core
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\.*
+    - name: Authn
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Authn\\.*
+    - name: Flows
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Flows\\.*
+    - name: Passkeys
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Passkeys\\.*
+    - name: Symfony
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Symfony\\.*
+    - name: Throttle
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Throttle\\.*
+    - name: IntentVerifier
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\IntentVerifier\\.*
+    - name: Mail
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Mail\\.*
+    - name: Translation
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Translation\\.*
+  ruleset:
+    Core: ~
+    Authn:
+      - Core
+      - Mail
+      - Throttle
+    Flows:
+      - Core
+      - Authn
+      - Throttle
+    Passkeys:
+      - Core
+      - Authn
+      - Flows
+      - IntentVerifier
+      - Throttle
+    Symfony:
+      - Core
+      - Authn
+      - Flows
+      - IntentVerifier
+      - Mail
+      - Passkeys
+      - Throttle
+      - Translation
+    Throttle:
+      - Core
+    IntentVerifier: ~
+    Mail:
+      - Core
+    Translation:
+      - Core

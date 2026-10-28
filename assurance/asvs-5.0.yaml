@@ -1,0 +1,1318 @@
+# OWASP ASVS 5.0.0: every requirement, and what YorvoID does about it.
+#
+# status:
+#   open            not assessed yet, or planned for a later milestone
+#   covered         YorvoID meets it; "tests" lists the tests that show it
+#   partly          YorvoID meets part of it; "note" says what is missing
+#   host            the application's responsibility; "docs" explains what to do
+#   not-applicable  doesn't apply to YorvoID; "note" says why
+#
+# Checked by tests/Assurance/AsvsTraceabilityTest. Requirement texts: see the standard.
+
+standard: OWASP Application Security Verification Standard 5.0.0
+source: https://github.com/OWASP/ASVS/releases/download/v5.0.0_release/OWASP_Application_Security_Verification_Standard_5.0.0_en.flat.json
+source_sha256: 8201b20eec2908c3380ac600c91c8ba746346fbb808859366abb232027532311
+
+requirements:
+    V1.1.1:
+        level: 2
+        status: open
+    V1.1.2:
+        level: 2
+        status: open
+    V1.2.1:
+        level: 1
+        status: open
+    V1.2.2:
+        level: 1
+        status: open
+    V1.2.3:
+        level: 1
+        status: open
+    V1.2.4:
+        level: 1
+        status: open
+    V1.2.5:
+        level: 1
+        status: open
+    V1.2.6:
+        level: 2
+        status: open
+    V1.2.7:
+        level: 2
+        status: open
+    V1.2.8:
+        level: 2
+        status: open
+    V1.2.9:
+        level: 2
+        status: open
+    V1.2.10:
+        level: 3
+        status: open
+    V1.3.1:
+        level: 1
+        status: open
+    V1.3.2:
+        level: 1
+        status: open
+    V1.3.3:
+        level: 2
+        status: open
+    V1.3.4:
+        level: 2
+        status: open
+    V1.3.5:
+        level: 2
+        status: open
+    V1.3.6:
+        level: 2
+        status: open
+    V1.3.7:
+        level: 2
+        status: open
+    V1.3.8:
+        level: 2
+        status: open
+    V1.3.9:
+        level: 2
+        status: open
+    V1.3.10:
+        level: 2
+        status: open
+    V1.3.11:
+        level: 2
+        status: open
+    V1.3.12:
+        level: 3
+        status: open
+    V1.4.1:
+        level: 2
+        status: open
+    V1.4.2:
+        level: 2
+        status: open
+    V1.4.3:
+        level: 2
+        status: open
+    V1.5.1:
+        level: 1
+        status: open
+    V1.5.2:
+        level: 2
+        status: open
+    V1.5.3:
+        level: 3
+        status: open
+    V2.1.1:
+        level: 1
+        status: open
+    V2.1.2:
+        level: 2
+        status: open
+    V2.1.3:
+        level: 2
+        status: open
+    V2.2.1:
+        level: 1
+        status: open
+    V2.2.2:
+        level: 1
+        status: open
+    V2.2.3:
+        level: 2
+        status: open
+    V2.3.1:
+        level: 1
+        status: open
+    V2.3.2:
+        level: 2
+        status: open
+    V2.3.3:
+        level: 2
+        status: open
+    V2.3.4:
+        level: 2
+        status: open
+    V2.3.5:
+        level: 3
+        status: open
+    V2.4.1:
+        level: 2
+        status: open
+    V2.4.2:
+        level: 3
+        status: open
+    V3.1.1:
+        level: 3
+        status: open
+    V3.2.1:
+        level: 1
+        status: open
+    V3.2.2:
+        level: 1
+        status: open
+    V3.2.3:
+        level: 3
+        status: open
+    V3.3.1:
+        level: 1
+        status: open
+    V3.3.2:
+        level: 2
+        status: open
+    V3.3.3:
+        level: 2
+        status: open
+    V3.3.4:
+        level: 2
+        status: open
+    V3.3.5:
+        level: 3
+        status: open
+    V3.4.1:
+        level: 1
+        status: open
+    V3.4.2:
+        level: 1
+        status: open
+    V3.4.3:
+        level: 2
+        status: open
+    V3.4.4:
+        level: 2
+        status: open
+    V3.4.5:
+        level: 2
+        status: open
+    V3.4.6:
+        level: 2
+        status: open
+    V3.4.7:
+        level: 3
+        status: open
+    V3.4.8:
+        level: 3
+        status: open
+    V3.5.1:
+        level: 1
+        status: open
+    V3.5.2:
+        level: 1
+        status: open
+    V3.5.3:
+        level: 1
+        status: open
+    V3.5.4:
+        level: 2
+        status: open
+    V3.5.5:
+        level: 2
+        status: open
+    V3.5.6:
+        level: 3
+        status: open
+    V3.5.7:
+        level: 3
+        status: open
+    V3.5.8:
+        level: 3
+        status: open
+    V3.6.1:
+        level: 3
+        status: open
+    V3.7.1:
+        level: 2
+        status: open
+    V3.7.2:
+        level: 2
+        status: open
+    V3.7.3:
+        level: 3
+        status: open
+    V3.7.4:
+        level: 3
+        status: open
+    V3.7.5:
+        level: 3
+        status: open
+    V4.1.1:
+        level: 1
+        status: open
+    V4.1.2:
+        level: 2
+        status: open
+    V4.1.3:
+        level: 2
+        status: open
+    V4.1.4:
+        level: 3
+        status: open
+    V4.1.5:
+        level: 3
+        status: open
+    V4.2.1:
+        level: 2
+        status: open
+    V4.2.2:
+        level: 3
+        status: open
+    V4.2.3:
+        level: 3
+        status: open
+    V4.2.4:
+        level: 3
+        status: open
+    V4.2.5:
+        level: 3
+        status: open
+    V4.3.1:
+        level: 2
+        status: open
+    V4.3.2:
+        level: 2
+        status: open
+    V4.4.1:
+        level: 1
+        status: open
+    V4.4.2:
+        level: 2
+        status: open
+    V4.4.3:
+        level: 2
+        status: open
+    V4.4.4:
+        level: 2
+        status: open
+    V5.1.1:
+        level: 2
+        status: open
+    V5.2.1:
+        level: 1
+        status: open
+    V5.2.2:
+        level: 1
+        status: open
+    V5.2.3:
+        level: 2
+        status: open
+    V5.2.4:
+        level: 3
+        status: open
+    V5.2.5:
+        level: 3
+        status: open
+    V5.2.6:
+        level: 3
+        status: open
+    V5.3.1:
+        level: 1
+        status: open
+    V5.3.2:
+        level: 1
+        status: open
+    V5.3.3:
+        level: 3
+        status: open
+    V5.4.1:
+        level: 2
+        status: open
+    V5.4.2:
+        level: 2
+        status: open
+    V5.4.3:
+        level: 2
+        status: open
+    V6.1.1:
+        level: 1
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Attempt\AttemptsTest::testEachKnownKeyHasItsLimit'
+            - 'YorvoID\Tests\Throttle\ThrottleTest::testAllowsALimitsAttemptsAtOnceThenOnePerInterval'
+        docs:
+            - concepts/throttling.md
+        note: 'The throttling page says which forms are limited per account and address, per account and per address, the defaults, how to configure them, and why the limits slow attempts down instead of locking accounts.'
+    V6.1.2:
+        level: 2
+        status: open
+    V6.1.3:
+        level: 2
+        status: open
+    V6.2.1:
+        level: 1
+        status: open
+    V6.2.2:
+        level: 1
+        status: open
+    V6.2.3:
+        level: 1
+        status: open
+    V6.2.4:
+        level: 1
+        status: open
+    V6.2.5:
+        level: 1
+        status: open
+    V6.2.6:
+        level: 1
+        status: open
+    V6.2.7:
+        level: 1
+        status: open
+    V6.2.8:
+        level: 1
+        status: open
+    V6.2.9:
+        level: 2
+        status: open
+    V6.2.10:
+        level: 2
+        status: open
+    V6.2.11:
+        level: 2
+        status: open
+    V6.2.12:
+        level: 2
+        status: open
+    V6.3.1:
+        level: 1
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testAttemptsAreLimitedAndASuccessForgetsThem'
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testSignInsFromOneAddressAreLimited'
+            - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testClaimsFromOneAddressAreLimited'
+            - 'YorvoID\Tests\Conformance\ThrottleConcurrencyTest::testConcurrentAttemptsDontSlipPastTheLimit'
+        docs:
+            - concepts/throttling.md
+        note: 'Recovery codes, passkey sign-in and setup codes are throttled as documented, also under concurrent requests; passwords arrive in M4.'
+    V6.3.2:
+        level: 1
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testTheFirstToEnterTheCodeClaimsTheRealm'
+        docs:
+            - concepts/setup-codes.md
+        note: 'YorvoID creates no default accounts: a fresh realm is claimed once with a random setup code.'
+    V6.3.3:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testRegistersAPasskeyAndSignsInWithIt'
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testWhenOnlyPreferredAPasskeyWithoutVerificationIsOneFactor'
+        docs:
+            - concepts/passkeys.md
+        note: 'A passkey with user verification is two factors on its own, and sessions record each proof''s strength; a step-up can require it for an operation; requiring it per realm or role arrives with MFA policies (M4).'
+    V6.3.4:
+        level: 2
+        status: open
+    V6.3.5:
+        level: 3
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Notification\SecurityNotificationsTest::testASignInFromANewDeviceIsAnnounced'
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testRecognisesDevicesByTheirCookie'
+        docs:
+            - concepts/notifications.md
+            - concepts/sessions.md
+        note: 'A sign-in from a device the person hasn''t used before is emailed, with "This wasn''t me"; unusual locations and sign-ins after failed attempts aren''t yet.'
+    V6.3.6:
+        level: 3
+        status: open
+    V6.3.7:
+        level: 3
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Notification\SecurityNotificationsTest::testEveryChangeToHowSomeoneSignsInIsAnnounced'
+            - 'YorvoID\Tests\Authn\Notification\SecurityNotificationsTest::testNotMeDisablesTheSignInMethodItWasAbout'
+        docs:
+            - concepts/notifications.md
+        note: 'Adding or removing a sign-in method, and using or replacing recovery codes, are emailed; changes of email address or username arrive with their flows (M4).'
+    V6.3.8:
+        level: 3
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Passkeys\PasskeyPolicyTest::testRefusalsDontTellAGuesserWhichPasskeysExist'
+        docs:
+            - concepts/passkeys.md
+        note: 'Refused passkey sign-ins give one message whatever the reason; equal response times are not yet assessed.'
+    V6.4.1:
+        level: 1
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testTheFirstToEnterTheCodeClaimsTheRealm'
+            - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testRefusesWrongExpiredReplacedAndForeignCodes'
+            - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testCodesAreUniformlyRandom'
+            - 'YorvoID\Tests\Authn\Invitation\InvitationsTest::testAnInviteeAcceptsWithTheLinkSentToThem'
+        docs:
+            - concepts/setup-codes.md
+            - concepts/invitations.md
+        note: 'Setup codes (130 bits) and invitation links (256 bits) are random, expire, work once, and are never passwords: the person then adds their own credential.'
+    V6.4.2:
+        level: 1
+        status: open
+    V6.4.3:
+        level: 2
+        status: open
+    V6.4.4:
+        level: 2
+        status: open
+    V6.4.5:
+        level: 3
+        status: open
+    V6.4.6:
+        level: 3
+        status: open
+    V6.5.1:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Token\OneTimeTokensTest::testIssuesATokenThatWorksOnce'
+            - 'YorvoID\Tests\Authn\Token\OneTimeTokenTracesTest::testTheImplementationBehavesAsTheModel'
+            - 'YorvoID\Tests\Conformance\OneTimeTokenConcurrencyTest::testOnlyOneOfSeveralConcurrentRequestsGetsAToken'
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testACodeRecoversTheAccountOnce'
+            - 'YorvoID\Tests\Conformance\RecoveryCodeConcurrencyTest::testOnlyOneOfSeveralConcurrentRequestsRecoversWithACode'
+        docs:
+            - concepts/one-time-tokens.md
+            - concepts/recovery-codes.md
+        note: 'One-time tokens, setup codes and recovery codes work once, also under concurrent use; TOTP arrives in M4.'
+    V6.5.2:
+        level: 2
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testStoresOnlyTheCodesHashes'
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testGeneratesTenCodesThatEachWorkOnce'
+        docs:
+            - concepts/recovery-codes.md
+        note: 'Recovery codes have 120 random bits, above the 112 at which a standard hash is allowed: only their SHA-256 hashes are stored.'
+    V6.5.3:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Token\OneTimeTokensTest::testIssuesATokenThatWorksOnce'
+            - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testCodesAreUniformlyRandom'
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testGeneratesTenCodesThatEachWorkOnce'
+        docs:
+            - concepts/one-time-tokens.md
+            - concepts/recovery-codes.md
+        note: 'Tokens, setup codes and recovery codes come from random_bytes(); TOTP seeds arrive in M4.'
+    V6.5.4:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testGeneratesTenCodesThatEachWorkOnce'
+        docs:
+            - concepts/recovery-codes.md
+        note: 'Recovery codes have 120 random bits; out-of-band codes arrive with email sign-in links (M4).'
+    V6.5.5:
+        level: 2
+        status: open
+    V6.5.6:
+        level: 3
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Credential\CredentialsTest::testTheLastWayToSignInCantBeRemoved'
+            - 'YorvoID\Tests\Authn\Credential\CredentialsTest::testADisabledCredentialIsNoWayIn'
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testOnlyRegisteredActivePasskeysOfActivePrincipalsSignIn'
+        docs:
+            - concepts/credentials.md
+        note: 'Credentials can be removed by their owner, or disabled; neither signs in again.'
+    V6.5.7:
+        level: 3
+        status: open
+    V6.5.8:
+        level: 3
+        status: open
+    V6.6.1:
+        level: 2
+        status: open
+    V6.6.2:
+        level: 2
+        status: open
+    V6.6.3:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testRefusesWrongExpiredReplacedAndForeignCodes'
+            - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testClaimsFromOneAddressAreLimited'
+        docs:
+            - concepts/setup-codes.md
+            - concepts/throttling.md
+        note: 'Setup codes have 130 bits and tokens 256, and attempts at setup codes are throttled per address; email sign-in codes arrive in M4.'
+    V6.6.4:
+        level: 3
+        status: open
+    V6.7.1:
+        level: 3
+        status: open
+    V6.7.2:
+        level: 3
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testTheOptionsAreYorvoIDsPolicy'
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testACeremonyWorksOnceForWhatItBegan'
+        docs:
+            - concepts/passkeys.md
+        note: 'Each ceremony''s challenge is 256 random bits, kept server-side and used once.'
+    V6.8.1:
+        level: 2
+        status: open
+    V6.8.2:
+        level: 2
+        status: open
+    V6.8.3:
+        level: 2
+        status: open
+    V6.8.4:
+        level: 2
+        status: open
+    V7.1.1:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testSessionsExpireAfterTheirLimits'
+            - 'YorvoID\Tests\Authn\Session\SessionTypesTest::testThePresetsAreNistsLimits'
+        docs:
+            - concepts/sessions.md
+        note: 'YorvoID''s presets are NIST SP 800-63B-4''s limits, and the docs explain them; documenting the limits it chose, and why, is the application''s.'
+    V7.1.2:
+        level: 2
+        status: open
+    V7.1.3:
+        level: 2
+        status: open
+    V7.2.1:
+        level: 1
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testStartsASessionAndValidatesItsToken'
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testEndingASessionTakesEffectAtOnce'
+        docs:
+            - concepts/sessions.md
+        note: 'Every request checks the session token against the database.'
+    V7.2.2:
+        level: 1
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testStartsASessionAndValidatesItsToken'
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testRefreshingReplacesTheToken'
+        docs:
+            - concepts/sessions.md
+    V7.2.3:
+        level: 1
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testStartsASessionAndValidatesItsToken'
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testStoresOnlyTheTokensHash'
+            - 'YorvoID\Tests\Conformance\SessionStoreTest::testRefusesADuplicateIdOrToken'
+        docs:
+            - concepts/sessions.md
+        note: '256 bits from random_bytes(); unique by a database constraint; stored only as SHA-256 hashes.'
+    V7.2.4:
+        level: 1
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testRefreshingReplacesTheToken'
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testSteppingUpAddsTheProofAndReplacesTheToken'
+        docs:
+            - concepts/sessions.md
+            - concepts/step-up.md
+        note: 'Signing in starts a new session with a new token, and a step-up replaces the session''s token; ending the previous session on sign-in is wired by the framework bridges (M1).'
+    V7.3.1:
+        level: 2
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testSessionsExpireAfterTheirLimits'
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testATightenedPolicyAppliesToExistingSessions'
+        docs:
+            - concepts/sessions.md
+    V7.3.2:
+        level: 2
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testSessionsExpireAfterTheirLimits'
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testATightenedPolicyAppliesToExistingSessions'
+        docs:
+            - concepts/sessions.md
+    V7.4.1:
+        level: 1
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testEndingASessionTakesEffectAtOnce'
+            - 'YorvoID\Tests\Conformance\SessionStoreTest::testEndsASessionOnceAndThenNeverRenewsItsToken'
+        docs:
+            - concepts/sessions.md
+    V7.4.2:
+        level: 1
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testASessionEndsWithItsPrincipalsActivity'
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testSuspendingAPrincipalEndsItsSessionsInTheSameTransaction'
+        docs:
+            - concepts/sessions.md
+        note: 'A session is valid only while its principal stays active at the status version it started with; a listener also ends the sessions in the suspension''s transaction.'
+    V7.4.3:
+        level: 2
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Credential\CredentialsTest::testRemovingCanEndTheOtherSessions'
+        docs:
+            - concepts/credentials.md
+    V7.4.4:
+        level: 2
+        status: host
+        docs:
+            - concepts/sessions.md
+        note: 'A visible sign-out on every page is the application''s; ending the session is YorvoID''s.'
+    V7.4.5:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testListsAndEndsAPrincipalsOtherSessions'
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testEndingASessionTakesEffectAtOnce'
+        docs:
+            - concepts/sessions.md
+        note: 'Administrators can end one session or all of a principal''s; ending every principal''s sessions at once is not in place yet.'
+    V7.5.1:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Credential\CredentialsTest::testChangesNeedAProofOfIdentityWithinTheWindow'
+            - 'YorvoID\Tests\Authn\Credential\CredentialsTest::testAStepUpCountsOnlyForTheChangeItWasFor'
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testGeneratingNeedsARecentProof'
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testRegisteringNeedsARecentProofOfIdentity'
+        docs:
+            - concepts/credentials.md
+            - concepts/step-up.md
+        note: 'Adding or removing a credential and replacing recovery codes need a proof of identity within 5 minutes; changing an email address arrives with its flow (M4).'
+    V7.5.2:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testListsAndEndsAPrincipalsOtherSessions'
+            - 'YorvoID\Tests\Authn\StepUp\StepUpTest::testReadsTheSessionAsItIsNow'
+        docs:
+            - concepts/sessions.md
+            - concepts/step-up.md
+        note: 'Listing and ending one''s sessions, and step-up, are in place; requiring a step-up before ending sessions is wired in the flows (M1).'
+    V7.5.3:
+        level: 3
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\StepUp\StepUpTest::testReadsTheSessionAsItIsNow'
+            - 'YorvoID\Tests\Authn\StepUp\AuthenticationRequirementTest::testAStepUpCountsOnlyForItsOperation'
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testStepsUpWithAPasskeyForAnOperation'
+        docs:
+            - concepts/step-up.md
+        note: 'StepUp::require() refuses an operation until the session proves who it is again, recently and as strongly as the operation asks, for that operation; the refusal names the remedy.'
+    V7.6.1:
+        level: 2
+        status: open
+    V7.6.2:
+        level: 2
+        status: open
+    V8.1.1:
+        level: 1
+        status: open
+    V8.1.2:
+        level: 2
+        status: open
+    V8.1.3:
+        level: 3
+        status: open
+    V8.1.4:
+        level: 3
+        status: open
+    V8.2.1:
+        level: 1
+        status: open
+    V8.2.2:
+        level: 1
+        status: open
+    V8.2.3:
+        level: 2
+        status: open
+    V8.2.4:
+        level: 3
+        status: open
+    V8.3.1:
+        level: 1
+        status: open
+    V8.3.2:
+        level: 3
+        status: open
+    V8.3.3:
+        level: 3
+        status: open
+    V8.4.1:
+        level: 2
+        status: open
+    V8.4.2:
+        level: 3
+        status: open
+    V9.1.1:
+        level: 1
+        status: open
+    V9.1.2:
+        level: 1
+        status: open
+    V9.1.3:
+        level: 1
+        status: open
+    V9.2.1:
+        level: 1
+        status: open
+    V9.2.2:
+        level: 2
+        status: open
+    V9.2.3:
+        level: 2
+        status: open
+    V9.2.4:
+        level: 2
+        status: open
+    V10.1.1:
+        level: 2
+        status: open
+    V10.1.2:
+        level: 2
+        status: open
+    V10.2.1:
+        level: 2
+        status: open
+    V10.2.2:
+        level: 2
+        status: open
+    V10.2.3:
+        level: 3
+        status: open
+    V10.3.1:
+        level: 2
+        status: open
+    V10.3.2:
+        level: 2
+        status: open
+    V10.3.3:
+        level: 2
+        status: open
+    V10.3.4:
+        level: 2
+        status: open
+    V10.3.5:
+        level: 3
+        status: open
+    V10.4.1:
+        level: 1
+        status: open
+    V10.4.2:
+        level: 1
+        status: open
+    V10.4.3:
+        level: 1
+        status: open
+    V10.4.4:
+        level: 1
+        status: open
+    V10.4.5:
+        level: 1
+        status: open
+    V10.4.6:
+        level: 2
+        status: open
+    V10.4.7:
+        level: 2
+        status: open
+    V10.4.8:
+        level: 2
+        status: open
+    V10.4.9:
+        level: 2
+        status: open
+    V10.4.10:
+        level: 2
+        status: open
+    V10.4.11:
+        level: 2
+        status: open
+    V10.4.12:
+        level: 3
+        status: open
+    V10.4.13:
+        level: 3
+        status: open
+    V10.4.14:
+        level: 3
+        status: open
+    V10.4.15:
+        level: 3
+        status: open
+    V10.4.16:
+        level: 3
+        status: open
+    V10.5.1:
+        level: 2
+        status: open
+    V10.5.2:
+        level: 2
+        status: open
+    V10.5.3:
+        level: 2
+        status: open
+    V10.5.4:
+        level: 2
+        status: open
+    V10.5.5:
+        level: 2
+        status: open
+    V10.6.1:
+        level: 2
+        status: open
+    V10.6.2:
+        level: 2
+        status: open
+    V10.7.1:
+        level: 2
+        status: open
+    V10.7.2:
+        level: 2
+        status: open
+    V10.7.3:
+        level: 2
+        status: open
+    V11.1.1:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Core\Key\KeyRingTest::testOneKeySignsAndAllVerify'
+        docs:
+            - concepts/keys.md
+        note: 'Key lifecycle and rotation are documented; a mapping to NIST SP 800-57 is still to be written.'
+    V11.1.2:
+        level: 2
+        status: open
+    V11.1.3:
+        level: 3
+        status: open
+    V11.1.4:
+        level: 3
+        status: open
+    V11.2.1:
+        level: 2
+        status: open
+    V11.2.2:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Core\Log\LogEntryTest::testAnUnknownAlgorithmGivesNoHash'
+        docs:
+            - concepts/keys.md
+        note: 'Every hash and key records its algorithm, so new ones can be added without changing stored formats; replacing an algorithm by configuration comes with the next algorithm.'
+    V11.2.3:
+        level: 2
+        status: open
+    V11.2.4:
+        level: 3
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Core\SecretTest::testComparesWithSecretsAndStrings'
+            - 'YorvoID\Tests\Tools\PHPStan\SecretComparisonRuleTest::testRefusesVariableTimeComparisonsOfRevealedSecrets'
+        docs:
+            - concepts/secrets.md
+        note: 'Secrets are compared only with hash_equals(), enforced by a PHPStan rule; signing uses libsodium. Not yet assessed: every other operation on secrets.'
+    V11.2.5:
+        level: 3
+        status: open
+    V11.3.1:
+        level: 1
+        status: open
+    V11.3.2:
+        level: 1
+        status: open
+    V11.3.3:
+        level: 2
+        status: open
+    V11.3.4:
+        level: 3
+        status: open
+    V11.3.5:
+        level: 3
+        status: open
+    V11.4.1:
+        level: 1
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Core\Log\LogEntryTest::testTheHashOfAKnownEntry'
+            - 'YorvoID\Tests\Core\Log\LogEntryTest::testAnUnknownAlgorithmGivesNoHash'
+            - 'YorvoID\Tests\Core\Key\KeyRingTest::testSignsAsRfc8032Specifies'
+        docs:
+            - concepts/security-log.md
+            - concepts/keys.md
+        note: 'SHA-256 for the log, Ed25519 for signatures; PHPStan refuses md5(), sha1() and crc32(); verification refuses entries naming another algorithm.'
+    V11.4.2:
+        level: 2
+        status: open
+    V11.4.3:
+        level: 2
+        status: open
+    V11.4.4:
+        level: 2
+        status: open
+    V11.5.1:
+        level: 2
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Core\SecretTest::testRandomSecretsHaveTheRequestedLengthAndDiffer'
+            - 'YorvoID\Tests\Core\SecretTest::testRefusesShortRandomSecrets'
+            - 'YorvoID\Tests\Tools\PHPStan\SecretComparisonRuleTest::testRefusesVariableTimeComparisonsOfRevealedSecrets'
+        docs:
+            - concepts/secrets.md
+        note: 'Secret::random() takes at least 16 bytes from random_bytes(); PHPStan refuses predictable generators (rand, mt_rand, uniqid, …) in YorvoID''s code.'
+    V11.5.2:
+        level: 3
+        status: open
+    V11.6.1:
+        level: 2
+        status: open
+    V11.6.2:
+        level: 3
+        status: open
+    V11.7.1:
+        level: 3
+        status: open
+    V11.7.2:
+        level: 3
+        status: open
+    V12.1.1:
+        level: 1
+        status: open
+    V12.1.2:
+        level: 2
+        status: open
+    V12.1.3:
+        level: 2
+        status: open
+    V12.1.4:
+        level: 3
+        status: open
+    V12.1.5:
+        level: 3
+        status: open
+    V12.2.1:
+        level: 1
+        status: open
+    V12.2.2:
+        level: 1
+        status: open
+    V12.3.1:
+        level: 2
+        status: open
+    V12.3.2:
+        level: 2
+        status: open
+    V12.3.3:
+        level: 2
+        status: open
+    V12.3.4:
+        level: 2
+        status: open
+    V12.3.5:
+        level: 3
+        status: open
+    V13.1.1:
+        level: 2
+        status: open
+    V13.1.2:
+        level: 3
+        status: open
+    V13.1.3:
+        level: 3
+        status: open
+    V13.1.4:
+        level: 3
+        status: open
+    V13.2.1:
+        level: 2
+        status: open
+    V13.2.2:
+        level: 2
+        status: open
+    V13.2.3:
+        level: 2
+        status: open
+    V13.2.4:
+        level: 2
+        status: open
+    V13.2.5:
+        level: 2
+        status: open
+    V13.2.6:
+        level: 3
+        status: open
+    V13.3.1:
+        level: 2
+        status: host
+        docs:
+            - concepts/keys.md
+        note: 'YorvoID reads keys from the environment or an owner-only file; providing them from a secrets manager is the application''s.'
+    V13.3.2:
+        level: 2
+        status: open
+    V13.3.3:
+        level: 3
+        status: open
+    V13.3.4:
+        level: 3
+        status: open
+    V13.4.1:
+        level: 1
+        status: open
+    V13.4.2:
+        level: 2
+        status: open
+    V13.4.3:
+        level: 2
+        status: open
+    V13.4.4:
+        level: 2
+        status: open
+    V13.4.5:
+        level: 2
+        status: open
+    V13.4.6:
+        level: 3
+        status: open
+    V13.4.7:
+        level: 3
+        status: open
+    V14.1.1:
+        level: 2
+        status: open
+    V14.1.2:
+        level: 2
+        status: open
+    V14.2.1:
+        level: 1
+        status: open
+    V14.2.2:
+        level: 2
+        status: open
+    V14.2.3:
+        level: 2
+        status: open
+    V14.2.4:
+        level: 2
+        status: open
+    V14.2.5:
+        level: 3
+        status: open
+    V14.2.6:
+        level: 3
+        status: open
+    V14.2.7:
+        level: 3
+        status: open
+    V14.2.8:
+        level: 3
+        status: open
+    V14.3.1:
+        level: 1
+        status: open
+    V14.3.2:
+        level: 2
+        status: open
+    V14.3.3:
+        level: 2
+        status: open
+    V15.1.1:
+        level: 1
+        status: open
+    V15.1.2:
+        level: 2
+        status: open
+    V15.1.3:
+        level: 2
+        status: open
+    V15.1.4:
+        level: 3
+        status: open
+    V15.1.5:
+        level: 3
+        status: open
+    V15.2.1:
+        level: 1
+        status: open
+    V15.2.2:
+        level: 2
+        status: open
+    V15.2.3:
+        level: 2
+        status: open
+    V15.2.4:
+        level: 3
+        status: open
+    V15.2.5:
+        level: 3
+        status: open
+    V15.3.1:
+        level: 1
+        status: open
+    V15.3.2:
+        level: 2
+        status: open
+    V15.3.3:
+        level: 2
+        status: open
+    V15.3.4:
+        level: 2
+        status: open
+    V15.3.5:
+        level: 2
+        status: open
+    V15.3.6:
+        level: 2
+        status: open
+    V15.3.7:
+        level: 2
+        status: open
+    V15.4.1:
+        level: 3
+        status: open
+    V15.4.2:
+        level: 3
+        status: open
+    V15.4.3:
+        level: 3
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Core\Storage\MigratorTest::testOneProcessAtATime'
+            - 'YorvoID\Tests\Conformance\SecurityLogConcurrencyTest::testConcurrentAppendsFromSeparateProcessesKeepOneChain'
+        docs:
+            - concepts/storage.md
+        note: 'Migrations wait for their lock for a bounded time; log appends lock only their realm''s head row, inside the caller''s transaction.'
+    V15.4.4:
+        level: 3
+        status: open
+    V16.1.1:
+        level: 2
+        status: open
+    V16.2.1:
+        level: 2
+        status: open
+    V16.2.2:
+        level: 2
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Core\Log\LogEntryTest::testTheHashOfAKnownEntry'
+            - 'YorvoID\Tests\Core\DurationTest::testAddingIsExactAcrossDaylightSavingTime'
+        docs:
+            - concepts/security-log.md
+        note: 'Security log times are stored in UTC, to the second (Time::stored()).'
+    V16.2.3:
+        level: 2
+        status: open
+    V16.2.4:
+        level: 2
+        status: open
+    V16.2.5:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testStartsASessionAndValidatesItsToken'
+            - 'YorvoID\Tests\Core\Principal\PrincipalsTest::testSetsRemovesAndVerifiesIdentifiers'
+        docs:
+            - concepts/security-log.md
+            - concepts/sessions.md
+        note: 'The security log never holds secrets, session tokens, email addresses, IP addresses or devices; a policy per data protection level is still to be documented.'
+    V16.3.1:
+        level: 2
+        status: open
+    V16.3.2:
+        level: 2
+        status: open
+    V16.3.3:
+        level: 2
+        status: open
+    V16.3.4:
+        level: 2
+        status: open
+    V16.4.1:
+        level: 2
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Core\Event\OriginTest::testRefusesInvalidCorrelationIds'
+            - 'YorvoID\Tests\Core\Log\LogEntryTest::testRecordsTextThatIsntValidUtf8'
+            - 'YorvoID\Tests\Conformance\SecurityLogStoreTest::testKeepsTextThatWasntValidUtf8'
+        docs:
+            - concepts/security-log.md
+        note: 'The security log is structured (columns and JSON), never formatted text; correlation IDs are restricted to safe characters; invalid UTF-8 is replaced, so attacker-controlled text can always be recorded and never breaks the log.'
+    V16.4.2:
+        level: 2
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Core\Log\SecurityLogTest::testDetectsTampering'
+            - 'YorvoID\Tests\Core\Log\SecurityLogTest::testDetectsAMissingHead'
+        docs:
+            - concepts/security-log.md
+        note: 'Changes are detected by the hash chain; preventing a full rewrite needs signed checkpoints kept outside the database (milestone M2), and database permissions are the application''s.'
+    V16.4.3:
+        level: 2
+        status: open
+    V16.5.1:
+        level: 2
+        status: open
+    V16.5.2:
+        level: 2
+        status: open
+    V16.5.3:
+        level: 2
+        status: open
+    V16.5.4:
+        level: 3
+        status: open
+    V17.1.1:
+        level: 2
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.1.2:
+        level: 3
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.2.1:
+        level: 2
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.2.2:
+        level: 2
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.2.3:
+        level: 2
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.2.4:
+        level: 2
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.2.5:
+        level: 3
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.2.6:
+        level: 3
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.2.7:
+        level: 3
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.2.8:
+        level: 3
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.3.1:
+        level: 2
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'
+    V17.3.2:
+        level: 2
+        status: not-applicable
+        note: 'YorvoID has no WebRTC functionality.'

@@ -1,0 +1,16 @@
+{# Signing in with a passkey: offered in the email field's autofill, and with the button. View: PasskeySignInView. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+{% import '@YorvoID/flow/fields.html.twig' as fields %}
+
+{% block title %}{{ 'yorvoid.ui.passkey.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    <form method="post" action="{{ action }}" {{ fields.ceremony('get', view.options, client_messages, true) }}>
+        {{ fields.input('username', 'yorvoid.ui.passkey.username'|yorvoid_trans, 'email', 'username webauthn', field_problems) }}
+        {{ fields.ceremony_fields() }}
+        <p><button type="submit">{{ 'yorvoid.ui.passkey.submit'|yorvoid_trans }}</button></p>
+    </form>
+    {% block alternatives %}
+        <p><a href="{{ path('yorvoid_flow_start', {flow: 'yorvoid.recover_with_code'}) }}">{{ 'yorvoid.ui.passkey.lost'|yorvoid_trans }}</a></p>
+    {% endblock %}
+{% endblock %}

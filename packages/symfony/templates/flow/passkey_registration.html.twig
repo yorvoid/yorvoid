@@ -1,0 +1,21 @@
+{# Adding a passkey. View: PasskeyRegistrationView. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+{% import '@YorvoID/flow/fields.html.twig' as fields %}
+
+{% block title %}{{ 'yorvoid.ui.passkey_registration.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    <p>{{ 'yorvoid.ui.passkey_registration.intro'|yorvoid_trans }}</p>
+    {% if view.options is null %}
+        <p>{{ 'yorvoid.ui.signed_out'|yorvoid_trans }}</p>
+    {% else %}
+        <form method="post" action="{{ action }}" {{ fields.ceremony('create', view.options, client_messages) }}>
+            {{ fields.input('label', 'yorvoid.ui.passkey_registration.label'|yorvoid_trans, 'text', 'off', field_problems, {maxlength: '64'}, 'yorvoid.ui.passkey_registration.label_hint'|yorvoid_trans) }}
+            {{ fields.ceremony_fields() }}
+            <p>
+                <button type="submit">{{ 'yorvoid.ui.passkey_registration.submit'|yorvoid_trans }}</button>
+                {% if view.canSkip %}<button type="submit" name="action" value="skip" formnovalidate>{{ 'yorvoid.ui.passkey_registration.skip'|yorvoid_trans }}</button>{% endif %}
+            </p>
+        </form>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,68 @@
+<?php
+
+declare(strict_types=1);
+
+namespace YorvoID\Authn\Migrations;
+
+use Doctrine\DBAL\Schema\Column;
+use Doctrine\DBAL\Schema\Index;
+use Doctrine\DBAL\Schema\PrimaryKeyConstraint;
+use Doctrine\DBAL\Schema\TableEditor;
+use Doctrine\DBAL\Types\Types;
+use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
+use YorvoID\Core\Storage\Migration\LockProfile;
+use YorvoID\Core\Storage\Migration\Migration;
+use YorvoID\Core\Storage\Migration\MigrationContext;
+
+/**
+ * @internal
+ */
+final class CreateCredentials implements Migration
+{
+    public function version(): string
+    {
+        return '20261027230200_authn_credentials';
+    }
+
+    public function description(): string
+    {
+        return 'Create the credential registry';
+    }
+
+    public function lockProfile(): LockProfile
+    {
+        return LockProfile::Online;
+    }
+
+    public function up(MigrationContext $context): void
+    {
+        $context->createTable(DbalCredentialStore::TABLE, static function (TableEditor $table) use ($context): void {
+            $table->addColumn(Column::editor()->setUnquotedName('id')->setTypeName(Types::GUID)->create());
+            $table->addColumn(self::string('realm', 63));
+            $table->addColumn(Column::editor()->setUnquotedName('principal_id')->setTypeName(Types::GUID)->create());
+            $table->addColumn(self::string('kind', 32));
+            $table->addColumn(self::string('label', 64));
+            $table->addColumn(self::time('created_at'));
+            $table->addColumn(self::time('last_used_at', true));
+            $table->addColumn(self::string('status', 16));
+            $table->addPrimaryKeyConstraint(PrimaryKeyConstraint::editor()->setUnquotedColumnNames('id')->create());
+            $table->addIndex(Index::editor()->setUnquotedName($context->name('credential_principal'))->setUnquotedColumnNames('realm', 'principal_id')->create());
+        });
+    }
+
+    /**
+     * @param non-empty-string $name
+     */
+    private static function string(string $name, int $length, bool $nullable = false): Column
+    {
+        return Column::editor()->setUnquotedName($name)->setTypeName(Types::STRING)->setLength($length)->setNotNull(!$nullable)->create();
+    }
+
+    /**
+     * @param non-empty-string $name
+     */
+    private static function time(string $name, bool $nullable = false): Column
+    {
+        return Column::editor()->setUnquotedName($name)->setTypeName(Types::DATETIMETZ_IMMUTABLE)->setNotNull(!$nullable)->create();
+    }
+}
