@@ -59,6 +59,8 @@ final class YorvoIDBundle extends AbstractBundle
         $children->scalarNode('connection')->defaultValue('default')->info('The DoctrineBundle connection to keep YorvoID\'s tables in');
         $children->scalarNode('realm')->defaultValue('default')->info('The realm people sign in to');
         $children->scalarNode('users')->defaultNull()->info('The service ID of your PrincipalUsers, to sign in your own users; PrincipalUser if not given');
+        $children->arrayNode('keys')->addDefaultsIfNotSet()->children()
+            ->scalarNode('file')->defaultNull()->info('The signing keys\' file, only its owner may read, e.g. "/run/secrets/yorvoid-keys.json"; yorvoid:keys:rotate creates it')->end();
         $children->arrayNode('cookies')->addDefaultsIfNotSet()->children()
             ->scalarNode('device')->defaultValue('__Host-yorvoid_device')->info('The cookie that recognises devices')->end();
         $children->arrayNode('storage')->addDefaultsIfNotSet()->children()

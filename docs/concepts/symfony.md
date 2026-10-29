@@ -36,6 +36,8 @@ That's all that's required. The rest, with its defaults; `# preset` marks what t
 yorvoid:
     preset: consumer_site               # or internal_tool, regulated, agent_platform
     connection: default                 # the DoctrineBundle connection for YorvoID's tables
+    keys:
+        file: ~                         # the signing keys, e.g. /run/secrets/yorvoid-keys.json; yorvoid:keys:rotate creates it
     realm: default                      # the realm people sign in to
     users: ~                            # the service ID of your PrincipalUsers; PrincipalUser otherwise
     cookies:
@@ -275,6 +277,7 @@ It answers only in debug mode, wherever it's imported.
 | Command | |
 |---|---|
 | `yorvoid:doctor` | Checks YorvoID's setup and says how to fix each problem ([below](#checking-the-setup)). `--strict` fails on warnings too. |
+| `yorvoid:keys:rotate` | Takes the next step in [rotating the signing keys](keys.md#rotating-keys): creates the ring, adds a verify-only key, makes it active; `--remove <key>` removes an old one. Sessions and tokens in flight carry on. |
 | `yorvoid:migrate` | Creates or updates YorvoID's tables, separately from your migrations. `--dry-run` prints the SQL; `--allow-blocking` runs migrations that block tables, in a maintenance window. |
 | `yorvoid:setup-code [realm]` | Prints a setup code that claims a fresh installation (`--lifetime`, 24 hours by default). |
 | `yorvoid:recovery-link <email>` | Prints a recovery link for someone who lost access, for whoever has the server's shell (`--url` with `{token}`, `--lifetime`, 15 minutes by default). |
@@ -290,6 +293,7 @@ It answers only in debug mode, wherever it's imported.
 | Check | What it looks at |
 |---|---|
 | Configuration | Builds what YorvoID builds only when it's first used: the passkey policy (the relying party ID and the origins), the session policy, the limits, the database. Passkeys for `localhost` outside development are a warning. |
+| Keys | With `keys.file` set: the file exists, only its owner can read it, and it holds a valid key ring. |
 | Database and migrations | YorvoID reaches its database, every migration of this version ran, and the database has none from a later version. |
 | Clock | The application's clock agrees with the database's within 5 seconds; a `MockClock` outside development is a problem. |
 | Assurance level | The configuration reaches the level its `sessions.preset` targets ([assurance levels](../security/assurance-levels.md)): passkeys require user verification, sessions last no longer than the level allows, and no AAL3 with synced passkeys. |

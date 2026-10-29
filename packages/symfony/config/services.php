@@ -62,6 +62,7 @@ use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
 use YorvoID\Symfony\Command\DoctorCommand;
+use YorvoID\Symfony\Command\KeysRotateCommand;
 use YorvoID\Symfony\Command\MigrateCommand;
 use YorvoID\Symfony\Command\PurgeCommand;
 use YorvoID\Symfony\Command\RecoveryLinkCommand;
@@ -76,6 +77,7 @@ use YorvoID\Symfony\Doctor\AssuranceCheck;
 use YorvoID\Symfony\Doctor\ClockCheck;
 use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
+use YorvoID\Symfony\Doctor\KeysCheck;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
@@ -222,6 +224,7 @@ return static function (ContainerConfigurator $container): void {
         array_map(service_closure(...), [PasskeyPolicy::class, SessionPolicy::class, AttemptLimits::class, Database::class]),
         param('kernel.debug'),
     ])->tag('yorvoid.doctor_check', ['name' => 'Configuration']);
+    $services->set(KeysCheck::class)->args([param('yorvoid.keys.file')])->tag('yorvoid.doctor_check', ['name' => 'Keys']);
     $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
     $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);
     $services->set(AssuranceCheck::class)->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle'), param('yorvoid.passkeys.user_verification')])->tag('yorvoid.doctor_check', ['name' => 'Assurance level']);
@@ -229,6 +232,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(CookiesCheck::class)->args([service('parameter_bag'), param('yorvoid.cookies.device'), param('yorvoid.sessions.recognise_devices')])->tag('yorvoid.doctor_check', ['name' => 'Cookies']);
     $services->set(MailerCheck::class)->args([param('yorvoid.notifications.enabled'), param('yorvoid.notifications.from'), null, param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Mailer']);
     $services->set(TemplatesCheck::class)->tag('yorvoid.doctor_check', ['name' => 'Flow pages']);
+    $services->set(KeysRotateCommand::class)->arg('$file', param('yorvoid.keys.file'))->tag('console.command');
     $services->set(DoctorCommand::class)->args([tagged_locator('yorvoid.doctor_check', 'name')])->tag('console.command');
 
     // Console commands.

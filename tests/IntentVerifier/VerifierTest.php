@@ -283,6 +283,29 @@ final class VerifierTest extends TestCase
         self::assertCount(1, $verifier->keys());
     }
 
+    /**
+     * Key rotation with intents in flight (OPS-045): an intent isn't bound to a key until it's signed, so
+     * one prepared before a rotation is signed by whichever key the verifier has when it's signed; a
+     * removed key's signature is refused, even on an intent prepared while that key was there.
+     */
+    #[DataProvider('stores')]
+    public function testIntentsInFlightOutliveARotationOfTheVerifiersKeys(string $store): void
+    {
+        $verifier = $this->bootstrapped($store);
+        $phone = $verifier->keys()[0]->id();
+        $first = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $second = $verifier->prepare('acme.site.remove', ['site' => 'joe']);
+
+        $laptop = $this->owner->create();
+        $addition = $verifier->prepare(OperationPolicy::ADD_KEY, self::keyOf($this->owner, $laptop, 'Laptop'));
+        $added = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
+        $removal = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $phone]);
+        $verifier->removeKey($removal->intent->nonce, $this->owner->signIn($removal->options, $laptop));
+
+        self::assertEquals($added->id(), $verifier->verify($first->intent->nonce, $this->owner->signIn($first->options, $laptop))->key->id());
+        $this->refused(Refusal::UnknownKey, fn () => $verifier->verify($second->intent->nonce, $this->owner->signIn($second->options)), 'The removed key\'s signature was accepted.');
+    }
+
     #[DataProvider('stores')]
     public function testANewBootstrapSecretIsTheWayBackInWhenEveryKeyIsLost(string $store): void
     {

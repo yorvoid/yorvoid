@@ -38,6 +38,10 @@ Keys are kept as a JSON Web Key Set (RFC 7517; Ed25519 keys as in RFC 8037), wit
 
 A ring with no active key, or more than one, is refused when it's loaded.
 
+In code, each step is a new ring: `$ring->with(SigningKey::generate('2026-11', KeyStatus::VerifyOnly))`, `$ring->activating('2026-11')`, `$ring->without('2026-10')`; `$ring->toFile($path)` writes it for its owner only, replacing the old file at once. With the Symfony bundle, `yorvoid:keys:rotate` takes the next step each time it runs and says what comes next; its first run creates the ring (see [Symfony](symfony.md#console-commands)).
+
+What's in flight doesn't notice a rotation: what the old key signed verifies until the old key is removed, and sessions and one-time tokens are random secrets kept as hashes, not signatures. Intents are signed by people's passkeys, and the verifier's keys rotate by intents ([signed intents](signed-intents.md)); an intent prepared before a rotation is signed by whichever key the verifier has then. Tests keep all of this so (OPS-045).
+
 ## Algorithms
 
 Ed25519 is the only algorithm today. Keys and signatures record theirs (`EdDSA`), so post-quantum signatures (ML-DSA) can be added beside it once PHP offers them, without changing what's already stored.
