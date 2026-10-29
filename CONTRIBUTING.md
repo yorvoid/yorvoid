@@ -33,6 +33,8 @@ docker compose up -d --wait
 
 This is a monorepo. Develop everything here, even code that's published as separate packages: each directory of `packages/` is copied to a read-only repository of its own, which Composer installs it from.
 
+So each package directory carries what its repository needs on its own: a README, the LICENSE and NOTICE, a `.gitattributes` that keeps `.github/` out of the archives Composer installs, a workflow that closes pull requests opened there, and `support` links in its `composer.json` back to this repository. `tests/Repository` checks them all; a new package needs them too, and an entry in `.github/split.json`.
+
 | Path | Contents |
 |------|----------|
 | `packages/core/` | `yorvoid/core` |

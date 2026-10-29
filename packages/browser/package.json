@@ -10,6 +10,9 @@
     "security"
   ],
   "homepage": "https://github.com/yorvoid/yorvoid",
+  "bugs": {
+    "url": "https://github.com/yorvoid/yorvoid/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yorvoid/yorvoid.git",
@@ -32,7 +35,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=24"
