@@ -56,7 +56,7 @@ final class DoctorTest extends TestCase
 
         self::assertSame(Command::SUCCESS, $status, $display);
 
-        foreach (['Configuration', 'Database and migrations', 'Clock', 'Assurance level', 'Cookies', 'Mailer', 'Flow pages'] as $check) {
+        foreach (['Configuration', 'Database and migrations', 'Clock', 'Assurance level', 'Preset', 'Cookies', 'Mailer', 'Flow pages'] as $check) {
             self::assertStringContainsString('✔ '.$check, $display);
         }
 
@@ -92,6 +92,17 @@ final class DoctorTest extends TestCase
 
         self::assertStringContainsString('✔ Assurance level', $display);
         self::assertStringContainsString('✔ Cookies', $display);
+    }
+
+    public function testComparesTheSettingsWithThePresets(): void
+    {
+        [$status, $display] = $this->doctor(['preset' => 'agent_platform', 'step_up' => ['cool_down' => null]], migrate: true);
+
+        self::assertSame(Command::SUCCESS, $status);
+        self::assertStringContainsString('! Preset', $display);
+        self::assertStringContainsString('Warning: step_up.cool_down is none, weaker than the "agent_platform" preset\'s 1d.', $display);
+        self::assertStringContainsString('How to fix it: Use the preset\'s, by leaving step_up.cool_down out, unless you chose yours knowingly.', $display);
+        self::assertStringContainsString('0 problems, 1 warning.', $display);
     }
 
     public function testSaysWhatAnAal3PresetDoesntReachYet(): void

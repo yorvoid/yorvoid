@@ -78,6 +78,7 @@ use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
+use YorvoID\Symfony\Doctor\PresetCheck;
 use YorvoID\Symfony\Doctor\TemplatesCheck;
 use YorvoID\Symfony\Factories;
 use YorvoID\Symfony\Flow\FlowContexts;
@@ -224,6 +225,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
     $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);
     $services->set(AssuranceCheck::class)->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle'), param('yorvoid.passkeys.user_verification')])->tag('yorvoid.doctor_check', ['name' => 'Assurance level']);
+    $services->set(PresetCheck::class)->args([param('yorvoid.preset'), array_combine(PresetCheck::SETTINGS, array_map(static fn (string $name) => param('yorvoid.'.$name), PresetCheck::SETTINGS))])->tag('yorvoid.doctor_check', ['name' => 'Preset']);
     $services->set(CookiesCheck::class)->args([service('parameter_bag'), param('yorvoid.cookies.device'), param('yorvoid.sessions.recognise_devices')])->tag('yorvoid.doctor_check', ['name' => 'Cookies']);
     $services->set(MailerCheck::class)->args([param('yorvoid.notifications.enabled'), param('yorvoid.notifications.from'), null, param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Mailer']);
     $services->set(TemplatesCheck::class)->tag('yorvoid.doctor_check', ['name' => 'Flow pages']);
