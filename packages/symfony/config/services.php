@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Psr\Clock\ClockInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
+use Symfony\Component\Security\Http\Event\LogoutEvent;
 use YorvoID\Authn\Attempt\AttemptLimits;
 use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Credential\Credentials;
@@ -92,6 +93,7 @@ use YorvoID\Symfony\Security\Authenticator\RecoveryLinkAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\SessionAuthenticator;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\DefaultPrincipalUsers;
+use YorvoID\Symfony\Security\EndSessionOnSignOut;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
@@ -189,6 +191,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(CurrentSession::class)->public()->tag('kernel.reset', ['method' => 'reset']);
     // Before the firewall (8), which would sign in from the PHP session.
     $services->set(ValidateSessionListener::class)->tag('kernel.event_listener', ['event' => 'kernel.request', 'priority' => 9]);
+    $services->set(EndSessionOnSignOut::class)->tag('kernel.event_listener', ['event' => LogoutEvent::class]);
 
     foreach ([PasskeyAuthenticator::class, RecoveryCodeAuthenticator::class, RecoveryLinkAuthenticator::class] as $authenticator) {
         $services->set($authenticator)->arg('$deviceCookie', param('yorvoid.cookies.device'))->public();

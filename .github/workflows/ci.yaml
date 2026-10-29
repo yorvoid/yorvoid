@@ -107,6 +107,22 @@ jobs:
           git add --intent-to-add packages/symfony/public/browser
           git diff --exit-code -- packages/symfony/public/browser
 
+  site:
+    name: Documentation site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build the toolchain's image
+        run: docker compose --profile node build node
+      - name: Build the site, refusing dead links
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose run --rm -w /app/site node sh -c 'npm ci && npm audit && npm run build'
+
   e2e:
     name: Browser tests
     runs-on: ubuntu-latest
@@ -144,6 +160,44 @@ jobs:
       - name: Show the app's log on failure
         if: failure()
         run: docker compose --profile e2e logs e2e-app
+
+  quickstart:
+    name: Quickstart
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build the development image
+        uses: docker/bake-action@v7
+        with:
+          pull: true
+          load: true
+          source: .
+          files: compose.yaml
+          targets: php
+          set: |
+            *.cache-from=type=gha,scope=dev-${{ github.ref }}
+            *.cache-from=type=gha,scope=dev-refs/heads/main
+      - name: Follow the quickstart as it's written, in a fresh application
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose --profile quickstart run --rm --no-deps quickstart-app php tools/quickstart/follow.php
+      - name: Claim, sign out and sign in, in a browser
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose --profile quickstart up -d --wait --no-build quickstart-app
+          docker compose --profile quickstart run --rm quickstart npm ci
+          docker compose --profile quickstart run --rm -e CI=1 quickstart npx playwright test --config playwright.quickstart.config.ts
+      - name: Show the app's log on failure
+        if: failure()
+        run: docker compose --profile quickstart logs quickstart-app
 
   specification:
     name: Formal models

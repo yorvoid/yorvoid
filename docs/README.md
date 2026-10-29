@@ -4,6 +4,25 @@ Documentation for two readers: **integrators**, who add YorvoID to an applicatio
 
 > YorvoID is in early development. These pages grow with each milestone.
 
+## Tutorials
+
+- [Quickstart: Symfony](tutorials/symfony-quickstart.md): passkey sign-in in a fresh Symfony application, in about 15 minutes.
+- [Any PHP application](tutorials/plain-php.md): the services wired by hand, from claiming the first account to signing in and out.
+- [A library on YorvoID](tutorials/library.md): a bundle that uses the application's YorvoID for its people.
+
+## How-to
+
+- [Check the setup in deployments](how-to/check-the-setup.md) with `yorvoid:doctor`.
+- [Move to PostgreSQL](how-to/postgresql.md) for production.
+- [Turn on notifications](how-to/notifications.md) with Symfony Mailer.
+- [Rotate the signing keys](how-to/rotate-keys.md) without downtime.
+- [Change the sign-in pages](how-to/sign-in-pages.md) to your look.
+
+## Reference
+
+- [Configuration](reference/configuration.md): everything the Symfony bundle takes, with its defaults.
+- [Console commands](reference/console.md): every command, its arguments and options.
+
 ## Concepts
 
 - [Realms](concepts/realms.md): the isolation boundary every record belongs to.
