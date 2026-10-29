@@ -17,6 +17,12 @@
             "email": "poposki.darko@gmail.com"
         }
     ],
+    "support": {
+        "issues": "https://github.com/yorvoid/yorvoid/issues",
+        "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/intent-verifier",
+        "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+        "security": "https://github.com/yorvoid/yorvoid/security/policy"
+    },
     "require": {
         "php": ">=8.5",
         "ext-mbstring": "*",

@@ -35,6 +35,6 @@ After 1.0, the latest minor version receives security fixes, and the previous mi
 
 ## Scope
 
-This policy covers the code in this repository: every `yorvoid/yorvoid-*` package and the Docker setup used to develop them.
+This policy covers the code in this repository: every `yorvoid/*` Composer package (their own repositories, such as `yorvoid/core`, are read-only copies of `packages/`), the `@yorvoid/browser` npm package, and the Docker setup used to develop them.
 
 Vulnerabilities in YorvoID's dependencies (e.g. Doctrine DBAL, Symfony components, `web-auth/webauthn-lib`) should be reported to those projects. If you're not sure where an issue belongs, report it here and we'll help route it.
