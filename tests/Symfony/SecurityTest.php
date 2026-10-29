@@ -11,10 +11,15 @@ use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpFoundation\Cookie;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpFoundation\Session\Session as PhpSession;
+use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAccountStatusException;
 use Symfony\Component\Security\Core\Exception\UserNotFoundException;
 use Symfony\Component\Security\Core\User\InMemoryUser;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Security\Http\Event\LogoutEvent;
 use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
 use YorvoID\Authn\Recovery\IssueRecoveryLink;
 use YorvoID\Authn\Recovery\RecoveryCodes;
@@ -38,7 +43,10 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\SuspendPrincipal;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Secret;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Symfony\Security\CurrentSession;
+use YorvoID\Symfony\Security\EndSessionOnSignOut;
 use YorvoID\Symfony\Security\PrincipalUser;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
@@ -110,6 +118,54 @@ final class SecurityTest extends TestCase
 
         self::assertSame(200, $this->statusCode());
         self::assertSame([], $this->browser->getResponse()->headers->getCookies());
+    }
+
+    public function testSigningOutEndsTheYorvoIDSession(): void
+    {
+        $this->boot();
+        $ana = $this->principal();
+        $this->signIn($ana);
+        $this->get('/me');
+        $held = $this->browser->getRequest()->getSession()->get('yorvoid_session');
+        \assert(\is_string($held));
+
+        $this->browser->request('GET', '/sign-out');
+
+        self::assertSame(302, $this->statusCode());
+        $sessions = $this->container->get(Sessions::class);
+        \assert($sessions instanceof Sessions);
+        self::assertNull($sessions->validate(Realm::default(), Secret::fromString($held)), 'The YorvoID session outlived signing out.');
+        $this->browser->request('GET', '/me');
+        self::assertSame(401, $this->statusCode());
+
+        // Signed out already: nothing to end.
+        $this->browser->request('GET', '/sign-out');
+        self::assertSame(302, $this->statusCode());
+    }
+
+    public function testSigningOutForgetsTheTokenWhenThePhpSessionStays(): void
+    {
+        // An application whose logout keeps the PHP session (invalidate_session: false).
+        $this->boot();
+        $sessions = $this->container->get(Sessions::class);
+        \assert($sessions instanceof Sessions);
+        $started = $sessions->start(new StartSession(Realm::default(), $this->principal()->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web));
+        $request = Request::create('/sign-out');
+        $request->setSession(new PhpSession(new MockArraySessionStorage()));
+        $request->getSession()->set(CurrentSession::KEY, $started->token->reveal());
+        $request->getSession()->set('cart', ['book']);
+        $request->cookies->set($request->getSession()->getName(), 'the browser\'s');
+        $requests = $this->container->get('request_stack');
+        \assert($requests instanceof RequestStack);
+        $requests->push($request);
+        $listener = $this->container->get(EndSessionOnSignOut::class);
+        \assert($listener instanceof EndSessionOnSignOut);
+
+        $listener(new LogoutEvent($request, null));
+
+        self::assertFalse($request->getSession()->has(CurrentSession::KEY));
+        self::assertNull($sessions->validate(Realm::default(), $started->token));
+        self::assertSame(['book'], $request->getSession()->get('cart'));
     }
 
     public function testEndingTheYorvoIDSessionSignsOutAtTheNextRequest(): void

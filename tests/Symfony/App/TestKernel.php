@@ -110,6 +110,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                     'lazy' => true,
                     'provider' => 'yorvoid',
                     'user_checker' => PrincipalUserChecker::class,
+                    'logout' => ['path' => 'sign_out'],
                 ] + ($this->authenticators ? ['custom_authenticators' => [PasskeyAuthenticator::class, RecoveryCodeAuthenticator::class, RecoveryLinkAuthenticator::class, SessionAuthenticator::class]] : [])],
                 'access_control' => [['path' => '^/me', 'roles' => 'IS_AUTHENTICATED']],
             ]);

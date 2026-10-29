@@ -13,6 +13,7 @@ use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Address;
+use Symfony\Component\Translation\Translator;
 use Twig\Extension\AbstractExtension;
 use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Notification\SecurityNotifications;
@@ -110,7 +111,9 @@ final class YorvoIDBundle extends AbstractBundle
 
     public function prependExtension(ContainerConfigurator $container, ContainerBuilder $builder): void
     {
-        if ($builder->hasExtension('framework')) {
+        // Only with Symfony's translation component: the paths would turn the translator on, and an
+        // application without it fails to start. YorvoID then uses its own translator.
+        if ($builder->hasExtension('framework') && class_exists(Translator::class)) {
             $builder->prependExtensionConfig('framework', ['translator' => ['paths' => self::TRANSLATIONS]]);
         }
     }

@@ -127,6 +127,8 @@ security:
                 - YorvoID\Symfony\Security\Authenticator\RecoveryCodeAuthenticator
                 - YorvoID\Symfony\Security\Authenticator\RecoveryLinkAuthenticator
                 - YorvoID\Symfony\Security\Authenticator\SessionAuthenticator
+            logout:
+                path: /sign-out
 
 # config/routes/yorvoid.yaml
 yorvoid:
@@ -150,7 +152,9 @@ yorvoid:
 - The [browser client](browser-client.md) calls these for you.
 - Refusals answer `{"error"}` with a message to show: 401 for a sign-in that didn't work (with `"unknown_credential": true` when the passkey isn't registered here, so the browser can tell its provider), 429 with `Retry-After` when there were too many, 400 with a `reason` for a passkey refused, and 403 with `step_up` when a change needs a more recent proof.
 - The PHP session holds only the YorvoID session's token, under a new PHP session ID at every sign-in and step-up. Each request checks the YorvoID session once; when it has ended, expired, or its principal was suspended, the PHP session is emptied before the firewall reads it, and the person is signed out.
-- `CurrentSession::get()` gives the request's YorvoID session, e.g. for `Sessions::stepUp()` checks; `CurrentSession::forget()` drops it when you sign someone out.
+- Signing out through the firewall's `logout` ends the YorvoID session as well as the PHP session, so its token is no use to anyone who kept it.
+- `CurrentSession::get()` gives the request's YorvoID session, e.g. for `Sessions::stepUp()` checks; `CurrentSession::forget()` drops it when you sign someone out yourself.
+- Without `symfony/translation`, YorvoID translates its pages and emails with its own translator.
 
 ### Your own users
 
