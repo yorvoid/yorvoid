@@ -1,11 +1,16 @@
 ---
 name: CI
 
+# Pull requests get the checks that decide whether they can be merged, as fast as they can run. The
+# expensive ones that don't depend on the change (the full mutation run, longer fuzzing) run on main
+# and every night, where they also catch what changed around the code: new advisories, new releases.
 on:
   push:
     branches:
       - main
   pull_request: ~
+  schedule:
+    - cron: '23 2 * * *'
   workflow_dispatch: ~
 
 permissions:
@@ -16,11 +21,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  qa:
-    name: Quality checks and tests (PostgreSQL ${{ matrix.postgres }})
+  checks:
+    name: Static analysis and fuzzing
     runs-on: ubuntu-latest
-    # Mutation testing and fuzzing have no time limit of their own (Composer's is off for them).
-    timeout-minutes: 45
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build the development image
+        uses: docker/bake-action@v7
+        with:
+          pull: true
+          load: true
+          source: .
+          files: compose.yaml
+          targets: php
+          set: |
+            *.cache-from=type=gha,scope=dev-${{ github.ref }}
+            *.cache-from=type=gha,scope=dev-refs/heads/main
+            *.cache-to=type=gha,scope=dev-${{ github.ref }},mode=max
+      - name: Start services
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose up --wait --no-build
+      - name: Install dependencies
+        run: docker compose exec -T php composer install --no-interaction --no-progress
+      - name: Check for known vulnerabilities in dependencies
+        run: docker compose exec -T php composer audit
+      - name: Validate composer.json
+        run: docker compose exec -T php composer validate --strict --no-check-publish
+      - name: Check the coding standard
+        run: docker compose exec -T php composer cs
+      - name: Analyse with PHPStan
+        run: docker compose exec -T php composer phpstan
+      - name: Check the architecture's layers
+        run: docker compose exec -T php composer deptrac
+      - name: Fuzzing
+        # passkey-responses is skipped here for now; it runs locally. Each night, ten times as long.
+        env:
+          RUNS: ${{ github.event_name == 'schedule' && '200000' || '20000' }}
+        run: docker compose exec -T -e FUZZ_SKIP=passkey-responses php composer fuzz -- "$RUNS"
+      - name: Check the ASVS mapping against OWASP's list
+        run: docker compose exec -T php php assurance/check-asvs.php
+
+  tests:
+    name: Tests (PostgreSQL ${{ matrix.postgres }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -54,17 +106,55 @@ jobs:
           docker compose up --wait --no-build
       - name: Install dependencies
         run: docker compose exec -T php composer install --no-interaction --no-progress
-      - name: Check for known vulnerabilities in dependencies
-        run: docker compose exec -T php composer audit
-      - name: Run quality checks and tests
-        run: docker compose exec -T php composer qa
-      - name: Mutation testing
+      - name: Run the tests
+        run: docker compose exec -T php composer test
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+  mutation:
+    name: Mutation testing
+    runs-on: ubuntu-latest
+    # A pull request's lines take minutes; the full run on main and each night takes much longer.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 120 }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # The pull request's base branch, to compare with.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build the development image
+        uses: docker/bake-action@v7
+        with:
+          pull: true
+          load: true
+          source: .
+          files: compose.yaml
+          targets: php
+          set: |
+            *.cache-from=type=gha,scope=dev-${{ github.ref }}
+            *.cache-from=type=gha,scope=dev-refs/heads/main
+            *.cache-to=type=gha,scope=dev-${{ github.ref }},mode=max
+      - name: Start services
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose up --wait --no-build
+      - name: Install dependencies
+        run: docker compose exec -T php composer install --no-interaction --no-progress
+      - name: Mutate the lines the pull request changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: docker compose exec -T php composer infection -- --git-diff-lines --git-diff-base="$BASE" --ignore-msi-with-no-mutations --logger-github
+      # Also catches what a pull request's lines can't show: a change to a test that lets mutants of
+      # code it didn't touch survive.
+      - name: Mutate all the code
+        if: github.event_name != 'pull_request'
         run: docker compose exec -T php composer infection
-      - name: Fuzzing
-        # passkey-responses is skipped here for now; it runs locally.
-        run: docker compose exec -T -e FUZZ_SKIP=passkey-responses php composer fuzz
-      - name: Check the ASVS mapping against OWASP's list
-        run: docker compose exec -T php php assurance/check-asvs.php
       - name: Show logs on failure
         if: failure()
         run: docker compose logs
@@ -72,11 +162,24 @@ jobs:
   browser:
     name: Browser client
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          # The pull request's base branch, to compare with.
+          fetch-depth: 0
           persist-credentials: false
+      # Mutation testing is the slow part, and nothing else changes what it finds.
+      - name: See whether the browser client changed
+        id: changes
+        env:
+          BASE: origin/${{ github.base_ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ] || ! git diff --quiet "$BASE" HEAD -- packages/browser compose.yaml .github/workflows/ci.yaml; then
+            echo "client=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build the toolchain's image
         run: docker compose --profile node build node
       - name: Install dependencies
@@ -95,6 +198,7 @@ jobs:
           export UID GID
           docker compose run --rm node npm run qa
       - name: Mutation testing
+        if: steps.changes.outputs.client == 'true'
         run: |
           GID=$(id -g)
           export UID GID
@@ -214,3 +318,29 @@ jobs:
           GID=$(id -g)
           export UID GID
           docker compose --profile spec run --rm spec ./check.sh
+
+  # The one check that pull requests need to pass: every job above passed.
+  ci:
+    name: CI
+    if: always()
+    needs:
+      - checks
+      - tests
+      - mutation
+      - browser
+      - site
+      - e2e
+      - quickstart
+      - specification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != success ]; then
+              echo "::error::A job ended with \"$result\": $RESULTS"
+              exit 1
+            fi
+          done

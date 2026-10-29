@@ -1,4 +1,6 @@
 version: 2
+# Minor and patch updates come together, one pull request per ecosystem and directory each week, so
+# that each runs CI once; major updates come one by one, as they may need changes.
 updates:
   - package-ecosystem: docker
     directory: /
@@ -8,6 +10,9 @@ updates:
       prefix: "chore"
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
 
   - package-ecosystem: composer
     directory: /
@@ -17,6 +22,9 @@ updates:
       prefix: "chore"
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
 
   - package-ecosystem: github-actions
     directory: /
@@ -26,3 +34,22 @@ updates:
       prefix: "chore"
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  # The browser client, which is published, and the tooling of the browser tests and the site.
+  - package-ecosystem: npm
+    directories:
+      - /packages/browser
+      - /e2e
+      - /site
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+    cooldown:
+      default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]

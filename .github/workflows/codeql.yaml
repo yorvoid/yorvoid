@@ -27,9 +27,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # CodeQL has no PHP: PHPStan, with the rules in tools/phpstan, analyses it in CI.
         language:
-          # Workflows now; javascript-typescript joins when the browser client arrives (UX-001).
           - actions
+          # The browser client (UX-001), and the e2e and site tooling.
+          - javascript-typescript
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
