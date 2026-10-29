@@ -10,8 +10,6 @@
         "summary": "var/infection/summary.log"
     },
     "tmpDir": "var/cache/infection",
-    // Collecting coverage of the whole suite needs more than PHP's default 128 MB.
-    "initialTestsPhpOptions": "-d memory_limit=1G",
     "mutators": {
         "@default": true,
         // assert() only tells static analysis what a value's type is; mutating it tests nothing.
