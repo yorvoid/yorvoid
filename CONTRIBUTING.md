@@ -80,6 +80,16 @@ This is a monorepo. Develop everything here, even code that's published as separ
    docker compose run --rm quickstart npx playwright test --config playwright.quickstart.config.ts
    ```
 
+   The documentation site arranges `docs/` with VitePress (`site/`). It refuses dead links; preview it at <http://localhost:5173/yorvoid/>:
+
+   ```bash
+   docker compose run --rm -w /app/site node npm ci
+   docker compose run --rm -w /app/site node npm run build
+   docker compose run --rm -p 5173:5173 -w /app/site node npm run dev
+   ```
+
+   `site/package.json` pins Vite to a release with the dev server's security fixes, which VitePress 1 doesn't depend on yet: drop the override when VitePress does. The reference pages are written from the code: `composer docs-reference` after changing the configuration or a command.
+
    CI runs the same checks, and a pull request can only be merged when they pass. `composer cs-fix` fixes the coding style for you. Changes to security-critical code also need `composer infection` (mutation testing) to stay above its thresholds.
 4. Open a pull request against `main`.
 

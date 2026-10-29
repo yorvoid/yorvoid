@@ -107,6 +107,22 @@ jobs:
           git add --intent-to-add packages/symfony/public/browser
           git diff --exit-code -- packages/symfony/public/browser
 
+  site:
+    name: Documentation site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build the toolchain's image
+        run: docker compose --profile node build node
+      - name: Build the site, refusing dead links
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose run --rm -w /app/site node sh -c 'npm ci && npm audit && npm run build'
+
   e2e:
     name: Browser tests
     runs-on: ubuntu-latest

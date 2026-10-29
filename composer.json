@@ -87,6 +87,7 @@
             "Composer\\Config::disableProcessTimeout",
             "@php -d memory_limit=1G vendor/bin/infection --threads=max --show-mutations"
         ],
+        "docs-reference": "YORVOID_WRITE_REFERENCE=1 phpunit --filter ReferenceDocsTest",
         "qa": [
             "@composer validate --strict --no-check-publish",
             "@cs",
@@ -106,6 +107,7 @@
         "deptrac": "Checks the dependency rules between packages",
         "test": "Runs the tests",
         "infection": "Mutation testing",
+        "docs-reference": "Writes the reference pages from the code: the configuration and the console commands",
         "qa": "Everything CI checks, in order",
         "fuzz": "Fuzzes the parsers; any crash fails"
     }
