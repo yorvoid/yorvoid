@@ -17,7 +17,9 @@
          displayDetailsOnTestsThatTriggerWarnings="true">
     <php>
         <ini name="error_reporting" value="-1"/>
-        <ini name="memory_limit" value="256M"/>
+        <!-- Every test that boots a kernel compiles a container of its own, whose classes stay loaded:
+             the whole suite with coverage, as Infection runs it, needs more than 256 MB. -->
+        <ini name="memory_limit" value="1G"/>
         <ini name="zend.assertions" value="1"/>
         <ini name="assert.exception" value="1"/>
     </php>

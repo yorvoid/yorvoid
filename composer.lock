@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "9d4a60f44603ee61c66ccd5112f9a454",
+    "content-hash": "c7187fc2ee7c79cf66e629f9530df30e",
     "packages": [
         {
             "name": "brick/math",
@@ -4196,7 +4196,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "70602625166c7bc48ca2643921a8ac2081430ded"
+                "reference": "d7c4fd151473a5a9770d190f01938a0a6cb62a13"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4250,7 +4250,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "fb06ef37f2c0f41d812904c5289e7adbffabf426"
+                "reference": "287be56b130552197e4ff3fdc2d2f3412146e9af"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4301,7 +4301,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/flows",
-                "reference": "a2b890ee0167ca37df0765b6d8dab7ac0da0fcf0"
+                "reference": "5614e208a415cd0274477dc794e5fd0363685853"
             },
             "require": {
                 "php": ">=8.5",
@@ -4350,7 +4350,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "7b1b3146b455e4101910d3582013dbcca2681559"
+                "reference": "9d8fcbdcb18944495c2044a28686f5a699527b56"
             },
             "require": {
                 "ext-mbstring": "*",
@@ -4400,7 +4400,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/mail",
-                "reference": "617a0e6dc53722cbe2043642e2702f7f3002e809"
+                "reference": "e873d0501b318d00e8b7a3556c6b4eb3404cec58"
             },
             "require": {
                 "ext-mbstring": "*",
@@ -4445,7 +4445,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/passkeys",
-                "reference": "51794438efeef4242f641024db0fdf81efe5d4c6"
+                "reference": "e4e9ab3e4784ef832cdcc516dea190138086583c"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4501,7 +4501,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "3f01561b8e12ff54027059d4dc41162dd23e7ded"
+                "reference": "1a0e976fa1b3e516a8c05399ff9a42245948f81e"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4563,12 +4563,67 @@
             }
         },
         {
+            "name": "yorvoid/testing",
+            "version": "0.1.x-dev",
+            "dist": {
+                "type": "path",
+                "url": "packages/testing",
+                "reference": "bbe1fad95385f7c8c201e043fc4c34479c1fe97f"
+            },
+            "require": {
+                "php": ">=8.5",
+                "psr/clock": "^1.0",
+                "psr/container": "^2.0",
+                "symfony/clock": "^8.1",
+                "yorvoid/authn": "^0.1",
+                "yorvoid/core": "^0.1",
+                "yorvoid/passkeys": "^0.1",
+                "yorvoid/virtual-authenticator": "^0.1"
+            },
+            "suggest": {
+                "symfony/framework-bundle": "To sign in to Symfony functional tests with BrowserSignIn",
+                "yorvoid/symfony": "To sign in to Symfony functional tests with BrowserSignIn"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-main": "0.1.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "YorvoID\\Testing\\": "src/"
+                }
+            },
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Darko Poposki",
+                    "email": "poposki.darko@gmail.com"
+                }
+            ],
+            "description": "YorvoID's test helpers: scenario fixtures made through YorvoID's own services, a movable clock, and signing in to Symfony functional tests.",
+            "homepage": "https://github.com/yorvoid/yorvoid",
+            "keywords": [
+                "authentication",
+                "fixtures",
+                "passkeys",
+                "symfony",
+                "testing"
+            ],
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
             "name": "yorvoid/throttle",
             "version": "0.1.x-dev",
             "dist": {
                 "type": "path",
                 "url": "packages/throttle",
-                "reference": "ad8abc10d4e68425b5840ddc343ed5cab0779722"
+                "reference": "1324f10bb6e3c785fb1ae3b7b4497292c31b19a8"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4616,7 +4671,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/translation",
-                "reference": "b4bc4007350d699707db6ae4b594a88cd50e3647"
+                "reference": "9fad8d6fd3dcb66b221f6a1f810ae32e8b390529"
             },
             "require": {
                 "ext-intl": "*",
@@ -4651,6 +4706,52 @@
                 "icu",
                 "messageformat",
                 "translation"
+            ],
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
+            "name": "yorvoid/virtual-authenticator",
+            "version": "0.1.x-dev",
+            "dist": {
+                "type": "path",
+                "url": "packages/virtual-authenticator",
+                "reference": "f9faab256639d4c0c1f38e7a0f072e445648cbac"
+            },
+            "require": {
+                "ext-openssl": "*",
+                "ext-sodium": "*",
+                "php": ">=8.5"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-main": "0.1.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "YorvoID\\VirtualAuthenticator\\": "src/"
+                }
+            },
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Darko Poposki",
+                    "email": "poposki.darko@gmail.com"
+                }
+            ],
+            "description": "YorvoID's virtual authenticator: a software WebAuthn authenticator for tests that answers registration and sign-in options as a browser would, and misbehaves on request.",
+            "homepage": "https://github.com/yorvoid/yorvoid",
+            "keywords": [
+                "fido2",
+                "passkeys",
+                "testing",
+                "virtual-authenticator",
+                "webauthn"
             ],
             "transport-options": {
                 "relative": true

@@ -6,6 +6,8 @@
     {"path": "packages/mail", "repository": "yorvoid/mail"},
     {"path": "packages/passkeys", "repository": "yorvoid/passkeys"},
     {"path": "packages/symfony", "repository": "yorvoid/symfony"},
+    {"path": "packages/testing", "repository": "yorvoid/testing"},
     {"path": "packages/throttle", "repository": "yorvoid/throttle"},
-    {"path": "packages/translation", "repository": "yorvoid/translation"}
+    {"path": "packages/translation", "repository": "yorvoid/translation"},
+    {"path": "packages/virtual-authenticator", "repository": "yorvoid/virtual-authenticator"}
 ]

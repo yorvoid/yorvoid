@@ -49,39 +49,43 @@ final class YorvoIDBundle extends AbstractBundle
 
     public function configure(DefinitionConfigurator $definition): void
     {
-        $limit = static fn (NodeBuilder $node, string $name, string $default, string $info): NodeBuilder => $node->scalarNode($name)->defaultValue($default)->info($info)
+        // A limit; without a default, one of the preset's.
+        $limit = static fn (NodeBuilder $node, string $name, ?string $default, string $info): NodeBuilder => (null === $default ? $node->scalarNode($name) : $node->scalarNode($name)->defaultValue($default))->info($info)
             ->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || 1 !== preg_match(Limits::FORMAT, $value))->thenInvalid('%s is not a limit: write attempts and a period, e.g. "10/15m".')->end()
             ->end();
 
         $children = $definition->rootNode()->children();
+        $children->enumNode('preset')->values(array_keys(Presets::ALL))->defaultValue(Presets::DEFAULT)->info('consumer_site, internal_tool, regulated or agent_platform: the settings you leave out (marked "preset")');
         $children->scalarNode('connection')->defaultValue('default')->info('The DoctrineBundle connection to keep YorvoID\'s tables in');
         $children->scalarNode('realm')->defaultValue('default')->info('The realm people sign in to');
         $children->scalarNode('users')->defaultNull()->info('The service ID of your PrincipalUsers, to sign in your own users; PrincipalUser if not given');
+        $children->arrayNode('keys')->addDefaultsIfNotSet()->children()
+            ->scalarNode('file')->defaultNull()->info('The signing keys\' file, only its owner may read, e.g. "/run/secrets/yorvoid-keys.json"; yorvoid:keys:rotate creates it')->end();
         $children->arrayNode('cookies')->addDefaultsIfNotSet()->children()
             ->scalarNode('device')->defaultValue('__Host-yorvoid_device')->info('The cookie that recognises devices')->end();
         $children->arrayNode('storage')->addDefaultsIfNotSet()->children()
             ->scalarNode('prefix')->defaultValue(StorageLocation::DEFAULT_PREFIX)->info('Prefix of YorvoID\'s tables')->end()
             ->scalarNode('schema')->defaultNull()->info('A PostgreSQL schema of their own')->end();
         $children->arrayNode('sessions')->addDefaultsIfNotSet()->children()
-            ->enumNode('preset')->values(array_keys(Factories::SESSION_PRESETS))->defaultValue('aal2')->info('aal2: 24h, 1h idle; aal3: 12h, 15m idle; console: 8h, 1h idle')->end()
+            ->enumNode('preset')->values(array_keys(Factories::SESSION_PRESETS))->info('aal2: 24h, 1h idle; aal3: 12h, 15m idle; console: 8h, 1h idle; preset')->end()
             ->scalarNode('absolute')->defaultNull()->info('Overrides the preset, e.g. "8h"')->end()
             ->scalarNode('idle')->defaultNull()->info('Overrides the preset, e.g. "30m"')->end()
-            ->booleanNode('recognise_devices')->defaultTrue()->info('Recognise devices by a cookie, and announce new ones')->end();
+            ->booleanNode('recognise_devices')->info('Recognise devices by a cookie, and announce new ones; preset')->end();
         $children->arrayNode('passkeys')->isRequired()->children()
             ->scalarNode('relying_party_id')->isRequired()->cannotBeEmpty()->info('E.g. "example.com"')->end()
             ->arrayNode('origins')->isRequired()->requiresAtLeastOneElement()->scalarPrototype()->end()->info('E.g. ["https://example.com"]')->end()
-            ->enumNode('user_verification')->values(['required', 'preferred'])->defaultValue('required')->end()
+            ->enumNode('user_verification')->values(['required', 'preferred'])->info('Preset')->end()
             ->enumNode('clone_policy')->values(['refuse_sign_in', 'disable_passkey', 'allow'])->defaultValue('refuse_sign_in')->end()
             ->scalarNode('timeout')->defaultValue('5m')->end();
         $children->arrayNode('step_up')->addDefaultsIfNotSet()->children()
-            ->scalarNode('window')->defaultValue('5m')->info('How recent a proof changing sign-in methods needs')->end()
-            ->scalarNode('cool_down')->defaultNull()->info('How long sensitive operations wait after an account recovery, e.g. "24h"; none if not given')->end();
+            ->scalarNode('window')->info('How recent a proof changing sign-in methods needs; preset')->end()
+            ->scalarNode('cool_down')->info('How long sensitive operations wait after an account recovery, e.g. "24h", or ~ for none; preset')->end();
         $children->arrayNode('recovery_codes')->addDefaultsIfNotSet()->children()
             ->integerNode('count')->defaultValue(10)->min(1)->max(100)->end();
         $limits = $children->arrayNode('limits')->addDefaultsIfNotSet()->children();
-        $limit($limits, 'per_account_and_address', '10/15m', 'Attempts at a secret, one account from one address');
-        $limit($limits, 'per_account', '100/1h', 'Attempts at a secret, one account from anywhere');
-        $limit($limits, 'per_address', '300/15m', 'Attempts at a secret, one address');
+        $limit($limits, 'per_account_and_address', null, 'Attempts at a secret, one account from one address; preset');
+        $limit($limits, 'per_account', null, 'Attempts at a secret, one account from anywhere; preset');
+        $limit($limits, 'per_address', null, 'Attempts at a secret, one address; preset');
         $limit($limits, 'invitation_emails', '1/2m', 'Invitations sent again to one person');
         $limit($limits, 'signature_requests', '20/1h', 'Signatures of intents asked of one person');
         $children->arrayNode('notifications')->canBeDisabled()->children()
@@ -116,7 +120,10 @@ final class YorvoIDBundle extends AbstractBundle
      */
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
-        $settings = $this->flatten($config);
+        // What the configuration leaves out, its preset gives: settings without a default are absent.
+        $preset = $config['preset'];
+        \assert(\is_string($preset));
+        $settings = $this->flatten($config) + Presets::ALL[$preset];
 
         foreach ($settings as $name => $value) {
             $container->parameters()->set('yorvoid.'.$name, $value);

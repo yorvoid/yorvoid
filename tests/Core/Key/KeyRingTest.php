@@ -6,6 +6,7 @@ namespace YorvoID\Tests\Core\Key;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Filesystem\Filesystem;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Key\KeyStatus;
@@ -222,6 +223,74 @@ final class KeyRingTest extends TestCase
         }
     }
 
+    public function testRotatesInThreeStepsAndKeepsVerifyingWhatTheOldKeySigned(): void
+    {
+        $ring = new KeyRing([SigningKey::generate('2026-09')]);
+        $signature = $ring->signer()->sign('checkpoint');
+
+        // 1. A new key, verify-only.
+        $ring = $ring->with(SigningKey::generate('2026-10', KeyStatus::VerifyOnly));
+        self::assertSame(['2026-09' => KeyStatus::Active, '2026-10' => KeyStatus::VerifyOnly], $this->statuses($ring));
+
+        // 2. The new key signs; the old one only verifies.
+        $ring = $ring->activating('2026-10');
+        self::assertSame(['2026-09' => KeyStatus::VerifyOnly, '2026-10' => KeyStatus::Active], $this->statuses($ring));
+        self::assertTrue($ring->verify('2026-09', 'checkpoint', $signature));
+        self::assertTrue($ring->verify('2026-10', 'next', $ring->signer()->sign('next')));
+        self::assertNotNull($ring->get('2026-09')?->seed, 'The old key lost its private part, so it can\'t be made active again.');
+
+        // 3. The old key goes, once nothing it signed needs checking.
+        $ring = $ring->without('2026-09');
+        self::assertSame(['2026-10' => KeyStatus::Active], $this->statuses($ring));
+        self::assertFalse($ring->verify('2026-09', 'checkpoint', $signature));
+    }
+
+    public function testRefusesToRemoveTheActiveKeyOrUnknownOnes(): void
+    {
+        $ring = new KeyRing([SigningKey::generate('2026-09', KeyStatus::VerifyOnly), SigningKey::generate('2026-10')]);
+
+        foreach ([
+            'active' => [static fn (): KeyRing => $ring->without('2026-10'), 'The key "2026-10" is active: it can\'t be removed.'],
+            'unknown, removed' => [static fn (): KeyRing => $ring->without('2026-11'), 'The key ring has no key "2026-11".'],
+            'unknown, activated' => [static fn (): KeyRing => $ring->activating('2026-11'), 'The key ring has no key "2026-11".'],
+            'without a private part' => [static fn (): KeyRing => $ring->with(SigningKey::generate('2026-11', KeyStatus::VerifyOnly)->withoutPrivatePart())->activating('2026-11'), 'The key "2026-11" is active but has no private part.'],
+            'a second active key' => [static fn (): KeyRing => $ring->with(SigningKey::generate('2026-11')), 'The key ring has 2 active keys (2026-10, 2026-11).'],
+        ] as $case => [$attempt, $problem]) {
+            try {
+                $attempt();
+                self::fail(\sprintf('Accepted: %s.', $case));
+            } catch (IntegratorError $error) {
+                self::assertSame($problem, $error->problem, $case);
+            }
+        }
+
+        self::assertSame('Use one of: 2026-09, 2026-10.', $this->error(static fn (): KeyRing => $ring->without('2026-11'))->fix);
+    }
+
+    public function testWritesAFileOnlyItsOwnerCanRead(): void
+    {
+        $directory = \sprintf('%s/yorvoid-keys-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
+        mkdir($directory);
+        $path = $directory.'/keys.json';
+
+        try {
+            $ring = new KeyRing([SigningKey::generate('2026-09', KeyStatus::VerifyOnly), SigningKey::generate('2026-10')]);
+            $ring->toFile($path);
+            self::assertSame(0o600, fileperms($path) & 0o777);
+            self::assertSame($ring->toJwks(true)->reveal(), KeyRing::fromFile($path)->toJwks(true)->reveal());
+
+            // Replaced at once, and nothing left behind.
+            $ring->without('2026-09')->toFile($path);
+            self::assertSame(['2026-10'], array_map(static fn (SigningKey $key): string => $key->id, KeyRing::fromFile($path)->keys()));
+            self::assertSame(['keys.json'], array_values(array_diff((array) scandir($directory), ['.', '..'])));
+        } finally {
+            new Filesystem()->remove($directory);
+        }
+
+        $error = $this->error(static fn () => $ring->toFile('/nonexistent/keys.json'));
+        self::assertSame('The key file "/nonexistent/keys.json" can\'t be written.', $error->problem);
+    }
+
     public function testReportsAMissingFile(): void
     {
         $this->expectException(IntegratorError::class);
@@ -246,5 +315,24 @@ final class KeyRingTest extends TestCase
     private static function signWith(SigningKey $key, string $message): string
     {
         return new SigningKey($key->id, KeyStatus::Active, $key->publicKey, $key->seed)->sign($message);
+    }
+
+    /**
+     * @return array<string, KeyStatus>
+     */
+    private function statuses(KeyRing $ring): array
+    {
+        return array_column(array_map(static fn (SigningKey $key): array => [$key->id, $key->status], $ring->keys()), 1, 0);
+    }
+
+    private function error(\Closure $attempt): IntegratorError
+    {
+        try {
+            $attempt();
+        } catch (IntegratorError $error) {
+            return $error;
+        }
+
+        self::fail('Nothing was refused.');
     }
 }

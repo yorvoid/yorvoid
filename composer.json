@@ -19,8 +19,10 @@
                     "yorvoid/mail": "0.1.x-dev",
                     "yorvoid/passkeys": "0.1.x-dev",
                     "yorvoid/symfony": "0.1.x-dev",
+                    "yorvoid/testing": "0.1.x-dev",
                     "yorvoid/throttle": "0.1.x-dev",
-                    "yorvoid/translation": "0.1.x-dev"
+                    "yorvoid/translation": "0.1.x-dev",
+                    "yorvoid/virtual-authenticator": "0.1.x-dev"
                 }
             }
         }
@@ -34,8 +36,10 @@
         "yorvoid/mail": "^0.1",
         "yorvoid/passkeys": "^0.1",
         "yorvoid/symfony": "^0.1",
+        "yorvoid/testing": "^0.1",
         "yorvoid/throttle": "^0.1",
-        "yorvoid/translation": "^0.1"
+        "yorvoid/translation": "^0.1",
+        "yorvoid/virtual-authenticator": "^0.1"
     },
     "require-dev": {
         "deptrac/deptrac": "^4.7",

@@ -48,10 +48,10 @@ use YorvoID\Passkeys\UserVerification;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
-use YorvoID\Tests\Support\VirtualAuthenticator;
 use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;
+use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
  * Passkeys on every implementation (ATN-001…003, ATN-005, ATN-006, ATN-027), with a software

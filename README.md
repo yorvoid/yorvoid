@@ -32,9 +32,11 @@ This repository is a monorepo. Each directory of `packages/` is published as its
 | [`yorvoid/mail`](packages/mail) | Emails from structured content: plain text and accessible HTML, delivered through an interface |
 | [`yorvoid/symfony`](packages/symfony) | YorvoID in Symfony: configuration, services, authenticators for any firewall, console commands |
 | [`yorvoid/translation`](packages/translation) | ICU message translation from the catalogues packages ship (English and German) |
+| [`yorvoid/testing`](packages/testing) | Test helpers for applications: scenario fixtures, a movable clock, signing in to Symfony functional tests |
+| [`yorvoid/virtual-authenticator`](packages/virtual-authenticator) | A software WebAuthn authenticator for tests, for any WebAuthn server |
 | [`@yorvoid/browser`](packages/browser) (npm) | The browser client: passkeys with autofill, step-up, signing intents, the signal API, errors to translate |
 
-More packages arrive with each milestone: authorization, federation, and testing tools.
+More packages arrive with each milestone: authorization and federation among them.
 
 ## Development
 

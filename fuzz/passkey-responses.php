@@ -31,9 +31,9 @@ use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\Storage\InMemoryCeremonyStore;
 use YorvoID\Passkeys\Storage\InMemoryPasskeyStore;
-use YorvoID\Tests\Support\VirtualAuthenticator;
 use YorvoID\Throttle\Storage\InMemoryThrottleStore;
 use YorvoID\Throttle\Throttle;
+use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 require __DIR__.'/bootstrap.php';
 

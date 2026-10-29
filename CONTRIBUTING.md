@@ -44,6 +44,8 @@ This is a monorepo. Develop everything here, even code that's published as separ
 | `packages/mail/` | `yorvoid/mail` |
 | `packages/translation/` | `yorvoid/translation` |
 | `packages/symfony/` | `yorvoid/symfony` |
+| `packages/testing/` | `yorvoid/testing` |
+| `packages/virtual-authenticator/` | `yorvoid/virtual-authenticator` |
 | `packages/browser/` | `@yorvoid/browser` (npm), with its tests |
 | `packages/…` | The other packages, as they arrive |
 | `tests/` | The tests of every package, by package |

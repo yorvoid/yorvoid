@@ -86,6 +86,58 @@ final readonly class KeyRing
     }
 
     /**
+     * Rotation's first step: the ring with a key added, e.g. a new verify-only one (OPS-003).
+     */
+    public function with(SigningKey $key): self
+    {
+        return new self([...$this->keys, $key]);
+    }
+
+    /**
+     * Rotation's second step: the ring with that key active, and the one that was verify-only.
+     */
+    public function activating(string $id): self
+    {
+        $key = $this->known($id);
+
+        return new self(array_map(static fn (SigningKey $other): SigningKey => new SigningKey($other->id, $other === $key ? KeyStatus::Active : KeyStatus::VerifyOnly, $other->publicKey, $other->seed), $this->keys));
+    }
+
+    /**
+     * Rotation's last step: the ring without a key nothing it signed needs any more.
+     */
+    public function without(string $id): self
+    {
+        if (KeyStatus::Active === $this->known($id)->status) {
+            throw new IntegratorError(\sprintf('The key "%s" is active: it can\'t be removed.', $id), 'Make another key active first; then remove this one once nothing it signed still needs checking.', 'concepts/keys.md#rotating-keys');
+        }
+
+        return new self(array_filter($this->keys, static fn (SigningKey $key): bool => $key->id !== $id));
+    }
+
+    /**
+     * Writes the ring, private parts included, to a file only its owner can read; replacing an existing
+     * one at once, so that no reader ever sees half a key set.
+     */
+    public function toFile(string $path): void
+    {
+        $temporary = @tempnam(\dirname($path), '.yorvoid-keys-');
+
+        if (false === $temporary || \dirname($temporary) !== \dirname($path)) {
+            throw new IntegratorError(\sprintf('The key file "%s" can\'t be written.', $path), 'Check that its folder exists, and that the application\'s user may write to it.', 'concepts/keys.md#where-keys-are-kept');
+        }
+
+        // tempnam() creates the file for its owner only (0600).
+        file_put_contents($temporary, $this->toJwks(true)->reveal());
+        rename($temporary, $path);
+    }
+
+    private function known(string $id): SigningKey
+    {
+        return $this->keys[$id] ?? throw new IntegratorError(\sprintf('The key ring has no key "%s".', $id), \sprintf('Use one of: %s.', implode(', ', array_keys($this->keys))), 'concepts/keys.md#rotating-keys');
+    }
+
+    /**
      * Reads a JSON Web Key Set: {"keys": [{"kid", "kty": "OKP", "crv": "Ed25519", "alg": "EdDSA", "x", "d", "status"}]}.
      */
     public static function fromJwks(Secret $json): self

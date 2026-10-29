@@ -30,11 +30,14 @@ yorvoid:
         from: security@example.com
 ```
 
-That's all that's required. The rest, with its defaults:
+That's all that's required. The rest, with its defaults; `# preset` marks what the [preset](#presets) gives when you leave it out, shown for `consumer_site`:
 
 ```yaml
 yorvoid:
+    preset: consumer_site               # or internal_tool, regulated, agent_platform
     connection: default                 # the DoctrineBundle connection for YorvoID's tables
+    keys:
+        file: ~                         # the signing keys, e.g. /run/secrets/yorvoid-keys.json; yorvoid:keys:rotate creates it
     realm: default                      # the realm people sign in to
     users: ~                            # the service ID of your PrincipalUsers; PrincipalUser otherwise
     cookies:
@@ -43,23 +46,23 @@ yorvoid:
         prefix: yorvoid_               # YorvoID's tables are yorvoid_principal, yorvoid_passkey, …
         schema: ~                       # or a PostgreSQL schema of their own
     sessions:
-        preset: aal2                    # aal2: 24h, 1h idle; aal3: 12h, 15m idle; console: 8h, 1h idle
+        preset: aal2                    # preset; aal2: 24h, 1h idle; aal3: 12h, 15m idle; console: 8h, 1h idle
         absolute: ~                     # overrides the preset, e.g. 8h
         idle: ~
-        recognise_devices: true         # announce sign-ins from new devices
+        recognise_devices: true         # preset; announce sign-ins from new devices
     passkeys:
-        user_verification: required     # or preferred
+        user_verification: required     # preset; or preferred
         clone_policy: refuse_sign_in    # or disable_passkey, allow
         timeout: 5m
     step_up:
-        window: 5m                      # how recent a proof changing sign-in methods needs
-        cool_down: ~                    # e.g. 24h after an account recovery
+        window: 5m                      # preset; how recent a proof changing sign-in methods needs
+        cool_down: ~                    # preset; e.g. 24h after an account recovery, ~ for none
     recovery_codes:
         count: 10
     limits:                             # attempts per period
-        per_account_and_address: 10/15m
-        per_account: 100/1h
-        per_address: 300/15m
+        per_account_and_address: 10/15m # preset
+        per_account: 100/1h             # preset
+        per_address: 300/15m            # preset
         invitation_emails: 1/2m
         signature_requests: 20/1h
     notifications:
@@ -75,6 +78,26 @@ yorvoid:
 
 - Durations are written `90s`, `15m`, `8h`, `30d`; limits as attempts per duration, `10/15m`.
 - Each principal's language comes from your profiles: implement `PrincipalLocales` and give its service ID as `notifications.locales`; English otherwise.
+
+### Presets
+
+A preset is a documented starting point for a kind of application (PLT-090). It gives the settings you leave out; whatever you write wins, `~` included. `yorvoid:doctor` warns where yours are weaker than your preset's ([below](#checking-the-setup)); stronger ones are fine.
+
+| Setting | `consumer_site` (default) | `internal_tool` | `regulated` | `agent_platform` |
+|---|---|---|---|---|
+| `sessions.preset` | `aal2` | `console` | `aal3` | `aal2` |
+| `sessions.recognise_devices` | `true` | `true` | `true` | `true` |
+| `passkeys.user_verification` | `required` | `required` | `required` | `required` |
+| `step_up.window` | `5m` | `5m` | `2m` | `5m` |
+| `step_up.cool_down` | none | none | `24h` | `24h` |
+| `limits.per_account_and_address` | `10/15m` | `10/15m` | `5/15m` | `10/15m` |
+| `limits.per_account` | `100/1h` | `100/1h` | `50/1h` | `100/1h` |
+| `limits.per_address` | `300/15m` | `1000/15m` (an office behind one address) | `300/15m` | `300/15m` |
+
+- **consumer_site:** a public site; AAL2 sessions.
+- **internal_tool:** staff signing in for a working day, many of them from one address.
+- **regulated:** AAL3 session limits, fresher proofs for changing sign-in methods, a day's cool-down after an account recovery, tighter limits. Quorum intents and strict audit join it when YorvoID has them.
+- **agent_platform:** people delegating to agents: a taken-over account hands over its agents too, so a recovery waits a day before sensitive operations. Delegation limits join it when YorvoID has agents.
 
 ## What the bundle wires
 
@@ -253,6 +276,8 @@ It answers only in debug mode, wherever it's imported.
 
 | Command | |
 |---|---|
+| `yorvoid:doctor` | Checks YorvoID's setup and says how to fix each problem ([below](#checking-the-setup)). `--strict` fails on warnings too. |
+| `yorvoid:keys:rotate` | Takes the next step in [rotating the signing keys](keys.md#rotating-keys): creates the ring, adds a verify-only key, makes it active; `--remove <key>` removes an old one. Sessions and tokens in flight carry on. |
 | `yorvoid:migrate` | Creates or updates YorvoID's tables, separately from your migrations. `--dry-run` prints the SQL; `--allow-blocking` runs migrations that block tables, in a maintenance window. |
 | `yorvoid:setup-code [realm]` | Prints a setup code that claims a fresh installation (`--lifetime`, 24 hours by default). |
 | `yorvoid:recovery-link <email>` | Prints a recovery link for someone who lost access, for whoever has the server's shell (`--url` with `{token}`, `--lifetime`, 15 minutes by default). |
@@ -260,3 +285,21 @@ It answers only in debug mode, wherever it's imported.
 | `yorvoid:templates:diff [templates]` | After an upgrade, what YorvoID changed in the templates you published; `--accept` takes it. |
 | `yorvoid:templates:lint` | Checks the flow pages, with your templates, for what each step needs. |
 | `yorvoid:purge` | Removes ended sessions, expired tokens and ceremonies, throttling state that's clear, ended cool-downs and long-unused devices. Run it daily. |
+
+## Checking the setup
+
+`yorvoid:doctor` checks what the configuration alone can't, and says how to fix each thing it finds, with a link to the page that explains it:
+
+| Check | What it looks at |
+|---|---|
+| Configuration | Builds what YorvoID builds only when it's first used: the passkey policy (the relying party ID and the origins), the session policy, the limits, the database. Passkeys for `localhost` outside development are a warning. |
+| Keys | With `keys.file` set: the file exists, only its owner can read it, and it holds a valid key ring. |
+| Database and migrations | YorvoID reaches its database, every migration of this version ran, and the database has none from a later version. |
+| Clock | The application's clock agrees with the database's within 5 seconds; a `MockClock` outside development is a problem. |
+| Assurance level | The configuration reaches the level its `sessions.preset` targets ([assurance levels](../security/assurance-levels.md)): passkeys require user verification, sessions last no longer than the level allows, and no AAL3 with synced passkeys. |
+| Preset | Your settings are no weaker than your [preset's](#presets): session preset, device recognition, step-up window and cool-down, limits. |
+| Cookies | The PHP session is on, its cookie is `Secure` (or `auto`), `HttpOnly` and `SameSite=Lax` or `Strict`, and the device cookie has the `__Host-` prefix. |
+| Mailer | With notifications on: the sender is an email address, and outside development the default transport delivers (not `null://`, not Symfony's `smtp://null`). It sends nothing. |
+| Flow pages | The pages have what each step needs (as `yorvoid:templates:lint`), and the templates you published kept up with YorvoID's (as `yorvoid:templates:diff`). |
+
+A **problem** breaks something: sign-in, emails, the pages. The command then fails, so a deployment can stop on it. A **warning** works, but less safely than it could, or than the configuration says; `--strict` fails on warnings too.

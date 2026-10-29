@@ -104,6 +104,25 @@ final class BundleTest extends TestCase
         self::assertSame(10, $this->boot(fresh: true)->getParameter('yorvoid.recovery_codes.count'));
     }
 
+    public function testAPresetGivesTheSettingsTheConfigurationLeavesOut(): void
+    {
+        $regulated = $this->boot(['preset' => 'regulated']);
+
+        self::assertEquals(SessionPolicy::aal3(), $regulated->get(SessionPolicy::class));
+        self::assertEquals(new AttemptLimits(new Limit(5, Duration::minutes(15)), new Limit(50, Duration::hours(1))), $regulated->get(AttemptLimits::class));
+        self::assertSame(['24h', '2m'], [$regulated->getParameter('yorvoid.step_up.cool_down'), $regulated->getParameter('yorvoid.step_up.window')]);
+
+        // What the configuration says wins, ~ included.
+        $own = $this->boot(['preset' => 'regulated', 'sessions' => ['preset' => 'console'], 'step_up' => ['cool_down' => null], 'limits' => ['per_address' => '50/15m']], fresh: true);
+        self::assertEquals(new SessionPolicy(Duration::hours(8), Duration::hours(1)), $own->get(SessionPolicy::class));
+        self::assertNull($own->getParameter('yorvoid.step_up.cool_down'));
+        self::assertSame('50/15m', $own->getParameter('yorvoid.limits.per_address'));
+
+        self::assertSame('1000/15m', $this->boot(['preset' => 'internal_tool'], fresh: true)->getParameter('yorvoid.limits.per_address'));
+        $default = $this->boot(fresh: true);
+        self::assertSame(['consumer_site', '5m', null], [$default->getParameter('yorvoid.preset'), $default->getParameter('yorvoid.step_up.window'), $default->getParameter('yorvoid.step_up.cool_down')]);
+    }
+
     public function testNotificationsOffNeedNoSettings(): void
     {
         $container = $this->boot(['notifications' => ['enabled' => false, 'application_name' => null, 'not_me_url' => null, 'from' => null]]);
@@ -133,6 +152,7 @@ final class BundleTest extends TestCase
         yield 'no recovery codes' => [['recovery_codes' => ['count' => 0]], 'yorvoid.recovery_codes.count'];
         yield 'too many recovery codes' => [['recovery_codes' => ['count' => 101]], 'yorvoid.recovery_codes.count'];
         yield 'an unknown preset' => [['sessions' => ['preset' => 'forever']], 'yorvoid.sessions.preset'];
+        yield 'an unknown configuration preset' => [['preset' => 'bank'], 'yorvoid.preset'];
     }
 
     /**

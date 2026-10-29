@@ -10,8 +10,6 @@
         "summary": "var/infection/summary.log"
     },
     "tmpDir": "var/cache/infection",
-    // Collecting coverage of the whole suite needs more than PHP's default 128 MB.
-    "initialTestsPhpOptions": "-d memory_limit=1G",
     "mutators": {
         "@default": true,
         // assert() only tells static analysis what a value's type is; mutating it tests nothing.
@@ -36,7 +34,22 @@
                 // Equivalent: the same pause; and a different default wait can't be observed without
                 // waiting that long.
                 ".*usleep\\(100_000\\).*",
-                ".*Duration::minutes\\(1\\);.*"
+                ".*Duration::minutes\\(1\\);.*",
+                // Equivalent: a scenario's made-up email address is unique at any length of randomness.
+                ".*bin2hex\\(random_bytes\\(6\\)\\).*"
+            ]
+        },
+        "CastFloat": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: PHP subtracts numeric strings as numbers; the casts are for static analysis.
+                ".*\\$drift = \\(float\\).*"
+            ]
+        },
+        "GreaterThan": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: two clocks read over a database round trip never differ by exactly 5 or 0 seconds.
+                ".*abs\\(\\$drift\\) > self::TOLERANCE_SECONDS.*",
+                ".*\\$drift > 0 \\?.*"
             ]
         },
         "LessThan": {
@@ -52,7 +65,8 @@
                 ".*explode\\('\\.', \\$assetName, 2\\).*",
                 // Equivalent: see DecrementInteger.
                 ".*usleep\\(100_000\\).*",
-                ".*Duration::minutes\\(1\\);.*"
+                ".*Duration::minutes\\(1\\);.*",
+                ".*bin2hex\\(random_bytes\\(6\\)\\).*"
             ]
         }
     },

@@ -57,8 +57,8 @@ use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\Refusal;
 use YorvoID\Tests\Support\DatabaseTestCase;
-use YorvoID\Tests\Support\VirtualAuthenticator;
 use YorvoID\Throttle\Throttle;
+use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
  * The passkey-first journeys, end to end, with a virtual authenticator.

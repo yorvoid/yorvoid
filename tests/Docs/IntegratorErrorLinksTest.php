@@ -42,7 +42,7 @@ final class IntegratorErrorLinksTest extends TestCase
         foreach ($files as $file) {
             \assert($file instanceof \SplFileInfo);
             // The docs link is the last argument: a quoted path ending in .md, optionally with an anchor.
-            preg_match_all("/new IntegratorError\\(.*'([a-z0-9\\/-]+\\.md(?:#[a-z0-9-]+)?)'\\)/", (string) file_get_contents($file->getPathname()), $matches);
+            preg_match_all("/(?:new IntegratorError|Finding::(?:problem|warning))\\(.*'([a-z0-9\\/-]+\\.md(?:#[a-z0-9-]+)?)'\\)/", (string) file_get_contents($file->getPathname()), $matches);
 
             foreach ($matches[1] as $link) {
                 $links[$link] ??= substr($file->getPathname(), \strlen(self::ROOT) + 1);
