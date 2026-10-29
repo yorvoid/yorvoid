@@ -69,9 +69,20 @@ foreach ($steps as $step) {
                     continue;
                 }
 
-                // YorvoID isn't on Packagist yet: the application takes it from this repository.
+                // YorvoID isn't on Packagist yet: the application takes it from this repository. Each
+                // package gets the version main has, as on Packagist: Composer would otherwise guess it
+                // from the checkout, and a detached one (as in CI) gives versions "^0.1" doesn't match.
                 if ($fromRepository && str_contains($command, 'composer require') && str_contains($command, 'yorvoid/')) {
-                    $run('composer config repositories.yorvoid path '.escapeshellarg($root.'/packages/*'), $cwd);
+                    $versions = [];
+                    $files = glob($root.'/packages/*/composer.json');
+                    assert(is_array($files));
+                    foreach ($files as $file) {
+                        $package = json_decode((string) file_get_contents($file), true, flags: \JSON_THROW_ON_ERROR);
+                        assert(is_array($package) && is_string($package['name']) && is_array($package['extra']) && is_array($package['extra']['branch-alias']) && is_string($package['extra']['branch-alias']['dev-main']));
+                        $versions[$package['name']] = $package['extra']['branch-alias']['dev-main'];
+                    }
+                    $repository = ['type' => 'path', 'url' => $root.'/packages/*', 'options' => ['versions' => $versions]];
+                    $run('composer config repositories.yorvoid '.escapeshellarg(json_encode($repository, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES)), $cwd);
                     $run('composer config minimum-stability dev && composer config prefer-stable true', $cwd);
                 }
 
