@@ -10,13 +10,10 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use YorvoID\Authn\Migrations\AuthnMigrations;
-use YorvoID\Core\Migrations\CoreMigrations;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Migration\Migration;
 use YorvoID\Core\Storage\Migration\Migrator;
-use YorvoID\Passkeys\Migrations\PasskeysMigrations;
-use YorvoID\Throttle\Migrations\ThrottleMigrations;
+use YorvoID\Symfony\Migrations;
 
 /**
  * Creates and updates YorvoID's tables, separately from the application's own migrations (PLT-023).
@@ -37,7 +34,7 @@ final class MigrateCommand extends Command
         ?array $migrations = null,
     ) {
         parent::__construct();
-        $this->migrations = $migrations ?? array_merge(CoreMigrations::all(), AuthnMigrations::all(), PasskeysMigrations::all(), ThrottleMigrations::all());
+        $this->migrations = $migrations ?? Migrations::all();
     }
 
     protected function configure(): void

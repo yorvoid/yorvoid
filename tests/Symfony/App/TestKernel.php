@@ -35,6 +35,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
      * @param array<string, mixed> $yorvoid        YorvoID's configuration, over the defaults below
      * @param bool                 $translations   Whether the application has Symfony's translator
      * @param bool                 $authenticators Whether the firewall has YorvoID's authenticators
+     * @param bool                 $debugging      Whether it runs in debug mode, as in development
      */
     public function __construct(
         private readonly string $directory,
@@ -43,8 +44,9 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         private readonly bool $authenticators = true,
         private readonly bool $twig = true,
         private readonly bool $customize = false,
+        bool $debugging = true,
     ) {
-        parent::__construct('test', true);
+        parent::__construct('test', $debugging);
     }
 
     public function registerBundles(): iterable

@@ -29,4 +29,4 @@ NIST SP 800-63B-4 (2025) defines authenticator assurance levels: AAL1, AAL2 and 
 | Device-bound passkey with user verification, attestation per policy | AAL3 | Requires the AAL3 session limits above |
 | Recovery code | AAL1 | One factor, can be phished; for getting back in, then adding a passkey |
 
-YorvoID will ship session presets for AAL2 and AAL3, and `yorvoid:doctor` will flag configurations that target AAL2 without offering a phishing-resistant method.
+YorvoID's session presets target AAL2 (`aal2`, `console`) and AAL3 (`aal3`). Passkeys, the phishing-resistant method, are always offered. `yorvoid:doctor` warns when a configuration falls short of its preset's level: passkeys without required user verification, sessions longer than the level allows, or AAL3 while synced passkeys are accepted ([checking the setup](../concepts/symfony.md#checking-the-setup)).

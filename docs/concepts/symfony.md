@@ -253,6 +253,7 @@ It answers only in debug mode, wherever it's imported.
 
 | Command | |
 |---|---|
+| `yorvoid:doctor` | Checks YorvoID's setup and says how to fix each problem ([below](#checking-the-setup)). `--strict` fails on warnings too. |
 | `yorvoid:migrate` | Creates or updates YorvoID's tables, separately from your migrations. `--dry-run` prints the SQL; `--allow-blocking` runs migrations that block tables, in a maintenance window. |
 | `yorvoid:setup-code [realm]` | Prints a setup code that claims a fresh installation (`--lifetime`, 24 hours by default). |
 | `yorvoid:recovery-link <email>` | Prints a recovery link for someone who lost access, for whoever has the server's shell (`--url` with `{token}`, `--lifetime`, 15 minutes by default). |
@@ -260,3 +261,19 @@ It answers only in debug mode, wherever it's imported.
 | `yorvoid:templates:diff [templates]` | After an upgrade, what YorvoID changed in the templates you published; `--accept` takes it. |
 | `yorvoid:templates:lint` | Checks the flow pages, with your templates, for what each step needs. |
 | `yorvoid:purge` | Removes ended sessions, expired tokens and ceremonies, throttling state that's clear, ended cool-downs and long-unused devices. Run it daily. |
+
+## Checking the setup
+
+`yorvoid:doctor` checks what the configuration alone can't, and says how to fix each thing it finds, with a link to the page that explains it:
+
+| Check | What it looks at |
+|---|---|
+| Configuration | Builds what YorvoID builds only when it's first used: the passkey policy (the relying party ID and the origins), the session policy, the limits, the database. Passkeys for `localhost` outside development are a warning. |
+| Database and migrations | YorvoID reaches its database, every migration of this version ran, and the database has none from a later version. |
+| Clock | The application's clock agrees with the database's within 5 seconds; a `MockClock` outside development is a problem. |
+| Assurance level | The configuration reaches the level its `sessions.preset` targets ([assurance levels](../security/assurance-levels.md)): passkeys require user verification, sessions last no longer than the level allows, and no AAL3 with synced passkeys. |
+| Cookies | The PHP session is on, its cookie is `Secure` (or `auto`), `HttpOnly` and `SameSite=Lax` or `Strict`, and the device cookie has the `__Host-` prefix. |
+| Mailer | With notifications on: the sender is an email address, and outside development the default transport delivers (not `null://`, not Symfony's `smtp://null`). It sends nothing. |
+| Flow pages | The pages have what each step needs (as `yorvoid:templates:lint`), and the templates you published kept up with YorvoID's (as `yorvoid:templates:diff`). |
+
+A **problem** breaks something: sign-in, emails, the pages. The command then fails, so a deployment can stop on it. A **warning** works, but less safely than it could, or than the configuration says; `--strict` fails on warnings too.

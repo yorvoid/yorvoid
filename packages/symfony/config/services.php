@@ -61,6 +61,7 @@ use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
+use YorvoID\Symfony\Command\DoctorCommand;
 use YorvoID\Symfony\Command\MigrateCommand;
 use YorvoID\Symfony\Command\PurgeCommand;
 use YorvoID\Symfony\Command\RecoveryLinkCommand;
@@ -71,6 +72,13 @@ use YorvoID\Symfony\Command\TemplatesPublishCommand;
 use YorvoID\Symfony\Controller\CeremonyController;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Controller\TemplateGalleryController;
+use YorvoID\Symfony\Doctor\AssuranceCheck;
+use YorvoID\Symfony\Doctor\ClockCheck;
+use YorvoID\Symfony\Doctor\ConfigurationCheck;
+use YorvoID\Symfony\Doctor\CookiesCheck;
+use YorvoID\Symfony\Doctor\MailerCheck;
+use YorvoID\Symfony\Doctor\MigrationsCheck;
+use YorvoID\Symfony\Doctor\TemplatesCheck;
 use YorvoID\Symfony\Factories;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Flow\SessionFlowStore;
@@ -97,7 +105,9 @@ use YorvoID\Translation\Translator;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\inline_service;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\param;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
+use function Symfony\Component\DependencyInjection\Loader\Configurator\service_closure;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\tagged_iterator;
+use function Symfony\Component\DependencyInjection\Loader\Configurator\tagged_locator;
 
 /*
  * YorvoID's services. Its own classes are autowired among themselves; what comes from the
@@ -204,6 +214,20 @@ return static function (ContainerConfigurator $container): void {
     $services->set(TemplateLint::class)->public();
     $services->set(TemplatePublisher::class)->arg('$projectDir', param('kernel.project_dir'))->arg('$source', null);
     $services->set(TemplateGalleryController::class)->public()->tag('controller.service_arguments')->arg('$debug', param('kernel.debug'));
+
+    // The doctor's checks, in the order it runs them. Each is built only when it runs, so that what
+    // YorvoID refuses while building one is reported, not fatal.
+    $services->set(ConfigurationCheck::class)->args([
+        array_map(service_closure(...), [PasskeyPolicy::class, SessionPolicy::class, AttemptLimits::class, Database::class]),
+        param('kernel.debug'),
+    ])->tag('yorvoid.doctor_check', ['name' => 'Configuration']);
+    $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
+    $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);
+    $services->set(AssuranceCheck::class)->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle'), param('yorvoid.passkeys.user_verification')])->tag('yorvoid.doctor_check', ['name' => 'Assurance level']);
+    $services->set(CookiesCheck::class)->args([service('parameter_bag'), param('yorvoid.cookies.device'), param('yorvoid.sessions.recognise_devices')])->tag('yorvoid.doctor_check', ['name' => 'Cookies']);
+    $services->set(MailerCheck::class)->args([param('yorvoid.notifications.enabled'), param('yorvoid.notifications.from'), null, param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Mailer']);
+    $services->set(TemplatesCheck::class)->tag('yorvoid.doctor_check', ['name' => 'Flow pages']);
+    $services->set(DoctorCommand::class)->args([tagged_locator('yorvoid.doctor_check', 'name')])->tag('console.command');
 
     // Console commands.
     foreach ([MigrateCommand::class, PurgeCommand::class, SetupCodeCommand::class, RecoveryLinkCommand::class, TemplatesPublishCommand::class, TemplatesDiffCommand::class, TemplatesLintCommand::class] as $command) {
