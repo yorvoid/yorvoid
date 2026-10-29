@@ -31,6 +31,7 @@ Documentation for two readers: **integrators**, who add YorvoID to an applicatio
 - [Keys](concepts/keys.md): signing keys, where they're kept, and rotating them.
 - [Operations and events](concepts/operations-and-events.md): commands, the catalogue, events, origins.
 - [Storage](concepts/storage.md): databases, where the tables live, migrations, upgrading without downtime.
+- [Testing](concepts/testing.md): testing your application with YorvoID: fixtures, the clock, signing in, a virtual authenticator.
 
 ## Policies
 

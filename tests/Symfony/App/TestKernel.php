@@ -36,6 +36,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
      * @param bool                 $translations   Whether the application has Symfony's translator
      * @param bool                 $authenticators Whether the firewall has YorvoID's authenticators
      * @param bool                 $debugging      Whether it runs in debug mode, as in development
+     * @param bool                 $session        Whether it has a PHP session
      */
     public function __construct(
         private readonly string $directory,
@@ -45,6 +46,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         private readonly bool $twig = true,
         private readonly bool $customize = false,
         bool $debugging = true,
+        private readonly bool $session = true,
     ) {
         parent::__construct('test', $debugging);
     }
@@ -95,7 +97,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                 'php_errors' => ['log' => true],
                 'mailer' => ['dsn' => 'null://null'],
                 'translator' => ['enabled' => $this->translations, 'default_path' => $this->directory.'/translations'],
-                'session' => ['storage_factory_id' => 'session.storage.factory.mock_file'],
+                'session' => $this->session ? ['storage_factory_id' => 'session.storage.factory.mock_file'] : false,
                 'router' => ['resource' => __DIR__.'/routes.php', 'type' => 'php', 'utf8' => true],
             ]);
             $container->loadFromExtension('doctrine', ['dbal' => ['default_connection' => 'default', 'connections' => [

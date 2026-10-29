@@ -36,7 +36,9 @@
                 // Equivalent: the same pause; and a different default wait can't be observed without
                 // waiting that long.
                 ".*usleep\\(100_000\\).*",
-                ".*Duration::minutes\\(1\\);.*"
+                ".*Duration::minutes\\(1\\);.*",
+                // Equivalent: a scenario's made-up email address is unique at any length of randomness.
+                ".*bin2hex\\(random_bytes\\(6\\)\\).*"
             ]
         },
         "CastFloat": {
@@ -65,7 +67,8 @@
                 ".*explode\\('\\.', \\$assetName, 2\\).*",
                 // Equivalent: see DecrementInteger.
                 ".*usleep\\(100_000\\).*",
-                ".*Duration::minutes\\(1\\);.*"
+                ".*Duration::minutes\\(1\\);.*",
+                ".*bin2hex\\(random_bytes\\(6\\)\\).*"
             ]
         }
     },

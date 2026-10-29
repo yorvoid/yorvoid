@@ -31,8 +31,8 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Symfony\Flow\SessionFlowStore;
-use YorvoID\Tests\Support\VirtualAuthenticator;
 use YorvoID\Tests\Symfony\App\TestKernel;
+use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
  * YorvoID's flows over HTTP: the reference pages, with forms, and the browser client's JSON (PLT-070,

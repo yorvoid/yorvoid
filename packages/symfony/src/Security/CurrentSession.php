@@ -20,6 +20,11 @@ use YorvoID\Core\Secret;
  */
 final class CurrentSession implements ResetInterface
 {
+    /**
+     * Where the PHP session keeps the YorvoID session's token.
+     */
+    public const string KEY = 'yorvoid_session';
+
     /** @var \WeakMap<Request, Session|null> */
     private \WeakMap $checked;
 
@@ -27,7 +32,7 @@ final class CurrentSession implements ResetInterface
         private readonly RequestStack $requests,
         private readonly Sessions $sessions,
         private readonly Realm $realm,
-        private readonly string $key = 'yorvoid_session',
+        private readonly string $key = self::KEY,
     ) {
         $this->checked = new \WeakMap();
     }

@@ -20,7 +20,7 @@ use YorvoID\IntentVerifier\Storage\InMemoryVerifierStore;
 use YorvoID\IntentVerifier\Verifier;
 use YorvoID\IntentVerifier\VerifierConfig;
 use YorvoID\IntentVerifier\VerifierStore;
-use YorvoID\Tests\Support\VirtualAuthenticator;
+use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
  * Signed intents, checked by the verifier with its own keys (INT-001…006, INT-008…010, INT-015, INT-016).

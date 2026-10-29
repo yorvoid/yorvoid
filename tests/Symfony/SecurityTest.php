@@ -43,8 +43,8 @@ use YorvoID\Symfony\Security\PrincipalUser;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
-use YorvoID\Tests\Support\VirtualAuthenticator;
 use YorvoID\Tests\Symfony\App\TestKernel;
+use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
  * Signing in through the application's own firewall, with YorvoID's authenticators and endpoints

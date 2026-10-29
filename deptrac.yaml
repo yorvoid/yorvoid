@@ -43,6 +43,14 @@ deptrac:
       collectors:
         - type: classLike
           value: ^YorvoID\\Translation\\.*
+    - name: Testing
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Testing\\.*
+    - name: VirtualAuthenticator
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\VirtualAuthenticator\\.*
   ruleset:
     Core: ~
     Authn:
@@ -75,3 +83,10 @@ deptrac:
       - Core
     Translation:
       - Core
+    Testing:
+      - Core
+      - Authn
+      - Passkeys
+      - Symfony
+      - VirtualAuthenticator
+    VirtualAuthenticator: ~

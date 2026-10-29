@@ -1,0 +1,45 @@
+{
+    "name": "yorvoid/testing",
+    "type": "library",
+    "description": "YorvoID's test helpers: scenario fixtures made through YorvoID's own services, a movable clock, and signing in to Symfony functional tests.",
+    "keywords": [
+        "testing",
+        "fixtures",
+        "passkeys",
+        "authentication",
+        "symfony"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "psr/clock": "^1.0",
+        "psr/container": "^2.0",
+        "symfony/clock": "^8.1",
+        "yorvoid/authn": "^0.1",
+        "yorvoid/core": "^0.1",
+        "yorvoid/passkeys": "^0.1",
+        "yorvoid/virtual-authenticator": "^0.1"
+    },
+    "suggest": {
+        "symfony/framework-bundle": "To sign in to Symfony functional tests with BrowserSignIn",
+        "yorvoid/symfony": "To sign in to Symfony functional tests with BrowserSignIn"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Testing\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}

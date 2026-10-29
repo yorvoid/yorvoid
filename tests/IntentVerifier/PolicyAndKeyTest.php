@@ -14,7 +14,7 @@ use YorvoID\IntentVerifier\Operation;
 use YorvoID\IntentVerifier\OperationPolicy;
 use YorvoID\IntentVerifier\ParameterType;
 use YorvoID\IntentVerifier\VerifierConfig;
-use YorvoID\Tests\Support\VirtualAuthenticator;
+use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
  * The operation policy (INT-008), the verifier's configuration, and keys (INT-015).

@@ -53,11 +53,11 @@ use YorvoID\Passkeys\Translations;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
-use YorvoID\Tests\Support\VirtualAuthenticator;
 use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;
 use YorvoID\Translation\Translator;
+use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
  * The console's side of signed intents, with a verifier (INT-010…012), on every implementation.

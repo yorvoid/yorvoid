@@ -2,14 +2,17 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Tests\Support;
+namespace YorvoID\VirtualAuthenticator;
 
 /**
  * A software authenticator for tests: it answers WebAuthn options as a browser with a real authenticator
- * would (ES256 keys from OpenSSL, CBOR, "none" attestation), and can be told to misbehave: skip user
- * verification, report a counter, answer for another origin or challenge.
+ * would (ES256 keys from OpenSSL or EdDSA from libsodium, CBOR, "none" attestation), and can be told to
+ * misbehave: skip user verification, report a counter, answer for another origin or challenge. It works
+ * with any WebAuthn server, not only YorvoID.
  *
- * End-to-end tests in real browsers (virtual authenticators over CDP) come with the browser client.
+ * For end-to-end tests in real browsers, use the browser's own virtual authenticator (CDP).
+ *
+ * @api
  */
 final class VirtualAuthenticator
 {
@@ -165,16 +168,5 @@ final class VirtualAuthenticator
             \is_array($value) => $head(5, \count($value)).implode('', array_map(static fn (int|string $key, mixed $item): string => self::cbor($key).self::cbor($item), array_keys($value), $value)),
             default => throw new \LogicException('Not encodable as CBOR here.'),
         };
-    }
-}
-
-/**
- * @internal
- */
-final readonly class CborBytes
-{
-    public function __construct(
-        public string $bytes,
-    ) {
     }
 }
