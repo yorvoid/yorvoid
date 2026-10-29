@@ -72,6 +72,14 @@ This is a monorepo. Develop everything here, even code that's published as separ
    docker compose run --rm e2e npx playwright test
    ```
 
+   The quickstart test follows [the Symfony quickstart](docs/tutorials/symfony-quickstart.md) as it's written, in a fresh application, then signs in to it in Chromium. Change the tutorial and its steps change with it:
+
+   ```bash
+   docker compose exec php php tools/quickstart/follow.php
+   docker compose --profile quickstart up -d --wait quickstart-app
+   docker compose run --rm quickstart npx playwright test --config playwright.quickstart.config.ts
+   ```
+
    CI runs the same checks, and a pull request can only be merged when they pass. `composer cs-fix` fixes the coding style for you. Changes to security-critical code also need `composer infection` (mutation testing) to stay above its thresholds.
 4. Open a pull request against `main`.
 
@@ -90,6 +98,16 @@ This is a monorepo. Develop everything here, even code that's published as separ
 - Secrets come from `random_bytes()` / `random_int()` and are compared with `hash_equals()`. PHPStan refuses predictable generators.
 - Errors aimed at developers say what went wrong, how to fix it, and link to the docs (`IntegratorError`).
 - No cryptography of our own: libsodium, OpenSSL and proven libraries only.
+
+## Before a release
+
+**Measure the quickstart with someone new to YorvoID** (PLT-080): a developer who knows Symfony and hasn't used YorvoID follows [the quickstart](docs/tutorials/symfony-quickstart.md) on their own machine, from the published packages, while you watch without helping.
+
+1. Time from the first command to signing in again after signing out. The target is 15 minutes at most.
+2. Note every place they hesitated, misread, or needed something the page didn't say, and fix the tutorial for each.
+3. Record the result in the release's pull request: who (a role, not a name), the date, their platform, the time, and what changed in the tutorial because of it.
+
+A release whose measured time is above 15 minutes doesn't go out until the quickstart is shorter or clearer. Before YorvoID is on Packagist, run `QUICKSTART_PACKAGIST=1 php tools/quickstart/follow.php` once it is, to check the published packages install as the page says.
 
 ## License
 

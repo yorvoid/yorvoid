@@ -78,6 +78,38 @@ services:
       e2e-app:
         condition: service_healthy
 
+  # The quickstart, followed as written (PLT-080): `docker compose exec php php tools/quickstart/follow.php`,
+  # then `docker compose --profile quickstart up -d --wait quickstart-app` and
+  # `docker compose run --rm quickstart npx playwright test --config playwright.quickstart.config.ts`.
+  quickstart-app:
+    image: ${IMAGES_PREFIX:-}yorvoid-php-dev
+    profiles: [quickstart]
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - .:/app
+    working_dir: /app
+    # As the tutorial says to serve it, from wherever it put the application.
+    command: ["sh", "-c", "exec php -S 0.0.0.0:8000 -t \"$$(cat var/quickstart/app)/public\""]
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://localhost:8000/') === false ? 1 : 0);"]
+      interval: 2s
+      timeout: 10s
+      retries: 30
+
+  quickstart:
+    image: mcr.microsoft.com/playwright:v1.64.1-noble
+    profiles: [quickstart]
+    network_mode: service:quickstart-app
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - .:/app
+    working_dir: /app/e2e
+    environment:
+      HOME: /tmp
+    depends_on:
+      quickstart-app:
+        condition: service_healthy
+
   # The formal models' checkers: `docker compose run --rm spec ./check.sh`.
   spec:
     image: ${IMAGES_PREFIX:-}yorvoid-spec
