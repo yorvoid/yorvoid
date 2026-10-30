@@ -35,7 +35,7 @@ jobs:
           export UID GID
           docker compose run --rm -w /app/site node sh -c 'npm ci && npm run build'
       - name: Upload it
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site/.vitepress/dist
 
