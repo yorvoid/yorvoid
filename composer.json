@@ -85,7 +85,7 @@
         "test": "phpunit",
         "infection": [
             "Composer\\Config::disableProcessTimeout",
-            "@php -d memory_limit=1G vendor/bin/infection --threads=max --show-mutations"
+            "@php -d memory_limit=1G vendor/bin/infection --threads=max --only-covering-test-cases --show-mutations"
         ],
         "docs-reference": "YORVOID_WRITE_REFERENCE=1 phpunit --filter ReferenceDocsTest",
         "qa": [

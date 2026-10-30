@@ -92,7 +92,7 @@ So each package directory carries what its repository needs on its own: a README
 
    `site/package.json` pins Vite to a release with the dev server's security fixes, which VitePress 1 doesn't depend on yet: drop the override when VitePress does. The reference pages are written from the code: `composer docs-reference` after changing the configuration or a command.
 
-   CI runs the same checks, and a pull request can only be merged when they pass. `composer cs-fix` fixes the coding style for you. Changes to security-critical code also need `composer infection` (mutation testing) to stay above its thresholds.
+   CI runs the same checks, and a pull request can only be merged when they pass: its **CI** check sums them up. `composer cs-fix` fixes the coding style for you. Mutation testing has to stay above its thresholds too. On a pull request, CI mutates only the lines it changes, as `composer infection -- --git-diff-lines --git-diff-base=origin/main` does locally. The full run (`composer infection`), and fuzzing ten times as long, run on `main` and every night; the browser client's mutation testing runs when the client changes.
 4. Open a pull request against `main`.
 
 ### What a change needs
