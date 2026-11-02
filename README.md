@@ -4,7 +4,7 @@
 
 YorvoID is a library your application embeds, not a server you run beside it. It covers who someone is, how they proved it, what they may do, under whose authority, and why. Humans, services, workloads and autonomous agents are all principals, and they all go through the same authorization. Authority can be delegated along chains of agents, and it can only shrink as it's passed on. Decisions can depend on verified facts, such as a human approval, never on what an agent claims. Every decision can explain itself.
 
-> **Status:** early development, nothing to install yet. The first milestone brings passkeys, recovery codes, sessions, step-up and passkey-signed operations.
+> **Status:** early development. The first milestone, passkeys, recovery codes, sessions, step-up and passkey-signed operations, is here, but not yet released: until 0.1.0 is on Packagist, install the packages from this repository.
 
 ## What it will do
 
@@ -23,7 +23,7 @@ This repository is a monorepo. Each directory of `packages/` is published as its
 
 | Package | Contents |
 |---|---|
-| [`yorvoid/core`](packages/core) | Principals, realms, decisions and evidence, the security log, keys, storage |
+| [`yorvoid/core`](packages/core) | Principals, realms, the security log, keys, storage |
 | [`yorvoid/authn`](packages/authn) | Authentication: sessions, step-up, credentials, one-time tokens, setup codes, invitations, recovery links and codes |
 | [`yorvoid/passkeys`](packages/passkeys) | Passkeys: registration, sign-in, user-verification policy, and the passkey-first journeys |
 | [`yorvoid/flows`](packages/flows) | Flows: journeys as server-side steps that applications insert into, replace or remove |

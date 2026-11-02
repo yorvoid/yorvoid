@@ -46,9 +46,9 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 |---|---|---|
 | Database read leak exposes secrets | Secrets stored hashed or encrypted; secrets in memory are `Secret`s that don't appear in dumps, logs or traces | Partly: `Secret` and hashed session tokens in place; storage of credentials arrives with them (M1) |
 | The log can't forget personal data that must be erased | The log holds IDs and kinds, never email addresses, IP addresses or devices; those stay in tables that are erased or purged | In place |
-| Database writer changes the log | Hash chain per realm; verification finds changed, removed, inserted, reordered or re-hashed entries and a cut-off end | In place |
-| Database writer rewrites the whole chain | Signed checkpoints kept outside the database | Planned (M2) |
-| Attacker-controlled text breaks the log (and so the operation, or the record of an attack) | Invalid UTF-8 replaced before hashing and storing; the log is structured, never formatted text | In place |
+| Database writer changes the log | Hash chain per realm; verification finds changed, removed, inserted, reordered or re-hashed entries | Partly: someone who can write the database can also change the realm's head, so entries cut off at the end, or a chain recomputed from a change onwards, aren't found; checkpoints kept outside the database close that |
+| Database writer rewrites the whole chain, or cuts off its end | Checkpoints kept outside the database | Planned (by 1.0) |
+| Attacker-controlled text breaks the log (and so the operation, or the record of an attack) | Invalid UTF-8 and NUL replaced before hashing and storing, an origin's detail cut to its column; the log is structured, never formatted text | In place, on PostgreSQL, SQLite and in memory |
 | Two processes write the log at once and fork it | Appends serialized per realm; the primary key refuses a second entry with the same number | In place, tested with concurrent processes |
 | Signing key leaks | Key ring with rotation; keys outside the database; key files readable only by their owner | In place; hardware or cloud key stores planned (M7) |
 | Predictable secrets | Only the operating system's CSPRNG, at least 128 bits; predictable generators refused by static analysis | In place |
@@ -67,7 +67,8 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 | A link sent to an old email address is used by whoever reads that inbox now | Tokens sent by email work only while the address is still the principal's | In place |
 | A default account with a known password | None: a setup code claims a fresh realm, once | In place |
 | A hijacked session adds the attacker's passkey | Adding a credential needs recent authentication and notifies the owner, whose "This wasn't me" disables it and signs everyone out | In place |
-| A stolen session cookie or credential used from another device goes unnoticed | New devices recognised by a random cookie (not fingerprinting); a sign-in from one is emailed with "This wasn't me" | In place |
+| A stolen credential used from another device goes unnoticed | New devices recognised by a random cookie (not fingerprinting); a sign-in from one is emailed with "This wasn't me" | In place |
+| A stolen session cookie used from another device goes unnoticed | Binding a session to its device | Planned: a copied session cookie works until the session ends, expires or is ended; signing out, "sign out everywhere" and administrators ending sessions stop it at once |
 | A copied hardware key signs in | Signature counters recorded; a counter that doesn't go up is refused, or disables the passkey | In place |
 | A passkey sign-in or registration replayed | Each ceremony's 256-bit challenge works once, kept server-side, and expires | In place |
 | Recovery as the weakest way in | Recovery links only from the server's operator, short-lived; recovery codes of 120 random bits, stored hashed, each used once; every recovery ends every other session, is logged and emailed, and can start a cool-down that holds removing credentials | In place |

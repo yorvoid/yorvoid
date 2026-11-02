@@ -1,7 +1,7 @@
 {
     "name": "yorvoid/core",
     "type": "library",
-    "description": "YorvoID's core: principals, realms, decisions and evidence, the security log, keys and storage.",
+    "description": "YorvoID's core: principals, realms, the security log, keys and storage.",
     "keywords": [
         "iam",
         "identity",
