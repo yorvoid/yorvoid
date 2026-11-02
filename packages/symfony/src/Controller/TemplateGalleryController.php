@@ -32,14 +32,12 @@ final readonly class TemplateGalleryController
     public function index(): Response
     {
         $this->guard();
-        $items = '';
 
-        foreach (Samples::all() as $sample) {
-            $links = implode(' ', array_map(fn (string $locale): string => \sprintf('<a href="%s" hreflang="%s">%2$s</a>', htmlspecialchars($this->urls->generate('yorvoid_template_gallery_page', ['template' => $sample->template, 'state' => $sample->state, 'locale' => $locale])), $locale), self::LOCALES));
-            $items .= \sprintf('<li>%s, %s: %s</li>', htmlspecialchars($sample->template), htmlspecialchars($sample->state), $links);
-        }
-
-        return new Response('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YorvoID\'s flow pages</title></head><body><main><h1>YorvoID\'s flow pages</h1><p>Every page with your templates, in every state, with made-up data. Their forms go nowhere.</p><ul>'.$items.'</ul></main></body></html>');
+        return new Response($this->pages->gallery(array_map(fn ($sample): array => [
+            'template' => $sample->template,
+            'state' => $sample->state,
+            'links' => array_combine(self::LOCALES, array_map(fn (string $locale): string => $this->urls->generate('yorvoid_template_gallery_page', ['template' => $sample->template, 'state' => $sample->state, 'locale' => $locale]), self::LOCALES)),
+        ], Samples::all())));
     }
 
     public function page(Request $request, string $template, string $state, string $locale): Response

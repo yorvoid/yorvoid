@@ -279,7 +279,7 @@ final class TemplatesTest extends TestCase
         self::assertSame(['en', 'YorvoID\'s flow pages', 'YorvoID\'s flow pages', 'Every page with your templates, in every state, with made-up data. Their forms go nowhere.'], [$index->filter('html')->attr('lang'), $index->filter('title')->text(), $index->filter('h1')->text(), $index->filter('main > p')->text()]);
         self::assertSame('passkey, default: en de', $index->filter('li')->first()->text());
         self::assertStringStartsWith('<!DOCTYPE html>', (string) $browser->getResponse()->getContent());
-        self::assertStringEndsWith('</ul></main></body></html>', (string) $browser->getResponse()->getContent());
+        self::assertStringEndsWith('</html>', trim((string) $browser->getResponse()->getContent()));
         self::assertSame(['/_yorvoid/templates/passkey/default/en', '/_yorvoid/templates/passkey/default/de'], $index->filter('li')->first()->filter('a')->each(static fn (Crawler $link): ?string => $link->attr('href')));
 
         $german = $browser->request('GET', '/_yorvoid/templates/passkey/problems/de');
