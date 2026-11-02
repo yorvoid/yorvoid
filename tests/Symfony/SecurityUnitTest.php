@@ -10,8 +10,13 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockFileSessionStorage;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
+use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
+use Symfony\Component\Security\Core\User\InMemoryUser;
 use YorvoID\Authn\Session\Sessions;
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
@@ -46,7 +51,8 @@ final class SecurityUnitTest extends TestCase
 
         self::assertNull($current->get());
         self::assertFalse($current->isHeld());
-        $current->forget();
+        $current->signOut();
+        $current->signOutKeepingData(new Origin(OriginKind::Web));
         $this->expectExceptionObject(new \LogicException('There is no request to hold a session in.'));
 
         $current->hold(Secret::fromString('token'));
@@ -72,23 +78,35 @@ final class SecurityUnitTest extends TestCase
         self::assertSame(['cart' => 3, 'yorvoid_session' => 'token'], $session->all());
     }
 
-    public function testForgetsTheSessionsToken(): void
+    public function testSigningOutEmptiesThePhpSessionUnderANewIdAndClearsTheFirewallsToken(): void
     {
-        $session = new Session(new MockFileSessionStorage($this->directory));
-        $session->set('yorvoid_session', 'token');
-        $session->set('cart', 3);
-        $withSession = new Request();
-        $withSession->setSession($session);
-        $requests = new RequestStack();
-        $requests->push($withSession);
+        [$requests, $session, $before] = $this->signedIn();
+        $tokens = new TokenStorage();
+        $tokens->setToken(new UsernamePasswordToken(new InMemoryUser('ana', null), 'main'));
 
-        new CurrentSession($requests, $this->sessions(), Realm::default())->forget();
+        new CurrentSession($requests, $this->sessions(), Realm::default(), tokens: $tokens)->signOut();
+
+        self::assertSame([], $session->all());
+        self::assertNotSame($before, $session->getId());
+        self::assertFileDoesNotExist(\sprintf('%s/%s.mocksess', $this->directory, $before), 'A copy of the old session cookie still works.');
+        self::assertNull($tokens->getToken(), 'The firewall would write its token back into the PHP session.');
+    }
+
+    public function testSigningOutKeepingDataTakesOutEveryFirewallsToken(): void
+    {
+        [$requests, $session, $before] = $this->signedIn();
+
+        new CurrentSession($requests, $this->sessions(), Realm::default())->signOutKeepingData(new Origin(OriginKind::Web));
+
         self::assertSame(['cart' => 3], $session->all());
+        self::assertNotSame($before, $session->getId());
+        self::assertFileDoesNotExist(\sprintf('%s/%s.mocksess', $this->directory, $before), 'A copy of the old session cookie still works.');
 
         $requests->pop();
         $requests->push(new Request());
-        new CurrentSession($requests, $this->sessions(), Realm::default())->forget();
-        self::assertFalse($requests->getMainRequest()?->hasSession());
+        new CurrentSession($requests, $this->sessions(), Realm::default())->signOut();
+        new CurrentSession($requests, $this->sessions(), Realm::default())->signOutKeepingData(new Origin(OriginKind::Web));
+        self::assertFalse($requests->getMainRequest()?->hasSession(), 'Signing out started a PHP session.');
     }
 
     public function testDescribesTheDeviceByItsUserAgent(): void
@@ -131,6 +149,28 @@ final class SecurityUnitTest extends TestCase
         self::assertFalse($response->headers->has('Retry-After'));
         self::assertSame(401, new SignInRefused('No.')->status);
         self::assertSame(0, new SignInRefused('No.')->getCode());
+    }
+
+    /**
+     * A request whose PHP session holds a YorvoID session's token, two firewalls' tokens and the
+     * application's own data.
+     *
+     * @return array{RequestStack, Session, string}
+     */
+    private function signedIn(): array
+    {
+        $session = new Session(new MockFileSessionStorage($this->directory));
+        $session->set('yorvoid_session', 'token');
+        $session->set('_security_main', 'a serialized token');
+        $session->set('_security_admin', 'another');
+        $session->set('cart', 3);
+        $session->save();
+        $request = new Request();
+        $request->setSession($session);
+        $requests = new RequestStack();
+        $requests->push($request);
+
+        return [$requests, $session, $session->getId()];
     }
 
     private function sessions(): Sessions
