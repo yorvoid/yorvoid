@@ -1,0 +1,26 @@
+{#- The verifier's keys, and the changes to them waiting to take effect. -#}
+{% extends '@yorvoid_signing/layout.html.twig' %}
+{% block title %}Signing keys{% endblock %}
+{% block body %}
+<h2>Keys</h2>
+<ul data-keys>
+{% for key in keys %}
+<li>{{ key.label }}, added {{ key.addedAt|date('Y-m-d H:i', 'UTC') }} UTC
+<form method="post" action="/keys/remove"><input type="hidden" name="key" value="{{ key.id }}"><button>Remove</button></form></li>
+{% else %}
+<li>None yet: add one with the bootstrap secret.</li>
+{% endfor %}
+</ul>
+<h2>Waiting to take effect</h2>
+{% if changes is empty %}
+<p data-changes>Nothing.</p>
+{% else %}
+<ul data-changes>
+{% for change in changes %}
+<li>{{ change.adding ? 'Adding' : 'Removing' }} {{ change.label }}, from {{ change.effectiveAt|date('Y-m-d H:i', 'UTC') }} UTC
+<form method="post" action="/keys/cancel"><input type="hidden" name="change" value="{{ change.id }}"><button>Cancel</button></form></li>
+{% endfor %}
+</ul>
+{% endif %}
+<p><a href="/keys/add">Add a passkey</a> · <a href="/keys/bootstrap">Add one with the bootstrap secret</a></p>
+{% endblock %}

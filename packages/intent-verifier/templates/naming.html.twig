@@ -1,0 +1,14 @@
+{#- The first step of adding a passkey: its name. -#}
+{% extends '@yorvoid_signing/layout.html.twig' %}
+{% block title %}{{ bootstrap ? 'Add a passkey with the bootstrap secret' : 'Add a passkey' }}{% endblock %}
+{% block body %}
+<form method="post">
+<p><label for="label">Name it</label><br><input id="label" name="label" maxlength="64" required></p>
+<button>Continue</button>
+</form>
+{% if bootstrap %}
+<p>You'll sign its addition with the passkey itself, and type the bootstrap secret the host's administrator gave you.</p>
+{% else %}
+<p>One of the passkeys here signs its addition. It takes effect after a waiting time, and every owner is told.</p>
+{% endif %}
+{% endblock %}

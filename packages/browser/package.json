@@ -48,7 +48,7 @@
     "coverage": "node --test --test-reporter=dot --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"tests/**/*.test.ts\"",
     "mutation": "stryker run",
     "qa": "npm run typecheck && npm run coverage && npm run build",
-    "assets": "npm run build && rm -rf ../symfony/public/browser && mkdir -p ../symfony/public/browser && cp dist/*.js ../symfony/public/browser/"
+    "assets": "npm run build && for target in ../symfony/public/browser ../intent-verifier/public/browser; do rm -rf $target && mkdir -p $target && cp dist/*.js $target/; done"
   },
   "devDependencies": {
     "@stryker-mutator/core": "10.1.1",

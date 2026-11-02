@@ -1,0 +1,23 @@
+{#- An intent waiting to be signed: the operation in full, from the verifier's own copy. -#}
+{% extends '@yorvoid_signing/layout.html.twig' %}
+{% block title %}Confirm with your passkey{% endblock %}
+{% block body %}
+{% if summary is not null %}
+<p data-summary><strong>{{ summary }}</strong></p>
+{% endif %}
+<p>Operation: <code data-action>{{ intent.action }}</code></p>
+<table data-parameters>
+{% for name, value in parameters %}
+<tr><th scope="row">{{ name }}</th><td><code>{{ value }}</code></td></tr>
+{% endfor %}
+</table>
+<p>For <code>{{ intent.audience }}</code>, until {{ intent.expiresAt|date('Y-m-d H:i', 'UTC') }} UTC.</p>
+<form method="post" data-yorvoid-ceremony="get" data-yorvoid-options="{{ options }}">
+{% if bootstrap %}
+<p><label for="secret">Bootstrap secret</label><br><input id="secret" name="secret" type="password" autocomplete="off" required></p>
+{% endif %}
+<input type="hidden" name="response">
+<button>Sign with your passkey</button>
+<p data-yorvoid-error role="alert" hidden></p>
+</form>
+{% endblock %}

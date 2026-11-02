@@ -1,0 +1,3 @@
+{% extends '@yorvoid_signing/layout.html.twig' %}
+{% block title %}Nicht gefunden{% endblock %}
+{% block body %}<p data-message>{{ refusal is null and title == 'Not found' ? 'Seite nicht gefunden' : message }}</p>{% endblock %}

@@ -6,6 +6,8 @@ namespace YorvoID\Tests\IntentVerifier;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
+use Twig\Environment;
+use Twig\Loader\FilesystemLoader;
 use YorvoID\IntentVerifier\CollectingNotifier;
 use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\Operation;
@@ -53,33 +55,34 @@ final class SigningPagesTest extends TestCase
         $secret = $this->verifier->createBootstrapSecret();
 
         $page = $this->pages->handle('GET', '/keys');
-        self::assertStringContainsString('None yet: add one with the bootstrap secret.', $page->body);
+        self::assertStringContainsString('None yet: add one with the bootstrap secret.', self::text($page));
         self::assertSame(200, $this->pages->handle('GET', '/keys/bootstrap')->status);
         $created = $this->pages->handle('POST', '/keys/bootstrap', ['label' => 'Ana\'s <YubiKey>']);
-        self::assertStringContainsString('Create a passkey named <strong>Ana&apos;s &lt;YubiKey&gt;</strong>', $created->body, 'The label isn\'t escaped.');
+        self::assertSame('Ana\'s <YubiKey>', self::document($created)->querySelector('[data-label]')?->textContent);
+        self::assertNull(self::document($created)->querySelector('yubikey'), 'The label isn\'t escaped.');
         [$action, $options] = self::form($created, 'create');
 
-        $signing = $this->pages->handle('POST', $action, ['credential' => $this->owner->register($options)]);
+        $signing = $this->pages->handle('POST', $action, ['response' => $this->owner->register($options)]);
         self::assertSame(303, $signing->status);
         $page = $this->pages->handle('GET', $signing->headers['Location']);
-        self::assertStringContainsString('Allow the passkey &quot;Ana&apos;s &lt;YubiKey&gt;&quot; to sign operations', $page->body);
-        self::assertStringContainsString('name="secret" type="password"', $page->body, 'The bootstrap secret is asked for on the signing page.');
+        self::assertSame('Allow the passkey "Ana\'s <YubiKey>" to sign operations', self::document($page)->querySelector('[data-summary]')?->textContent);
+        self::assertSame('password', self::document($page)->querySelector('form[data-yorvoid-ceremony] input[name="secret"]')?->getAttribute('type'), 'The bootstrap secret is asked for on the signing page, in the signed form.');
         [, $options] = self::form($page, 'get');
 
-        $wrong = $this->pages->handle('POST', $signing->headers['Location'], ['credential' => $this->owner->signIn($options), 'secret' => 'wrong']);
+        $wrong = $this->pages->handle('POST', $signing->headers['Location'], ['response' => $this->owner->signIn($options), 'secret' => 'wrong']);
         self::assertSame(422, $wrong->status);
-        self::assertStringContainsString('That bootstrap secret doesn&apos;t work', $wrong->body);
+        self::assertStringContainsString('That bootstrap secret doesn\'t work', self::text($wrong));
 
         // The nonce is used up: once more from the registration.
         $created = $this->pages->handle('POST', '/keys/bootstrap', ['label' => 'Laptop']);
         [$action, $options] = self::form($created, 'create');
-        $location = $this->pages->handle('POST', $action, ['credential' => $this->owner->register($options)])->headers['Location'];
+        $location = $this->pages->handle('POST', $action, ['response' => $this->owner->register($options)])->headers['Location'];
         [, $options] = self::form($this->pages->handle('GET', $location), 'get');
-        $done = $this->pages->handle('POST', $location, ['credential' => $this->owner->signIn($options, 1), 'secret' => $secret]);
+        $done = $this->pages->handle('POST', $location, ['response' => $this->owner->signIn($options, 1), 'secret' => $secret]);
 
         self::assertSame([303, '/keys'], [$done->status, $done->headers['Location']]);
         self::assertSame(['Laptop'], array_map(static fn ($key): string => $key->label, $this->verifier->keys()));
-        self::assertStringContainsString('Laptop, added 2026-10-28 18:00 UTC', $this->pages->handle('GET', '/keys')->body);
+        self::assertStringContainsString('Laptop, added 2026-10-28 18:00 UTC', self::text($this->pages->handle('GET', '/keys')));
     }
 
     public function testAnOperationIsShownInFullSignedAndRunThenTheBrowserGoesBack(): void
@@ -93,19 +96,20 @@ final class SigningPagesTest extends TestCase
         $page = $this->pages->handle('GET', $path);
 
         self::assertSame(200, $page->status);
-        self::assertStringContainsString('<strong>Remove the site &lt;b&gt;jane&lt;/b&gt;</strong>', $page->body);
-        self::assertStringContainsString('<th scope="row">site</th><td><code>&lt;b&gt;jane&lt;/b&gt;</code></td>', $page->body, 'Every parameter, in full, escaped.');
-        self::assertStringContainsString('Operation: <code>acme.site.remove</code>', $page->body);
-        self::assertStringNotContainsString('name="secret"', $page->body);
+        $document = self::document($page);
+        self::assertSame('Remove the site <b>jane</b>', $document->querySelector('[data-summary]')?->textContent);
+        self::assertSame([['site', '<b>jane</b>']], self::rows($page), 'Every parameter, in full.');
+        self::assertNull($document->querySelector('main b'), 'A parameter isn\'t escaped.');
+        self::assertSame('acme.site.remove', $document->querySelector('[data-action]')?->textContent);
+        self::assertNull($document->querySelector('input[name="secret"]'));
         self::assertSame('no-store', $page->headers['Cache-Control']);
         // The console's origin too: browsers check the redirect after a form's post against form-action.
-        self::assertMatchesRegularExpression("/^default-src 'none'; script-src 'nonce-[A-Za-z0-9_-]{24}'; form-action 'self' https:\\/\\/acme\\.example; frame-ancestors 'none'; base-uri 'none'$/D", $page->headers['Content-Security-Policy']);
-        self::assertStringContainsString('<script nonce="'.self::nonce($page).'">', $page->body, 'The script\'s nonce isn\'t the policy\'s.');
-        self::assertNotSame(self::nonce($page), self::nonce($this->pages->handle('GET', $path)), 'Two pages had one nonce.');
+        self::assertSame("default-src 'none'; script-src 'self'; form-action 'self' https://acme.example; frame-ancestors 'none'; base-uri 'none'", $page->headers['Content-Security-Policy']);
+        self::assertSame([['module', '/browser/forms.js', '']], array_map(static fn (\Dom\Element $script): array => [$script->getAttribute('type'), $script->getAttribute('src'), $script->textContent], iterator_to_array($document->querySelectorAll('script'))), 'The page runs more than the browser client.');
         self::assertSame(['no-referrer', 'nosniff'], [$page->headers['Referrer-Policy'], $page->headers['X-Content-Type-Options']]);
         [, $options] = self::form($page, 'get');
 
-        $done = $this->pages->handle('POST', $path, ['credential' => $this->owner->signIn($options)]);
+        $done = $this->pages->handle('POST', $path, ['response' => $this->owner->signIn($options)]);
 
         self::assertSame(303, $done->status);
         self::assertSame('https://acme.example/signed?nonce='.$prepared->intent->nonce.'&outcome=ran', $done->headers['Location']);
@@ -116,8 +120,8 @@ final class SigningPagesTest extends TestCase
 
         $again = $this->pages->handle('GET', $path);
         self::assertSame(404, $again->status);
-        self::assertStringContainsString('This request has expired', $again->body);
-        self::assertStringEndsWith('&outcome=refused', $this->pages->handle('POST', $path, ['credential' => $this->owner->signIn($options)])->headers['Location']);
+        self::assertSame('This request has expired', self::document($again)->querySelector('h1')?->textContent);
+        self::assertStringEndsWith('&outcome=refused', $this->pages->handle('POST', $path, ['response' => $this->owner->signIn($options)])->headers['Location']);
         self::assertCount(1, $this->ran, 'An operation ran twice.');
     }
 
@@ -129,7 +133,7 @@ final class SigningPagesTest extends TestCase
         $prepared = $this->verifier->prepare('acme.site.remove', ['site' => 'jane']);
         $path = '/intents/'.$prepared->intent->nonce;
 
-        $done = $this->pages->handle('POST', $path, ['credential' => $stranger->signIn($prepared->options)]);
+        $done = $this->pages->handle('POST', $path, ['response' => $stranger->signIn($prepared->options)]);
 
         self::assertStringEndsWith('&outcome=refused', $done->headers['Location']);
         self::assertCount(0, $this->ran);
@@ -140,30 +144,30 @@ final class SigningPagesTest extends TestCase
         $this->bootstrap();
         $first = $this->verifier->keys()[0];
 
-        self::assertStringContainsString('One of the passkeys here signs its addition.', $this->pages->handle('GET', '/keys/add')->body);
+        self::assertStringContainsString('One of the passkeys here signs its addition.', self::text($this->pages->handle('GET', '/keys/add')));
         [$action, $options] = self::form($this->pages->handle('POST', '/keys/add', ['label' => 'Laptop']), 'create');
-        $location = $this->pages->handle('POST', $action, ['credential' => $this->owner->register($options)])->headers['Location'];
+        $location = $this->pages->handle('POST', $action, ['response' => $this->owner->register($options)])->headers['Location'];
         [, $options] = self::form($this->pages->handle('GET', $location), 'get');
-        self::assertSame('/keys', $this->pages->handle('POST', $location, ['credential' => $this->owner->signIn($options)])->headers['Location']);
+        self::assertSame('/keys', $this->pages->handle('POST', $location, ['response' => $this->owner->signIn($options)])->headers['Location']);
 
-        $keys = $this->pages->handle('GET', '/keys')->body;
-        self::assertStringContainsString('Adding Laptop, from 2026-10-29 18:00 UTC', $keys);
+        self::assertSame(['Adding Laptop, from 2026-10-29 18:00 UTC Cancel'], self::items($this->pages->handle('GET', '/keys'), '[data-changes] li'));
         $change = $this->verifier->keyChanges()[0];
 
         $cancel = $this->pages->handle('POST', '/keys/cancel', ['change' => $change->id]);
         $page = $this->pages->handle('GET', $cancel->headers['Location']);
-        self::assertStringContainsString('Cancel the change to the keys '.$change->id, $page->body);
+        self::assertSame('Cancel the change to the keys '.$change->id, self::document($page)->querySelector('[data-summary]')?->textContent);
         [, $options] = self::form($page, 'get');
-        $this->pages->handle('POST', $cancel->headers['Location'], ['credential' => $this->owner->signIn($options)]);
+        $this->pages->handle('POST', $cancel->headers['Location'], ['response' => $this->owner->signIn($options)]);
         self::assertSame([], $this->verifier->keyChanges());
 
         $remove = $this->pages->handle('POST', '/keys/remove', ['key' => $first->id()]);
         $page = $this->pages->handle('GET', $remove->headers['Location']);
-        self::assertStringContainsString('Stop the passkey '.$first->id().' from signing operations', $page->body);
+        self::assertSame('Stop the passkey '.$first->id().' from signing operations', self::document($page)->querySelector('[data-summary]')?->textContent);
         [, $options] = self::form($page, 'get');
-        $last = $this->pages->handle('POST', $remove->headers['Location'], ['credential' => $this->owner->signIn($options)]);
+        $last = $this->pages->handle('POST', $remove->headers['Location'], ['response' => $this->owner->signIn($options)]);
         self::assertSame(422, $last->status);
-        self::assertStringContainsString('That&apos;s the last key', $last->body);
+        self::assertSame('That\'s the last key: add another before removing it.', self::document($last)->querySelector('[data-message]')?->textContent);
+        self::assertSame('/keys', self::document($last)->querySelector('main a')?->getAttribute('href'), 'A refusal has no way back to the keys.');
     }
 
     public function testMistakesGetAPageThatSaysSo(): void
@@ -173,12 +177,14 @@ final class SigningPagesTest extends TestCase
         self::assertSame(404, $this->pages->handle('GET', '/intents/not/a/nonce')->status);
         $empty = $this->pages->handle('POST', '/keys/add', ['label' => ' ']);
         self::assertSame(400, $empty->status);
-        self::assertStringContainsString('A key&apos;s label has 1 to 64 characters.', $empty->body);
-        $unknown = $this->pages->handle('POST', '/keys/registrations/unknown', ['credential' => '{}']);
+        self::assertSame('A key\'s label has 1 to 64 characters.', self::document($empty)->querySelector('[data-message]')?->textContent);
+        self::assertNull(self::document($empty)->querySelector('main a'), 'A mistake in the form offered the keys.');
+        $unknown = $this->pages->handle('POST', '/keys/registrations/unknown', ['response' => '{}']);
         self::assertSame(422, $unknown->status);
-        self::assertStringContainsString('This request has expired, or was used already.', $unknown->body);
+        self::assertStringContainsString('This request has expired, or was used already.', self::text($unknown));
         self::assertSame(400, $this->pages->handle('POST', '/keys/remove', ['key' => ['x']])->status, 'A key that isn\'t text was taken.');
-        self::assertStringContainsString('The form has no change.', $this->pages->handle('POST', '/keys/cancel')->body);
+        self::assertStringContainsString('The form has no change.', self::text($this->pages->handle('POST', '/keys/cancel')));
+        self::assertSame('There\'s no such page.', self::document($this->pages->handle('GET', '/elsewhere'))->querySelector('[data-message]')?->textContent);
     }
 
     public function testOnlyItsOwnPathsAnswer(): void
@@ -188,11 +194,11 @@ final class SigningPagesTest extends TestCase
         $registration = $this->verifier->prepareRegistration('Laptop')->id;
 
         foreach (['/x/intents/'.$nonce, '/intents/'.$nonce.'/x', "/intents/{$nonce}\n"] as $path) {
-            self::assertSame([404, 404], [$this->pages->handle('GET', $path)->status, $this->pages->handle('POST', $path, ['credential' => '{}'])->status], $path);
+            self::assertSame([404, 404], [$this->pages->handle('GET', $path)->status, $this->pages->handle('POST', $path, ['response' => '{}'])->status], $path);
         }
 
         foreach (['/x/keys/registrations/'.$registration, '/keys/registrations/'.$registration.'/x', "/keys/registrations/{$registration}\n"] as $path) {
-            self::assertSame(404, $this->pages->handle('POST', $path, ['credential' => '{}'])->status, $path);
+            self::assertSame(404, $this->pages->handle('POST', $path, ['response' => '{}'])->status, $path);
         }
 
         self::assertSame(200, $this->pages->handle('GET', '/intents/'.$nonce)->status, 'The intent was used up.');
@@ -208,8 +214,8 @@ final class SigningPagesTest extends TestCase
         $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options));
 
         $page = $pages->handle('GET', '/intents/'.$verifier->prepare('acme.site.move', ['site' => 'jane', 'to' => 'joe', 'keep' => false])->intent->nonce);
-        self::assertStringContainsString('<table><tr><th scope="row">site</th><td><code>jane</code></td></tr><tr><th scope="row">to</th><td><code>joe</code></td></tr><tr><th scope="row">keep</th><td><code>false</code></td></tr></table>', $page->body);
-        self::assertStringNotContainsString('<strong>', $page->body, 'An operation without a summary got one.');
+        self::assertSame([['site', 'jane'], ['to', 'joe'], ['keep', 'false']], self::rows($page));
+        self::assertNull(self::document($page)->querySelector('[data-summary]'), 'An operation without a summary got one.');
 
         foreach (['Laptop', 'Tablet'] as $label) {
             $registration = $verifier->prepareRegistration($label);
@@ -219,14 +225,19 @@ final class SigningPagesTest extends TestCase
 
         $keys = $pages->handle('GET', '/keys');
         self::assertSame([200, 'text/html; charset=utf-8'], [$keys->status, $keys->headers['Content-Type']]);
-        self::assertSame(1, preg_match('#<h2>Waiting to take effect</h2><ul><li>Adding Laptop, [^<]*<form[^>]*>.*?</form></li><li>Adding Tablet, .*?</li></ul>#', $keys->body), $keys->body);
+        self::assertSame(['Adding Laptop, from 2026-10-29 18:00 UTC Cancel', 'Adding Tablet, from 2026-10-29 18:00 UTC Cancel'], self::items($keys, '[data-changes] li'));
+        $changes = $verifier->keyChanges();
+        self::assertSame(array_map(static fn ($change): string => $change->id, $changes), array_map(static fn (\Dom\Element $field): string => (string) $field->getAttribute('value'), iterator_to_array(self::document($keys)->querySelectorAll('form[action="/keys/cancel"] input[name="change"]'))));
         $this->clock->sleep(86400);
-        self::assertSame(1, preg_match('#<h2>Keys</h2><ul><li>Phone, .*?</li><li>Laptop, .*?</li><li>Tablet, .*?</li></ul><h2>Waiting to take effect</h2><p>Nothing.</p>#', $pages->handle('GET', '/keys')->body));
+        $keys = $pages->handle('GET', '/keys');
+        self::assertSame(['Phone, added 2026-10-28 18:00 UTC Remove', 'Laptop, added 2026-10-28 18:00 UTC Remove', 'Tablet, added 2026-10-28 18:00 UTC Remove'], self::items($keys, '[data-keys] li'));
+        self::assertSame(array_map(static fn ($key): string => $key->id(), $verifier->keys()), array_map(static fn (\Dom\Element $field): string => (string) $field->getAttribute('value'), iterator_to_array(self::document($keys)->querySelectorAll('form[action="/keys/remove"] input[name="key"]'))));
+        self::assertSame('Nothing.', self::document($keys)->querySelector('[data-changes]')?->textContent);
 
         $add = $pages->handle('GET', '/keys/add');
         self::assertSame(200, $add->status);
-        self::assertStringContainsString('<h1>Add a passkey</h1>', $add->body);
-        self::assertStringContainsString('<h1>Add a passkey with the bootstrap secret</h1>', $pages->handle('GET', '/keys/bootstrap')->body);
+        self::assertSame(['Add a passkey', 'Add a passkey'], [self::document($add)->querySelector('h1')?->textContent, self::document($add)->querySelector('title')?->textContent]);
+        self::assertSame('Add a passkey with the bootstrap secret', self::document($pages->handle('GET', '/keys/bootstrap'))->querySelector('h1')?->textContent);
         self::assertSame(200, $pages->handle('POST', '/keys/add', ['label' => 'Watch'])->status);
     }
 
@@ -238,7 +249,7 @@ final class SigningPagesTest extends TestCase
         $path = '/intents/'.$prepared->intent->nonce;
 
         self::assertStringContainsString("form-action 'self' http://localhost:8000;", $pages->handle('GET', $path)->headers['Content-Security-Policy']);
-        self::assertSame('http://localhost:8000/signed?from=sites&nonce='.$prepared->intent->nonce.'&outcome=ran', $pages->handle('POST', $path, ['credential' => $this->owner->signIn($prepared->options)])->headers['Location']);
+        self::assertSame('http://localhost:8000/signed?from=sites&nonce='.$prepared->intent->nonce.'&outcome=ran', $pages->handle('POST', $path, ['response' => $this->owner->signIn($prepared->options)])->headers['Location']);
 
         $relative = new SigningPages($this->verifier, static fn (VerifiedIntent $verified): null => null, '/signed');
         self::assertStringContainsString("form-action 'self';", $relative->handle('GET', '/keys')->headers['Content-Security-Policy'], 'A relative way back allowed another origin.');
@@ -269,11 +280,64 @@ final class SigningPagesTest extends TestCase
         ], $words);
     }
 
-    private static function nonce(SigningResponse $page): string
+    public function testItServesTheBrowserClientAndNothingElse(): void
     {
-        preg_match("/'nonce-([A-Za-z0-9_-]+)'/", $page->headers['Content-Security-Policy'], $nonce);
+        $script = $this->pages->handle('GET', '/browser/forms.js');
 
-        return $nonce[1] ?? '';
+        self::assertSame([200, 'text/javascript; charset=utf-8', 'no-store', 'nosniff'], [$script->status, $script->headers['Content-Type'], $script->headers['Cache-Control'], $script->headers['X-Content-Type-Options']]);
+        self::assertStringEqualsFile(\dirname(__DIR__, 2).'/packages/browser/dist/forms.js', $script->body, 'It isn\'t the browser client as built.');
+        self::assertSame(200, $this->pages->handle('GET', '/browser/webauthn.js')->status, 'forms.js imports it.');
+
+        foreach (['/browser/missing.js', '/browser/../composer.json', '/browser/forms.js/x', '/browser/Forms.js', "/browser/forms.js\n", '/x/browser/forms.js', '/browser/forms.ts'] as $path) {
+            self::assertSame(404, $this->pages->handle('GET', $path)->status, $path);
+        }
+
+        self::assertSame(404, $this->pages->handle('POST', '/browser/forms.js')->status);
+    }
+
+    public function testAHostRendersThePagesWithItsOwnTemplates(): void
+    {
+        $loader = new FilesystemLoader();
+        $loader->addPath(__DIR__.'/templates', 'yorvoid_signing');
+        $loader->addPath(SigningPages::TEMPLATES, 'yorvoid_signing');
+        // To extend a page it replaces.
+        $loader->addPath(SigningPages::TEMPLATES, 'yorvoid_signing_package');
+        $pages = new SigningPages($this->verifier, static fn (VerifiedIntent $verified): null => null, 'https://acme.example/signed', twig: new Environment($loader, ['autoescape' => 'html', 'strict_variables' => true]));
+
+        $page = $pages->handle('GET', '/keys/remove/none');
+
+        self::assertSame('de', self::document($page)->documentElement?->getAttribute('lang'));
+        self::assertSame('Seite nicht gefunden', self::document($page)->querySelector('[data-message]')?->textContent);
+        self::assertSame('Signing keys', self::document($pages->handle('GET', '/keys'))->querySelector('h1')?->textContent, 'A page the host left alone isn\'t the package\'s.');
+    }
+
+    private static function document(SigningResponse $page): \Dom\HTMLDocument
+    {
+        return \Dom\HTMLDocument::createFromString($page->body, \LIBXML_NOERROR);
+    }
+
+    /**
+     * The page's text, its spaces collapsed.
+     */
+    private static function text(SigningResponse $page): string
+    {
+        return trim((string) preg_replace('/\s+/', ' ', (string) self::document($page)->body?->textContent));
+    }
+
+    /**
+     * @return list<string> The elements' texts, their spaces collapsed
+     */
+    private static function items(SigningResponse $page, string $selector): array
+    {
+        return array_values(array_map(static fn (\Dom\Element $item): string => trim((string) preg_replace('/\s+/', ' ', (string) $item->textContent)), iterator_to_array(self::document($page)->querySelectorAll($selector))));
+    }
+
+    /**
+     * @return list<array{string, string}> The intent's parameters, as the page lists them
+     */
+    private static function rows(SigningResponse $page): array
+    {
+        return array_values(array_map(static fn (\Dom\Element $row): array => [(string) $row->querySelector('th')?->textContent, (string) $row->querySelector('td code')?->textContent], iterator_to_array(self::document($page)->querySelectorAll('[data-parameters] tr'))));
     }
 
     private function bootstrap(): void
@@ -296,8 +360,11 @@ final class SigningPagesTest extends TestCase
      */
     private static function form(SigningResponse $page, string $ceremony): array
     {
-        self::assertSame(1, preg_match(\sprintf('#<form method="post"(?: action="([^"]*)")? data-ceremony="%s" data-options="([^"]*)">#', $ceremony), $page->body, $form), $page->body);
+        $form = self::document($page)->querySelector(\sprintf('form[method="post"][data-yorvoid-ceremony="%s"]', $ceremony));
+        self::assertNotNull($form, $page->body);
+        self::assertNotNull($form->querySelector('input[type="hidden"][name="response"]'), 'The browser client has nowhere to put the answer.');
+        self::assertNotNull($form->querySelector('[data-yorvoid-error]'), 'The browser client has nowhere to say what went wrong.');
 
-        return [html_entity_decode($form[1], \ENT_QUOTES | \ENT_HTML5), html_entity_decode($form[2], \ENT_QUOTES | \ENT_HTML5)];
+        return [(string) $form->getAttribute('action'), (string) $form->getAttribute('data-yorvoid-options')];
     }
 }

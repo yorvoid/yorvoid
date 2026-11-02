@@ -81,7 +81,28 @@ $response = $pages->handle($method, $path, $_POST);   // status, headers, body
 
 - `/intents/{nonce}` shows the operation: the summary you give, the operation's name, **every parameter in full**, who it's for and until when. Signing it runs it through `run`, then the browser goes back to `returnTo` with the nonce and `outcome` (`ran` or `refused`) in the query, for a page to show. What really happened, the console learns from the verifier.
 - `/keys` lists the signing keys and the changes waiting, to remove a key or cancel a change; `/keys/add` and `/keys/bootstrap` register a new signing passkey there.
-- Every answer forbids caching and framing, runs only its own script, and lets forms post only to the signing origin and back to the console.
+- `/browser/*.js` is YorvoID's browser client, which the package ships: its `forms.js` runs the passkey ceremonies, as on the console's flow pages.
+- Every answer forbids caching and framing, runs scripts only from the signing origin, and lets forms post only to the signing origin and back to the console.
+
+### Your own look and language
+
+The pages are Twig templates in the package's `templates/` directory, every value escaped, in the `yorvoid_signing` namespace. To brand or translate them, pass a Twig environment whose loader looks in your directory first; a page you don't replace stays the package's:
+
+```php
+use Twig\Environment;
+use Twig\Loader\FilesystemLoader;
+
+$loader = new FilesystemLoader();
+$loader->addPath('/etc/acme-verifier/templates', 'yorvoid_signing');   // e.g. your layout.html.twig
+$loader->addPath(SigningPages::TEMPLATES, 'yorvoid_signing');
+$loader->addPath(SigningPages::TEMPLATES, 'yorvoid_signing_package'); // to extend a page you replace
+
+$pages = new SigningPages($verifier, $run, $returnTo, $summary, twig: new Environment($loader, ['autoescape' => 'html']));
+```
+
+- `layout.html.twig` is every page's frame, with the `lang`, `title` and `body` blocks; extend `@yorvoid_signing_package/layout.html.twig` to change only some.
+- `intent.html.twig`, `keys.html.twig`, `naming.html.twig`, `registration.html.twig` and `message.html.twig` are the pages. `message.html.twig` gets the refusal, when there was one, to put it in other words.
+- Keep the ceremony forms' `data-yorvoid-*` attributes, their `response` field and the script: the browser client needs them. Keep auto-escaping on: the pages show what the console asked for.
 
 ## Signing an operation
 
