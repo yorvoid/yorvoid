@@ -462,16 +462,41 @@ final readonly class Verifier
             $state->pending[$pending->intent->nonce] = $pending;
             $this->log->record('prepared', ['action' => $pending->intent->action, 'nonce' => $pending->intent->nonce, 'bootstrap' => $pending->bootstrap], $this->clock->now());
 
-            return $pending->bootstrap ? [] : $state->keys;
+            return $state->keys;
         });
 
-        if ($bootstrap) {
-            $key = Key::fromParameters($parameters, $issuedAt);
+        return $this->ready($pending, $keys);
+    }
+
+    /**
+     * The intent waiting under the nonce, ready to be signed, if it's still there: for the signing page,
+     * which shows it from the verifier's own copy.
+     *
+     * @phpstan-impure
+     */
+    public function prepared(string $nonce): ?PreparedIntent
+    {
+        $this->applyKeyChanges();
+        $now = $this->clock->now();
+        [$pending, $keys] = $this->store->transaction(static fn (VerifierState $state): array => [$state->pending[$nonce] ?? null, $state->keys]);
+
+        return null === $pending || $now >= $pending->intent->expiresAt ? null : $this->ready($pending, $keys);
+    }
+
+    /**
+     * The WebAuthn request options for an intent: its challenge, and the keys that may sign it.
+     *
+     * @param array<string, Key> $keys The verifier's keys
+     */
+    private function ready(PendingIntent $pending, array $keys): PreparedIntent
+    {
+        if ($pending->bootstrap) {
+            $key = Key::fromParameters($pending->intent->parameters, $pending->intent->issuedAt);
             $keys = null === $key ? [] : [$key];
         }
 
         $options = PublicKeyCredentialRequestOptions::create(
-            $intent->challenge(),
+            $pending->intent->challenge(),
             $this->config->relyingPartyId,
             // A list: the keys are kept by ID, and a map would be a JSON object, which browsers refuse.
             array_values(array_map(static fn (Key $key): PublicKeyCredentialDescriptor => PublicKeyCredentialDescriptor::create('public-key', $key->credentialId), $keys)),
@@ -479,7 +504,7 @@ final readonly class Verifier
             $this->config->intentLifetime * 1000,
         );
 
-        return new PreparedIntent($intent, $this->serializer->serialize($options, 'json'));
+        return new PreparedIntent($pending->intent, $this->serializer->serialize($options, 'json'), $pending->bootstrap);
     }
 
     /**
