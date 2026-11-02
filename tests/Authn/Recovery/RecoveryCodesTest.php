@@ -44,6 +44,7 @@ use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Principal\ActivatePrincipal;
 use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
@@ -54,6 +55,7 @@ use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\StatementLog;
 use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;
 
@@ -234,7 +236,8 @@ final class RecoveryCodesTest extends DatabaseTestCase
         self::assertNull($codes->redeem(new Realm('acme'), $someoneElse->principalId, $generated[0], new Origin(OriginKind::Web)), 'Someone else\'s code worked.');
         self::assertNull($codes->redeem(new Realm('globex'), $session->principalId, $generated[0], new Origin(OriginKind::Web)), 'A code worked in another realm.');
         self::assertNull($codes->redeem(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), $generated[0], new Origin(OriginKind::Web)));
-        self::assertCount($entries, $this->entries(), 'A principal without codes had a failed attempt recorded.');
+        $failed = array_map(static fn (LogEntry $entry): array => [$entry->action, $entry->outcome, $entry->actor, $entry->subjectType, $entry->details], \array_slice($this->entries(), $entries));
+        self::assertSame(array_fill(0, 2, [RecoveryCodes::USE, Outcome::Failed, null, null, []]), $failed, 'An attempt on a principal without codes wasn\'t recorded as one on no account.');
 
         $credential = $this->credentials->of(new Realm('acme'), $session->principalId)[0];
         $this->credentials->disable($credential, 'testing', new Origin(OriginKind::Console));
@@ -307,12 +310,87 @@ final class RecoveryCodesTest extends DatabaseTestCase
         self::assertNotNull($codes->redeem(new Realm('acme'), $session->principalId, $generated[1], new Origin(OriginKind::Web), address: '192.0.2.2'));
     }
 
+    #[DataProvider('implementations')]
+    public function testRecoveringAnswersCountsAndRecordsTheSameForEveryAccount(string $implementation): void
+    {
+        $codes = $this->codes($implementation);
+        $generated = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $this->session('ana@example.com'), new Origin(OriginKind::Web));
+        $this->session('bo@example.com');
+        $observed = [];
+
+        foreach (['has codes' => 'Ana@Example.com', 'has none' => 'bo@example.com', 'doesn\'t exist' => 'cy@example.com'] as $account => $email) {
+            $before = \count($this->entries());
+            $answers = [];
+
+            // Wrong codes, an empty one, and one that isn't a code at all.
+            foreach (['', '0000-0000-0000-0000-0000-0000', str_repeat('x', 1000), ...array_fill(0, 7, 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ')] as $wrong) {
+                $answers[] = $codes->recover(new Realm('acme'), IdentifierKind::Email, $email, $wrong, new Origin(OriginKind::Web), address: '192.0.2.1');
+            }
+
+            try {
+                $codes->recover(new Realm('acme'), IdentifierKind::Email, $email, $generated[0]->reveal(), new Origin(OriginKind::Web), address: '192.0.2.1');
+                $answers[] = 'checked';
+            } catch (Throttled $exception) {
+                $answers[] = $exception->seconds;
+            }
+
+            $entries = \array_slice($this->entries(), $before);
+            $observed[$account] = [$answers, array_map(static fn (LogEntry $entry): array => [$entry->action, $entry->outcome, $entry->actor], $entries)];
+        }
+
+        self::assertSame(array_fill(0, 10, null), \array_slice($observed['has codes'][0], 0, 10), 'A wrong code worked.');
+        self::assertSame(90, $observed['has codes'][0][10], 'The eleventh attempt in 15 minutes was checked.');
+        self::assertCount(10, $observed['has codes'][1]);
+        self::assertSame($observed['has codes'], $observed['has none'], 'An account without codes answered differently.');
+        self::assertSame($observed['has codes'], $observed['doesn\'t exist'], 'An account that doesn\'t exist answered differently.');
+        self::assertSame(10, $codes->remaining(new Realm('acme'), $this->principals->findByIdentifier(new Realm('acme'), IdentifierKind::Email, 'ana@example.com')->id ?? self::fail()));
+
+        // From another address the code works, and a success forgets the attempts before it from there.
+        for ($i = 0; $i < 9; ++$i) {
+            self::assertNull($codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.2'));
+        }
+
+        self::assertNotNull($codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', $generated[0]->reveal(), new Origin(OriginKind::Web), address: '192.0.2.2'));
+
+        for ($i = 0; $i < 10; ++$i) {
+            self::assertNull($codes->recover(new Realm('acme'), IdentifierKind::Email, 'ANA@example.com', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.2'), 'A success didn\'t forget the attempts before it.');
+        }
+    }
+
+    #[DataProvider('platforms')]
+    public function testRecoveringRunsAsManyStatementsForEveryAccount(string $platform): void
+    {
+        $statements = new StatementLog();
+        $codes = $this->codes($platform, statements: $statements);
+        $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $this->session('ana@example.com'), new Origin(OriginKind::Web));
+        $this->session('bo@example.com');
+        $counted = [];
+
+        foreach (['has codes' => 'ana@example.com', 'has none' => 'bo@example.com', 'doesn\'t exist' => 'cy@example.com'] as $account => $email) {
+            $statements->take();
+            $codes->recover(new Realm('acme'), IdentifierKind::Email, $email, 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.1');
+            $counted[$account] = \count($statements->take());
+        }
+
+        self::assertSame(array_fill_keys(array_keys($counted), $counted['has codes']), $counted, 'The work done tells whether an account exists or has codes.');
+    }
+
+    #[DataProvider('implementations')]
+    public function testRecoveringWithAnIdentifierThatIsntValidCountsOnlyTheAddress(string $implementation): void
+    {
+        $codes = $this->codes($implementation);
+
+        for ($i = 0; $i < 20; ++$i) {
+            self::assertNull($codes->recover(new Realm('acme'), IdentifierKind::Email, 0 === $i % 2 ? 'not an email' : '', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.1'));
+        }
+    }
+
     public function testTheSizeOfASetIsConfigurable(): void
     {
         $this->codes('memory');
 
         foreach ([1, 100] as $count) {
-            $codes = new RecoveryCodes($this->stack->recoveryCodes, $this->credentials, $this->sessions, $this->stepUp, $this->attempts, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, clock: $this->clock, count: $count);
+            $codes = new RecoveryCodes($this->stack->recoveryCodes, $this->credentials, $this->sessions, $this->stepUp, $this->attempts, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, $this->principals, clock: $this->clock, count: $count);
             self::assertCount($count, $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $this->session(), new Origin(OriginKind::Web)));
         }
     }
@@ -323,7 +401,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
 
         foreach ([0, 101] as $count) {
             try {
-                new RecoveryCodes($this->stack->recoveryCodes, $this->credentials, $this->sessions, $this->stepUp, $this->attempts, new SecurityLog($this->stack->log, $this->stack->transactions), $this->stack->transactions, count: $count);
+                new RecoveryCodes($this->stack->recoveryCodes, $this->credentials, $this->sessions, $this->stepUp, $this->attempts, new SecurityLog($this->stack->log, $this->stack->transactions), $this->stack->transactions, $this->principals, count: $count);
                 self::fail(\sprintf('A set of %d codes was accepted.', $count));
             } catch (IntegratorError $exception) {
                 self::assertStringStartsWith(\sprintf('A set of %d recovery codes is out of range.', $count), $exception->getMessage());
@@ -348,9 +426,9 @@ final class RecoveryCodesTest extends DatabaseTestCase
         self::assertNull($operation->ability, 'Only the owner generates their own codes.');
     }
 
-    private function codes(string $implementation, ?Duration $coolDown = null): RecoveryCodes
+    private function codes(string $implementation, ?Duration $coolDown = null, ?StatementLog $statements = null): RecoveryCodes
     {
-        $this->stack = $this->stack($implementation);
+        $this->stack = $this->stack($implementation, $statements);
         $this->clock = new MockClock('2026-10-28 18:45:30 UTC');
         $this->events = new RecordingDispatcher();
         $ids = new UuidV7Generator($this->clock);
@@ -362,12 +440,12 @@ final class RecoveryCodesTest extends DatabaseTestCase
 
         $this->attempts = new Attempts(new Throttle($this->stack->throttle, $this->clock));
 
-        return new RecoveryCodes($this->stack->recoveryCodes, $this->credentials, $this->sessions, $this->stepUp, $this->attempts, $log, $this->stack->transactions, $this->events, $this->clock);
+        return new RecoveryCodes($this->stack->recoveryCodes, $this->credentials, $this->sessions, $this->stepUp, $this->attempts, $log, $this->stack->transactions, $this->principals, $this->events, $this->clock);
     }
 
-    private function session(): Session
+    private function session(?string $email = null): Session
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: $email), new Origin(OriginKind::Console));
         $session = $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true))), new Origin(OriginKind::Web))->session;
         $this->events->dispatched = [];
 

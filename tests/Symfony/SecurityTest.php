@@ -238,6 +238,28 @@ final class SecurityTest extends TestCase
         self::assertSame(429, $this->statusCode());
     }
 
+    public function testTheRecoveryCodeFormAnswersTheSameForEveryAccount(): void
+    {
+        $this->boot();
+        $codes = $this->container->get(RecoveryCodes::class);
+        \assert($codes instanceof RecoveryCodes);
+        $code = $codes->generate(new GenerateRecoveryCodes(Realm::default()), $this->session($this->principal()), new Origin(OriginKind::Web))[0];
+        $this->principal('bo@example.com');
+        $answers = [];
+
+        foreach (['has codes' => 'ana@example.com', 'has none' => 'bo@example.com', 'doesn\'t exist' => 'cy@example.com'] as $account => $email) {
+            foreach ([['code' => ''], [], ['code' => 5], ...array_fill(0, 7, ['code' => 'wrong']), ['code' => $code->reveal()]] as $body) {
+                $json = $this->post('/yorvoid/recover/code', ['email' => $email, ...$body]);
+                $answers[$account][] = [$this->statusCode(), $json, $this->browser->getResponse()->headers->get('Retry-After')];
+            }
+        }
+
+        self::assertSame(array_fill(0, 10, [401, ['error' => 'That code didn\'t work. Check it, or use another one.'], null]), \array_slice($answers['has codes'], 0, 10));
+        self::assertSame(429, $answers['has codes'][10][0], 'The eleventh attempt in 15 minutes was checked.');
+        self::assertSame($answers['has codes'], $answers['has none'], 'An account without codes answered differently.');
+        self::assertSame($answers['has codes'], $answers['doesn\'t exist'], 'An account that doesn\'t exist answered differently.');
+    }
+
     public function testRecoversWithACodeOrALink(): void
     {
         $this->boot();
@@ -434,12 +456,12 @@ final class SecurityTest extends TestCase
         new CommandTester(new Application($this->kernel)->find('yorvoid:migrate'))->execute([]);
     }
 
-    private function principal(): Principal
+    private function principal(string $email = 'ana@example.com'): Principal
     {
         $principals = $this->container->get(Principals::class);
         \assert($principals instanceof Principals);
 
-        return $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
+        return $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: $email, emailVerified: true), new Origin(OriginKind::Console));
     }
 
     private function session(Principal $principal): Session

@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony\Security\Authenticator;
 
-use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Principal\IdentifierKind;
-use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Symfony\Security\CurrentSession;
@@ -26,12 +24,10 @@ final class RecoveryCodeAuthenticator extends YorvoIDAuthenticator
 {
     public function __construct(
         CurrentSession $current,
-        private readonly Principals $principals,
         PrincipalUserProvider $users,
         Realm $realm,
         string $deviceCookie,
         private readonly RecoveryCodes $codes,
-        private readonly Attempts $attempts,
     ) {
         parent::__construct($current, $users, $realm, $deviceCookie);
     }
@@ -45,13 +41,7 @@ final class RecoveryCodeAuthenticator extends YorvoIDAuthenticator
     {
         $email = $body['email'] ?? null;
         $code = $body['code'] ?? null;
-        $principal = \is_string($email) ? $this->principals->findByIdentifier($this->realm, IdentifierKind::Email, $email) : null;
-
-        // Attempts on accounts that don't exist count too, against the address's limit.
-        if (null === $principal) {
-            $this->attempts->count('recovery_code', $this->realm, null, $address);
-        }
-        $started = null === $principal || !\is_string($code) ? null : $this->codes->redeem($this->realm, $principal->id, Secret::fromString($code), $origin, $device, $address, $deviceCookie);
+        $started = $this->codes->recover($this->realm, IdentifierKind::Email, \is_string($email) ? $email : '', \is_string($code) ? $code : '', $origin, $device, $address, $deviceCookie);
 
         return $started ?? throw new SignInRefused('That code didn\'t work. Check it, or use another one.');
     }

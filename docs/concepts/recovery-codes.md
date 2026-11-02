@@ -28,18 +28,19 @@ foreach ($codes as $code) {
 
 ## Using a code
 
-Ask for the person's email address (or username) and a code. Find the principal, then:
+Ask for the person's email address (or username) and a code, and pass both as typed:
 
 ```php
-$started = $recoveryCodes->redeem($realm, $principalId, Secret::fromString($typed), $origin, device: 'Firefox on Linux', address: $request->getClientIp());
+$started = $recoveryCodes->recover($realm, IdentifierKind::Email, $typedEmail, $typedCode, $origin, device: 'Firefox on Linux', address: $request->getClientIp());
 ```
 
 - Case, hyphens and spaces don't matter, and O, I and L count as 0, 1 and 1.
 - A code works once. Of several requests presenting it at the same moment, one gets it.
 - Using one **ends all of the principal's sessions**, since whoever else had one may be why they lost access, starts the [cool-down](step-up.md#the-cool-down-after-a-recovery), and starts a new session. Then let them add a passkey.
 - `RecoveryCodeUsed` follows the commit, with how many codes are left: tell the principal on every verified channel. If it wasn't them, they need to know now.
-- Attempts are [throttled](throttling.md) per account and address, per account and per address: pass `address:`. Too many throw `Throttled`, with when to try again; a code that works forgets that account's attempts from that address.
-- A wrong code returns `null`, and the attempt is recorded. Answer the same when there's no such principal, so the form doesn't tell which accounts exist.
+- Attempts are [throttled](throttling.md) per account and address, per account and per address: pass `address:`. The account is what the person typed, normalized, whether or not it exists. Too many throw `Throttled`, with when to try again; a code that works forgets that account's attempts from that address.
+- A wrong code returns `null`, and the attempt is recorded. So does an account that doesn't exist or has no codes, and an empty code: `recover()` counts, works and answers the same in every case, so the form doesn't tell which accounts exist. Answer `null` with one message whatever the reason.
+- When you already hold the principal's ID, e.g. in a support tool, `redeem($realm, $principalId, Secret::fromString($typedCode), $origin, …)` does the same for that principal. Don't use it behind a form where someone types who they are.
 
 A recovery code is one factor and can be phished: a session started with one meets a requirement for any proof, but not one for two factors or a phishing-resistant proof.
 

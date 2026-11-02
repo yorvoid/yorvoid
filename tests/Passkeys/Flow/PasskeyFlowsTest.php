@@ -104,12 +104,12 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         $stepUp = new StepUp($this->sessions, $stack->coolDowns, $log, $this->clock);
         $this->credentials = $credentials = new Credentials($stack->credentials, $this->sessions, $stepUp, $log, $stack->transactions, ids: $ids, clock: $this->clock);
         $this->passkeys = new Passkeys($stack->passkeys, $stack->ceremonies, $credentials, $this->sessions, $this->principals, $log, $stack->transactions, new PasskeyPolicy('example.com', ['https://example.com']), $attempts, $ids, $this->clock);
-        $this->recoveryCodes = new RecoveryCodes($stack->recoveryCodes, $credentials, $this->sessions, $stepUp, $attempts, $log, $stack->transactions, clock: $this->clock);
+        $this->recoveryCodes = new RecoveryCodes($stack->recoveryCodes, $credentials, $this->sessions, $stepUp, $attempts, $log, $stack->transactions, $this->principals, clock: $this->clock);
         $tokens = new OneTimeTokens($stack->tokens, $this->principals, $log, $stack->transactions, clock: $this->clock);
         $this->recoveryLinks = new RecoveryLinks($tokens, $this->sessions, $this->principals, $stepUp, $stack->transactions, $this->clock);
         $this->setupCodes = new SetupCodes($stack->setup, $this->principals, $log, $stack->transactions, $attempts, $this->clock);
         $this->invitations = new Invitations($this->principals, $tokens, $stack->transactions, new Throttle($stack->throttle, $this->clock));
-        $this->journeys = $journeys = new PasskeyFlows($this->passkeys, $this->sessions, $this->principals, $this->setupCodes, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, $attempts, Duration::minutes(5), $this->clock);
+        $this->journeys = $journeys = new PasskeyFlows($this->passkeys, $this->sessions, $this->principals, $this->setupCodes, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, Duration::minutes(5), $this->clock);
         $this->flows = new Flows($journeys->all(), new InMemoryFlowStore(), $this->sessions, clock: $this->clock);
         $this->context = new FlowContext(new Origin(OriginKind::Web), device: 'Firefox on Linux', address: '192.0.2.10');
     }

@@ -95,7 +95,7 @@ $log = new SecurityLog(new DbalSecurityLogStore($database), $transactions);
 $principals = new Principals(new DbalPrincipalStore($database), new DbalIdentifierStore($database), $log, $transactions);
 $sessions = new Sessions(new DbalSessionStore($database), $principals, $log, $transactions);
 $stepUp = new StepUp($sessions, new DbalCoolDownStore($database), $log);
-$codes = new RecoveryCodes(new DbalRecoveryCodeStore($database), new Credentials($slow, $sessions, $stepUp, $log, $transactions), $sessions, $stepUp, new Attempts(new Throttle(new DbalThrottleStore($database))), $log, $transactions);
+$codes = new RecoveryCodes(new DbalRecoveryCodeStore($database), new Credentials($slow, $sessions, $stepUp, $log, $transactions), $sessions, $stepUp, new Attempts(new Throttle(new DbalThrottleStore($database))), $log, $transactions, $principals);
 $deadline = microtime(true) + 10;
 
 while (!file_exists($start)) {
