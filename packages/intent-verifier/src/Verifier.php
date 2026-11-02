@@ -326,15 +326,25 @@ final readonly class Verifier
      * command run by root), never for a web page. With it, the first key is added; when keys exist, it's
      * the way back in after every one was lost (INT-016). Recorded; tell every owner it happened.
      *
+     * Type it only on the signing page: never give it to the console.
+     *
+     * @param int $lifetime How long, in seconds, it works: an hour by default, at most a day
+     *
      * @return string The secret, shown only now
      */
-    public function createBootstrapSecret(): string
+    public function createBootstrapSecret(int $lifetime = 3600): string
     {
-        $secret = Base64Url::encode(random_bytes(32));
+        if ($lifetime < 60 || $lifetime > 86400) {
+            throw new ConfigurationError('A bootstrap secret works between a minute and a day.');
+        }
 
-        $this->store->transaction(function (VerifierState $state) use ($secret): void {
+        $secret = Base64Url::encode(random_bytes(32));
+        $expiresAt = new \DateTimeImmutable('@'.($this->clock->now()->getTimestamp() + $lifetime));
+
+        $this->store->transaction(function (VerifierState $state) use ($secret, $expiresAt): void {
             $state->bootstrapSecretHash = hash('sha256', $secret);
-            $this->log->record('bootstrap_secret_created', ['keys' => \count($state->keys)], $this->clock->now());
+            $state->bootstrapSecretExpiresAt = $expiresAt;
+            $this->log->record('bootstrap_secret_created', ['keys' => \count($state->keys), 'expires_at' => $expiresAt->getTimestamp()], $this->clock->now());
         });
         $this->notifier->notify(new VerifierNotice(VerifierNotice::BOOTSTRAP_SECRET_CREATED, null, null, $this->clock->now()));
 
@@ -354,13 +364,14 @@ final readonly class Verifier
         [$change, $intent] = $this->attempt(function (VerifierState $state) use ($secret, $nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => $pending->bootstrap);
 
-            if (null === $state->bootstrapSecretHash || !hash_equals($state->bootstrapSecretHash, hash('sha256', $secret))) {
+            if (null === $state->bootstrapSecretHash || null === $state->bootstrapSecretExpiresAt || $this->clock->now() >= $state->bootstrapSecretExpiresAt || !hash_equals($state->bootstrapSecretHash, hash('sha256', $secret))) {
                 $this->refuse($pending->intent, Refusal::InvalidBootstrapSecret);
             }
 
             $key = $this->newKey($state, $pending->intent);
             $verified = $this->check($state, $pending, [$key->id() => $key], $assertion);
             $state->bootstrapSecretHash = null;
+            $state->bootstrapSecretExpiresAt = null;
 
             return [$this->requestChange($state, KeyChange::ADD, $verified->key, $verified, [] === $state->keys), $verified->intent];
         });

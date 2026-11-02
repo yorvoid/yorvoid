@@ -79,6 +79,7 @@ final readonly class FileVerifierStore implements VerifierStore
                 'expires_at' => $registration->expiresAt->getTimestamp(),
             ], $state->registrations),
             'bootstrap_secret_hash' => $state->bootstrapSecretHash,
+            'bootstrap_secret_expires_at' => $state->bootstrapSecretExpiresAt?->getTimestamp(),
         ];
     }
 
@@ -147,6 +148,7 @@ final readonly class FileVerifierStore implements VerifierStore
             }
 
             $state->bootstrapSecretHash = self::nullableString($data['bootstrap_secret_hash']);
+            $state->bootstrapSecretExpiresAt = null === $data['bootstrap_secret_expires_at'] ? null : self::time($data['bootstrap_secret_expires_at']);
 
             return $state;
         } catch (\Throwable $exception) {

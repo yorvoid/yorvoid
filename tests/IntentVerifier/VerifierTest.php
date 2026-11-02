@@ -74,13 +74,39 @@ final class VerifierTest extends TestCase
         self::assertEquals([$key], $verifier->keys(), 'The first key waits for nothing: there\'s no owner to tell.');
         self::assertEquals([KeyChange::ADD, $change->requestedAt, $key->id()], [$change->kind, $change->effectiveAt, $change->signer]);
         self::assertSame(['bootstrap_secret_created', 'registration_prepared', 'registered', 'prepared', 'key_change_requested', 'key_added'], array_column($this->log->entries, 'event'));
-        self::assertSame(['keys' => 0], $this->log->entries[0]['details']);
+        self::assertSame(['keys' => 0, 'expires_at' => $this->clock->now()->getTimestamp() + 3600], $this->log->entries[0]['details'], 'An hour by default.');
         self::assertSame(['action' => OperationPolicy::ADD_KEY, 'nonce' => $prepared->intent->nonce, 'key' => $key->id(), 'algorithm' => -7, 'change' => $change->id, 'kind' => 'add', 'subject' => $key->id(), 'effective_at' => $change->effectiveAt->getTimestamp()], $this->log->entries[4]['details']);
         self::assertSame(['change' => $change->id, 'key' => $key->id(), 'signer' => $key->id()], $this->log->entries[5]['details']);
 
         // The secret works once.
         [$again, $other] = $this->registered($verifier, $this->owner, 'Passkey', true);
         $this->refused(Refusal::InvalidBootstrapSecret, fn () => $verifier->bootstrap($secret, $again->intent->nonce, $this->owner->signIn($again->options, $other)));
+    }
+
+    public function testABootstrapSecretExpires(): void
+    {
+        $verifier = $this->verifier('memory');
+        $secret = $verifier->createBootstrapSecret(60);
+        [$prepared] = $this->registered($verifier, $this->owner, 'Passkey', true);
+        $this->clock->sleep(60);
+
+        $this->refused(Refusal::InvalidBootstrapSecret, fn () => $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options)), 'An expired secret worked.');
+
+        foreach ([59, 86401] as $lifetime) {
+            try {
+                $verifier->createBootstrapSecret($lifetime);
+                self::fail(\sprintf('A secret for %d seconds was created.', $lifetime));
+            } catch (ConfigurationError $exception) {
+                self::assertSame('A bootstrap secret works between a minute and a day.', $exception->getMessage());
+            }
+        }
+
+        // A day's secret still works just before the day is over.
+        $secret = $verifier->createBootstrapSecret(86400);
+        $this->clock->sleep(86000);
+        [$prepared, $index] = $this->registered($verifier, $this->owner, 'Passkey', true);
+        $this->clock->sleep(299);
+        self::assertSame(KeyChange::ADD, $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options, $index))->kind);
     }
 
     #[DataProvider('stores')]
@@ -502,7 +528,7 @@ final class VerifierTest extends TestCase
         self::assertSame(1, $verifier->applyKeyChanges(), 'The due change wasn\'t applied once.');
         self::assertCount($lostKeys + 1, $verifier->keys());
         $created = array_values(array_filter($this->log->entries, static fn (array $entry): bool => 'bootstrap_secret_created' === $entry['event']));
-        self::assertSame(['keys' => 1], $created[1]['details'], 'A re-bootstrap with keys there isn\'t recorded as such.');
+        self::assertSame(1, $created[1]['details']['keys'], 'A re-bootstrap with keys there isn\'t recorded as such.');
     }
 
     public function testStateSurvivesARestart(): void

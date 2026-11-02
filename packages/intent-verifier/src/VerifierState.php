@@ -26,4 +26,7 @@ final class VerifierState
 
     /** SHA-256 of the bootstrap secret, hex; null when there's none */
     public ?string $bootstrapSecretHash = null;
+
+    /** When the bootstrap secret stops working */
+    public ?\DateTimeImmutable $bootstrapSecretExpiresAt = null;
 }
