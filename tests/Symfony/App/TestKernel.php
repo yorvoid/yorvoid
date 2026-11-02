@@ -121,6 +121,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
             }
 
             $container->register(MeController::class)->setPublic(true)->setAutowired(true)->addTag('controller.service_arguments');
+            $container->register(SignOutController::class)->setPublic(true)->setAutowired(true)->addTag('controller.service_arguments');
             $container->register('test.users', OwnUsers::class);
             $yorvoid = array_replace_recursive([
                 'passkeys' => ['relying_party_id' => 'example.com', 'origins' => ['https://example.com']],

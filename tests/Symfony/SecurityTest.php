@@ -143,7 +143,7 @@ final class SecurityTest extends TestCase
         self::assertSame(302, $this->statusCode());
     }
 
-    public function testSigningOutForgetsTheTokenWhenThePhpSessionStays(): void
+    public function testSigningOutTakesEveryTokenOutWhenThePhpSessionStays(): void
     {
         // An application whose logout keeps the PHP session (invalidate_session: false).
         $this->boot();
@@ -154,6 +154,8 @@ final class SecurityTest extends TestCase
         $request->setSession(new PhpSession(new MockArraySessionStorage()));
         $request->getSession()->set(CurrentSession::KEY, $started->token->reveal());
         $request->getSession()->set('cart', ['book']);
+        $request->getSession()->set('_security_admin', 'another firewall\'s token');
+        $before = $request->getSession()->getId();
         $request->cookies->set($request->getSession()->getName(), 'the browser\'s');
         $requests = $this->container->get('request_stack');
         \assert($requests instanceof RequestStack);
@@ -163,9 +165,33 @@ final class SecurityTest extends TestCase
 
         $listener(new LogoutEvent($request, null));
 
-        self::assertFalse($request->getSession()->has(CurrentSession::KEY));
+        self::assertSame(['cart' => ['book']], $request->getSession()->all(), 'A token stayed, or the application\'s data went.');
+        self::assertNotSame($before, $request->getSession()->getId());
         self::assertNull($sessions->validate(Realm::default(), $started->token));
-        self::assertSame(['book'], $request->getSession()->get('cart'));
+    }
+
+    public function testSigningOutInTheApplicationsOwnCodeSignsOutForGood(): void
+    {
+        $this->boot();
+        $this->signIn($this->principal());
+        $this->get('/me');
+        $held = $this->browser->getRequest()->getSession()->get('yorvoid_session');
+        \assert(\is_string($held));
+        $copy = $this->browser->getCookieJar()->all();
+
+        self::assertSame(['signed_out' => true], $this->post('/me/sign-out', []));
+
+        $this->browser->request('GET', '/me');
+        self::assertSame(401, $this->statusCode(), 'The firewall kept the person signed in.');
+        $sessions = $this->container->get(Sessions::class);
+        \assert($sessions instanceof Sessions);
+        self::assertNull($sessions->validate(Realm::default(), Secret::fromString($held)), 'The YorvoID session outlived signing out.');
+
+        // Someone who copied the cookies before.
+        $this->browser->getCookieJar()->clear();
+        $this->browser->getCookieJar()->updateFromSetCookie(array_map(static fn ($cookie): string => (string) $cookie, $copy));
+        $this->browser->request('GET', '/me');
+        self::assertSame(401, $this->statusCode(), 'A copy of the cookies still signs in.');
     }
 
     public function testEndingTheYorvoIDSessionSignsOutAtTheNextRequest(): void

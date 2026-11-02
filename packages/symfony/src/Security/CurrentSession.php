@@ -6,9 +6,15 @@ namespace YorvoID\Symfony\Security;
 
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Contracts\Service\ResetInterface;
+use YorvoID\Authn\Session\EndSession;
 use YorvoID\Authn\Session\Session;
+use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 
@@ -33,6 +39,7 @@ final class CurrentSession implements ResetInterface
         private readonly Sessions $sessions,
         private readonly Realm $realm,
         private readonly string $key = self::KEY,
+        private readonly ?TokenStorageInterface $tokens = null,
     ) {
         $this->checked = new \WeakMap();
     }
@@ -78,14 +85,37 @@ final class CurrentSession implements ResetInterface
     }
 
     /**
-     * Forgets the session's token, e.g. after signing out.
+     * Signs the person out, when you do it yourself rather than through the firewall's logout: ends the
+     * YorvoID session, empties the PHP session under a new ID, and clears the firewall's token, so no
+     * firewall stays signed in, and a copy of the old session cookie is no use.
      */
-    public function forget(): void
+    public function signOut(Origin $origin = new Origin(OriginKind::Web)): void
     {
+        $this->end($origin);
         $request = $this->requests->getMainRequest();
 
         if (null !== $request && $request->hasSession()) {
-            $request->getSession()->remove($this->key);
+            $request->getSession()->invalidate();
+        }
+
+        $this->tokens?->setToken(null);
+        $this->checked = new \WeakMap();
+    }
+
+    /**
+     * For the firewall's logout, which empties the PHP session itself unless the application keeps its
+     * data in it (invalidate_session: false): ends the YorvoID session, and takes its token and every
+     * firewall's token out of the PHP session, under a new ID.
+     *
+     * @internal
+     */
+    public function signOutKeepingData(Origin $origin): void
+    {
+        $this->end($origin);
+        $request = $this->requests->getMainRequest();
+
+        if (null !== $request && $request->hasSession()) {
+            self::signOutOf($request->getSession(), $this->key);
         }
 
         $this->checked = new \WeakMap();
@@ -94,6 +124,27 @@ final class CurrentSession implements ResetInterface
     public function reset(): void
     {
         $this->checked = new \WeakMap();
+    }
+
+    private function end(Origin $origin): void
+    {
+        $session = $this->get();
+
+        if (null !== $session) {
+            $this->sessions->end(new EndSession($session->realm, $session->id, SessionEndReason::SignedOut), $origin);
+        }
+    }
+
+    private static function signOutOf(SessionInterface $session, string $key): void
+    {
+        foreach (array_keys($session->all()) as $name) {
+            // Every firewall keeps its token under "_security_" and its context's name.
+            if ($key === $name || str_starts_with($name, '_security_')) {
+                $session->remove($name);
+            }
+        }
+
+        $session->migrate(true);
     }
 
     private function token(Request $request): ?Secret

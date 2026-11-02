@@ -152,8 +152,8 @@ yorvoid:
 - The [browser client](browser-client.md) calls these for you.
 - Refusals answer `{"error"}` with a message to show: 401 for a sign-in that didn't work (with `"unknown_credential": true` when the passkey isn't registered here, so the browser can tell its provider), 429 with `Retry-After` when there were too many, 400 with a `reason` for a passkey refused, and 403 with `step_up` when a change needs a more recent proof.
 - The PHP session holds only the YorvoID session's token, under a new PHP session ID at every sign-in and step-up. Each request checks the YorvoID session once; when it has ended, expired, or its principal was suspended, the PHP session is emptied before the firewall reads it, and the person is signed out.
-- Signing out through the firewall's `logout` ends the YorvoID session as well as the PHP session, so its token is no use to anyone who kept it.
-- `CurrentSession::get()` gives the request's YorvoID session, e.g. for `Sessions::stepUp()` checks; `CurrentSession::forget()` drops it when you sign someone out yourself.
+- Signing out through the firewall's `logout` ends the YorvoID session, and takes every firewall's token out of the PHP session under a new ID, even when the firewall keeps the PHP session (`invalidate_session: false`) for your own data.
+- `CurrentSession::get()` gives the request's YorvoID session, e.g. for [`StepUp::require()`](step-up.md). To sign someone out yourself, call `CurrentSession::signOut()`: it ends the YorvoID session, empties the PHP session under a new ID and clears the firewall's token. Don't remove things from the PHP session yourself: a firewall's token left in it would keep the person signed in.
 - Without `symfony/translation`, YorvoID translates its pages and emails with its own translator.
 
 ### Your own users
