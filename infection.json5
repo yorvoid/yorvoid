@@ -35,12 +35,20 @@
         },
         "DecrementInteger": {
             "ignoreSourceCodeByRegex": [
+                // Equivalent: any size of block finds the same last line, a block or two later.
+                ".*private const int BLOCK = 4096;.*",
                 // Equivalent: the same pause; and a different default wait can't be observed without
                 // waiting that long.
                 ".*usleep\\(100_000\\).*",
                 ".*Duration::minutes\\(1\\);.*",
                 // Equivalent: a scenario's made-up email address is unique at any length of randomness.
                 ".*bin2hex\\(random_bytes\\(6\\)\\).*"
+            ]
+        },
+        "CastString": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: fread() fails only on a closed file, which the log never reads from.
+                ".*\\$tail = \\(string\\) fread\\(.*"
             ]
         },
         "CastFloat": {
@@ -64,6 +72,8 @@
         },
         "IncrementInteger": {
             "ignoreSourceCodeByRegex": [
+                // Equivalent: see DecrementInteger.
+                ".*private const int BLOCK = 4096;.*",
                 // Equivalent: asset names have at most one dot, and only the start of the name is
                 // compared, so a higher limit can't change the result.
                 ".*explode\\('\\.', \\$assetName, 2\\).*",
