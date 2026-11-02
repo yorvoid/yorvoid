@@ -13,6 +13,7 @@ use YorvoID\Authn\Credential\Event\CredentialAdded;
 use YorvoID\Authn\Credential\Event\CredentialRemoved;
 use YorvoID\Authn\Recovery\Event\RecoveryCodesGenerated;
 use YorvoID\Authn\Recovery\Event\RecoveryCodeUsed;
+use YorvoID\Authn\Recovery\Event\RecoveryLinkUsed;
 use YorvoID\Authn\Session\Event\NewDeviceSignedIn;
 use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
@@ -77,6 +78,7 @@ final readonly class SecurityNotifications
             CredentialRemoved::class => 'credentialRemoved',
             RecoveryCodeUsed::class => 'recoveryCodeUsed',
             RecoveryCodesGenerated::class => 'recoveryCodesGenerated',
+            RecoveryLinkUsed::class => 'recoveryLinkUsed',
         ];
     }
 
@@ -105,6 +107,13 @@ final readonly class SecurityNotifications
     public function recoveryCodeUsed(RecoveryCodeUsed $event): void
     {
         $this->send($event->realm, $event->principalId, 'recovery_code_used', ['remaining' => $event->remaining], fn (string $locale): array => [
+            'when' => $this->time($this->clock->now(), $locale),
+        ]);
+    }
+
+    public function recoveryLinkUsed(RecoveryLinkUsed $event): void
+    {
+        $this->send($event->realm, $event->principalId, 'recovery_link_used', [], fn (string $locale): array => [
             'when' => $this->time($this->clock->now(), $locale),
         ]);
     }

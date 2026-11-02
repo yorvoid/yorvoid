@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace YorvoID\Authn\Recovery;
 
 use Psr\Clock\ClockInterface;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Clock\NativeClock;
+use YorvoID\Authn\Recovery\Event\RecoveryLinkUsed;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -20,6 +22,7 @@ use YorvoID\Authn\Token\IssuedToken;
 use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
+use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
@@ -32,7 +35,7 @@ use YorvoID\Core\Storage\Transactions;
  * Recovery links issued by an operator (ATN-033): someone with access to the server (and so the final
  * authority anyway) gives a person who lost access a short-lived link. Opening it ends all of their
  * sessions, since whoever else had one may be why they lost access, starts the cool-down, and starts a
- * new session (ATN-029).
+ * new session (ATN-029). Each use is announced with RecoveryLinkUsed, for a notification.
  *
  * A recovery link is a one-time token for the purpose "yorvoid.recovery_link", not bound to an email
  * address: the operator hands it over directly.
@@ -50,6 +53,7 @@ final readonly class RecoveryLinks
         private StepUp $stepUp,
         private Transactions $transactions,
         private ClockInterface $clock = new NativeClock(),
+        private EventDispatcherInterface $events = new NoEventListeners(),
     ) {
     }
 
@@ -88,6 +92,10 @@ final readonly class RecoveryLinks
 
             $this->sessions->endAll(new EndSessions($realm, $used->principalId, SessionEndReason::Recovered), $origin, $used->principalId);
             $this->stepUp->startCoolDown($realm, $used->principalId, $origin);
+
+            $this->transactions->afterCommit(function () use ($realm, $used, $origin): void {
+                $this->events->dispatch(new RecoveryLinkUsed($realm, $used->principalId, $origin));
+            });
 
             return $this->sessions->start(new StartSession($realm, $used->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryLink, $this->clock->now())), $device, $address, $deviceCookie), $origin);
         });

@@ -12,6 +12,8 @@ return [
     'yorvoid.notification.credential_added.body' => 'Zu Ihrem {application}-Konto wurde eine neue Anmeldemethode hinzugefügt. Wenn Sie das waren, müssen Sie nichts tun.',
     'yorvoid.notification.credential_removed.subject' => 'Anmeldemethode aus Ihrem {application}-Konto entfernt',
     'yorvoid.notification.credential_removed.body' => 'Aus Ihrem {application}-Konto wurde eine Anmeldemethode entfernt. Wenn Sie das waren, müssen Sie nichts tun.',
+    'yorvoid.notification.recovery_link_used.subject' => 'Wiederherstellungslink für Ihr {application}-Konto verwendet',
+    'yorvoid.notification.recovery_link_used.body' => 'Jemand hat einen Wiederherstellungslink des {application}-Supports verwendet, um auf Ihr Konto zuzugreifen, und alle anderen wurden abgemeldet.',
     'yorvoid.notification.recovery_code_used.subject' => 'Wiederherstellungscode für Ihr {application}-Konto verwendet',
     'yorvoid.notification.recovery_code_used.body' => 'Jemand hat einen Ihrer Wiederherstellungscodes verwendet, um auf Ihr {application}-Konto zuzugreifen, und alle anderen wurden abgemeldet. {remaining, plural, =0 {Sie haben keine Wiederherstellungscodes mehr: Erstellen Sie neue.} one {Sie haben noch # Wiederherstellungscode.} other {Sie haben noch # Wiederherstellungscodes.}}',
     'yorvoid.notification.recovery_codes_generated.subject' => 'Neue Wiederherstellungscodes für Ihr {application}-Konto',

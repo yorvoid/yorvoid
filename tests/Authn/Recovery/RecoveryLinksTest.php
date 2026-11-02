@@ -6,6 +6,7 @@ namespace YorvoID\Tests\Authn\Recovery;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Clock\MockClock;
+use YorvoID\Authn\Recovery\Event\RecoveryLinkUsed;
 use YorvoID\Authn\Recovery\IssueRecoveryLink;
 use YorvoID\Authn\Recovery\RecoveryLinks;
 use YorvoID\Authn\Session\AuthenticationContext;
@@ -31,6 +32,7 @@ use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 
 /**
@@ -41,6 +43,8 @@ final class RecoveryLinksTest extends DatabaseTestCase
     private Stack $stack;
 
     private MockClock $clock;
+
+    private RecordingDispatcher $events;
 
     private Principals $principals;
 
@@ -61,15 +65,20 @@ final class RecoveryLinksTest extends DatabaseTestCase
         self::assertNull($link->token->email, 'An operator hands the link over: it isn\'t sent by email.');
         self::assertEquals(new \DateTimeImmutable('2026-10-27 19:00:30 UTC'), $link->token->expiresAt, '15 minutes by default.');
 
-        $started = $links->redeem(new Realm('acme'), $link->secret, new Origin(OriginKind::Web), 'Firefox on Linux', '192.0.2.10');
+        $origin = new Origin(OriginKind::Web);
+        $this->events->dispatched = [];
+        $started = $links->redeem(new Realm('acme'), $link->secret, $origin, 'Firefox on Linux', '192.0.2.10');
 
         self::assertNotNull($started);
+        self::assertEquals(new RecoveryLinkUsed(new Realm('acme'), $owner->id, $origin), $this->events->last(), 'Using the link wasn\'t announced, for a notification.');
         self::assertSame([AuthenticationMethod::RecoveryLink], $started->session->authentication->methods());
         self::assertSame(['Firefox on Linux', '192.0.2.10'], [$started->session->device, $started->session->address]);
         self::assertNotNull($this->sessions->validate(new Realm('acme'), $started->token));
         self::assertNull($this->sessions->validate(new Realm('acme'), $attackers->token), 'A session from before the recovery survived it.');
         self::assertSame(SessionEndReason::Recovered, $this->sessions->get(new Realm('acme'), $attackers->session->id)?->endReason);
+        $this->events->dispatched = [];
         self::assertNull($links->redeem(new Realm('acme'), $link->secret, new Origin(OriginKind::Web)), 'A recovery link worked twice.');
+        self::assertSame([], $this->events->of(RecoveryLinkUsed::class), 'A link that didn\'t work was announced.');
         self::assertEquals(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'), $this->stepUp->coolDownEndsAt(new Realm('acme'), $owner->id), 'The recovery started no cool-down.');
     }
 
@@ -117,6 +126,8 @@ final class RecoveryLinksTest extends DatabaseTestCase
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, clock: $this->clock);
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock, Duration::hours(24));
 
-        return new RecoveryLinks(new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock), $this->sessions, $this->principals, $this->stepUp, $this->stack->transactions, $this->clock);
+        $this->events = new RecordingDispatcher();
+
+        return new RecoveryLinks(new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock), $this->sessions, $this->principals, $this->stepUp, $this->stack->transactions, $this->clock, $this->events);
     }
 }
