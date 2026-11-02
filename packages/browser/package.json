@@ -54,5 +54,10 @@
     "@stryker-mutator/core": "10.1.1",
     "@types/node": "26.6.5",
     "typescript": "7.0.2"
+  },
+  "overrides": {
+    "@stryker-mutator/core": {
+      "minimatch": "11.0.4"
+    }
   }
 }
