@@ -43,13 +43,19 @@ final class PolicyAndKeyTest extends TestCase
         yield 'a parameter name' => [static fn () => new Operation('acme.site.remove', ['Site' => ParameterType::String]), 'The parameter "Site" of acme.site.remove is invalid'];
         yield 'a parameter name with a hyphen' => [static fn () => new Operation('acme.site.remove', ['site-name' => ParameterType::String]), 'The parameter "site-name" of acme.site.remove is invalid'];
         yield 'a parameter name with a line break' => [static fn () => new Operation('acme.site.remove', ["site\n" => ParameterType::String]), 'of acme.site.remove is invalid'];
-        yield 'no audience' => [static fn () => new VerifierConfig(' ', 'acme.example', ['https://acme.example']), 'The verifier needs an audience'];
-        yield 'no origin' => [static fn () => new VerifierConfig('acme', 'acme.example', []), 'The verifier needs an audience, at least one origin'];
-        yield 'too short a lifetime' => [static fn () => new VerifierConfig('acme', 'acme.example', ['https://acme.example'], 9), 'an intent lifetime between 10 seconds and an hour'];
-        yield 'too long a lifetime' => [static fn () => new VerifierConfig('acme', 'acme.example', ['https://acme.example'], 3601), 'an intent lifetime between 10 seconds and an hour'];
-        yield 'plain http' => [static fn () => new VerifierConfig('acme', 'acme.example', ['http://acme.example']), 'The origin "http://acme.example" isn\'t an https:// origin at or under acme.example.'];
-        yield 'another site' => [static fn () => new VerifierConfig('acme', 'acme.example', ['https://evilacme.example']), 'isn\'t an https:// origin at or under acme.example'];
-        yield 'not an origin' => [static fn () => new VerifierConfig('acme', 'acme.example', ['acme.example']), 'isn\'t an https:// origin'];
+        $console = ['https://acme.example'];
+        yield 'no audience' => [static fn () => new VerifierConfig(' ', 'sign.acme.example', ['https://sign.acme.example'], $console), 'The verifier needs an audience'];
+        yield 'no origin' => [static fn () => new VerifierConfig('acme', 'sign.acme.example', [], $console), 'at least one signing origin and one console origin'];
+        yield 'no console origin' => [static fn () => new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example'], []), 'at least one signing origin and one console origin'];
+        yield 'too short a lifetime' => [static fn () => new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example'], $console, 9), 'an intent lifetime between 10 seconds and an hour'];
+        yield 'too long a lifetime' => [static fn () => new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example'], $console, 3601), 'an intent lifetime between 10 seconds and an hour'];
+        yield 'plain http' => [static fn () => new VerifierConfig('acme', 'sign.acme.example', ['http://sign.acme.example'], $console), 'The origin "http://sign.acme.example" isn\'t an https:// origin at or under sign.acme.example.'];
+        yield 'another site' => [static fn () => new VerifierConfig('acme', 'sign.acme.example', ['https://evilsign.acme.example'], $console), 'isn\'t an https:// origin at or under sign.acme.example'];
+        yield 'not an origin' => [static fn () => new VerifierConfig('acme', 'sign.acme.example', ['sign.acme.example'], $console), 'isn\'t an https:// origin'];
+        yield 'a console origin that isn\'t one' => [static fn () => new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example'], ['acme.example']), 'The console origin "acme.example" isn\'t an https:// origin.'];
+        yield 'signing at the console\'s own relying party' => [static fn () => new VerifierConfig('acme', 'acme.example', ['https://acme.example'], $console), 'The console at "https://acme.example" could ask for signatures for acme.example itself'];
+        yield 'a console under the signing relying party' => [static fn () => new VerifierConfig('acme', 'acme.example', ['https://sign.acme.example'], ['https://console.acme.example']), 'could ask for signatures for acme.example itself'];
+        yield 'a console at a signing origin' => [static fn () => new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example'], ['https://sign.acme.example:8443']), 'could ask for signatures'];
     }
 
     /**
@@ -73,9 +79,11 @@ final class PolicyAndKeyTest extends TestCase
 
     public function testAcceptsOriginsUnderTheRelyingPartyAndLocalDevelopment(): void
     {
-        self::assertCount(3, new VerifierConfig('acme', 'acme.example', ['https://acme.example', 'https://console.acme.example:8443', 'https://acme.example'])->origins);
-        self::assertSame(['http://localhost:8000'], new VerifierConfig('acme', 'localhost', ['http://localhost:8000'], 10)->origins);
-        self::assertSame(3600, new VerifierConfig('acme', 'acme.example', ['https://acme.example'], 3600)->intentLifetime);
+        self::assertCount(3, new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example', 'https://eu.sign.acme.example:8443', 'https://sign.acme.example'], ['https://acme.example'])->origins);
+        // The console may be the relying party's parent: a parent's pages can't ask for its subdomain's passkeys.
+        self::assertSame(['https://acme.example', 'https://console.acme.example'], new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example'], ['https://acme.example', 'https://console.acme.example'])->consoleOrigins);
+        self::assertSame(['http://sign.localhost:8001'], new VerifierConfig('acme', 'sign.localhost', ['http://sign.localhost:8001'], ['http://localhost:8000'], 10)->origins);
+        self::assertSame(3600, new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example'], ['https://acme.example'], 3600)->intentLifetime);
     }
 
     /**

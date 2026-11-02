@@ -57,7 +57,7 @@ final class VerifierTest extends TestCase
         $prepared = $verifier->prepareBootstrap(self::keyOf($this->owner, 0, 'Ana\'s YubiKey'));
         $options = self::json($prepared->options);
         self::assertSame([['type' => 'public-key', 'id' => VirtualAuthenticator::encode($this->owner->credentials[0]['id'])]], $options['allowCredentials'], 'Only the key being added is asked for.');
-        self::assertSame(['acme.example', 'required', 300000], [$options['rpId'], $options['userVerification'], $options['timeout']]);
+        self::assertSame(['sign.acme.example', 'required', 300000], [$options['rpId'], $options['userVerification'], $options['timeout']]);
         self::assertSame(VirtualAuthenticator::encode($prepared->intent->challenge()), $options['challenge']);
 
         $key = $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options));
@@ -79,7 +79,7 @@ final class VerifierTest extends TestCase
     {
         $verifier = $this->verifier($store);
         $secret = $verifier->createBootstrapSecret();
-        $stranger = new VirtualAuthenticator('https://acme.example');
+        $stranger = new VirtualAuthenticator('https://sign.acme.example');
         $stranger->create();
         $prepared = $verifier->prepareBootstrap(self::keyOf($this->owner, 0));
 
@@ -128,7 +128,7 @@ final class VerifierTest extends TestCase
     public function testAcceptsEdDsaKeys(): void
     {
         $verifier = $this->verifier('memory');
-        $edwards = new VirtualAuthenticator('https://acme.example', edwards: true);
+        $edwards = new VirtualAuthenticator('https://sign.acme.example', edwards: true);
         $edwards->create();
         $secret = $verifier->createBootstrapSecret();
         $prepared = $verifier->prepareBootstrap(self::keyOf($edwards, 0));
@@ -150,7 +150,7 @@ final class VerifierTest extends TestCase
     public static function badSignatures(): iterable
     {
         yield 'another site' => [Refusal::InvalidSignature, ['origin' => 'https://evil.example']];
-        yield 'an origin of the site the verifier doesn\'t list' => [Refusal::InvalidSignature, ['origin' => 'https://other.acme.example']];
+        yield 'an origin of the site the verifier doesn\'t list' => [Refusal::InvalidSignature, ['origin' => 'https://other.sign.acme.example']];
         yield 'another relying party' => [Refusal::InvalidSignature, ['rpId' => 'evil.example']];
         yield 'another intent' => [Refusal::InvalidSignature, ['challenge' => VirtualAuthenticator::encode(random_bytes(32))]];
         yield 'without user verification' => [Refusal::UserNotVerified, ['userVerified' => false]];
@@ -176,7 +176,7 @@ final class VerifierTest extends TestCase
     public function testRefusesWhatIsntASignatureByItsKeys(): void
     {
         $verifier = $this->bootstrapped('memory');
-        $stranger = new VirtualAuthenticator('https://acme.example');
+        $stranger = new VirtualAuthenticator('https://sign.acme.example');
         $stranger->create();
 
         foreach (['', 'null', '{}', $this->owner->register(self::registration())] as $garbage) {
@@ -311,7 +311,7 @@ final class VerifierTest extends TestCase
     {
         $verifier = $this->bootstrapped($store);
         $lostKeys = \count($verifier->keys());
-        $found = new VirtualAuthenticator('https://acme.example');
+        $found = new VirtualAuthenticator('https://sign.acme.example');
         $found->create();
 
         $secret = $verifier->createBootstrapSecret();
@@ -348,7 +348,7 @@ final class VerifierTest extends TestCase
     {
         $this->clock = new MockClock('2026-10-28 18:00:00 UTC');
         $this->log = new InMemoryVerifierLog();
-        $this->owner = new VirtualAuthenticator('https://acme.example');
+        $this->owner = new VirtualAuthenticator('https://sign.acme.example');
         $this->owner->create();
 
         if ('file' === $store) {
@@ -373,7 +373,7 @@ final class VerifierTest extends TestCase
 
     private static function config(): VerifierConfig
     {
-        return new VerifierConfig('acme-verifier:host-1', 'acme.example', ['https://acme.example']);
+        return new VerifierConfig('acme-verifier:host-1', 'sign.acme.example', ['https://sign.acme.example'], ['https://acme.example']);
     }
 
     private static function policy(): OperationPolicy
@@ -396,7 +396,7 @@ final class VerifierTest extends TestCase
 
     private static function registration(): string
     {
-        return (string) json_encode(['rp' => ['id' => 'acme.example'], 'user' => ['id' => VirtualAuthenticator::encode(random_bytes(32))], 'challenge' => VirtualAuthenticator::encode(random_bytes(32))]);
+        return (string) json_encode(['rp' => ['id' => 'sign.acme.example'], 'user' => ['id' => VirtualAuthenticator::encode(random_bytes(32))], 'challenge' => VirtualAuthenticator::encode(random_bytes(32))]);
     }
 
     /**

@@ -85,13 +85,14 @@ final class IntentSigningTest extends DatabaseTestCase
     {
         $signing = $this->signing($implementation);
         $session = $this->session();
-        $authenticator = new VirtualAuthenticator();
-        $registration = $this->passkeys->beginRegistration($session);
-        $this->passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'YubiKey', new Origin(OriginKind::Web));
-        $verifier = new Verifier(new VerifierConfig('acme-verifier', 'example.com', ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), $this->clock);
+        // A passkey for signing, at the signing origin: not one of the console's.
+        $authenticator = new VirtualAuthenticator('https://sign.example.com');
+        $authenticator->create();
+        $verifier = new Verifier(new VerifierConfig('acme-verifier', 'sign.example.com', ['https://sign.example.com'], ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), $this->clock);
 
         // The passkey becomes the verifier's first key, with the bootstrap secret.
-        $key = Passkeys::verifierKey($this->passkeys->of(new Realm('acme'), $session->principalId)[0], 'Ana\'s YubiKey');
+        $passkey = $authenticator->credentials[0];
+        $key = ['credential_id' => VirtualAuthenticator::encode($passkey['id']), 'public_key' => VirtualAuthenticator::encode($passkey['publicKey']), 'user_handle' => VirtualAuthenticator::encode($passkey['userHandle']), 'label' => 'Ana\'s YubiKey'];
         $bootstrap = $verifier->prepareBootstrap($key);
         $request = $signing->request($session, $bootstrap, 'en', new Origin(OriginKind::Web));
         self::assertSame('Allow the passkey "Ana\'s YubiKey" to sign operations', $request->summary->text);
@@ -152,7 +153,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $signing = $this->signing('memory', new Limit(2, Duration::hours(1)));
         $session = $this->session();
         $other = $this->session();
-        $verifier = new Verifier(new VerifierConfig('acme-verifier', 'example.com', ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), $this->clock);
+        $verifier = new Verifier(new VerifierConfig('acme-verifier', 'sign.example.com', ['https://sign.example.com'], ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), $this->clock);
 
         $signing->request($session, $verifier->prepare('acme.site.remove', ['site' => 'a']), 'en', new Origin(OriginKind::Web));
         $signing->request($session, $verifier->prepare('acme.site.remove', ['site' => 'b']), 'en', new Origin(OriginKind::Web));
@@ -167,7 +168,7 @@ final class IntentSigningTest extends DatabaseTestCase
     {
         $signing = $this->signing('memory');
         $session = $this->session();
-        $prepared = new Verifier(new VerifierConfig('acme-verifier', 'example.com', ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), $this->clock)->prepare('acme.site.remove', ['site' => 'a']);
+        $prepared = new Verifier(new VerifierConfig('acme-verifier', 'sign.example.com', ['https://sign.example.com'], ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), $this->clock)->prepare('acme.site.remove', ['site' => 'a']);
 
         for ($i = 0; $i < 20; ++$i) {
             $signing->request($session, $prepared, 'en', new Origin(OriginKind::Web));
