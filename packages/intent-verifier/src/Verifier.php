@@ -14,12 +14,19 @@ use Symfony\Component\Uid\Uuid;
 use Webauthn\AttestationStatement\AttestationStatementSupportManager;
 use Webauthn\AuthenticatorAssertionResponse;
 use Webauthn\AuthenticatorAssertionResponseValidator;
+use Webauthn\AuthenticatorAttestationResponse;
+use Webauthn\AuthenticatorAttestationResponseValidator;
+use Webauthn\AuthenticatorSelectionCriteria;
 use Webauthn\CeremonyStep\CeremonyStepManagerFactory;
 use Webauthn\CredentialRecord;
 use Webauthn\Denormalizer\WebauthnSerializerFactory;
 use Webauthn\PublicKeyCredential;
+use Webauthn\PublicKeyCredentialCreationOptions;
 use Webauthn\PublicKeyCredentialDescriptor;
+use Webauthn\PublicKeyCredentialParameters;
 use Webauthn\PublicKeyCredentialRequestOptions;
+use Webauthn\PublicKeyCredentialRpEntity;
+use Webauthn\PublicKeyCredentialUserEntity;
 use Webauthn\TrustPath\EmptyTrustPath;
 
 /**
@@ -32,7 +39,9 @@ use Webauthn\TrustPath\EmptyTrustPath;
  *    verifier kept, so the console can't change the operation after it's prepared (T-INT-1). The
  *    nonce works once, signed or not, and expires (INT-003, T-INT-4).
  *
- * Its keys change only by intents too: a key is added with a signature by an existing key, removed
+ * Its keys are passkeys of its own relying party, registered at its signing origin
+ * (prepareRegistration()), never one of the console's. They change only by intents: a key is added with
+ * a signature by an existing key, removed
  * with a signature, never the last one. Each change waits a day (by default) before it takes effect,
  * while the owners are told and any key can cancel it (INT-013, INT-017). The first key comes with the
  * bootstrap secret, signed by itself, at once; a new secret is the host's way back in when every key is
@@ -76,18 +85,90 @@ final readonly class Verifier
             throw new ConfigurationError(\sprintf('The operation %s runs unsigned: there\'s nothing to prepare.', $action));
         }
 
+        if (OperationPolicy::ADD_KEY === $action) {
+            throw new ConfigurationError('A key is added from its registration at the signing origin: use prepareRegistration().');
+        }
+
         return $this->begin($operation, $parameters, false);
     }
 
     /**
-     * Prepares the first key's addition: an "add key" intent that the key itself signs, with the
-     * bootstrap secret (see bootstrap()).
+     * Starts registering a passkey at the signing origin, for its relying party: give the options to
+     * navigator.credentials.create() on the signing page, then the answer to finishRegistration().
      *
-     * @param array<string, mixed> $key As OperationPolicy::ADD_KEY's parameters
+     * @param string $label     What the owner calls it, e.g. "Ana's YubiKey"
+     * @param bool   $bootstrap Whether it's added with the bootstrap secret, signing its own addition; otherwise one
+     *                          of the verifier's keys signs it
      */
-    public function prepareBootstrap(array $key): PreparedIntent
+    public function prepareRegistration(string $label, bool $bootstrap = false): PendingRegistration
     {
-        return $this->begin($this->policy->get(OperationPolicy::ADD_KEY), $key, true);
+        $label = trim($label);
+
+        if ('' === $label || mb_strlen($label) > 64) {
+            throw new ConfigurationError('A key\'s label has 1 to 64 characters.');
+        }
+
+        $this->applyKeyChanges();
+
+        return $this->store->transaction(function (VerifierState $state) use ($label, $bootstrap): PendingRegistration {
+            $known = [...array_values($state->keys), ...array_map(static fn (KeyChange $change): Key => $change->key, array_values($state->keyChanges))];
+            $options = PublicKeyCredentialCreationOptions::create(
+                PublicKeyCredentialRpEntity::create('', $this->config->relyingPartyId),
+                PublicKeyCredentialUserEntity::create($label, random_bytes(32), $label),
+                random_bytes(32),
+                [PublicKeyCredentialParameters::createPk(ES256::ID), PublicKeyCredentialParameters::createPk(Ed25519::ID), PublicKeyCredentialParameters::createPk(RS256::ID)],
+                AuthenticatorSelectionCriteria::create(userVerification: AuthenticatorSelectionCriteria::USER_VERIFICATION_REQUIREMENT_REQUIRED, residentKey: AuthenticatorSelectionCriteria::RESIDENT_KEY_REQUIREMENT_DISCOURAGED),
+                PublicKeyCredentialCreationOptions::ATTESTATION_CONVEYANCE_PREFERENCE_NONE,
+                array_map(static fn (Key $key): PublicKeyCredentialDescriptor => PublicKeyCredentialDescriptor::create('public-key', $key->credentialId), $known),
+                $this->config->intentLifetime * 1000,
+            );
+            $registration = new PendingRegistration(Base64Url::encode(random_bytes(18)), $this->serializer->serialize($options, 'json'), $label, $bootstrap, $this->clock->now()->modify(\sprintf('+%d seconds', $this->config->intentLifetime)));
+            $state->registrations[$registration->id] = $registration;
+            $this->log->record('registration_prepared', ['registration' => $registration->id, 'bootstrap' => $bootstrap], $this->clock->now());
+
+            return $registration;
+        });
+    }
+
+    /**
+     * Checks the authenticator's answer to a registration, and prepares the new key's "add key" intent from
+     * it: to be signed by one of the verifier's keys (addKey()), or for the bootstrap secret by the new key
+     * itself (bootstrap()). The registration works once.
+     *
+     * @param string $attestation The browser's PublicKeyCredential, as JSON
+     *
+     * @throws IntentRefused
+     */
+    public function finishRegistration(string $registration, string $attestation): PreparedIntent
+    {
+        $registered = $this->store->transaction(function (VerifierState $state) use ($registration, $attestation): array|IntentRefused {
+            $pending = $state->registrations[$registration] ?? null;
+            unset($state->registrations[$registration]);
+
+            try {
+                if (null === $pending || $this->clock->now() >= $pending->expiresAt) {
+                    throw new IntentRefused(Refusal::InvalidRegistration);
+                }
+
+                $key = $this->registered($pending, $attestation);
+                $this->log->record('registered', ['registration' => $registration, 'subject' => $key->id(), 'algorithm' => $key->algorithm], $this->clock->now());
+
+                return [$key, $pending->bootstrap];
+            } catch (IntentRefused $refusal) {
+                $this->log->record('refused', ['registration' => $registration, 'reason' => $refusal->refusal->value], $this->clock->now());
+
+                return $refusal;
+            }
+        });
+
+        if ($registered instanceof IntentRefused) {
+            throw $registered;
+        }
+
+        [$key, $bootstrap] = $registered;
+        $parameters = ['credential_id' => $key->id(), 'public_key' => Base64Url::encode($key->publicKey), 'user_handle' => Base64Url::encode($key->userHandle), 'label' => $key->label];
+
+        return $this->begin($this->policy->get(OperationPolicy::ADD_KEY), $parameters, $bootstrap);
     }
 
     /**
@@ -261,8 +342,8 @@ final readonly class Verifier
     }
 
     /**
-     * Adds a key with the bootstrap secret: the key signed its own "add key" intent, prepared with
-     * prepareBootstrap(). The secret works once. The first key is added at once; when the verifier has
+     * Adds a key with the bootstrap secret: the key signed its own "add key" intent, prepared from its
+     * registration (prepareRegistration() with $bootstrap, then finishRegistration()). The secret works once. The first key is added at once; when the verifier has
      * keys, the new one waits like any change, so their owners can cancel it.
      *
      * @throws IntentRefused
@@ -302,7 +383,8 @@ final readonly class Verifier
     }
 
     /**
-     * Forgets intents that expired unsigned; run it now and then, e.g. hourly.
+     * Forgets intents that expired unsigned, and registrations that expired unanswered; run it now and
+     * then, e.g. hourly.
      *
      * @return int How many
      */
@@ -311,10 +393,11 @@ final readonly class Verifier
         $now = $this->clock->now();
 
         return $this->store->transaction(static function (VerifierState $state) use ($now): int {
-            $count = \count($state->pending);
+            $count = \count($state->pending) + \count($state->registrations);
             $state->pending = array_filter($state->pending, static fn (PendingIntent $pending): bool => $now < $pending->intent->expiresAt);
+            $state->registrations = array_filter($state->registrations, static fn (PendingRegistration $registration): bool => $now < $registration->expiresAt);
 
-            return $count - \count($state->pending);
+            return $count - \count($state->pending) - \count($state->registrations);
         });
     }
 
@@ -447,12 +530,8 @@ final readonly class Verifier
         }
 
         $options = PublicKeyCredentialRequestOptions::create($pending->intent->challenge(), $this->config->relyingPartyId, [], PublicKeyCredentialRequestOptions::USER_VERIFICATION_REQUIREMENT_REQUIRED);
-        $steps = new CeremonyStepManagerFactory();
-        $steps->setAllowedOrigins($this->config->origins);
-        $steps->setAlgorithmManager(Manager::create()->add(ES256::create(), Ed25519::create(), RS256::create()));
-
         try {
-            $record = AuthenticatorAssertionResponseValidator::create($steps->requestCeremony())->check(self::credentialRecord($key), $response, $options, $this->config->relyingPartyId, null);
+            $record = AuthenticatorAssertionResponseValidator::create($this->steps()->requestCeremony())->check(self::credentialRecord($key), $response, $options, $this->config->relyingPartyId, null);
         } catch (\Throwable $exception) {
             $this->refuse($pending->intent, Refusal::InvalidSignature, $exception);
         }
@@ -490,6 +569,55 @@ final readonly class Verifier
         $this->applyKeyChanges();
 
         return $change;
+    }
+
+    /**
+     * The key the authenticator registered, if its answer is a valid one to the registration: user
+     * verified, at a signing origin, for the signing relying party.
+     *
+     * @throws IntentRefused
+     */
+    private function registered(PendingRegistration $pending, string $attestation): Key
+    {
+        try {
+            $credential = $this->parse($attestation);
+            // The library writes the relying party's name as its ID, and warns when it reads one back.
+            $stored = json_decode($pending->options, true, flags: \JSON_THROW_ON_ERROR);
+            \assert(\is_array($stored) && \is_array($stored['rp']));
+            $stored['rp']['name'] = '';
+            $options = $this->serializer->deserialize(json_encode($stored, \JSON_THROW_ON_ERROR), PublicKeyCredentialCreationOptions::class, 'json');
+        } catch (\Throwable $exception) {
+            throw new IntentRefused(Refusal::InvalidRegistration, $exception);
+        }
+
+        $response = $credential instanceof PublicKeyCredential ? $credential->response : null;
+
+        if (!$response instanceof AuthenticatorAttestationResponse) {
+            throw new IntentRefused(Refusal::InvalidRegistration);
+        }
+
+        if (!$response->attestationObject->authData->isUserVerified()) {
+            throw new IntentRefused(Refusal::UserNotVerified);
+        }
+
+        try {
+            $record = AuthenticatorAttestationResponseValidator::create($this->steps()->creationCeremony())->check($response, $options, $this->config->relyingPartyId);
+        } catch (\Throwable $exception) {
+            throw new IntentRefused(Refusal::InvalidRegistration, $exception);
+        }
+
+        $key = Key::fromParameters(['credential_id' => Base64Url::encode($record->publicKeyCredentialId), 'public_key' => Base64Url::encode($record->credentialPublicKey), 'user_handle' => Base64Url::encode($record->userHandle), 'label' => $pending->label], new \DateTimeImmutable('@'.$this->clock->now()->getTimestamp()));
+
+        return $key ?? throw new IntentRefused(Refusal::InvalidKey);
+    }
+
+    private function steps(): CeremonyStepManagerFactory
+    {
+        $steps = new CeremonyStepManagerFactory();
+        $steps->setAllowedOrigins($this->config->origins);
+        $steps->setAlgorithmManager(Manager::create()->add(ES256::create(), Ed25519::create(), RS256::create()));
+
+        return $steps;
     }
 
     /**

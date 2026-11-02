@@ -9,6 +9,7 @@ use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\Key;
 use YorvoID\IntentVerifier\KeyChange;
 use YorvoID\IntentVerifier\PendingIntent;
+use YorvoID\IntentVerifier\PendingRegistration;
 use YorvoID\IntentVerifier\VerifierState;
 use YorvoID\IntentVerifier\VerifierStore;
 
@@ -70,6 +71,13 @@ final readonly class FileVerifierStore implements VerifierStore
                 'expires_at' => $pending->intent->expiresAt->getTimestamp(),
                 'bootstrap' => $pending->bootstrap,
             ], $state->pending),
+            'registrations' => array_map(static fn (PendingRegistration $registration): array => [
+                'id' => $registration->id,
+                'options' => $registration->options,
+                'label' => $registration->label,
+                'bootstrap' => $registration->bootstrap,
+                'expires_at' => $registration->expiresAt->getTimestamp(),
+            ], $state->registrations),
             'bootstrap_secret_hash' => $state->bootstrapSecretHash,
         ];
     }
@@ -107,7 +115,7 @@ final readonly class FileVerifierStore implements VerifierStore
         try {
             $data = json_decode($contents, true, flags: \JSON_THROW_ON_ERROR);
 
-            if (!\is_array($data) || self::VERSION !== ($data['version'] ?? null) || !\is_array($data['keys'] ?? null) || !\is_array($data['key_changes'] ?? null) || !\is_array($data['pending'] ?? null)) {
+            if (!\is_array($data) || self::VERSION !== ($data['version'] ?? null) || !\is_array($data['keys'] ?? null) || !\is_array($data['key_changes'] ?? null) || !\is_array($data['pending'] ?? null) || !\is_array($data['registrations'] ?? null)) {
                 throw new \UnexpectedValueException('Not a state.');
             }
 
@@ -130,6 +138,12 @@ final readonly class FileVerifierStore implements VerifierStore
                 $parameters = $pending['parameters'];
                 $intent = new Intent(self::string($pending['action']), $parameters, self::string($pending['audience']), self::string($pending['nonce']), self::time($pending['issued_at']), self::time($pending['expires_at']));
                 $state->pending[$intent->nonce] = new PendingIntent($intent, $pending['bootstrap']);
+            }
+
+            foreach ($data['registrations'] as $registration) {
+                \assert(\is_array($registration) && \is_bool($registration['bootstrap']));
+                $registration = new PendingRegistration(self::string($registration['id']), self::string($registration['options']), self::string($registration['label']), $registration['bootstrap'], self::time($registration['expires_at']));
+                $state->registrations[$registration->id] = $registration;
             }
 
             $state->bootstrapSecretHash = self::nullableString($data['bootstrap_secret_hash']);

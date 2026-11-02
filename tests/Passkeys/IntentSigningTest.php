@@ -6,8 +6,6 @@ namespace YorvoID\Tests\Passkeys;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Clock\MockClock;
-use YorvoID\Authn\Attempt\Attempts;
-use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Notification\SecurityNotifications;
 use YorvoID\Authn\Session\AuthenticationContext;
@@ -16,7 +14,6 @@ use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
-use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Translations as AuthnTranslations;
 use YorvoID\Core\Duration;
@@ -48,8 +45,6 @@ use YorvoID\Passkeys\Intent\Event\SignedOperationRan;
 use YorvoID\Passkeys\Intent\IntentSigning;
 use YorvoID\Passkeys\Intent\IntentSummaries;
 use YorvoID\Passkeys\Intent\SignedOperationNotification;
-use YorvoID\Passkeys\PasskeyPolicy;
-use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\Translations;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
@@ -75,8 +70,6 @@ final class IntentSigningTest extends DatabaseTestCase
 
     private Principals $principals;
 
-    private Passkeys $passkeys;
-
     private InMemoryMailer $mailer;
 
     private IntentSummaries $summaries;
@@ -86,15 +79,13 @@ final class IntentSigningTest extends DatabaseTestCase
     {
         $signing = $this->signing($implementation);
         $session = $this->session();
-        // A passkey for signing, at the signing origin: not one of the console's.
+        // A passkey for signing, registered at the signing origin: not one of the console's.
         $authenticator = new VirtualAuthenticator('https://sign.example.com');
-        $authenticator->create();
         $verifier = new Verifier(new VerifierConfig('acme-verifier', 'sign.example.com', ['https://sign.example.com'], ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), new CollectingNotifier(), $this->clock);
 
         // The passkey becomes the verifier's first key, with the bootstrap secret.
-        $passkey = $authenticator->credentials[0];
-        $key = ['credential_id' => VirtualAuthenticator::encode($passkey['id']), 'public_key' => VirtualAuthenticator::encode($passkey['publicKey']), 'user_handle' => VirtualAuthenticator::encode($passkey['userHandle']), 'label' => 'Ana\'s YubiKey'];
-        $bootstrap = $verifier->prepareBootstrap($key);
+        $registration = $verifier->prepareRegistration('Ana\'s YubiKey', true);
+        $bootstrap = $verifier->finishRegistration($registration->id, $authenticator->register($registration->options));
         $request = $signing->request($session, $bootstrap, 'en', new Origin(OriginKind::Web));
         self::assertSame('Allow the passkey "Ana\'s YubiKey" to sign operations', $request->summary->text);
         $added = $verifier->bootstrap($verifier->createBootstrapSecret(), $request->nonce, $authenticator->signIn($request->options))->key;
@@ -220,21 +211,6 @@ final class IntentSigningTest extends DatabaseTestCase
         $this->summaries->summarize($intent, 'en');
     }
 
-    public function testAPasskeyBecomesAVerifierKey(): void
-    {
-        $this->signing('memory');
-        $session = $this->session();
-        $authenticator = new VirtualAuthenticator();
-        $registration = $this->passkeys->beginRegistration($session);
-        $this->passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'YubiKey', new Origin(OriginKind::Web));
-        $passkey = $this->passkeys->of(new Realm('acme'), $session->principalId)[0];
-
-        $key = Key::fromParameters(Passkeys::verifierKey($passkey, 'Ana\'s'), new \DateTimeImmutable('@0'));
-
-        self::assertNotNull($key);
-        self::assertSame([$passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, -7, 'Ana\'s'], [$key->credentialId, $key->publicKey, $key->userHandle, $key->algorithm, $key->label]);
-    }
-
     private function signing(string $implementation, ?Limit $limit = null): IntentSigning
     {
         $this->stack = $this->stack($implementation);
@@ -244,10 +220,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, events: $this->events, ids: $ids, clock: $this->clock);
-        $stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock);
-        $credentials = new Credentials($this->stack->credentials, $this->sessions, $stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $throttle = new Throttle($this->stack->throttle, $this->clock);
-        $this->passkeys = new Passkeys($this->stack->passkeys, $this->stack->ceremonies, $credentials, $this->sessions, $this->principals, $log, $this->stack->transactions, new PasskeyPolicy('example.com', ['https://example.com']), new Attempts($throttle), $ids, $this->clock);
         $translator = new Translator([AuthnTranslations::DIRECTORY, Translations::DIRECTORY, __DIR__.'/catalogues']);
         $this->summaries = new IntentSummaries($translator, 'acme');
         $this->mailer = new InMemoryMailer();

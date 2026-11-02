@@ -29,7 +29,6 @@ use YorvoID\IntentVerifier\Verifier;
 use YorvoID\Passkeys\Flow\IntentConfirmationStep;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\Intent\IntentSigning;
-use YorvoID\Passkeys\Passkeys;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Security\CurrentSession;
 
@@ -45,7 +44,6 @@ final readonly class AppController
         private Principals $principals,
         private SetupCodes $setupCodes,
         private RecoveryLinks $recoveryLinks,
-        private Passkeys $passkeys,
         private Verifier $verifier,
         private IntentSigning $signing,
         private Flows $flows,
@@ -109,11 +107,7 @@ final readonly class AppController
      */
     public function addKey(Request $request): Response
     {
-        $session = $this->current->get();
-        \assert(null !== $session);
-        $passkey = $this->passkeys->of($session->realm, $session->principalId)[0];
-
-        return $this->sign($request, $this->verifier->prepareBootstrap(Passkeys::verifierKey($passkey, 'E2E passkey')), [SignedOperations::BOOTSTRAP => $this->verifier->createBootstrapSecret()]);
+        throw new \LogicException('Keys are registered on the signing page.');
     }
 
     public function removeSite(Request $request): Response

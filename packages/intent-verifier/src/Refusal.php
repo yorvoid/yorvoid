@@ -32,6 +32,9 @@ enum Refusal: string
     /** Removing the key would leave the verifier with none */
     case LastKey = 'last_key';
 
+    /** No registration waits under that ID, or the authenticator's answer to it isn't valid */
+    case InvalidRegistration = 'invalid_registration';
+
     /** No change to the keys waits under that ID */
     case UnknownKeyChange = 'unknown_key_change';
 

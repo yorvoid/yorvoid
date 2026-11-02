@@ -18,6 +18,9 @@ final class VerifierState
     /** @var array<string, PendingIntent> By nonce */
     public array $pending = [];
 
+    /** @var array<string, PendingRegistration> Passkey registrations waiting for the browser's answer, by ID */
+    public array $registrations = [];
+
     /** @var array<string, KeyChange> Changes to the keys waiting to take effect, by their ID */
     public array $keyChanges = [];
 
