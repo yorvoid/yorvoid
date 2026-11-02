@@ -9,7 +9,7 @@ use YorvoID\Core\Realm;
 
 /**
  * Ends one session (SES-004, SES-013). Anyone may end their own sessions; ending someone else's needs
- * the ability below.
+ * the ability below. Sessions::end() doesn't check either: the caller does, with a recent proof.
  *
  * @api
  */

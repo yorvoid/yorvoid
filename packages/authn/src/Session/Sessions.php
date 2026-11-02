@@ -228,7 +228,8 @@ final readonly class Sessions
     }
 
     /**
-     * Ends a session; nothing happens if it already ended.
+     * Ends a session; nothing happens if it already ended. It doesn't check who asks: check that they may
+     * (their own session, or yorvoid.sessions.manage) and that they proved who they are recently.
      *
      * @param PrincipalId|null $actor Who ended it, if not the session's own principal signing out
      *
@@ -244,7 +245,7 @@ final readonly class Sessions
     }
 
     /**
-     * Ends all of a principal's current sessions, or all but one.
+     * Ends all of a principal's current sessions, or all but one. Like end(), it doesn't check who asks.
      *
      * @return int How many ended
      */

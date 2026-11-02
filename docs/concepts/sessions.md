@@ -79,7 +79,7 @@ $sessions->endAll(new EndSessions($realm, $principalId, SessionEndReason::EndedB
 
 `current($realm, $principalId)` lists a principal's sessions, the most recently used first, for a "your devices" page or an administrator's.
 
-Ending someone else's sessions needs the ability `yorvoid.sessions.manage`; anyone may end their own. Ask for a recent authentication before either (OWASP ASVS 7.5.2): the framework bridges do.
+`end()` and `endAll()` end what they're told to: who may is your check, before you call them. Let people end their own sessions, and administrators anyone's, and ask for a recent authentication before either (OWASP ASVS 7.5.2), e.g. with [`StepUp::require()`](step-up.md). The operations name the ability `yorvoid.sessions.manage` for ending someone else's; YorvoID's authorization, from 0.2.0, will check it.
 
 Each ended session gets a log entry with the reason, and a `SessionEnded` event.
 
