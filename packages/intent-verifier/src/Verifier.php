@@ -33,8 +33,10 @@ use Webauthn\TrustPath\EmptyTrustPath;
  *    nonce works once, signed or not, and expires (INT-003, T-INT-4).
  *
  * Its keys change only by intents too: a key is added with a signature by an existing key, removed
- * with a signature, never the last one. The first key comes with the bootstrap secret, signed by
- * itself; a new secret is the host's way back in when every key is lost (INT-005, 006, 016).
+ * with a signature, never the last one. Each change waits a day (by default) before it takes effect,
+ * while the owners are told and any key can cancel it (INT-013, INT-017). The first key comes with the
+ * bootstrap secret, signed by itself, at once; a new secret is the host's way back in when every key is
+ * lost, and waits like any change (INT-005, 006, 016).
  *
  * Every operation verified and every change to its keys goes to its notifier, for the owners, through
  * a channel the console doesn't control (INT-012).
@@ -97,6 +99,7 @@ final readonly class Verifier
      */
     public function verify(string $nonce, string $assertion): VerifiedIntent
     {
+        $this->applyKeyChanges();
         $verified = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): VerifiedIntent {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && !str_starts_with($pending->intent->action, 'yorvoid.verifier.'));
             $verified = $this->check($state, $pending, $state->keys, $assertion);
@@ -110,54 +113,131 @@ final readonly class Verifier
     }
 
     /**
-     * Adds the key a prepared "add key" intent describes, signed by one of the verifier's keys.
+     * Asks to add the key a prepared "add key" intent describes, signed by one of the verifier's keys. It
+     * takes effect after the configured delay, unless a key cancels it.
      *
      * @throws IntentRefused
      */
-    public function addKey(string $nonce, string $assertion): Key
+    public function addKey(string $nonce, string $assertion): KeyChange
     {
-        [$key, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
+        $this->applyKeyChanges();
+        [$change, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && OperationPolicy::ADD_KEY === $pending->intent->action);
             $key = $this->newKey($state, $pending->intent);
             $verified = $this->check($state, $pending, $state->keys, $assertion);
-            $state->keys[$key->id()] = $key;
-            $this->record('key_added', $verified, ['added' => $key->id(), 'algorithm' => $key->algorithm]);
 
-            return [$key, $verified->intent];
+            return [$this->requestChange($state, KeyChange::ADD, $key, $verified), $verified->intent];
         });
-        $this->notifier->notify(new VerifierNotice(VerifierNotice::KEY_ADDED, $intent, $key, $this->clock->now()));
 
-        return $key;
+        return $this->requested($change, $intent);
     }
 
     /**
-     * Removes the key a prepared "remove key" intent names, signed by one of the verifier's keys; never
-     * the last one.
-     *
-     * @return Key The key removed
+     * Asks to remove the key a prepared "remove key" intent names, signed by one of the verifier's keys;
+     * never the last one. It takes effect after the configured delay, unless a key cancels it: until then,
+     * the key still signs.
      *
      * @throws IntentRefused
      */
-    public function removeKey(string $nonce, string $assertion): Key
+    public function removeKey(string $nonce, string $assertion): KeyChange
     {
-        [$key, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
+        $this->applyKeyChanges();
+        [$change, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => OperationPolicy::REMOVE_KEY === $pending->intent->action);
             $verified = $this->check($state, $pending, $state->keys, $assertion);
             $removed = $pending->intent->parameters['credential_id'];
-            $key = \is_string($removed) && isset($state->keys[$removed]) ? $state->keys[$removed] : $this->refuse($pending->intent, Refusal::UnknownKey);
+            $leaving = array_map(static fn (KeyChange $change): string => $change->key->id(), array_filter($state->keyChanges, static fn (KeyChange $change): bool => KeyChange::REMOVE === $change->kind));
+            $key = \is_string($removed) && isset($state->keys[$removed]) && !\in_array($removed, $leaving, true) ? $state->keys[$removed] : $this->refuse($pending->intent, Refusal::UnknownKey);
 
-            if (1 === \count($state->keys)) {
+            if (\count($state->keys) - \count($leaving) <= 1) {
                 $this->refuse($pending->intent, Refusal::LastKey);
             }
 
-            unset($state->keys[$key->id()]);
-            $this->record('key_removed', $verified, ['removed' => $key->id()]);
-
-            return [$key, $verified->intent];
+            return [$this->requestChange($state, KeyChange::REMOVE, $key, $verified), $verified->intent];
         });
-        $this->notifier->notify(new VerifierNotice(VerifierNotice::KEY_REMOVED, $intent, $key, $this->clock->now()));
 
-        return $key;
+        return $this->requested($change, $intent);
+    }
+
+    /**
+     * Cancels a change to the keys before it takes effect, signed by one of the verifier's keys: prepare
+     * OperationPolicy::CANCEL_KEY_CHANGE with the change's ID.
+     *
+     * @throws IntentRefused
+     */
+    public function cancelKeyChange(string $nonce, string $assertion): KeyChange
+    {
+        $this->applyKeyChanges();
+        [$change, $verified] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
+            $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => OperationPolicy::CANCEL_KEY_CHANGE === $pending->intent->action);
+            $verified = $this->check($state, $pending, $state->keys, $assertion);
+            $id = $pending->intent->parameters['change'];
+            $change = \is_string($id) && isset($state->keyChanges[$id]) ? $state->keyChanges[$id] : $this->refuse($pending->intent, Refusal::UnknownKeyChange);
+            unset($state->keyChanges[$change->id]);
+            $this->record('key_change_cancelled', $verified, ['change' => $change->id]);
+
+            return [$change, $verified];
+        });
+        $this->notifier->notify(new VerifierNotice(VerifierNotice::KEY_CHANGE_CANCELLED, $verified->intent, $verified->key, $verified->verifiedAt, $change));
+
+        return $change;
+    }
+
+    /**
+     * Applies the changes to the keys that are due, and tells the notifier. Every other call does it
+     * first; run it on a schedule too (e.g. hourly), so a change takes effect, and is announced, on time.
+     *
+     * @return int How many took effect
+     */
+    public function applyKeyChanges(): int
+    {
+        $now = $this->clock->now();
+        $applied = $this->store->transaction(function (VerifierState $state) use ($now): array {
+            $applied = [];
+
+            foreach ($state->keyChanges as $id => $change) {
+                if ($now < $change->effectiveAt) {
+                    continue;
+                }
+
+                unset($state->keyChanges[$id]);
+
+                if (KeyChange::ADD === $change->kind) {
+                    $state->keys[$change->key->id()] = $change->key;
+                } elseif (isset($state->keys[$change->key->id()]) && \count($state->keys) > 1) {
+                    unset($state->keys[$change->key->id()]);
+                } else {
+                    continue;
+                }
+
+                $this->log->record(KeyChange::ADD === $change->kind ? 'key_added' : 'key_removed', ['change' => $change->id, 'key' => $change->key->id(), 'signer' => $change->signer], $now);
+                $applied[] = $change;
+            }
+
+            return $applied;
+        });
+
+        foreach ($applied as $change) {
+            $this->notifier->notify(new VerifierNotice(KeyChange::ADD === $change->kind ? VerifierNotice::KEY_ADDED : VerifierNotice::KEY_REMOVED, null, $change->key, $now, $change));
+        }
+
+        return \count($applied);
+    }
+
+    /**
+     * The changes to the keys waiting to take effect, the soonest first.
+     *
+     * @return list<KeyChange>
+     *
+     * @phpstan-impure
+     */
+    public function keyChanges(): array
+    {
+        $this->applyKeyChanges();
+        $changes = $this->store->transaction(static fn (VerifierState $state): array => array_values($state->keyChanges));
+        usort($changes, static fn (KeyChange $a, KeyChange $b): int => $a->effectiveAt <=> $b->effectiveAt);
+
+        return $changes;
     }
 
     /**
@@ -182,13 +262,15 @@ final readonly class Verifier
 
     /**
      * Adds a key with the bootstrap secret: the key signed its own "add key" intent, prepared with
-     * prepareBootstrap(). The secret works once.
+     * prepareBootstrap(). The secret works once. The first key is added at once; when the verifier has
+     * keys, the new one waits like any change, so their owners can cancel it.
      *
      * @throws IntentRefused
      */
-    public function bootstrap(#[\SensitiveParameter] string $secret, string $nonce, string $assertion): Key
+    public function bootstrap(#[\SensitiveParameter] string $secret, string $nonce, string $assertion): KeyChange
     {
-        $verified = $this->attempt(function (VerifierState $state) use ($secret, $nonce, $assertion): VerifiedIntent {
+        $this->applyKeyChanges();
+        [$change, $intent] = $this->attempt(function (VerifierState $state) use ($secret, $nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => $pending->bootstrap);
 
             if (null === $state->bootstrapSecretHash || !hash_equals($state->bootstrapSecretHash, hash('sha256', $secret))) {
@@ -197,15 +279,12 @@ final readonly class Verifier
 
             $key = $this->newKey($state, $pending->intent);
             $verified = $this->check($state, $pending, [$key->id() => $key], $assertion);
-            $state->keys[$key->id()] = $verified->key;
             $state->bootstrapSecretHash = null;
-            $this->record('bootstrapped', $verified, ['added' => $key->id(), 'algorithm' => $key->algorithm]);
 
-            return $verified;
+            return [$this->requestChange($state, KeyChange::ADD, $verified->key, $verified, [] === $state->keys), $verified->intent];
         });
-        $this->notifier->notify(new VerifierNotice(VerifierNotice::BOOTSTRAPPED, $verified->intent, $verified->key, $verified->verifiedAt));
 
-        return $verified->key;
+        return $this->requested($change, $intent);
     }
 
     /**
@@ -217,6 +296,8 @@ final readonly class Verifier
      */
     public function keys(): array
     {
+        $this->applyKeyChanges();
+
         return $this->store->transaction(static fn (VerifierState $state): array => array_values($state->keys));
     }
 
@@ -274,6 +355,9 @@ final readonly class Verifier
         if (!$operation->accepts($parameters)) {
             throw new ConfigurationError(\sprintf('The parameters aren\'t those of %s: give exactly %s, of their types.', $operation->action, implode(', ', array_keys($operation->parameters))));
         }
+
+        // The options name the keys that may sign: those of now.
+        $this->applyKeyChanges();
 
         $now = $this->clock->now();
         $issuedAt = new \DateTimeImmutable('@'.$now->getTimestamp());
@@ -383,6 +467,32 @@ final readonly class Verifier
     }
 
     /**
+     * Keeps a signed change to the keys until it's due, and records it.
+     *
+     * @param bool $now Whether it takes effect at once: only the first key, which no owner could cancel
+     */
+    private function requestChange(VerifierState $state, string $kind, Key $key, VerifiedIntent $verified, bool $now = false): KeyChange
+    {
+        $at = new \DateTimeImmutable('@'.$this->clock->now()->getTimestamp());
+        $change = new KeyChange(Base64Url::encode(random_bytes(12)), $kind, $key, $at, $now ? $at : $at->modify(\sprintf('+%d seconds', $this->config->keyChangeDelay)), $verified->key->id());
+        $state->keyChanges[$change->id] = $change;
+        $this->record('key_change_requested', $verified, ['change' => $change->id, 'kind' => $kind, 'subject' => $key->id(), 'effective_at' => $change->effectiveAt->getTimestamp()]);
+
+        return $change;
+    }
+
+    /**
+     * Tells the notifier of a change just asked for, and applies it if it's due already.
+     */
+    private function requested(KeyChange $change, Intent $intent): KeyChange
+    {
+        $this->notifier->notify(new VerifierNotice(VerifierNotice::KEY_CHANGE_REQUESTED, $intent, $change->key, $change->requestedAt, $change));
+        $this->applyKeyChanges();
+
+        return $change;
+    }
+
+    /**
      * The key an "add key" intent describes, if it's a usable passkey public key the verifier hasn't got.
      *
      * @throws IntentRefused
@@ -390,8 +500,9 @@ final readonly class Verifier
     private function newKey(VerifierState $state, Intent $intent): Key
     {
         $key = Key::fromParameters($intent->parameters, new \DateTimeImmutable('@'.$this->clock->now()->getTimestamp()));
+        $coming = array_map(static fn (KeyChange $change): string => $change->key->id(), array_filter($state->keyChanges, static fn (KeyChange $change): bool => KeyChange::ADD === $change->kind));
 
-        return null === $key || isset($state->keys[$key->id()]) ? $this->refuse($intent, Refusal::InvalidKey) : $key;
+        return null === $key || isset($state->keys[$key->id()]) || \in_array($key->id(), $coming, true) ? $this->refuse($intent, Refusal::InvalidKey) : $key;
     }
 
     /**

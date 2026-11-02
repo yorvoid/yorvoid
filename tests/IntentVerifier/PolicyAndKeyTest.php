@@ -25,7 +25,7 @@ final class PolicyAndKeyTest extends TestCase
     {
         $policy = new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]);
 
-        self::assertSame([OperationPolicy::ADD_KEY, OperationPolicy::REMOVE_KEY, 'acme.site.remove'], array_keys($policy->operations));
+        self::assertSame([OperationPolicy::ADD_KEY, OperationPolicy::REMOVE_KEY, OperationPolicy::CANCEL_KEY_CHANGE, 'acme.site.remove'], array_keys($policy->operations));
         self::assertSame(['credential_id', 'public_key', 'user_handle', 'label'], array_keys($policy->get(OperationPolicy::ADD_KEY)->parameters));
         self::assertSame(['credential_id'], array_keys($policy->get(OperationPolicy::REMOVE_KEY)->parameters));
         self::assertTrue($policy->get(OperationPolicy::ADD_KEY)->signed);

@@ -97,7 +97,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $bootstrap = $verifier->prepareBootstrap($key);
         $request = $signing->request($session, $bootstrap, 'en', new Origin(OriginKind::Web));
         self::assertSame('Allow the passkey "Ana\'s YubiKey" to sign operations', $request->summary->text);
-        $added = $verifier->bootstrap($verifier->createBootstrapSecret(), $request->nonce, $authenticator->signIn($request->options));
+        $added = $verifier->bootstrap($verifier->createBootstrapSecret(), $request->nonce, $authenticator->signIn($request->options))->key;
         self::assertSame([-7, 'Ana\'s YubiKey'], [$added->algorithm, $added->label]);
 
         // An operation, signed on the confirming page, run by the verifier.

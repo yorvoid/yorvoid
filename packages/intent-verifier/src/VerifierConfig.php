@@ -24,6 +24,8 @@ final readonly class VerifierConfig
      * @param list<string> $consoleOrigins Where the console is, e.g. ["https://console.example.com"], which mustn't be at
      *                                     or under the relying party
      * @param positive-int $intentLifetime How long, in seconds, an intent can be signed after it's prepared
+     * @param int          $keyChangeDelay How long, in seconds, a change to the keys waits before it takes effect, while
+     *                                     the owners can cancel it: a day by default, at most 30
      */
     public function __construct(
         public string $audience,
@@ -31,9 +33,14 @@ final readonly class VerifierConfig
         public array $origins,
         public array $consoleOrigins,
         public int $intentLifetime = 300,
+        public int $keyChangeDelay = 86400,
     ) {
         if ('' === trim($audience) || [] === $origins || [] === $consoleOrigins || $intentLifetime < 10 || $intentLifetime > 3600) {
             throw new ConfigurationError('The verifier needs an audience, at least one signing origin and one console origin, and an intent lifetime between 10 seconds and an hour.');
+        }
+
+        if ($keyChangeDelay < 0 || $keyChangeDelay > 30 * 86400) {
+            throw new ConfigurationError('A key change waits between no time and 30 days.');
         }
 
         foreach ($origins as $origin) {

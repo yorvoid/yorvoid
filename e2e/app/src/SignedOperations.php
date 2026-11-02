@@ -44,7 +44,7 @@ final readonly class SignedOperations
 
         try {
             if (null !== $secret) {
-                $result = \sprintf('Key added: %s', $this->verifier->bootstrap($secret, $nonce, $assertion)->label);
+                $result = \sprintf('Key added: %s', $this->verifier->bootstrap($secret, $nonce, $assertion)->key->label);
             } else {
                 $verified = $this->verifier->verify($nonce, $assertion);
                 $session = $this->current->get();

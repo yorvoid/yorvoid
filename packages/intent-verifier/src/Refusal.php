@@ -32,6 +32,9 @@ enum Refusal: string
     /** Removing the key would leave the verifier with none */
     case LastKey = 'last_key';
 
+    /** No change to the keys waits under that ID */
+    case UnknownKeyChange = 'unknown_key_change';
+
     /** The bootstrap secret is wrong, used, or there's none */
     case InvalidBootstrapSecret = 'invalid_bootstrap_secret';
 }
