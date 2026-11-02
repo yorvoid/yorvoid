@@ -1,6 +1,6 @@
 # yorvoid/mail
 
-YorvoID's emails: built from structured content, rendered as plain text and accessible HTML without a template engine, delivered through an interface. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
+YorvoID's emails: built from structured content, rendered as plain text and as accessible HTML from a Twig template you can replace, delivered through an interface. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
 
 ```bash
 composer require yorvoid/mail

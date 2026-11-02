@@ -1,7 +1,7 @@
 {
     "name": "yorvoid/mail",
     "type": "library",
-    "description": "YorvoID's emails: built from structured content, rendered as plain text and accessible HTML without a template engine, delivered through an interface.",
+    "description": "YorvoID's emails: built from structured content, rendered as plain text and as accessible HTML from a Twig template you can replace, delivered through an interface.",
     "keywords": [
         "email",
         "mail",
@@ -25,6 +25,7 @@
     "require": {
         "php": ">=8.5",
         "ext-mbstring": "*",
+        "twig/twig": "^3.30",
         "yorvoid/core": "^0.1"
     },
     "autoload": {

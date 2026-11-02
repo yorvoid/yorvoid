@@ -20,6 +20,7 @@ final readonly class SymfonyMailer implements Mailer
     public function __construct(
         private MailerInterface $mailer,
         private Address $from,
+        private Renderer $renderer = new Renderer(),
     ) {
     }
 
@@ -29,7 +30,7 @@ final readonly class SymfonyMailer implements Mailer
             ->from($this->from)
             ->to($email->to)
             ->subject($email->subject)
-            ->text(Renderer::text($email))
-            ->html(Renderer::html($email)));
+            ->text($this->renderer->text($email))
+            ->html($this->renderer->html($email)));
     }
 }

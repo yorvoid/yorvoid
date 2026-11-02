@@ -6,6 +6,8 @@ namespace YorvoID\Tests\Mail;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Twig\Environment;
+use Twig\Loader\FilesystemLoader;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Mail\Block\Action;
 use YorvoID\Mail\Block\Block;
@@ -35,7 +37,7 @@ final class RendererTest extends TestCase
             -- 
             You get these for your security.
 
-            TEXT, Renderer::text(self::email()));
+            TEXT, new Renderer()->text(self::email()));
     }
 
     /**
@@ -51,15 +53,15 @@ final class RendererTest extends TestCase
             new Footnote('Small print.'),
         ]);
 
-        self::assertStringEqualsFile(__DIR__.'/expected/email.html', Renderer::html($email));
-        self::assertStringEqualsFile(__DIR__.'/expected/email.txt', Renderer::text($email));
+        self::assertStringEqualsFile(__DIR__.'/expected/email.html', new Renderer()->html($email));
+        self::assertStringEqualsFile(__DIR__.'/expected/email.txt', new Renderer()->text($email));
     }
 
     public function testRefusesABlockItDoesntKnow(): void
     {
         $email = new Email('ana@example.com', 'Hi', [new class implements Block {}]);
 
-        foreach ([static fn () => Renderer::text($email), static fn () => Renderer::html($email)] as $render) {
+        foreach ([static fn () => new Renderer()->text($email), static fn () => new Renderer()->html($email)] as $render) {
             try {
                 $render();
                 self::fail('An unknown block was rendered.');
@@ -71,7 +73,7 @@ final class RendererTest extends TestCase
 
     public function testRendersAccessibleHtmlWithEverythingEscaped(): void
     {
-        $html = Renderer::html(new Email('ana@example.com', 'New sign-in <b>', [
+        $html = new Renderer()->html(new Email('ana@example.com', 'New sign-in <b>', [
             new Paragraph('Tom & <script>alert(1)</script>'),
             new Facts(['Device "x"' => '<img src=x onerror=alert(1)>']),
             new Action('Go <now>', 'https://example.com/a?b=1&c="2"'),
@@ -113,7 +115,7 @@ final class RendererTest extends TestCase
     #[DataProvider('locales')]
     public function testSaysTheLanguageAndItsDirection(string $locale, string $lang, string $dir): void
     {
-        self::assertStringContainsString(\sprintf('<html lang="%s" dir="%s">', $lang, $dir), Renderer::html(new Email('ana@example.com', 'Hi', [], $locale)));
+        self::assertStringContainsString(\sprintf('<html lang="%s" dir="%s">', $lang, $dir), new Renderer()->html(new Email('ana@example.com', 'Hi', [], $locale)));
     }
 
     public function testKeepsTheBodysOrder(): void
@@ -151,6 +153,20 @@ final class RendererTest extends TestCase
         $this->expectExceptionMessage(\sprintf('"%s" isn\'t a web address for an email\'s action.', $url));
 
         new Action('Go', $url);
+    }
+
+    public function testAnApplicationGivesEmailsItsOwnLook(): void
+    {
+        $loader = new FilesystemLoader();
+        $loader->addPath(__DIR__.'/templates', 'yorvoid_mail');
+        $loader->addPath(Renderer::TEMPLATES, 'yorvoid_mail_package');
+        $renderer = new Renderer(new Environment($loader, ['autoescape' => 'html']));
+
+        $html = $renderer->html(self::email());
+
+        self::assertStringContainsString('<body style="margin:0;background:#f2f3f0;">', $html);
+        self::assertStringContainsString('<p style="margin:0 0 16px;">Someone signed in.</p>', $html, 'The blocks it left alone aren\'t the package\'s.');
+        self::assertSame(new Renderer()->text(self::email()), $renderer->text(self::email()));
     }
 
     public function testTheInMemoryMailerKeepsWhatItsGiven(): void

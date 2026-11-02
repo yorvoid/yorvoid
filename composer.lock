@@ -4505,11 +4505,12 @@
             "dist": {
                 "type": "path",
                 "url": "packages/mail",
-                "reference": "413cf725b8ed2b7a14f5388a14732c4987bcd2ce"
+                "reference": "7b59efc1898a961f2ecd439993b22e52d4f0cace"
             },
             "require": {
                 "ext-mbstring": "*",
                 "php": ">=8.5",
+                "twig/twig": "^3.30",
                 "yorvoid/core": "^0.1"
             },
             "type": "library",
@@ -4532,7 +4533,7 @@
                     "email": "poposki.darko@gmail.com"
                 }
             ],
-            "description": "YorvoID's emails: built from structured content, rendered as plain text and accessible HTML without a template engine, delivered through an interface.",
+            "description": "YorvoID's emails: built from structured content, rendered as plain text and as accessible HTML from a Twig template you can replace, delivered through an interface.",
             "homepage": "https://github.com/yorvoid/yorvoid",
             "keywords": [
                 "accessibility",
