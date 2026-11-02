@@ -4,10 +4,14 @@
         "directories": ["packages"],
         "excludes": ["vendor", "node_modules"]
     },
-    "timeout": 30,
+    // Infection skips mutants whose covering tests take longer than this, and leaves them out of the
+    // score: long enough for the slowest (the bridge's tests in separate processes), and
+    // tools/infection/no-skipped.php fails the run if any was skipped all the same.
+    "timeout": 900,
     "logs": {
         "text": "var/infection/infection.log",
-        "summary": "var/infection/summary.log"
+        "summary": "var/infection/summary.log",
+        "summaryJson": "var/infection/summary.json"
     },
     "tmpDir": "var/cache/infection",
     "mutators": {

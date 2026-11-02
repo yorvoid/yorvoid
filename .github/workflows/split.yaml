@@ -3,16 +3,23 @@ name: Split
 
 # Copies each package (see .github/split.json) to its own read-only repository, which Packagist
 # installs it from: main to their main, and each version tag to every repository (all packages are
-# released together, with the same version).
+# released together, with the same version). Only what passed CI: main after CI passed for its newest
+# commit, a tag when its commit is on main and passed CI.
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
     branches:
       - main
+  push:
     tags:
       - 'v*'
 
 permissions:
   contents: read
+  checks: read
 
 # One at a time, in order, so that a repository never goes back to an older commit.
 concurrency:
@@ -22,18 +29,60 @@ concurrency:
 jobs:
   split:
     name: Split packages
-    if: github.repository == 'yorvoid/yorvoid'
+    if: >-
+      github.repository == 'yorvoid/yorvoid'
+      && (github.event_name == 'push'
+      || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
     # Holds the GitHub App's credentials, which only main and version tags can use. A job's "if" can't
     # see the environment's variables, so their absence fails the job below rather than skipping it.
     environment: split
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'push' && github.ref || 'main' }}
           fetch-depth: 0
           persist-credentials: false
+      # main: only the commit CI just passed, if it's still main's newest; a newer one gets its own run.
+      # A tag: only a commit on main that passed CI.
+      - name: Check CI passed for the commit
+        id: passed
+        env:
+          EVENT: ${{ github.event_name }}
+          PASSED: ${{ github.event.workflow_run.head_sha }}
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit=$(git rev-parse HEAD)
+
+          if [ "$EVENT" != push ]; then
+            if [ "$commit" != "$PASSED" ]; then
+              echo "::notice::main moved on from $PASSED to $commit: its own CI run splits it."
+              echo "split=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "ref=refs/heads/main" >> "$GITHUB_OUTPUT"
+          else
+            if ! git merge-base --is-ancestor "$commit" origin/main; then
+              echo "::error::The tag's commit $commit isn't on main."
+              exit 1
+            fi
+
+            passed=$(gh api "repos/$REPOSITORY/commits/$commit/check-runs?check_name=CI" --jq '[.check_runs[] | select(.conclusion == "success")] | length')
+
+            if [ "$passed" -eq 0 ]; then
+              echo "::error::CI hasn't passed for the tag's commit $commit."
+              exit 1
+            fi
+
+            echo "ref=$GITHUB_REF" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "split=true" >> "$GITHUB_OUTPUT"
       - name: Check the split app is configured
+        if: steps.passed.outputs.split == 'true'
         env:
           CLIENT_ID: ${{ vars.SPLIT_APP_CLIENT_ID }}
           PRIVATE_KEY_SET: ${{ secrets.SPLIT_APP_PRIVATE_KEY != '' }}
@@ -43,13 +92,15 @@ jobs:
             exit 1
           fi
       - name: List the repositories
+        if: steps.passed.outputs.split == 'true'
         id: repositories
         run: echo "names=$(jq -r 'map(.repository | split("/")[1]) | join(",")' .github/split.json)" >> "$GITHUB_OUTPUT"
       # A GitHub App of the organisation, installed on those repositories, with permission to write
       # their contents and workflows. Its token lasts an hour and can't write anywhere else.
       - name: Get a token for the repositories
+        if: steps.passed.outputs.split == 'true'
         id: token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.SPLIT_APP_CLIENT_ID }}
           private-key: ${{ secrets.SPLIT_APP_PRIVATE_KEY }}
@@ -58,6 +109,8 @@ jobs:
           permission-contents: write
           permission-workflows: write
       - name: Split and push
-        run: .github/split.sh "$GITHUB_REF" --push
+        if: steps.passed.outputs.split == 'true'
+        run: .github/split.sh "$REF" --push
         env:
+          REF: ${{ steps.passed.outputs.ref }}
           GIT_TOKEN: ${{ steps.token.outputs.token }}
