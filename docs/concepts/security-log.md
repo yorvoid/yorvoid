@@ -6,6 +6,10 @@ YorvoID records every security-relevant event of a realm in its security log: si
 $log->verify(Realm::default());   // Verification: isIntact(), entriesChecked, brokenAt, problem
 ```
 
+## Size
+
+The log grows with every recorded event, a few hundred bytes each, and nothing prunes it: an entry can't be removed without breaking the chain after it. `verify()` reads it in batches of 1,000 entries, so checking a long log takes time in proportion to its length, not memory: run it from a scheduled job rather than in a request. Keeping it to a size, by archiving old entries with their hashes, comes with external checkpoints.
+
 ## Entries
 
 Each entry has:

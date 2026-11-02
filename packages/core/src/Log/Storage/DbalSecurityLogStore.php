@@ -34,8 +34,13 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
 
     private const string COLUMNS = 'sequence, id, recorded_at, action, outcome, origin_kind, origin_detail, correlation_id, actor, subject_type, subject_id, details, algorithm, previous_hash, hash';
 
+    /**
+     * @param positive-int $batch How many entries entries() reads at a time: a realm's whole log never sits in
+     *                            memory, the database driver's included
+     */
     public function __construct(
         private Database $database,
+        private int $batch = 1000,
     ) {
     }
 
@@ -87,14 +92,19 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
 
     public function entries(Realm $realm, int $fromSequence): iterable
     {
-        $rows = $this->database->connection->iterateAssociative(
-            \sprintf('SELECT %s FROM %s WHERE realm = ? AND sequence >= ? ORDER BY sequence', self::COLUMNS, $this->database->table(self::TABLE)),
-            [$realm->name, $fromSequence],
-        );
+        $sql = \sprintf('SELECT %s FROM %s WHERE realm = ? AND sequence >= ? ORDER BY sequence LIMIT %d', self::COLUMNS, $this->database->table(self::TABLE), $this->batch);
 
-        foreach ($rows as $row) {
-            yield $this->entry($realm, $row);
-        }
+        do {
+            // A batch at a time, from where the last one ended: by the primary key, however long the log.
+            $rows = $this->database->connection->fetchAllAssociative($sql, [$realm->name, $fromSequence]);
+
+            foreach ($rows as $row) {
+                $entry = $this->entry($realm, $row);
+                $fromSequence = $entry->sequence + 1;
+
+                yield $entry;
+            }
+        } while (\count($rows) === $this->batch);
     }
 
     public function head(Realm $realm): ?array
