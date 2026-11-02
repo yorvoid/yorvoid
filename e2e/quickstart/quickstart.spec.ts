@@ -23,7 +23,12 @@ test('the quickstart\'s application claims, signs out and signs in with a passke
   await expect(page.getByText('Signed in as ana@example.com.')).toBeVisible();
   expect(await authenticator.passkeys()).toBe(1);
 
-  await page.getByRole('link', { name: 'Sign out' }).click();
+  // A link from another site, or a browser fetching ahead, signs nobody out: only the form does.
+  await page.goto('/sign-out');
+  await page.goto('/');
+  await expect(page.getByText('Signed in as ana@example.com.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByText('Not signed in.')).toBeVisible();
 
   // The authenticator answers the email field's passkey suggestion at once.

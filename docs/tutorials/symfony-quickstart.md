@@ -84,9 +84,10 @@ security:
                 - YorvoID\Symfony\Security\Authenticator\SessionAuthenticator
             logout:
                 path: /sign-out
+                enable_csrf: true
 ```
 
-Signing out at `/sign-out` ends the YorvoID session too, not only the PHP session. YorvoID's pages and endpoints go under `/yorvoid`:
+Signing out at `/sign-out` ends the YorvoID session too, not only the PHP session. It takes a form's POST with a CSRF token, so another site, or a browser fetching links ahead, can't sign anyone out. YorvoID's pages and endpoints go under `/yorvoid`:
 
 <!-- quickstart: write config/routes/yorvoid.yaml -->
 ```yaml
@@ -107,6 +108,7 @@ namespace App\Controller;
 
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Symfony\Security\CurrentSession;
@@ -114,7 +116,7 @@ use YorvoID\Symfony\Security\CurrentSession;
 final class HomeController
 {
     #[Route('/', name: 'home')]
-    public function __invoke(CurrentSession $current, Principals $principals): Response
+    public function __invoke(CurrentSession $current, Principals $principals, CsrfTokenManagerInterface $csrf): Response
     {
         $session = $current->get();
 
@@ -124,7 +126,11 @@ final class HomeController
 
         $email = $principals->identifiers($session->realm, $session->principalId)[IdentifierKind::Email->value]->value;
 
-        return new Response(sprintf('<p>Signed in as %s. <a href="/sign-out">Sign out</a></p>', htmlspecialchars($email)));
+        return new Response(sprintf(
+            '<p>Signed in as %s.</p><form method="post" action="/sign-out"><input type="hidden" name="_csrf_token" value="%s"><button>Sign out</button></form>',
+            htmlspecialchars($email),
+            htmlspecialchars($csrf->getToken('logout')->getValue()),
+        ));
     }
 }
 ```

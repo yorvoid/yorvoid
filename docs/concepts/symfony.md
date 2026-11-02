@@ -129,6 +129,7 @@ security:
                 - YorvoID\Symfony\Security\Authenticator\SessionAuthenticator
             logout:
                 path: /sign-out
+                enable_csrf: true
 
 # config/routes/yorvoid.yaml
 yorvoid:
