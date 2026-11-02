@@ -77,22 +77,25 @@ final readonly class OneTimeTokens
 
             $email = null === $command->sentTo ? null : $this->email($principal, $command->sentTo);
 
-            if ($command->newestOnly) {
-                $this->store->deleteFor($principal->realm, $principal->id, $command->purpose);
-            }
-
             $now = Time::stored($this->clock->now());
             $selector = bin2hex(random_bytes(16));
             $verifier = Secret::fromString(self::base64url(random_bytes(32)));
             $token = new OneTimeToken($selector, $principal->realm, $principal->id, $command->purpose, $email, $now, $command->lifetime->after($now));
-            $this->store->add($token, hash('sha256', $verifier->reveal()));
-            $issued = new IssuedToken($token, Secret::fromString($selector.'.'.$verifier->reveal()));
 
+            // Recording first takes the realm's log lock, so two tokens issued at once are stored one after
+            // the other: with newestOnly, the later removes the earlier.
             $this->log->record($principal->realm, 'yorvoid.token.issue', Outcome::Success, $origin, $actor, 'principal', (string) $principal->id, [
                 'expires_at' => $token->expiresAt->format(\DATE_ATOM),
                 'purpose' => $token->purpose,
                 'sent_to_email' => null !== $email,
             ]);
+
+            if ($command->newestOnly) {
+                $this->store->deleteFor($principal->realm, $principal->id, $command->purpose);
+            }
+
+            $this->store->add($token, hash('sha256', $verifier->reveal()));
+            $issued = new IssuedToken($token, Secret::fromString($selector.'.'.$verifier->reveal()));
 
             $this->transactions->afterCommit(function () use ($issued, $origin, $actor): void {
                 $this->events->dispatch(new OneTimeTokenIssued($issued, $origin, $actor));

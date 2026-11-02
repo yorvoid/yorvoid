@@ -12,6 +12,8 @@ return [
     'yorvoid.notification.credential_added.body' => 'A new way to sign in was added to your {application} account. If it was you, there\'s nothing to do.',
     'yorvoid.notification.credential_removed.subject' => 'A sign-in method was removed from your {application} account',
     'yorvoid.notification.credential_removed.body' => 'A way to sign in was removed from your {application} account. If it was you, there\'s nothing to do.',
+    'yorvoid.notification.recovery_link_used.subject' => 'A recovery link was used for your {application} account',
+    'yorvoid.notification.recovery_link_used.body' => 'Someone used a recovery link from {application}\'s support to get into your account, and everyone else was signed out.',
     'yorvoid.notification.recovery_code_used.subject' => 'A recovery code was used for your {application} account',
     'yorvoid.notification.recovery_code_used.body' => 'Someone used one of your recovery codes to get into your {application} account, and everyone else was signed out. {remaining, plural, =0 {You have no recovery codes left: create new ones.} one {You have # recovery code left.} other {You have # recovery codes left.}}',
     'yorvoid.notification.recovery_codes_generated.subject' => 'New recovery codes for your {application} account',
