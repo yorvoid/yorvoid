@@ -98,12 +98,12 @@ final class YorvoIDBundle extends AbstractBundle
             ->validate()->ifTrue(static fn (mixed $value): bool => \is_array($value) && true === $value['enabled'] && (null === $value['application_name'] || null === $value['not_me_url'] || null === $value['from']))
             ->thenInvalid('Notifications need application_name, not_me_url and from; or turn them off with enabled: false.')->end();
         $path = static fn (NodeBuilder $node, string $name, string $default, string $info): NodeBuilder => $node->scalarNode($name)->defaultValue($default)->info($info)
-            ->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || 1 !== preg_match('#^/(?!/)#', $value))->thenInvalid('%s is not a path on this site: start it with one "/".')->end()
+            ->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || !self::isLocalPath($value))->thenInvalid('%s is not a path on this site: start it with one "/", and use no "\\" or spaces.')->end()
             ->end();
         $flows = $children->arrayNode('flows')->addDefaultsIfNotSet()->children();
         $path($flows, 'completed_path', '/', 'Where people go when a flow completes, e.g. after signing in');
         $flows->arrayNode('completed_paths')->useAttributeAsKey('flow')->info('Where to go after particular flows, e.g. {yorvoid.sign_intent: /console/confirmed}')
-            ->scalarPrototype()->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || 1 !== preg_match('#^/(?!/)#', $value))->thenInvalid('%s is not a path on this site: start it with one "/".')->end()->end()->end();
+            ->scalarPrototype()->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || !self::isLocalPath($value))->thenInvalid('%s is not a path on this site: start it with one "/", and use no "\\" or spaces.')->end()->end()->end();
         $flows->scalarNode('script')->defaultValue('/bundles/yorvoid/browser/forms.js')->info('Where the pages load the browser client\'s form script from')->end();
         $children->arrayNode('intents')->addDefaultsIfNotSet()->children()
             ->scalarNode('summaries_domain')->defaultValue('messages')->info('The translation domain of your operations\' summaries')->end();
@@ -218,5 +218,14 @@ final class YorvoIDBundle extends AbstractBundle
         }
 
         return $flat;
+    }
+
+    /**
+     * Whether a configured path stays on this site. Browsers read "\" as "/", and drop tabs and line
+     * breaks from addresses, so "/\host", or "/", a tab and "/host", would lead to another site.
+     */
+    private static function isLocalPath(string $path): bool
+    {
+        return 1 === preg_match('#^/(?![/\\\\])[^\\\\\x00-\x20\x7f]*$#D', $path);
     }
 }

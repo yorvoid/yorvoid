@@ -30,6 +30,7 @@ use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Flow\SessionFlowStore;
 use YorvoID\Tests\Symfony\App\TestKernel;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
@@ -291,6 +292,39 @@ final class FlowPagesTest extends TestCase
         self::assertSame(400, $this->statusCode());
         $this->browser->request('POST', '/yorvoid/flows/yorvoid.sign_in', [], [], ['CONTENT_TYPE' => 'application/json'], '[1]');
         self::assertSame(400, $this->statusCode());
+    }
+
+    public function testNoAnswerIsCachedFramedOrPostedElsewhere(): void
+    {
+        $this->boot();
+        [, $authenticator] = $this->account();
+        $id = str_repeat('A', 43);
+        $answers = [];
+
+        $this->browser->followRedirects(false);
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.sign_in');
+        $answers['started, a redirect'] = $this->browser->getResponse();
+        $page = $this->browser->followRedirect();
+        $answers['a step\'s page'] = $this->browser->getResponse();
+        $form = $page->filter('form[data-yorvoid-ceremony="get"]');
+        $this->browser->request('POST', (string) $form->attr('action'), ['response' => 'x']);
+        $answers['refused, a page'] = $this->browser->getResponse();
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.sign_in/'.$id);
+        $answers['expired, a page'] = $this->browser->getResponse();
+        $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.$id.'/passkey', []);
+        $answers['expired, JSON'] = $this->browser->getResponse();
+        $started = $this->json('POST', '/yorvoid/flows/yorvoid.sign_in', []);
+        $answers['started, JSON'] = $this->browser->getResponse();
+        $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.self::id($started).'/passkey', ['response' => json_decode($authenticator->signIn((string) json_encode(((array) $started['view'])['options'])), true)]);
+        $answers['signed in, JSON'] = $this->browser->getResponse();
+
+        foreach ($answers as $answer => $response) {
+            self::assertTrue($response->headers->hasCacheControlDirective('no-store'), $answer.': a cache, or the back button, could show it again.');
+            self::assertSame([FlowController::CONTENT_SECURITY_POLICY, 'no-referrer', 'nosniff'], [$response->headers->get('Content-Security-Policy'), $response->headers->get('Referrer-Policy'), $response->headers->get('X-Content-Type-Options')], $answer);
+        }
+
+        self::assertStringContainsString("form-action 'self'", FlowController::CONTENT_SECURITY_POLICY);
+        self::assertStringContainsString("frame-ancestors 'self'", FlowController::CONTENT_SECURITY_POLICY);
     }
 
     public function testAFailedFlowSaysWhy(): void

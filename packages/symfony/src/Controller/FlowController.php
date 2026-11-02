@@ -35,10 +35,17 @@ use YorvoID\Symfony\Templates\FlowPages;
  * Only these flows start from a request, with only these inputs; the others, like confirming a signed
  * operation, are started by the application, which then sends the person to the step's page.
  *
+ * Every answer is kept out of caches, the browser's back-forward cache included, since pages show
+ * recovery codes and a person's account; and says that its forms post only to this site, and that only
+ * this site may frame it.
+ *
  * @internal
  */
 final readonly class FlowController
 {
+    /** What every answer's Content-Security-Policy allows, whatever else the application's adds */
+    public const string CONTENT_SECURITY_POLICY = "form-action 'self'; frame-ancestors 'self'; base-uri 'none'; object-src 'none'";
+
     /** The flows a request may start, and the inputs it may give them */
     private const array ENTRANCES = [
         PasskeyFlows::SIGN_IN => [],
@@ -86,14 +93,14 @@ final readonly class FlowController
             throw new BadRequestHttpException('That isn\'t an operation\'s name.');
         }
 
-        return $this->answer($request, $this->flows->start($flow, $this->realm, $this->contexts->of($request), $data), true);
+        return self::secured($this->answer($request, $this->flows->start($flow, $this->realm, $this->contexts->of($request), $data), true));
     }
 
     public function show(Request $request, string $flow, string $id): Response
     {
         $progress = $this->flows->resume($id, $this->contexts->of($request));
 
-        return null === $progress || $flow !== $progress->state->flow ? $this->expired($request, $flow) : $this->answer($request, $progress, false);
+        return self::secured(null === $progress || $flow !== $progress->state->flow ? $this->expired($request, $flow) : $this->answer($request, $progress, false));
     }
 
     public function submit(Request $request, string $flow, string $id, string $step): Response
@@ -102,14 +109,24 @@ final readonly class FlowController
         $current = $this->flows->resume($id, $context);
 
         if (null === $current || $flow !== $current->state->flow) {
-            return $this->expired($request, $flow);
+            return self::secured($this->expired($request, $flow));
         }
 
         $input = $this->wantsJson($request) ? $this->json($request) : $request->request->all();
         $progress = $this->flows->submit($id, $step, new Input($input), $context);
         \assert(null !== $progress);
 
-        return $this->answer($request, $progress, true);
+        return self::secured($this->answer($request, $progress, true));
+    }
+
+    private static function secured(Response $response): Response
+    {
+        $response->headers->set('Cache-Control', 'no-store');
+        $response->headers->set('Content-Security-Policy', self::CONTENT_SECURITY_POLICY);
+        $response->headers->set('Referrer-Policy', 'no-referrer');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+
+        return $response;
     }
 
     /**

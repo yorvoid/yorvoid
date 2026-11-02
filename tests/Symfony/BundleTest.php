@@ -154,6 +154,14 @@ final class BundleTest extends TestCase
         yield 'too many recovery codes' => [['recovery_codes' => ['count' => 101]], 'yorvoid.recovery_codes.count'];
         yield 'an unknown preset' => [['sessions' => ['preset' => 'forever']], 'yorvoid.sessions.preset'];
         yield 'an unknown configuration preset' => [['preset' => 'bank'], 'yorvoid.preset'];
+        yield 'a completed path on another site' => [['flows' => ['completed_path' => 'https://example.org/']], 'is not a path on this site'];
+        yield 'a completed path for any site' => [['flows' => ['completed_path' => '//example.org/']], 'is not a path on this site'];
+        yield 'a completed path with a backslash browsers read as a slash' => [['flows' => ['completed_path' => '/\\example.org/']], 'is not a path on this site'];
+        yield 'a completed path with a tab browsers drop' => [['flows' => ['completed_path' => "/\t/example.org/"]], 'is not a path on this site'];
+        yield 'a completed path with a line break browsers drop' => [['flows' => ['completed_path' => "/\n/example.org/"]], 'is not a path on this site'];
+        yield 'a completed path that ends with a line break' => [['flows' => ['completed_path' => "/home\n"]], 'is not a path on this site'];
+        yield 'a completed path with a backslash later on' => [['flows' => ['completed_path' => '/home\\..\\x']], 'is not a path on this site'];
+        yield 'a flow\'s completed path with a backslash' => [['flows' => ['completed_paths' => ['yorvoid.sign_in' => '/\\example.org/']]], 'is not a path on this site'];
     }
 
     /**

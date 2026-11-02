@@ -35,10 +35,11 @@ foreach (SecurityNotifications::events() as $event => $method) {
 
 ## "This wasn't me"
 
-Each email's link holds a one-time token, bound to the email address and valid for 7 days. Your page confirms it:
+Each email's link holds a one-time token, bound to the email address and valid for 7 days. Opening the link only shows your page: mail scanners and link previews open every link in an email, so act only when the person presses a button. The page asks "Wasn't this you?" with a form that posts the token and the credential back, with a CSRF token, and the POST confirms it:
 
 ```php
-$principalId = $notMe->confirm($realm, Secret::fromString($request->query->get('token')), $request->query->get('credential'), $origin);
+// GET: show the question and a form; POST, after checking the CSRF token:
+$principalId = $notMe->confirm($realm, Secret::fromString($request->request->getString('token')), $request->request->get('credential'), $origin);
 ```
 
 - It signs everyone out of the account (`SessionEndReason::Reported`).
