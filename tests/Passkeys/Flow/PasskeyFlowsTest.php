@@ -41,18 +41,14 @@ use YorvoID\Flows\Input;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\Progress;
 use YorvoID\Flows\Storage\InMemoryFlowStore;
-use YorvoID\Passkeys\Flow\IntentConfirmationStep;
 use YorvoID\Passkeys\Flow\InvitationStep;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\Flow\RecoveryLinkStep;
-use YorvoID\Passkeys\Flow\View\IntentConfirmationView;
 use YorvoID\Passkeys\Flow\View\InvitationView;
 use YorvoID\Passkeys\Flow\View\PasskeyRegistrationView;
 use YorvoID\Passkeys\Flow\View\PasskeySignInView;
 use YorvoID\Passkeys\Flow\View\RecoveryCodesView;
 use YorvoID\Passkeys\Flow\View\StepUpView;
-use YorvoID\Passkeys\Intent\IntentSummary;
-use YorvoID\Passkeys\Intent\SigningRequest;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\Refusal;
@@ -325,31 +321,6 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertEquals(new Problem('yorvoid.flow.signed_out'), $this->submit($registering, 'step_up', [])->failure);
     }
 
-    public function testConfirmsASignedOperation(): void
-    {
-        [$ana, $authenticator] = $this->account();
-        $context = $this->context->withSession($this->session($ana));
-        $request = new SigningRequest('nonce-1', new IntentSummary('Remove the site jane', ['site' => 'jane'], new \DateTimeImmutable('2026-10-28 18:05:00 UTC')), '{"challenge":"AQID","rpId":"example.com","allowCredentials":[]}');
-
-        $flow = $this->flows->start(PasskeyFlows::SIGN_INTENT, $this->realm, $context, IntentConfirmationStep::data($request));
-
-        self::assertEquals(new IntentConfirmationView('Remove the site jane', ['site' => 'jane'], $request->options, '2026-10-28T18:05:00+00:00'), $flow->view);
-        self::assertEquals(['summary' => 'Remove the site jane', 'parameters' => ['site' => 'jane'], 'options' => json_decode($request->options), 'expires_at' => '2026-10-28T18:05:00+00:00'], $flow->view?->jsonSerialize());
-        self::assertEquals([new Problem('yorvoid.passkey.not_working', field: 'response')], $this->submit($flow, 'confirm', [], $context)->problems);
-
-        $assertion = $authenticator->signIn($request->options);
-        $done = $this->submit($flow, 'confirm', ['response' => $assertion], $context);
-        self::assertSame(FlowStatus::Completed, $done->status);
-        self::assertSame(['nonce-1', $assertion], [$done->state->get(IntentConfirmationStep::NONCE), $done->state->get(IntentConfirmationStep::ASSERTION)]);
-
-        $signedOut = $this->flows->start(PasskeyFlows::SIGN_INTENT, $this->realm, $this->context, IntentConfirmationStep::data($request));
-        self::assertEquals(new Problem('yorvoid.flow.signed_out'), $this->submit($signedOut, 'confirm', ['response' => $assertion])->failure);
-
-        $broken = $this->flows->start(PasskeyFlows::SIGN_INTENT, $this->realm, $context, ['intent.parameters' => ['site' => 5, 3 => 'x']]);
-        self::assertEquals(['summary' => '', 'parameters' => ['site' => ''], 'options' => new \stdClass(), 'expires_at' => ''], $broken->view?->jsonSerialize(), 'What isn\'t text is shown as nothing.');
-        self::assertSame([], $this->flows->start(PasskeyFlows::SIGN_INTENT, $this->realm, $context, ['intent.parameters' => 'site'])->view?->jsonSerialize()['parameters']);
-    }
-
     public function testTheJourneysRequireWhatMakesThemSafe(): void
     {
         $required = [];
@@ -366,7 +337,6 @@ final class PasskeyFlowsTest extends DatabaseTestCase
             'yorvoid.recover_with_link' => ['recovery_link'],
             'yorvoid.add_passkey' => ['passkey_registration'],
             'yorvoid.step_up' => ['step_up'],
-            'yorvoid.sign_intent' => ['confirm'],
         ], $required);
     }
 

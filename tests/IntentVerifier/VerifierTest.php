@@ -69,6 +69,7 @@ final class VerifierTest extends TestCase
 
         $change = $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options));
         $key = $change->key;
+        self::assertSame([VerifierNotice::KEY_CHANGE_REQUESTED, VerifierNotice::KEY_ADDED], array_map(static fn (VerifierNotice $notice): string => $notice->event, \array_slice($this->notifier->notices, 1)), 'The first key wasn\'t added at once.');
 
         self::assertSame([-7, 'Ana\'s YubiKey', 1], [$key->algorithm, $key->label, $key->signCount]);
         self::assertEquals([$key], $verifier->keys(), 'The first key waits for nothing: there\'s no owner to tell.');
@@ -155,6 +156,110 @@ final class VerifierTest extends TestCase
         $this->refused(Refusal::UnknownIntent, fn () => $verifier->verify('never-prepared', $this->owner->signIn($prepared->options)));
         $entry = $this->log->entries[\count($this->log->entries) - 1];
         self::assertSame(['refused', ['nonce' => 'never-prepared', 'reason' => 'unknown_intent']], [$entry['event'], $entry['details']]);
+    }
+
+    /**
+     * Signing passkeys aren't discoverable: browsers answer without a user handle, and one that's there
+     * must be the key's.
+     */
+    public function testAnAnswerWithoutAUserHandleIsTheKeysAnswer(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $answer = self::json($this->owner->signIn($prepared->options));
+        $response = (array) $answer['response'];
+        unset($response['userHandle']);
+        $answer['response'] = $response;
+
+        self::assertSame('acme.site.remove', $verifier->verify($prepared->intent->nonce, (string) json_encode($answer))->intent->action);
+
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'joe']);
+        $this->refused(Refusal::InvalidSignature, fn () => $verifier->verify($prepared->intent->nonce, $this->owner->signIn($prepared->options, userHandle: random_bytes(32))), 'Another user handle was accepted.');
+    }
+
+    public function testARegistrationsOptionsAndRecords(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        $phone = $verifier->keys()[0]->id();
+        [$addition] = $this->registered($verifier, $this->owner, 'Laptop');
+        $laptop = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options))->key->id();
+
+        $label = str_repeat('é', 64);
+        $registration = $verifier->prepareRegistration($label);
+        $options = self::json($registration->options);
+
+        self::assertMatchesRegularExpression('/^[A-Za-z0-9_-]{24}$/D', $registration->id, '144 random bits.');
+        $user = (array) $options['user'];
+        \assert(\is_string($user['id']) && \is_string($options['challenge']));
+        self::assertSame([43, 43, 300000], [\strlen($user['id']), \strlen($options['challenge']), $options['timeout']], '256 random bits each, and the intents\' lifetime.');
+        self::assertSame([['type' => 'public-key', 'id' => $phone], ['type' => 'public-key', 'id' => $laptop]], $options['excludeCredentials'], 'A list of the keys there and coming.');
+        $entry = $this->log->entries[\count($this->log->entries) - 1];
+        self::assertSame(['registration_prepared', ['registration' => $registration->id, 'bootstrap' => false]], [$entry['event'], $entry['details']]);
+
+        $verifier->finishRegistration($registration->id, $this->owner->register($registration->options));
+        $entry = $this->log->entries[\count($this->log->entries) - 2];
+        self::assertSame(['registered', ['registration' => $registration->id, 'subject' => VirtualAuthenticator::encode($this->owner->credentials[\count($this->owner->credentials) - 1]['id']), 'algorithm' => -7]], [$entry['event'], $entry['details']]);
+        self::assertMatchesRegularExpression('/^[A-Za-z0-9_-]{16}$/D', $verifier->keyChanges()[0]->id, '96 random bits.');
+    }
+
+    /**
+     * Changes taking effect together all do, in the order asked for; a key coming doesn't count against
+     * removing one there.
+     */
+    public function testChangesDueTogetherAllTakeEffect(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        [$addition, $laptop] = $this->registered($verifier, $this->owner, 'Laptop');
+        $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
+        $this->clock->sleep(86400);
+        $phone = $verifier->keys()[0]->id();
+        [$addition] = $this->registered($verifier, $this->owner, 'Tablet');
+        $tablet = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
+        $removal = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $phone]);
+        $removed = $verifier->removeKey($removal->intent->nonce, $this->owner->signIn($removal->options, $laptop));
+
+        self::assertSame([$tablet->id, $removed->id], array_map(static fn (KeyChange $change): string => $change->id, $verifier->keyChanges()));
+        $this->clock->sleep(86400);
+        $notices = \count($this->notifier->notices);
+
+        self::assertSame(2, $verifier->applyKeyChanges());
+        self::assertSame(['Laptop', 'Tablet'], array_map(static fn (Key $key): string => $key->label, $verifier->keys()));
+        self::assertSame([VerifierNotice::KEY_ADDED, VerifierNotice::KEY_REMOVED], array_map(static fn (VerifierNotice $notice): string => $notice->event, \array_slice($this->notifier->notices, $notices)));
+        self::assertSame(0, $verifier->applyKeyChanges());
+    }
+
+    public function testWhatExpiresIsGoneAtTheMomentItExpires(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $verifier->prepareRegistration('Laptop');
+        $this->clock->sleep(299);
+        self::assertNotNull($verifier->prepared($prepared->intent->nonce));
+        $kept = $verifier->prepareRegistration('Tablet');
+        $this->clock->sleep(1);
+
+        self::assertNull($verifier->prepared($prepared->intent->nonce), 'An intent outlived its expiry.');
+        self::assertSame(2, $verifier->purge(), 'The intent and the first registration, not the second.');
+        self::assertSame(0, $verifier->purge());
+        $verifier->finishRegistration($kept->id, $this->owner->register($kept->options));
+    }
+
+    public function testTheDelayBeforeAKeyChangeIsBounded(): void
+    {
+        foreach ([0, 30 * 86400] as $delay) {
+            self::assertSame($delay, self::config($delay)->keyChangeDelay);
+        }
+
+        foreach ([-1, 30 * 86400 + 1] as $delay) {
+            try {
+                self::config($delay);
+                self::fail(\sprintf('A delay of %d seconds was accepted.', $delay));
+            } catch (ConfigurationError $exception) {
+                self::assertSame('A key change waits between no time and 30 days.', $exception->getMessage());
+            }
+        }
+
+        self::assertSame(86400, new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example'], ['https://acme.example'])->keyChangeDelay, 'A day by default.');
     }
 
     public function testAcceptsEdDsaKeys(): void

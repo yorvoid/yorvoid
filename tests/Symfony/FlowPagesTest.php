@@ -237,29 +237,16 @@ final class FlowPagesTest extends TestCase
         self::assertSame(['preferred', 'required', 'preferred', 'preferred', 'required', 'preferred', 'preferred'], $verification);
     }
 
-    public function testConfirmsAnOperationTheApplicationStarted(): void
+    public function testAFlowGoesWhereItsCompletedPathSays(): void
     {
-        $this->boot(['flows' => ['completed_path' => '/home', 'completed_paths' => ['yorvoid.sign_intent' => '/intent-confirmed']]]);
+        $this->boot(['flows' => ['completed_path' => '/home', 'completed_paths' => ['yorvoid.step_up' => '/stepped-up']]]);
         [, $authenticator] = $this->account();
         $started = $this->json('POST', '/yorvoid/flows/yorvoid.sign_in', []);
         $signedIn = $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.self::id($started).'/passkey', ['response' => json_decode($authenticator->signIn((string) json_encode(((array) $started['view'])['options'])), true)]);
         self::assertSame('/home', $signedIn['redirect'], 'The other flows go to the default.');
-        $options = '{"challenge":"AQID","rpId":"example.com","allowCredentials":[],"userVerification":"required"}';
 
-        $this->browser->request('GET', '/confirm-intent?options='.urlencode($options));
-        $page = $this->browser->followRedirect();
-
-        self::assertSame('Remove the site <jane>', $page->filter('[data-yorvoid-summary]')->text());
-        self::assertStringContainsString('&lt;jane&gt;', (string) $this->browser->getResponse()->getContent(), 'Escaped.');
-        self::assertSame(['site', 'keep backups'], $page->filter('[data-yorvoid-parameters] dt')->each(static fn (Crawler $name): string => $name->text()));
-        self::assertSame(['<jane>', 'no'], $page->filter('[data-yorvoid-parameters] dd')->each(static fn (Crawler $value): string => $value->text()));
-        self::assertSame(['2026-10-28T18:05:00+00:00', 'You can sign it until 18:05 UTC.'], [$page->filter('time')->attr('datetime'), $page->filter('time')->text()]);
-
-        $this->browser->submit($page->filter('form')->form(), ['response' => $authenticator->signIn($options)]);
-        self::assertSame([303, '/intent-confirmed'], [$this->statusCode(), $this->browser->getResponse()->headers->get('Location')]);
-
-        $this->json('POST', '/yorvoid/flows/yorvoid.sign_intent', []);
-        self::assertSame(404, $this->statusCode(), 'A request can\'t start signing: only the application can.');
+        // Signed in a moment ago, the step-up is done at once.
+        self::assertSame('/stepped-up', $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove'])['redirect']);
     }
 
     public function testExpiredAndUnknownFlows(): void

@@ -11,6 +11,7 @@ use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\Operation;
 use YorvoID\IntentVerifier\OperationPolicy;
 use YorvoID\IntentVerifier\ParameterType;
+use YorvoID\IntentVerifier\Refusal;
 use YorvoID\IntentVerifier\SigningPages;
 use YorvoID\IntentVerifier\SigningResponse;
 use YorvoID\IntentVerifier\Storage\InMemoryVerifierLog;
@@ -97,7 +98,8 @@ final class SigningPagesTest extends TestCase
         self::assertStringContainsString('Operation: <code>acme.site.remove</code>', $page->body);
         self::assertStringNotContainsString('name="secret"', $page->body);
         self::assertSame('no-store', $page->headers['Cache-Control']);
-        self::assertMatchesRegularExpression("/^default-src 'none'; script-src 'nonce-[A-Za-z0-9_-]{24}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'$/D", $page->headers['Content-Security-Policy']);
+        // The console's origin too: browsers check the redirect after a form's post against form-action.
+        self::assertMatchesRegularExpression("/^default-src 'none'; script-src 'nonce-[A-Za-z0-9_-]{24}'; form-action 'self' https:\\/\\/acme\\.example; frame-ancestors 'none'; base-uri 'none'$/D", $page->headers['Content-Security-Policy']);
         self::assertStringContainsString('<script nonce="'.self::nonce($page).'">', $page->body, 'The script\'s nonce isn\'t the policy\'s.');
         self::assertNotSame(self::nonce($page), self::nonce($this->pages->handle('GET', $path)), 'Two pages had one nonce.');
         self::assertSame(['no-referrer', 'nosniff'], [$page->headers['Referrer-Policy'], $page->headers['X-Content-Type-Options']]);
@@ -177,6 +179,94 @@ final class SigningPagesTest extends TestCase
         self::assertStringContainsString('This request has expired, or was used already.', $unknown->body);
         self::assertSame(400, $this->pages->handle('POST', '/keys/remove', ['key' => ['x']])->status, 'A key that isn\'t text was taken.');
         self::assertStringContainsString('The form has no change.', $this->pages->handle('POST', '/keys/cancel')->body);
+    }
+
+    public function testOnlyItsOwnPathsAnswer(): void
+    {
+        $this->bootstrap();
+        $nonce = $this->verifier->prepare('acme.site.remove', ['site' => 'jane'])->intent->nonce;
+        $registration = $this->verifier->prepareRegistration('Laptop')->id;
+
+        foreach (['/x/intents/'.$nonce, '/intents/'.$nonce.'/x', "/intents/{$nonce}\n"] as $path) {
+            self::assertSame([404, 404], [$this->pages->handle('GET', $path)->status, $this->pages->handle('POST', $path, ['credential' => '{}'])->status], $path);
+        }
+
+        foreach (['/x/keys/registrations/'.$registration, '/keys/registrations/'.$registration.'/x', "/keys/registrations/{$registration}\n"] as $path) {
+            self::assertSame(404, $this->pages->handle('POST', $path, ['credential' => '{}'])->status, $path);
+        }
+
+        self::assertSame(200, $this->pages->handle('GET', '/intents/'.$nonce)->status, 'The intent was used up.');
+    }
+
+    public function testEveryParameterKeyAndChangeIsListed(): void
+    {
+        $verifier = new Verifier(self::config(), new OperationPolicy([new Operation('acme.site.move', ['site' => ParameterType::String, 'to' => ParameterType::String, 'keep' => ParameterType::Boolean])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), new CollectingNotifier(), $this->clock);
+        $pages = new SigningPages($verifier, static fn (VerifiedIntent $verified): null => null, 'https://acme.example/signed');
+        $secret = $verifier->createBootstrapSecret();
+        $registration = $verifier->prepareRegistration('Phone', true);
+        $prepared = $verifier->finishRegistration($registration->id, $this->owner->register($registration->options));
+        $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options));
+
+        $page = $pages->handle('GET', '/intents/'.$verifier->prepare('acme.site.move', ['site' => 'jane', 'to' => 'joe', 'keep' => false])->intent->nonce);
+        self::assertStringContainsString('<table><tr><th scope="row">site</th><td><code>jane</code></td></tr><tr><th scope="row">to</th><td><code>joe</code></td></tr><tr><th scope="row">keep</th><td><code>false</code></td></tr></table>', $page->body);
+        self::assertStringNotContainsString('<strong>', $page->body, 'An operation without a summary got one.');
+
+        foreach (['Laptop', 'Tablet'] as $label) {
+            $registration = $verifier->prepareRegistration($label);
+            $prepared = $verifier->finishRegistration($registration->id, $this->owner->register($registration->options));
+            $verifier->addKey($prepared->intent->nonce, $this->owner->signIn($prepared->options));
+        }
+
+        $keys = $pages->handle('GET', '/keys');
+        self::assertSame([200, 'text/html; charset=utf-8'], [$keys->status, $keys->headers['Content-Type']]);
+        self::assertSame(1, preg_match('#<h2>Waiting to take effect</h2><ul><li>Adding Laptop, [^<]*<form[^>]*>.*?</form></li><li>Adding Tablet, .*?</li></ul>#', $keys->body), $keys->body);
+        $this->clock->sleep(86400);
+        self::assertSame(1, preg_match('#<h2>Keys</h2><ul><li>Phone, .*?</li><li>Laptop, .*?</li><li>Tablet, .*?</li></ul><h2>Waiting to take effect</h2><p>Nothing.</p>#', $pages->handle('GET', '/keys')->body));
+
+        $add = $pages->handle('GET', '/keys/add');
+        self::assertSame(200, $add->status);
+        self::assertStringContainsString('<h1>Add a passkey</h1>', $add->body);
+        self::assertStringContainsString('<h1>Add a passkey with the bootstrap secret</h1>', $pages->handle('GET', '/keys/bootstrap')->body);
+        self::assertSame(200, $pages->handle('POST', '/keys/add', ['label' => 'Watch'])->status);
+    }
+
+    public function testTheWayBackKeepsTheConsolesQueryAndPort(): void
+    {
+        $pages = new SigningPages($this->verifier, static fn (VerifiedIntent $verified): null => null, 'http://localhost:8000/signed?from=sites');
+        $this->bootstrap();
+        $prepared = $this->verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $path = '/intents/'.$prepared->intent->nonce;
+
+        self::assertStringContainsString("form-action 'self' http://localhost:8000;", $pages->handle('GET', $path)->headers['Content-Security-Policy']);
+        self::assertSame('http://localhost:8000/signed?from=sites&nonce='.$prepared->intent->nonce.'&outcome=ran', $pages->handle('POST', $path, ['credential' => $this->owner->signIn($prepared->options)])->headers['Location']);
+
+        $relative = new SigningPages($this->verifier, static fn (VerifiedIntent $verified): null => null, '/signed');
+        self::assertStringContainsString("form-action 'self';", $relative->handle('GET', '/keys')->headers['Content-Security-Policy'], 'A relative way back allowed another origin.');
+        $hostless = new SigningPages($this->verifier, static fn (VerifiedIntent $verified): null => null, 'https:/signed');
+        self::assertStringContainsString("form-action 'self';", $hostless->handle('GET', '/keys')->headers['Content-Security-Policy'], 'A way back without a host allowed one.');
+        self::assertSame('https://sign.acme.example/intents/'.$prepared->intent->nonce, SigningPages::url(new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example/'], ['https://acme.example']), $prepared), 'A trailing slash doubled.');
+    }
+
+    public function testEveryRefusalHasWords(): void
+    {
+        $words = [];
+
+        foreach (Refusal::cases() as $refusal) {
+            $words[$refusal->value] = SigningPages::reason($refusal);
+        }
+
+        self::assertSame([
+            'unknown_intent' => 'This request has expired, or was used already. Start again.',
+            'wrong_operation' => 'The signature didn\'t work. Start again.',
+            'invalid_signature' => 'The signature didn\'t work. Start again.',
+            'unknown_key' => 'That passkey can\'t sign here. Use one of the signing passkeys.',
+            'user_not_verified' => 'Your authenticator didn\'t confirm it\'s you. Try again, with its PIN or biometrics.',
+            'invalid_key' => 'That passkey is here already.',
+            'last_key' => 'That\'s the last key: add another before removing it.',
+            'invalid_registration' => 'This request has expired, or was used already. Start again.',
+            'unknown_key_change' => 'The signature didn\'t work. Start again.',
+            'invalid_bootstrap_secret' => 'That bootstrap secret doesn\'t work: it\'s wrong, used, or expired.',
+        ], $words);
     }
 
     private static function nonce(SigningResponse $page): string

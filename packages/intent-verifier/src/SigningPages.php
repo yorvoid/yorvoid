@@ -195,19 +195,19 @@ final readonly class SigningPages
     {
         $separator = str_contains($this->returnTo, '?') ? '&' : '?';
 
-        return new SigningResponse(303, ['Location' => $this->returnTo.$separator.http_build_query(['nonce' => $nonce, 'outcome' => $outcome])] + self::headers(''), '');
+        return new SigningResponse(303, ['Location' => $this->returnTo.$separator.http_build_query(['nonce' => $nonce, 'outcome' => $outcome])] + $this->headers(''), '');
     }
 
     private function redirect(string $path): SigningResponse
     {
-        return new SigningResponse(303, ['Location' => $path] + self::headers(''), '');
+        return new SigningResponse(303, ['Location' => $path] + $this->headers(''), '');
     }
 
     private function page(int $status, string $title, string $body): SigningResponse
     {
         $nonce = Base64Url::encode(random_bytes(18));
 
-        return new SigningResponse($status, self::headers($nonce) + ['Content-Type' => 'text/html; charset=utf-8'], \sprintf(
+        return new SigningResponse($status, $this->headers($nonce) + ['Content-Type' => 'text/html; charset=utf-8'], \sprintf(
             '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>%1$s</title></head><body><main><h1>%1$s</h1>%2$s</main><script nonce="%3$s">%4$s</script></body></html>',
             self::e($title),
             $body,
@@ -217,19 +217,30 @@ final readonly class SigningPages
     }
 
     /**
+     * The headers of every answer. Forms post only here, and the redirect after an operation goes to the
+     * console's origin, which browsers check against form-action too.
+     *
      * @return array<string, string>
      */
-    private static function headers(string $nonce): array
+    private function headers(string $nonce): array
     {
+        $scheme = parse_url($this->returnTo, \PHP_URL_SCHEME);
+        $host = parse_url($this->returnTo, \PHP_URL_HOST);
+        $port = parse_url($this->returnTo, \PHP_URL_PORT);
+        $console = \is_string($scheme) && \is_string($host) ? \sprintf(' %s://%s%s', $scheme, $host, \is_int($port) ? ':'.$port : '') : '';
+
         return [
             'Cache-Control' => 'no-store',
-            'Content-Security-Policy' => \sprintf("default-src 'none'; script-src 'nonce-%s'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", $nonce),
+            'Content-Security-Policy' => \sprintf("default-src 'none'; script-src 'nonce-%s'; form-action 'self'%s; frame-ancestors 'none'; base-uri 'none'", $nonce, $console),
             'Referrer-Policy' => 'no-referrer',
             'X-Content-Type-Options' => 'nosniff',
         ];
     }
 
-    private static function reason(Refusal $refusal): string
+    /**
+     * The words the pages use for a refusal: for a host that builds its own pages.
+     */
+    public static function reason(Refusal $refusal): string
     {
         return match ($refusal) {
             Refusal::UnknownIntent, Refusal::InvalidRegistration => 'This request has expired, or was used already. Start again.',

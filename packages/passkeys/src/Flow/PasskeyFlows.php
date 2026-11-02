@@ -47,9 +47,6 @@ final readonly class PasskeyFlows
     /** A step-up for "step_up.operation" */
     public const string STEP_UP = 'yorvoid.step_up';
 
-    /** Confirming an operation the verifier prepared */
-    public const string SIGN_INTENT = 'yorvoid.sign_intent';
-
     /**
      * @param Duration $window How recent a step-up must be, as for the credentials (5 minutes by default)
      */
@@ -86,7 +83,6 @@ final readonly class PasskeyFlows
             new Flow(self::RECOVER_WITH_LINK, [new RecoveryLinkStep($this->recoveryLinks), $later, $codes], [RecoveryLinkStep::NAME]),
             new Flow(self::ADD_PASSKEY, [new StepUpStep($this->passkeys, $this->stepUp, $this->window, 'yorvoid.credential.add'), $passkey], [PasskeyRegistrationStep::NAME]),
             new Flow(self::STEP_UP, [new StepUpStep($this->passkeys, $this->stepUp, $this->window)], [StepUpStep::NAME]),
-            new Flow(self::SIGN_INTENT, [new IntentConfirmationStep()], [IntentConfirmationStep::NAME]),
         ];
     }
 }

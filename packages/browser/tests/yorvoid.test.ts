@@ -265,33 +265,6 @@ describe('stepping up', () => {
   });
 });
 
-describe('signing intents', () => {
-  test('signs the options the verifier prepared, as JSON or parsed', async () => {
-    const { server, credentials, yorvoid } = setUp();
-
-    for (const options of [REQUEST_OPTIONS, JSON.stringify(REQUEST_OPTIONS)]) {
-      const signed = await yorvoid.signIntent(options);
-
-      assert.equal(signed['id'], 'AAE');
-      assert.deepEqual((signed['response'] as Record<string, unknown>)['signature'], 'Aw');
-    }
-
-    assert.deepEqual(credentials.calls.map((call) => call.options.publicKey?.challenge), [bytes(1, 2, 3), bytes(1, 2, 3)]);
-    assert.deepEqual(server.paths(), [], 'The console sends it to the verifier, not YorvoID.');
-  });
-
-  test('refuses options that aren\'t', async () => {
-    const { yorvoid } = setUp();
-
-    for (const [options, cause] of [['{', SyntaxError], ['[]', TypeError], ['{"challenge": "!"}', TypeError], [{}, TypeError]] as const) {
-      const error = await refusal(yorvoid.signIntent(options));
-
-      assert.equal(error.code, 'server');
-      assert.ok(error.cause instanceof cause);
-    }
-  });
-});
-
 describe('the signal API', () => {
   test('isn\'t asked for when the browser can\'t use it', async () => {
     for (const publicKeyCredential of [{ isConditionalMediationAvailable: async () => true }, undefined]) {
@@ -336,7 +309,7 @@ describe('errors', () => {
   test('a browser without passkeys', async () => {
     const { server, yorvoid } = setUp({ credentials: undefined });
 
-    for (const attempt of [yorvoid.signIn(), yorvoid.addPasskey('x'), yorvoid.stepUp(), yorvoid.signIntent(REQUEST_OPTIONS)]) {
+    for (const attempt of [yorvoid.signIn(), yorvoid.addPasskey('x'), yorvoid.stepUp(), yorvoid.authenticate(REQUEST_OPTIONS)]) {
       const error = await refusal(attempt);
       assert.deepEqual([error.code, error.message], ['not_supported', MESSAGES.not_supported]);
     }

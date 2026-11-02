@@ -125,7 +125,6 @@ final readonly class TemplateLint
                 ...(true === $view['can_skip'] ? self::require($page, 'button[name="action"][value="skip"]', 'There\'s no way to add a passkey later: a button name="action" value="skip".') : []),
             ],
             'step_up' => null === $view['options'] ? [] : self::ceremony($page, 'get'),
-            'confirm' => [...self::ceremony($page, 'get'), ...self::shows($text, [self::text($view['summary'] ?? null), ...array_map(self::text(...), array_keys((array) ($view['parameters'] ?? []))), ...array_map(self::text(...), (array) ($view['parameters'] ?? []))], 'The page doesn\'t show what is signed in full: "%s" is missing.')],
             'setup_code' => [...self::require($page, 'input[name="code"][autocomplete="one-time-code"]', 'There\'s no setup code field: name="code" autocomplete="one-time-code".'), ...self::require($page, 'input[name="email"][type="email"]', 'There\'s no email field: name="email" type="email".')],
             'recovery_code' => [...self::require($page, 'input[name="email"]', 'There\'s no email field: name="email".'), ...self::require($page, 'input[name="code"]', 'There\'s no recovery code field: name="code".')],
             'recovery_codes' => [...self::shows($text, array_map(self::text(...), (array) ($view['codes'] ?? [])), 'A recovery code isn\'t shown: "%s".'), ...self::require($page, 'input[name="saved"][type="checkbox"]', 'There\'s no way to confirm the codes were saved: a checkbox name="saved".')],

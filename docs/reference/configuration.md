@@ -100,7 +100,7 @@ yorvoid:
         # Where people go when a flow completes, e.g. after signing in
         completed_path:       /
 
-        # Where to go after particular flows, e.g. {yorvoid.sign_intent: /console/confirmed}
+        # Where to go after particular flows, e.g. {yorvoid.sign_in: /dashboard}
         completed_paths:
 
             # Prototype

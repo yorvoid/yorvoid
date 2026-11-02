@@ -1,7 +1,7 @@
 {
   "name": "@yorvoid/browser",
   "version": "0.0.0",
-  "description": "YorvoID's browser client: passkey sign-in with autofill, adding passkeys, step-up, signing intents, the WebAuthn signal API, and errors as codes to translate. No dependencies.",
+  "description": "YorvoID's browser client: passkey sign-in with autofill, adding passkeys, step-up, the WebAuthn signal API, and errors as codes to translate. No dependencies.",
   "keywords": [
     "passkeys",
     "webauthn",

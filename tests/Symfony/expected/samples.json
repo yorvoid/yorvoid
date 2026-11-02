@@ -326,54 +326,6 @@
         "problems": []
     },
     {
-        "template": "confirm",
-        "state": "default",
-        "flow": "yorvoid.sign_intent",
-        "view": {
-            "summary": "Remove the site jane.example",
-            "parameters": {
-                "site": "jane.example",
-                "keep backups": "no"
-            },
-            "options": {
-                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
-                "rpId": "example.com",
-                "allowCredentials": [],
-                "userVerification": "required",
-                "timeout": 300000
-            },
-            "expires_at": "2026-10-28T18:05:00+00:00"
-        },
-        "problems": []
-    },
-    {
-        "template": "confirm",
-        "state": "problems",
-        "flow": "yorvoid.sign_intent",
-        "view": {
-            "summary": "Remove the site jane.example",
-            "parameters": {
-                "site": "jane.example"
-            },
-            "options": {
-                "challenge": "c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ",
-                "rpId": "example.com",
-                "allowCredentials": [],
-                "userVerification": "required",
-                "timeout": 300000
-            },
-            "expires_at": "2026-10-28T18:05:00+00:00"
-        },
-        "problems": [
-            {
-                "message": "yorvoid.passkey.not_working",
-                "parameters": [],
-                "field": null,
-                "reason": null
-            }
-        ]
-    },
-    {
         "template": "failed",
         "state": "default",
         "flow": "yorvoid.invitation",

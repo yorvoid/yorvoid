@@ -108,9 +108,7 @@ final readonly class Verifier
             throw new ConfigurationError('A key\'s label has 1 to 64 characters.');
         }
 
-        $this->applyKeyChanges();
-
-        return $this->store->transaction(function (VerifierState $state) use ($label, $bootstrap): PendingRegistration {
+        return $this->transaction(function (VerifierState $state) use ($label, $bootstrap): PendingRegistration {
             $known = [...array_values($state->keys), ...array_map(static fn (KeyChange $change): Key => $change->key, array_values($state->keyChanges))];
             $options = PublicKeyCredentialCreationOptions::create(
                 PublicKeyCredentialRpEntity::create('', $this->config->relyingPartyId),
@@ -141,7 +139,7 @@ final readonly class Verifier
      */
     public function finishRegistration(string $registration, string $attestation): PreparedIntent
     {
-        $registered = $this->store->transaction(function (VerifierState $state) use ($registration, $attestation): array|IntentRefused {
+        $registered = $this->transaction(function (VerifierState $state) use ($registration, $attestation): array|IntentRefused {
             $pending = $state->registrations[$registration] ?? null;
             unset($state->registrations[$registration]);
 
@@ -180,7 +178,6 @@ final readonly class Verifier
      */
     public function verify(string $nonce, string $assertion): VerifiedIntent
     {
-        $this->applyKeyChanges();
         $verified = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): VerifiedIntent {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && !str_starts_with($pending->intent->action, 'yorvoid.verifier.'));
             $verified = $this->check($state, $pending, $state->keys, $assertion);
@@ -201,7 +198,6 @@ final readonly class Verifier
      */
     public function addKey(string $nonce, string $assertion): KeyChange
     {
-        $this->applyKeyChanges();
         [$change, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && OperationPolicy::ADD_KEY === $pending->intent->action);
             $key = $this->newKey($state, $pending->intent);
@@ -222,7 +218,6 @@ final readonly class Verifier
      */
     public function removeKey(string $nonce, string $assertion): KeyChange
     {
-        $this->applyKeyChanges();
         [$change, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => OperationPolicy::REMOVE_KEY === $pending->intent->action);
             $verified = $this->check($state, $pending, $state->keys, $assertion);
@@ -248,7 +243,6 @@ final readonly class Verifier
      */
     public function cancelKeyChange(string $nonce, string $assertion): KeyChange
     {
-        $this->applyKeyChanges();
         [$change, $verified] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => OperationPolicy::CANCEL_KEY_CHANGE === $pending->intent->action);
             $verified = $this->check($state, $pending, $state->keys, $assertion);
@@ -266,47 +260,21 @@ final readonly class Verifier
 
     /**
      * Applies the changes to the keys that are due, and tells the notifier. Every other call does it
-     * first; run it on a schedule too (e.g. hourly), so a change takes effect, and is announced, on time.
+     * first, in its own transaction; run it on a schedule too (e.g. hourly), so a change takes effect,
+     * and is announced, on time.
      *
      * @return int How many took effect
      */
     public function applyKeyChanges(): int
     {
-        $now = $this->clock->now();
-        $applied = $this->store->transaction(function (VerifierState $state) use ($now): array {
-            $applied = [];
+        $this->transaction(static fn (VerifierState $state): null => null, $applied);
 
-            foreach ($state->keyChanges as $id => $change) {
-                if ($now < $change->effectiveAt) {
-                    continue;
-                }
-
-                unset($state->keyChanges[$id]);
-
-                if (KeyChange::ADD === $change->kind) {
-                    $state->keys[$change->key->id()] = $change->key;
-                } elseif (isset($state->keys[$change->key->id()]) && \count($state->keys) > 1) {
-                    unset($state->keys[$change->key->id()]);
-                } else {
-                    continue;
-                }
-
-                $this->log->record(KeyChange::ADD === $change->kind ? 'key_added' : 'key_removed', ['change' => $change->id, 'key' => $change->key->id(), 'signer' => $change->signer], $now);
-                $applied[] = $change;
-            }
-
-            return $applied;
-        });
-
-        foreach ($applied as $change) {
-            $this->notifier->notify(new VerifierNotice(KeyChange::ADD === $change->kind ? VerifierNotice::KEY_ADDED : VerifierNotice::KEY_REMOVED, null, $change->key, $now, $change));
-        }
-
-        return \count($applied);
+        return $applied;
     }
 
     /**
-     * The changes to the keys waiting to take effect, the soonest first.
+     * The changes to the keys waiting to take effect, in the order they were asked for, which is the order
+     * they take effect in.
      *
      * @return list<KeyChange>
      *
@@ -314,11 +282,7 @@ final readonly class Verifier
      */
     public function keyChanges(): array
     {
-        $this->applyKeyChanges();
-        $changes = $this->store->transaction(static fn (VerifierState $state): array => array_values($state->keyChanges));
-        usort($changes, static fn (KeyChange $a, KeyChange $b): int => $a->effectiveAt <=> $b->effectiveAt);
-
-        return $changes;
+        return $this->transaction(static fn (VerifierState $state): array => array_values($state->keyChanges));
     }
 
     /**
@@ -341,7 +305,7 @@ final readonly class Verifier
         $secret = Base64Url::encode(random_bytes(32));
         $expiresAt = new \DateTimeImmutable('@'.($this->clock->now()->getTimestamp() + $lifetime));
 
-        $this->store->transaction(function (VerifierState $state) use ($secret, $expiresAt): void {
+        $this->transaction(function (VerifierState $state) use ($secret, $expiresAt): void {
             $state->bootstrapSecretHash = hash('sha256', $secret);
             $state->bootstrapSecretExpiresAt = $expiresAt;
             $this->log->record('bootstrap_secret_created', ['keys' => \count($state->keys), 'expires_at' => $expiresAt->getTimestamp()], $this->clock->now());
@@ -360,11 +324,11 @@ final readonly class Verifier
      */
     public function bootstrap(#[\SensitiveParameter] string $secret, string $nonce, string $assertion): KeyChange
     {
-        $this->applyKeyChanges();
         [$change, $intent] = $this->attempt(function (VerifierState $state) use ($secret, $nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => $pending->bootstrap);
 
-            if (null === $state->bootstrapSecretHash || null === $state->bootstrapSecretExpiresAt || $this->clock->now() >= $state->bootstrapSecretExpiresAt || !hash_equals($state->bootstrapSecretHash, hash('sha256', $secret))) {
+            // A secret and its expiry are set and cleared together.
+            if (null === $state->bootstrapSecretExpiresAt || $this->clock->now() >= $state->bootstrapSecretExpiresAt || !hash_equals((string) $state->bootstrapSecretHash, hash('sha256', $secret))) {
                 $this->refuse($pending->intent, Refusal::InvalidBootstrapSecret);
             }
 
@@ -388,9 +352,7 @@ final readonly class Verifier
      */
     public function keys(): array
     {
-        $this->applyKeyChanges();
-
-        return $this->store->transaction(static fn (VerifierState $state): array => array_values($state->keys));
+        return $this->transaction(static fn (VerifierState $state): array => array_values($state->keys));
     }
 
     /**
@@ -403,13 +365,68 @@ final readonly class Verifier
     {
         $now = $this->clock->now();
 
-        return $this->store->transaction(static function (VerifierState $state) use ($now): int {
+        return $this->transaction(static function (VerifierState $state) use ($now): int {
             $count = \count($state->pending) + \count($state->registrations);
             $state->pending = array_filter($state->pending, static fn (PendingIntent $pending): bool => $now < $pending->intent->expiresAt);
             $state->registrations = array_filter($state->registrations, static fn (PendingRegistration $registration): bool => $now < $registration->expiresAt);
 
             return $count - \count($state->pending) - \count($state->registrations);
         });
+    }
+
+    /**
+     * Runs work in a store transaction that first applies the changes to the keys that are due, so every
+     * call sees the keys of now; then tells the notifier of them.
+     *
+     * @template T
+     *
+     * @param \Closure(VerifierState): T $work
+     *
+     * @param-out int                    $applied How many changes took effect
+     *
+     * @return T
+     */
+    private function transaction(\Closure $work, ?int &$applied = null): mixed
+    {
+        $now = $this->clock->now();
+        [$result, $changes] = $this->store->transaction(function (VerifierState $state) use ($work, $now): array {
+            $changes = $this->applyDue($state, $now);
+
+            return [$work($state), $changes];
+        });
+
+        foreach ($changes as $change) {
+            $this->notifier->notify(new VerifierNotice(KeyChange::ADD === $change->kind ? VerifierNotice::KEY_ADDED : VerifierNotice::KEY_REMOVED, null, $change->key, $now, $change));
+        }
+
+        $applied = \count($changes);
+
+        return $result;
+    }
+
+    /**
+     * @return list<KeyChange> The changes that took effect
+     */
+    private function applyDue(VerifierState $state, \DateTimeImmutable $now): array
+    {
+        $applied = [];
+
+        // Asking for a change checked it against the keys and the changes before it: none can leave the
+        // verifier without keys, nor add one twice.
+        foreach (array_filter($state->keyChanges, static fn (KeyChange $change): bool => $now >= $change->effectiveAt) as $id => $change) {
+            unset($state->keyChanges[$id]);
+
+            if (KeyChange::ADD === $change->kind) {
+                $state->keys[$change->key->id()] = $change->key;
+            } else {
+                unset($state->keys[$change->key->id()]);
+            }
+
+            $this->log->record(KeyChange::ADD === $change->kind ? 'key_added' : 'key_removed', ['change' => $change->id, 'key' => $change->key->id(), 'signer' => $change->signer], $now);
+            $applied[] = $change;
+        }
+
+        return $applied;
     }
 
     /**
@@ -426,7 +443,7 @@ final readonly class Verifier
      */
     private function attempt(\Closure $work): mixed
     {
-        $result = $this->store->transaction(static function (VerifierState $state) use ($work): mixed {
+        $result = $this->transaction(static function (VerifierState $state) use ($work): mixed {
             try {
                 return $work($state);
             } catch (IntentRefused $refusal) {
@@ -450,15 +467,12 @@ final readonly class Verifier
             throw new ConfigurationError(\sprintf('The parameters aren\'t those of %s: give exactly %s, of their types.', $operation->action, implode(', ', array_keys($operation->parameters))));
         }
 
-        // The options name the keys that may sign: those of now.
-        $this->applyKeyChanges();
-
         $now = $this->clock->now();
         $issuedAt = new \DateTimeImmutable('@'.$now->getTimestamp());
         $intent = new Intent($operation->action, $parameters, $this->config->audience, Base64Url::encode(random_bytes(18)), $issuedAt, $issuedAt->modify(\sprintf('+%d seconds', $this->config->intentLifetime)));
         $pending = new PendingIntent($intent, $bootstrap);
 
-        $keys = $this->store->transaction(function (VerifierState $state) use ($pending): array {
+        $keys = $this->transaction(function (VerifierState $state) use ($pending): array {
             $state->pending[$pending->intent->nonce] = $pending;
             $this->log->record('prepared', ['action' => $pending->intent->action, 'nonce' => $pending->intent->nonce, 'bootstrap' => $pending->bootstrap], $this->clock->now());
 
@@ -476,9 +490,8 @@ final readonly class Verifier
      */
     public function prepared(string $nonce): ?PreparedIntent
     {
-        $this->applyKeyChanges();
         $now = $this->clock->now();
-        [$pending, $keys] = $this->store->transaction(static fn (VerifierState $state): array => [$state->pending[$nonce] ?? null, $state->keys]);
+        [$pending, $keys] = $this->transaction(static fn (VerifierState $state): array => [$state->pending[$nonce] ?? null, $state->keys]);
 
         return null === $pending || $now >= $pending->intent->expiresAt ? null : $this->ready($pending, $keys);
     }
@@ -565,9 +578,11 @@ final readonly class Verifier
             $this->refuse($pending->intent, Refusal::UserNotVerified);
         }
 
+        // The key is known before the ceremony, so its user handle is given: signing passkeys aren't
+        // discoverable, and browsers leave the user handle out of their answers.
         $options = PublicKeyCredentialRequestOptions::create($pending->intent->challenge(), $this->config->relyingPartyId, [], PublicKeyCredentialRequestOptions::USER_VERIFICATION_REQUIREMENT_REQUIRED);
         try {
-            $record = AuthenticatorAssertionResponseValidator::create($this->steps()->requestCeremony())->check(self::credentialRecord($key), $response, $options, $this->config->relyingPartyId, null);
+            $record = AuthenticatorAssertionResponseValidator::create($this->steps()->requestCeremony())->check(self::credentialRecord($key), $response, $options, $this->config->relyingPartyId, $key->userHandle);
         } catch (\Throwable $exception) {
             $this->refuse($pending->intent, Refusal::InvalidSignature, $exception);
         }
@@ -664,7 +679,8 @@ final readonly class Verifier
     private function newKey(VerifierState $state, Intent $intent): Key
     {
         $key = Key::fromParameters($intent->parameters, new \DateTimeImmutable('@'.$this->clock->now()->getTimestamp()));
-        $coming = array_map(static fn (KeyChange $change): string => $change->key->id(), array_filter($state->keyChanges, static fn (KeyChange $change): bool => KeyChange::ADD === $change->kind));
+        // A key being removed is there still; one being added, not yet.
+        $coming = array_map(static fn (KeyChange $change): string => $change->key->id(), $state->keyChanges);
 
         return null === $key || isset($state->keys[$key->id()]) || \in_array($key->id(), $coming, true) ? $this->refuse($intent, Refusal::InvalidKey) : $key;
     }
