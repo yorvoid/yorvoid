@@ -117,6 +117,22 @@ final readonly class DbalSessionStore implements SessionStore
         );
     }
 
+    public function endCurrent(Realm $realm, PrincipalId $principalId, \DateTimeImmutable $now, SessionEndReason $reason, ?SessionId $except = null): array
+    {
+        $sessions = [];
+
+        // One statement, however many there are; PostgreSQL and SQLite return what they changed.
+        foreach ($this->database->connection->iterateAssociative(
+            \sprintf('UPDATE %s SET ended_at = ?, end_reason = ? WHERE realm = ? AND principal_id = ? AND ended_at IS NULL AND expires_at > ? AND idle_expires_at > ?%s RETURNING %s', $this->database->table(self::TABLE), null === $except ? '' : ' AND id <> ?', self::COLUMNS),
+            [$now, $reason->value, $realm->name, $principalId->uuid->toRfc4122(), $now, $now, ...(null === $except ? [] : [$except->uuid->toRfc4122()])],
+            [0 => Types::DATETIMETZ_IMMUTABLE, 4 => Types::DATETIMETZ_IMMUTABLE, 5 => Types::DATETIMETZ_IMMUTABLE],
+        ) as $row) {
+            $sessions[] = $this->session($row);
+        }
+
+        return $sessions;
+    }
+
     public function end(Realm $realm, SessionId $id, \DateTimeImmutable $endedAt, SessionEndReason $reason): bool
     {
         return 1 === $this->database->connection->executeStatement(

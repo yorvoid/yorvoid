@@ -499,8 +499,9 @@ final class SessionsTest extends DatabaseTestCase
         $ended = $sessions->get(new Realm('acme'), $started->session->id);
         self::assertSame(SessionEndReason::PrincipalDeactivated, $ended?->endReason);
         $entries = iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false);
-        self::assertSame(['yorvoid.principal.create', 'yorvoid.session.start', 'yorvoid.session.end', 'yorvoid.principal.suspend'], array_map(static fn ($entry): string => $entry->action, $entries));
+        self::assertSame(['yorvoid.principal.create', 'yorvoid.session.start', 'yorvoid.session.end_all', 'yorvoid.principal.suspend'], array_map(static fn ($entry): string => $entry->action, $entries));
         self::assertEquals($actor, $entries[2]->actor);
+        self::assertSame(['principal', (string) $principal->id, ['count' => 1, 'reason' => 'principal_deactivated']], [$entries[2]->subjectType, $entries[2]->subjectId, $entries[2]->details]);
 
         // Deleting a suspended principal has no sessions left to end.
         $this->principals->delete(new DeletePrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Web));
