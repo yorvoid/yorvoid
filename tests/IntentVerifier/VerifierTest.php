@@ -7,6 +7,7 @@ namespace YorvoID\Tests\IntentVerifier;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
+use YorvoID\IntentVerifier\CollectingNotifier;
 use YorvoID\IntentVerifier\ConfigurationError;
 use YorvoID\IntentVerifier\IntentRefused;
 use YorvoID\IntentVerifier\Key;
@@ -19,6 +20,8 @@ use YorvoID\IntentVerifier\Storage\InMemoryVerifierLog;
 use YorvoID\IntentVerifier\Storage\InMemoryVerifierStore;
 use YorvoID\IntentVerifier\Verifier;
 use YorvoID\IntentVerifier\VerifierConfig;
+use YorvoID\IntentVerifier\VerifierNotice;
+use YorvoID\IntentVerifier\VerifierNotifier;
 use YorvoID\IntentVerifier\VerifierStore;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
@@ -30,6 +33,8 @@ final class VerifierTest extends TestCase
     private MockClock $clock;
 
     private InMemoryVerifierLog $log;
+
+    private CollectingNotifier $notifier;
 
     private VerifierStore $store;
 
@@ -288,6 +293,64 @@ final class VerifierTest extends TestCase
      * one prepared before a rotation is signed by whichever key the verifier has when it's signed; a
      * removed key's signature is refused, even on an intent prepared while that key was there.
      */
+    /**
+     * The owners hear of every operation verified and every change to the keys from the verifier itself,
+     * through its notifier: not from the console.
+     */
+    public function testTellsItsNotifierOfEveryOperationAndKeyChange(): void
+    {
+        $verifier = $this->verifier('memory');
+        $secret = $verifier->createBootstrapSecret();
+        $bootstrap = $verifier->prepareBootstrap(self::keyOf($this->owner, 0));
+        $verifier->bootstrap($secret, $bootstrap->intent->nonce, $this->owner->signIn($bootstrap->options));
+        $laptop = $this->owner->create();
+        $addition = $verifier->prepare(OperationPolicy::ADD_KEY, self::keyOf($this->owner, $laptop, 'Laptop'));
+        $added = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $verified = $verifier->verify($prepared->intent->nonce, $this->owner->signIn($prepared->options));
+        $removal = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $added->id()]);
+        $verifier->removeKey($removal->intent->nonce, $this->owner->signIn($removal->options));
+
+        self::assertSame(
+            [[VerifierNotice::BOOTSTRAP_SECRET_CREATED, null, null], [VerifierNotice::BOOTSTRAPPED, OperationPolicy::ADD_KEY, $verifier->keys()[0]->id()], [VerifierNotice::KEY_ADDED, OperationPolicy::ADD_KEY, $added->id()], [VerifierNotice::VERIFIED, 'acme.site.remove', $verifier->keys()[0]->id()], [VerifierNotice::KEY_REMOVED, OperationPolicy::REMOVE_KEY, $added->id()]],
+            array_map(static fn (VerifierNotice $notice): array => [$notice->event, $notice->intent?->action, $notice->key?->id()], $this->notifier->notices),
+        );
+        self::assertSame(['site' => 'jane'], $this->notifier->notices[3]->intent?->parameters);
+        self::assertEquals($this->clock->now(), $this->notifier->notices[3]->at);
+
+        // A refusal isn't notified: nothing ran.
+        $wrong = $verifier->prepare('acme.site.remove', ['site' => 'joe']);
+        $this->refused(Refusal::InvalidSignature, static fn () => $verifier->verify($wrong->intent->nonce, '{}'));
+        self::assertCount(5, $this->notifier->notices);
+    }
+
+    /**
+     * A notice that can't be sent stops the operation: verify() throws, so the operation doesn't run
+     * unannounced. The nonce is used up all the same.
+     */
+    public function testAnOperationWhoseNoticeCantBeSentDoesntRun(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $answer = $this->owner->signIn($prepared->options);
+        $failing = new class implements VerifierNotifier {
+            public function notify(VerifierNotice $notice): void
+            {
+                throw new \RuntimeException('The mail queue is down.');
+            }
+        };
+        $silent = new Verifier(self::config(), self::policy(), $this->store, $this->log, $failing, $this->clock);
+
+        try {
+            $silent->verify($prepared->intent->nonce, $answer);
+            self::fail('An operation was verified without its notice.');
+        } catch (\RuntimeException $exception) {
+            self::assertSame('The mail queue is down.', $exception->getMessage());
+        }
+
+        $this->refused(Refusal::UnknownIntent, static fn () => $verifier->verify($prepared->intent->nonce, $answer));
+    }
+
     #[DataProvider('stores')]
     public function testIntentsInFlightOutliveARotationOfTheVerifiersKeys(string $store): void
     {
@@ -329,7 +392,7 @@ final class VerifierTest extends TestCase
         $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
         $answer = $this->owner->signIn($prepared->options);
 
-        $restarted = new Verifier(self::config(), self::policy(), new FileVerifierStore($this->files[0]), $this->log, $this->clock);
+        $restarted = new Verifier(self::config(), self::policy(), new FileVerifierStore($this->files[0]), $this->log, $this->notifier, $this->clock);
         self::assertEquals($verifier->keys(), $restarted->keys());
         $restarted->verify($prepared->intent->nonce, $answer);
         $this->refused(Refusal::UnknownIntent, static fn () => $verifier->verify($prepared->intent->nonce, $answer), 'A nonce worked again in another process.');
@@ -358,7 +421,9 @@ final class VerifierTest extends TestCase
             $this->store = new InMemoryVerifierStore();
         }
 
-        return new Verifier(self::config(), self::policy(), $this->store, $this->log, $this->clock);
+        $this->notifier = new CollectingNotifier();
+
+        return new Verifier(self::config(), self::policy(), $this->store, $this->log, $this->notifier, $this->clock);
     }
 
     private function bootstrapped(string $store): Verifier

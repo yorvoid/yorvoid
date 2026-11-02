@@ -36,6 +36,9 @@ use Webauthn\TrustPath\EmptyTrustPath;
  * with a signature, never the last one. The first key comes with the bootstrap secret, signed by
  * itself; a new secret is the host's way back in when every key is lost (INT-005, 006, 016).
  *
+ * Every operation verified and every change to its keys goes to its notifier, for the owners, through
+ * a channel the console doesn't control (INT-012).
+ *
  * It trusts nothing the console says: it needs no framework, no database, and none of YorvoID's other
  * packages (INT-007).
  *
@@ -50,6 +53,7 @@ final readonly class Verifier
         private OperationPolicy $policy,
         private VerifierStore $store,
         private VerifierLog $log,
+        private VerifierNotifier $notifier,
         private ClockInterface $clock = new SystemClock(),
     ) {
         $this->serializer = new WebauthnSerializerFactory(new AttestationStatementSupportManager())->create();
@@ -93,13 +97,16 @@ final readonly class Verifier
      */
     public function verify(string $nonce, string $assertion): VerifiedIntent
     {
-        return $this->attempt(function (VerifierState $state) use ($nonce, $assertion): VerifiedIntent {
+        $verified = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): VerifiedIntent {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && !str_starts_with($pending->intent->action, 'yorvoid.verifier.'));
             $verified = $this->check($state, $pending, $state->keys, $assertion);
             $this->record('verified', $verified);
 
             return $verified;
         });
+        $this->notifier->notify(new VerifierNotice(VerifierNotice::VERIFIED, $verified->intent, $verified->key, $verified->verifiedAt));
+
+        return $verified;
     }
 
     /**
@@ -109,15 +116,18 @@ final readonly class Verifier
      */
     public function addKey(string $nonce, string $assertion): Key
     {
-        return $this->attempt(function (VerifierState $state) use ($nonce, $assertion): Key {
+        [$key, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && OperationPolicy::ADD_KEY === $pending->intent->action);
             $key = $this->newKey($state, $pending->intent);
             $verified = $this->check($state, $pending, $state->keys, $assertion);
             $state->keys[$key->id()] = $key;
             $this->record('key_added', $verified, ['added' => $key->id(), 'algorithm' => $key->algorithm]);
 
-            return $key;
+            return [$key, $verified->intent];
         });
+        $this->notifier->notify(new VerifierNotice(VerifierNotice::KEY_ADDED, $intent, $key, $this->clock->now()));
+
+        return $key;
     }
 
     /**
@@ -130,7 +140,7 @@ final readonly class Verifier
      */
     public function removeKey(string $nonce, string $assertion): Key
     {
-        return $this->attempt(function (VerifierState $state) use ($nonce, $assertion): Key {
+        [$key, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => OperationPolicy::REMOVE_KEY === $pending->intent->action);
             $verified = $this->check($state, $pending, $state->keys, $assertion);
             $removed = $pending->intent->parameters['credential_id'];
@@ -143,8 +153,11 @@ final readonly class Verifier
             unset($state->keys[$key->id()]);
             $this->record('key_removed', $verified, ['removed' => $key->id()]);
 
-            return $key;
+            return [$key, $verified->intent];
         });
+        $this->notifier->notify(new VerifierNotice(VerifierNotice::KEY_REMOVED, $intent, $key, $this->clock->now()));
+
+        return $key;
     }
 
     /**
@@ -162,6 +175,7 @@ final readonly class Verifier
             $state->bootstrapSecretHash = hash('sha256', $secret);
             $this->log->record('bootstrap_secret_created', ['keys' => \count($state->keys)], $this->clock->now());
         });
+        $this->notifier->notify(new VerifierNotice(VerifierNotice::BOOTSTRAP_SECRET_CREATED, null, null, $this->clock->now()));
 
         return $secret;
     }
@@ -174,7 +188,7 @@ final readonly class Verifier
      */
     public function bootstrap(#[\SensitiveParameter] string $secret, string $nonce, string $assertion): Key
     {
-        return $this->attempt(function (VerifierState $state) use ($secret, $nonce, $assertion): Key {
+        $verified = $this->attempt(function (VerifierState $state) use ($secret, $nonce, $assertion): VerifiedIntent {
             $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => $pending->bootstrap);
 
             if (null === $state->bootstrapSecretHash || !hash_equals($state->bootstrapSecretHash, hash('sha256', $secret))) {
@@ -187,8 +201,11 @@ final readonly class Verifier
             $state->bootstrapSecretHash = null;
             $this->record('bootstrapped', $verified, ['added' => $key->id(), 'algorithm' => $key->algorithm]);
 
-            return $verified->key;
+            return $verified;
         });
+        $this->notifier->notify(new VerifierNotice(VerifierNotice::BOOTSTRAPPED, $verified->intent, $verified->key, $verified->verifiedAt));
+
+        return $verified->key;
     }
 
     /**
@@ -224,7 +241,7 @@ final readonly class Verifier
      * Runs the work in a store transaction that's saved even when the work refuses: a refused attempt
      * still uses its nonce up. Then throws the refusal, if any.
      *
-     * @template T of object
+     * @template T
      *
      * @param \Closure(VerifierState): T $work
      *
@@ -232,9 +249,9 @@ final readonly class Verifier
      *
      * @throws IntentRefused
      */
-    private function attempt(\Closure $work): object
+    private function attempt(\Closure $work): mixed
     {
-        $result = $this->store->transaction(static function (VerifierState $state) use ($work): object {
+        $result = $this->store->transaction(static function (VerifierState $state) use ($work): mixed {
             try {
                 return $work($state);
             } catch (IntentRefused $refusal) {
