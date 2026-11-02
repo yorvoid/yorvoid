@@ -4,12 +4,9 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
-use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Session\InactivePrincipal;
 use YorvoID\Core\Principal\IdentifierKind;
-use YorvoID\Core\Principal\Principals;
-use YorvoID\Core\Secret;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
 use YorvoID\Flows\Input;
@@ -32,8 +29,6 @@ final readonly class RecoveryCodeStep implements Step
 
     public function __construct(
         private RecoveryCodes $codes,
-        private Principals $principals,
-        private Attempts $attempts,
     ) {
     }
 
@@ -59,17 +54,8 @@ final readonly class RecoveryCodeStep implements Step
 
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult
     {
-        $email = $input->string('email');
-        $code = $input->string('code') ?? '';
-        $principal = null === $email ? null : $this->principals->findByIdentifier($state->realm, IdentifierKind::Email, $email);
-
-        // Attempts on accounts that don't exist count too, against the address's limit.
-        if (null === $principal) {
-            $this->attempts->count('recovery_code', $state->realm, null, $context->address);
-        }
-
         try {
-            $started = null === $principal || '' === $code ? null : $this->codes->redeem($state->realm, $principal->id, Secret::fromString($code), $context->origin, $context->device, $context->address, $context->deviceCookie);
+            $started = $this->codes->recover($state->realm, IdentifierKind::Email, $input->string('email') ?? '', $input->string('code') ?? '', $context->origin, $context->device, $context->address, $context->deviceCookie);
         } catch (InactivePrincipal) {
             return StepResult::refused(new Problem(Refusal::PrincipalInactive->messageId()));
         }

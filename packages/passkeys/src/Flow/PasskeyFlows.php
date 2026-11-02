@@ -6,7 +6,6 @@ namespace YorvoID\Passkeys\Flow;
 
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
-use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryLinks;
@@ -63,7 +62,6 @@ final readonly class PasskeyFlows
         private RecoveryCodes $recoveryCodes,
         private RecoveryLinks $recoveryLinks,
         private StepUp $stepUp,
-        private Attempts $attempts,
         private Duration $window,
         private ClockInterface $clock = new NativeClock(),
     ) {
@@ -84,7 +82,7 @@ final readonly class PasskeyFlows
             new Flow(self::SIGN_IN, [new PasskeySignInStep($this->passkeys)], [PasskeySignInStep::NAME]),
             new Flow(self::SETUP, [new SetupCodeStep($this->setupCodes, $this->sessions, $this->clock), $passkey, $codes], [SetupCodeStep::NAME, PasskeyRegistrationStep::NAME]),
             new Flow(self::INVITATION, [new InvitationStep($this->invitations, $this->principals, $this->sessions, $this->clock), $passkey, $codes], [InvitationStep::NAME]),
-            new Flow(self::RECOVER_WITH_CODE, [new RecoveryCodeStep($this->recoveryCodes, $this->principals, $this->attempts), $later, $codes], [RecoveryCodeStep::NAME]),
+            new Flow(self::RECOVER_WITH_CODE, [new RecoveryCodeStep($this->recoveryCodes), $later, $codes], [RecoveryCodeStep::NAME]),
             new Flow(self::RECOVER_WITH_LINK, [new RecoveryLinkStep($this->recoveryLinks), $later, $codes], [RecoveryLinkStep::NAME]),
             new Flow(self::ADD_PASSKEY, [new StepUpStep($this->passkeys, $this->stepUp, $this->window, 'yorvoid.credential.add'), $passkey], [PasskeyRegistrationStep::NAME]),
             new Flow(self::STEP_UP, [new StepUpStep($this->passkeys, $this->stepUp, $this->window)], [StepUpStep::NAME]),

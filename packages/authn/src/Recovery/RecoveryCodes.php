@@ -31,9 +31,14 @@ use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Id\IdGenerator;
+use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Principal\IdentifierKind;
+use YorvoID\Core\Principal\InvalidIdentifier;
 use YorvoID\Core\Principal\PrincipalId;
+use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Transactions;
@@ -53,12 +58,16 @@ use YorvoID\Throttle\Throttled;
  *   access, starts the cool-down, and starts a new session. Each use is recorded and announced with
  *   RecoveryCodeUsed, for a notification.
  * - Attempts are counted per account and address, per account and per address (see Attempts).
+ * - recover() finds the account from what the person typed, and answers, counts and works the same
+ *   whether there's no such account, it has no codes, or the code is wrong.
  *
  * @api
  */
 final readonly class RecoveryCodes
 {
     public const string GENERATE = 'yorvoid.recovery_codes.generate';
+
+    public const string USE = 'yorvoid.recovery_code.use';
 
     private const int LENGTH = 24;
 
@@ -73,9 +82,11 @@ final readonly class RecoveryCodes
         private Attempts $attempts,
         private SecurityLog $log,
         private Transactions $transactions,
+        private Principals $principals,
         private EventDispatcherInterface $events = new NoEventListeners(),
         private ClockInterface $clock = new NativeClock(),
         private int $count = 10,
+        private IdGenerator $ids = new UuidV7Generator(),
     ) {
         if ($count < 1 || $count > 100) {
             throw new IntegratorError(\sprintf('A set of %d recovery codes is out of range.', $count), 'Use between 1 and 100; 10 is usual.', 'concepts/recovery-codes.md#configuration');
@@ -130,9 +141,55 @@ final readonly class RecoveryCodes
     }
 
     /**
+     * Recovers an account with one of its codes, finding it from what the person typed, e.g. their email
+     * address: ends all of its sessions, and starts one. Use this for anything a person enters.
+     *
+     * The answer, the attempts counted and the work done are the same whether there's no such account, it
+     * has no codes, or the code is wrong; attempts are counted for the identifier typed, not the account.
+     *
+     * @param string      $identifier   As typed; one that isn't valid for its kind matches no account
+     * @param string      $code         As typed; case, hyphens and spaces don't matter
+     * @param string|null $device       As for StartSession
+     * @param string|null $address      As for StartSession; pass it, so attempts from one address are limited
+     * @param Secret|null $deviceCookie The device cookie the browser sent, if any; the session's result says which to set
+     *
+     * @return StartedSession|null The new session; null if there's no such account or the code doesn't work
+     *
+     * @throws InactivePrincipal When the account isn't active and the code is right; the code still works afterwards
+     * @throws Throttled         When there were too many attempts; nothing was checked
+     */
+    public function recover(Realm $realm, IdentifierKind $kind, string $identifier, #[\SensitiveParameter] string $code, Origin $origin, ?string $device = null, ?string $address = null, #[\SensitiveParameter] ?Secret $deviceCookie = null): ?StartedSession
+    {
+        try {
+            $account = \sprintf('%s:%s', $kind->value, $kind->normalize($identifier));
+        } catch (InvalidIdentifier) {
+            $account = null;
+        }
+
+        $this->attempts->count('recovery_code', $realm, $account, $address);
+        $principalId = null === $account ? null : $this->principals->findByIdentifier($realm, $kind, $identifier)?->id;
+
+        if (null === $principalId) {
+            // An account that doesn't exist is looked up and checked like one without codes, under an ID
+            // nothing has.
+            $principalId = new PrincipalId($this->ids->next());
+            $this->principals->get($realm, $principalId);
+        }
+
+        $started = $this->check($realm, $principalId, self::hash($code), $origin, $device, $address, $deviceCookie);
+
+        if (null !== $started) {
+            \assert(null !== $account, 'Only an account that exists has codes.');
+            $this->attempts->succeeded('recovery_code', $realm, $account, $address);
+        }
+
+        return $started;
+    }
+
+    /**
      * Recovers the principal's account with one of its codes: ends all of its sessions, and starts one.
-     * Find the principal from what the person entered (e.g. their email address) and answer the same,
-     * whether there's no such principal or the code is wrong.
+     * When the person types who they are, use recover() instead, which answers the same for accounts that
+     * don't exist.
      *
      * @param string|null $device       As for StartSession
      * @param string|null $address      As for StartSession; pass it, so attempts from one address are limited
@@ -146,33 +203,7 @@ final readonly class RecoveryCodes
     public function redeem(Realm $realm, PrincipalId $principalId, #[\SensitiveParameter] Secret $code, Origin $origin, ?string $device = null, ?string $address = null, #[\SensitiveParameter] ?Secret $deviceCookie = null): ?StartedSession
     {
         $this->attempts->count('recovery_code', $realm, $principalId, $address);
-
-        $started = $this->transactions->run(function () use ($realm, $principalId, $code, $origin, $device, $address, $deviceCookie): ?StartedSession {
-            $credential = $this->credential($realm, $principalId);
-
-            if (null === $credential || !$credential->isActive()) {
-                return null;
-            }
-
-            if (!$this->store->use($realm, $principalId, self::hash($code->reveal()))) {
-                $this->record($credential, Outcome::Failed, $origin);
-
-                return null;
-            }
-
-            $remaining = $this->store->count($realm, $principalId);
-            $this->credentials->markUsed($credential);
-            $this->record($credential, Outcome::Success, $origin, ['remaining' => $remaining]);
-            $this->sessions->endAll(new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $principalId);
-            $this->stepUp->startCoolDown($realm, $principalId, $origin);
-            $started = $this->sessions->start(new StartSession($realm, $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now())), $device, $address, $deviceCookie), $origin);
-
-            $this->transactions->afterCommit(function () use ($realm, $principalId, $remaining, $origin): void {
-                $this->events->dispatch(new RecoveryCodeUsed($realm, $principalId, $remaining, $origin));
-            });
-
-            return $started;
-        });
+        $started = $this->check($realm, $principalId, self::hash($code->reveal()), $origin, $device, $address, $deviceCookie);
 
         if (null !== $started) {
             $this->attempts->succeeded('recovery_code', $realm, $principalId, $address);
@@ -189,6 +220,45 @@ final readonly class RecoveryCodes
         return null === $this->credential($realm, $principalId) ? 0 : $this->store->count($realm, $principalId);
     }
 
+    /**
+     * Uses the code if it's one of the principal's, in the same statements whether the principal has no
+     * codes or the code is wrong: a refusal is recorded either way.
+     */
+    private function check(Realm $realm, PrincipalId $principalId, string $hash, Origin $origin, ?string $device, ?string $address, ?Secret $deviceCookie): ?StartedSession
+    {
+        return $this->transactions->run(function () use ($realm, $principalId, $hash, $origin, $device, $address, $deviceCookie): ?StartedSession {
+            $credential = $this->credential($realm, $principalId);
+            $usable = null !== $credential && $credential->isActive();
+
+            if (!$usable) {
+                // No codes to use, or a disabled set, which keeps its codes: a read instead of the use.
+                $this->store->count($realm, $principalId);
+                $this->log->record($realm, self::USE, Outcome::Failed, $origin);
+
+                return null;
+            }
+
+            if (!$this->store->use($realm, $principalId, $hash)) {
+                $this->log->record($realm, self::USE, Outcome::Failed, $origin, null, 'credential', (string) $credential->id, ['principal' => (string) $principalId]);
+
+                return null;
+            }
+
+            $remaining = $this->store->count($realm, $principalId);
+            $this->credentials->markUsed($credential);
+            $this->log->record($realm, self::USE, Outcome::Success, $origin, $principalId, 'credential', (string) $credential->id, ['principal' => (string) $principalId, 'remaining' => $remaining]);
+            $this->sessions->endAll(new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $principalId);
+            $this->stepUp->startCoolDown($realm, $principalId, $origin);
+            $started = $this->sessions->start(new StartSession($realm, $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now())), $device, $address, $deviceCookie), $origin);
+
+            $this->transactions->afterCommit(function () use ($realm, $principalId, $remaining, $origin): void {
+                $this->events->dispatch(new RecoveryCodeUsed($realm, $principalId, $remaining, $origin));
+            });
+
+            return $started;
+        });
+    }
+
     private function credential(Realm $realm, PrincipalId $principalId): ?Credential
     {
         foreach ($this->credentials->of($realm, $principalId) as $credential) {
@@ -198,14 +268,6 @@ final readonly class RecoveryCodes
         }
 
         return null;
-    }
-
-    /**
-     * @param array<string, int> $details
-     */
-    private function record(Credential $credential, Outcome $outcome, Origin $origin, array $details = []): void
-    {
-        $this->log->record($credential->realm, 'yorvoid.recovery_code.use', $outcome, $origin, Outcome::Success === $outcome ? $credential->principalId : null, 'credential', (string) $credential->id, ['principal' => (string) $credential->principalId, ...$details]);
     }
 
     private static function hash(#[\SensitiveParameter] string $code): string

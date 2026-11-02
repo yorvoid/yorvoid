@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Support;
 use Doctrine\DBAL\Configuration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Logging\Middleware as LoggingMiddleware;
 use Doctrine\DBAL\Tools\DsnParser;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
@@ -88,7 +89,7 @@ abstract class DatabaseTestCase extends TestCase
     /**
      * YorvoID's stores on one implementation, migrated and ready.
      */
-    protected function stack(string $implementation): Stack
+    protected function stack(string $implementation, ?StatementLog $statements = null): Stack
     {
         if ('memory' === $implementation) {
             $transactions = new InMemoryTransactions();
@@ -121,7 +122,7 @@ abstract class DatabaseTestCase extends TestCase
         }
 
         $middleware = new TransactionMiddleware();
-        $database = new Database($this->connect($implementation, $middleware), new StorageLocation(StorageLocation::DEFAULT_PREFIX, 'postgresql' === $implementation ? $this->locations[$implementation] : null));
+        $database = new Database($this->connect($implementation, $middleware, $statements), new StorageLocation(StorageLocation::DEFAULT_PREFIX, 'postgresql' === $implementation ? $this->locations[$implementation] : null));
         new Migrator($database, [...CoreMigrations::all(), ...AuthnMigrations::all(), ...PasskeysMigrations::all(), ...ThrottleMigrations::all()])->migrate();
 
         return new Stack($implementation, new DbalTransactions($database->connection, $middleware), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), $database);
@@ -163,13 +164,10 @@ abstract class DatabaseTestCase extends TestCase
     /**
      * Another connection to the same database, as a second process would have.
      */
-    protected function connect(string $platform, ?TransactionMiddleware $middleware = null): Connection
+    protected function connect(string $platform, ?TransactionMiddleware $middleware = null, ?StatementLog $statements = null): Connection
     {
         $configuration = new Configuration();
-
-        if (null !== $middleware) {
-            $configuration->setMiddlewares([$middleware]);
-        }
+        $configuration->setMiddlewares(array_values(array_filter([$middleware, null === $statements ? null : new LoggingMiddleware($statements)])));
 
         $connection = match ($platform) {
             'sqlite' => DriverManager::getConnection(['driver' => 'pdo_sqlite', 'path' => $this->locations['sqlite'] ??= $this->sqliteFile()], $configuration),
