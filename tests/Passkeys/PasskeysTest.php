@@ -311,6 +311,7 @@ final class PasskeysTest extends DatabaseTestCase
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
         $this->refused(Refusal::UnknownPasskey, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $stranger->signIn($signIn->options), new Origin(OriginKind::Web)));
 
+        $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove'), new Origin(OriginKind::Web));
         $this->credentials->remove(new RemoveCredential(new Realm('acme'), $credentials[0]->id), $session, new Origin(OriginKind::Web));
         self::assertCount(2, $passkeys->of(new Realm('acme'), $session->principalId), 'The removed passkey\'s key was kept.');
         $signIn = $passkeys->beginSignIn(new Realm('acme'));

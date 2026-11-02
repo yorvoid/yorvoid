@@ -85,7 +85,11 @@ final class DoctorChecksTest extends DatabaseTestCase
 
     public function testNotificationsNeedAnAddressAndATransportThatDelivers(): void
     {
-        self::assertSame([], iterator_to_array(new MailerCheck(false, null, null, false)->findings(), false));
+        // Off: fine while developing, a warning in production.
+        self::assertSame([], iterator_to_array(new MailerCheck(false, null, null, true)->findings(), false));
+        $off = iterator_to_array(new MailerCheck(false, null, null, false)->findings(), false);
+        self::assertSame(['Notifications are off: nobody hears about recoveries, new passkeys or new devices, so a taken-over account goes unnoticed.'], array_map(static fn (Finding $finding): string => $finding->what, $off));
+        self::assertFalse($off[0]->problem);
 
         $findings = iterator_to_array(new MailerCheck(true, 'security at example', null, true)->findings(), false);
 
@@ -120,6 +124,7 @@ final class DoctorChecksTest extends DatabaseTestCase
         ], $this->whats(new PresetCheck('regulated', $weaker)));
 
         self::assertSame(['step_up.cool_down is none, weaker than the "agent_platform" preset\'s 1d.'], $this->whats(new PresetCheck('agent_platform', ['step_up.cool_down' => null] + Presets::ALL['agent_platform'])));
+        self::assertSame(['step_up.cool_down is none, weaker than the "consumer_site" preset\'s 1d.'], $this->whats(new PresetCheck('consumer_site', ['step_up.cool_down' => null] + Presets::ALL['consumer_site'])), 'The default preset doesn\'t mind a recovery without a wait.');
         // Idle time alone makes a session preset weaker.
         self::assertSame(['sessions.preset is "console", weaker than the "regulated" preset\'s "aal3".'], $this->whats(new PresetCheck('regulated', ['sessions.preset' => 'console'] + Presets::ALL['regulated'])));
         self::assertSame([], $this->whats(new PresetCheck('consumer_site', ['sessions.preset' => 'aal3'] + Presets::ALL['consumer_site'])));

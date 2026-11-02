@@ -21,7 +21,7 @@ foreach ($codes as $code) {
 - A set has 10 codes by default. Each is 120 random bits, written as 24 characters of Crockford's base 32 in groups of four. Only their SHA-256 hashes are kept: above 112 bits, a fast hash is enough (OWASP ASVS 6.5.2), since no one can try them all.
 - The set is one entry in the [credential registry](credentials.md), "Recovery codes". It doesn't count as a way to sign in, so it never stands in for the last passkey.
 - Generating a new set replaces the old one: the old codes stop working.
-- The first set needs a recent proof of identity, as adding any credential does. A new set needs one too, for `yorvoid.recovery_codes.generate`, and waits out the [cool-down after a recovery](step-up.md#the-cool-down-after-a-recovery): it would make the owner's saved codes useless.
+- The first set needs a recent proof of identity, as adding any credential does. A new set needs a phishing-resistant one, such as a passkey's, for `yorvoid.recovery_codes.generate`, and waits out the [cool-down after a recovery](step-up.md#the-cool-down-after-a-recovery): it would make the owner's saved codes useless.
 - `RecoveryCodesGenerated` follows the commit, for a notification.
 
 `remaining($realm, $principalId)` says how many are left; suggest a new set when few are.

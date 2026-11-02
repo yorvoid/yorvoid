@@ -124,10 +124,33 @@ final class CredentialsTest extends DatabaseTestCase
             $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $session, new Origin(OriginKind::Web));
             self::fail('A session that proved nothing recently removed a passkey.');
         } catch (StepUpRequired $exception) {
-            self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), operation: 'yorvoid.credential.remove', heldAfterRecovery: true), $exception->requirement);
+            self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), phishingResistant: true, operation: 'yorvoid.credential.remove', heldAfterRecovery: true), $exception->requirement);
         }
 
         self::assertCount(2, $credentials->of(new Realm('acme'), $session->principalId));
+    }
+
+    #[DataProvider('implementations')]
+    public function testAProofThatCanBePhishedAddsButDoesntRemove(string $implementation): void
+    {
+        $credentials = $this->credentials($implementation);
+        $owner = $this->session();
+        $phone = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $owner, new Origin(OriginKind::Web));
+        // Someone in with one of the owner's recovery codes, a moment ago.
+        $recovered = $this->sessions->start(new StartSession(new Realm('acme'), $owner->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
+
+        $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $recovered, new Origin(OriginKind::Web));
+
+        try {
+            $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $recovered, new Origin(OriginKind::Web));
+            self::fail('A recovery code\'s proof removed a passkey.');
+        } catch (StepUpRequired $exception) {
+            self::assertTrue($exception->requirement->phishingResistant);
+        }
+
+        self::assertCount(2, $credentials->of(new Realm('acme'), $owner->principalId));
+        $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $owner, new Origin(OriginKind::Web));
+        self::assertCount(1, $credentials->of(new Realm('acme'), $owner->principalId), 'A passkey\'s proof didn\'t remove one.');
     }
 
     public function testTheWindowIsConfigurable(): void

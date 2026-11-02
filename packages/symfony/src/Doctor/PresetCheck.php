@@ -56,15 +56,13 @@ final readonly class PresetCheck implements Check
                 yield $this->weaker('step_up.window', (string) $window, $preset['step_up.window']);
             }
 
-            if (null !== $preset['step_up.cool_down']) {
-                $coolDown = $this->settings['step_up.cool_down'];
-                $presetCoolDown = Duration::parse($preset['step_up.cool_down']);
+            // Every preset waits after a recovery: none is weaker.
+            $presetCoolDown = Duration::parse($preset['step_up.cool_down']);
 
-                if (null === $coolDown) {
-                    yield $this->weaker('step_up.cool_down', 'none', (string) $presetCoolDown);
-                } elseif ($presetCoolDown->isLongerThan($this->duration('step_up.cool_down'))) {
-                    yield $this->weaker('step_up.cool_down', (string) $this->duration('step_up.cool_down'), (string) $presetCoolDown);
-                }
+            if (null === $this->settings['step_up.cool_down']) {
+                yield $this->weaker('step_up.cool_down', 'none', (string) $presetCoolDown);
+            } elseif ($presetCoolDown->isLongerThan($this->duration('step_up.cool_down'))) {
+                yield $this->weaker('step_up.cool_down', (string) $this->duration('step_up.cool_down'), (string) $presetCoolDown);
             }
 
             foreach (['limits.per_account_and_address', 'limits.per_account', 'limits.per_address'] as $name) {

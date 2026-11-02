@@ -199,7 +199,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
             $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
             self::fail('A session that proved nothing recently replaced the recovery codes.');
         } catch (StepUpRequired $exception) {
-            self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), operation: RecoveryCodes::GENERATE, heldAfterRecovery: true), $exception->requirement);
+            self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), phishingResistant: true, operation: RecoveryCodes::GENERATE, heldAfterRecovery: true), $exception->requirement);
         }
 
         $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, RecoveryCodes::GENERATE), new Origin(OriginKind::Web));
@@ -383,6 +383,24 @@ final class RecoveryCodesTest extends DatabaseTestCase
         for ($i = 0; $i < 20; ++$i) {
             self::assertNull($codes->recover(new Realm('acme'), IdentifierKind::Email, 0 === $i % 2 ? 'not an email' : '', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.1'));
         }
+    }
+
+    #[DataProvider('implementations')]
+    public function testACodesProofDoesntReplaceTheCodes(string $implementation): void
+    {
+        $codes = $this->codes($implementation);
+        $session = $this->session();
+        $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+        $recovered = $this->sessions->start(new StartSession(new Realm('acme'), $session->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
+
+        try {
+            $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $recovered, new Origin(OriginKind::Web));
+            self::fail('A recovery code\'s proof replaced the codes.');
+        } catch (StepUpRequired $exception) {
+            self::assertTrue($exception->requirement->phishingResistant);
+        }
+
+        self::assertSame(10, $codes->remaining(new Realm('acme'), $session->principalId));
     }
 
     public function testTheSizeOfASetIsConfigurable(): void
