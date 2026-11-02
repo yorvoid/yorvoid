@@ -53,6 +53,13 @@ interface SessionStore
     public function end(Realm $realm, SessionId $id, \DateTimeImmutable $endedAt, SessionEndReason $reason): bool;
 
     /**
+     * Ends all of a principal's current sessions but one, if given, in one go.
+     *
+     * @return list<Session> The sessions it ended, ended
+     */
+    public function endCurrent(Realm $realm, PrincipalId $principalId, \DateTimeImmutable $now, SessionEndReason $reason, ?SessionId $except = null): array;
+
+    /**
      * Removes the sessions that ended or expired before the moment, in every realm.
      *
      * @return int How many

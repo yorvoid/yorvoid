@@ -130,6 +130,40 @@ final class SessionStoreTest extends DatabaseTestCase
     }
 
     #[DataProvider('implementations')]
+    public function testEndsAPrincipalsCurrentSessionsButOneInOneGo(string $implementation): void
+    {
+        $store = $this->stack($implementation)->sessions;
+        $ana = new PrincipalId(new UuidV7());
+        $now = new \DateTimeImmutable('2026-10-27 19:00:00 UTC');
+        $kept = self::session(new Realm('acme'), $ana);
+        $current = [self::session(new Realm('acme'), $ana, '2026-10-27 18:50:00'), self::session(new Realm('acme'), $ana, '2026-10-27 18:45:00')];
+        $others = [
+            self::session(new Realm('acme'), $ana, idleExpires: '2026-10-27 19:00:00'),
+            self::session(new Realm('globex'), $ana),
+            self::session(new Realm('acme'), new PrincipalId(new UuidV7())),
+        ];
+
+        foreach ([$kept, ...$current, ...$others] as $i => $session) {
+            $store->add($session, self::hash((string) $i));
+        }
+
+        $ended = $store->endCurrent(new Realm('acme'), $ana, $now, SessionEndReason::Recovered, $kept->id);
+
+        usort($ended, static fn (Session $a, Session $b): int => $b->lastSeenAt <=> $a->lastSeenAt);
+        self::assertSame([(string) $current[0]->id, (string) $current[1]->id], array_map(static fn (Session $session): string => (string) $session->id, $ended));
+        self::assertEquals([[$now, SessionEndReason::Recovered], [$now, SessionEndReason::Recovered]], array_map(static fn (Session $session): array => [$session->endedAt, $session->endReason], $ended));
+        self::assertEquals($current[0]->authentication, $ended[0]->authentication, 'An ended session came back changed.');
+        self::assertSame([(string) $kept->id], array_map(static fn (Session $session): string => (string) $session->id, $store->current(new Realm('acme'), $ana, $now)));
+
+        foreach ($others as $other) {
+            self::assertNull($store->get($other->realm, $other->id)?->endedAt, 'A session that wasn\'t current, the principal\'s, or in the realm was ended.');
+        }
+
+        self::assertSame([], $store->endCurrent(new Realm('acme'), $ana, $now, SessionEndReason::Recovered, $kept->id), 'Ended sessions were ended again.');
+        self::assertCount(1, $store->endCurrent(new Realm('acme'), $ana, $now, SessionEndReason::Recovered));
+    }
+
+    #[DataProvider('implementations')]
     public function testSteppingUpReplacesTheAuthenticationAndTheToken(string $implementation): void
     {
         $store = $this->stack($implementation)->sessions;

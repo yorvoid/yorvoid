@@ -103,6 +103,20 @@ final class InMemorySessionStore implements SessionStore, InMemoryStore
         }
     }
 
+    public function endCurrent(Realm $realm, PrincipalId $principalId, \DateTimeImmutable $now, SessionEndReason $reason, ?SessionId $except = null): array
+    {
+        $ended = [];
+
+        foreach ($this->current($realm, $principalId, $now) as $session) {
+            if (null === $except || !$session->id->equals($except)) {
+                $this->end($realm, $session->id, $now, $reason);
+                $ended[] = $this->get($realm, $session->id) ?? $session;
+            }
+        }
+
+        return $ended;
+    }
+
     public function end(Realm $realm, SessionId $id, \DateTimeImmutable $endedAt, SessionEndReason $reason): bool
     {
         $session = $this->get($realm, $id);

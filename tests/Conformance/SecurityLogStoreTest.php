@@ -11,8 +11,10 @@ use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
+use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Stack;
 
@@ -89,6 +91,16 @@ final class SecurityLogStoreTest extends DatabaseTestCase
         self::assertSame([1, 2, 3, 4, 5], array_map(static fn (LogEntry $entry): int => $entry->sequence, iterator_to_array($stack->log->entries($realm, 1), false)));
         self::assertSame([4, 5], array_map(static fn (LogEntry $entry): int => $entry->sequence, iterator_to_array($stack->log->entries($realm, 4), false)));
         self::assertSame([], iterator_to_array($stack->log->entries($realm, 6), false));
+
+        if ('memory' !== $implementation) {
+            // Read in batches of two: across their edges, and when the last one is full.
+            $database = $stack->database;
+            \assert($database instanceof Database);
+            $batched = new DbalSecurityLogStore($database, 2);
+            self::assertSame([1, 2, 3, 4, 5], array_map(static fn (LogEntry $entry): int => $entry->sequence, iterator_to_array($batched->entries($realm, 1), false)));
+            self::assertSame([2, 3, 4, 5], array_map(static fn (LogEntry $entry): int => $entry->sequence, iterator_to_array($batched->entries($realm, 2), false)));
+            self::assertEquals(iterator_to_array($stack->log->entries($realm, 1), false), iterator_to_array($batched->entries($realm, \PHP_INT_MIN), false));
+        }
     }
 
     #[DataProvider('implementations')]

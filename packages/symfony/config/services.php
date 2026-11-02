@@ -10,6 +10,7 @@ use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
+use YorvoID\Authn\Credential\ForgetCredentialsOfDeletedPrincipals;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Notification\NotMe;
@@ -180,6 +181,7 @@ return static function (ContainerConfigurator $container): void {
 
     // Listeners of YorvoID's events, through Symfony's dispatcher.
     $services->set(EndSessionsOfInactivePrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
+    $services->set(ForgetCredentialsOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
     $services->set(RemovePasskeyWithCredential::class)->tag('kernel.event_listener', ['event' => CredentialRemoving::class]);
 
     // Security: the user, the request's YorvoID session, the authenticators, the endpoints.

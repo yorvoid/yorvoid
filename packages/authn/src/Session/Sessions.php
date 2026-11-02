@@ -252,15 +252,24 @@ final readonly class Sessions
     public function endAll(EndSessions $command, Origin $origin, ?PrincipalId $actor = null): int
     {
         return $this->transactions->run(function () use ($command, $origin, $actor): int {
-            $ended = 0;
+            $ended = $this->store->endCurrent($command->realm, $command->principalId, Time::stored($this->clock->now()), $command->reason, $command->except);
 
-            foreach ($this->store->current($command->realm, $command->principalId, $this->clock->now()) as $session) {
-                if ((null === $command->except || !$session->id->equals($command->except)) && $this->endOne($session, $command->reason, $origin, $actor)) {
-                    ++$ended;
-                }
+            if ([] !== $ended) {
+                // One entry for them all, recorded last: the realm's log lock is taken at the end, however
+                // many sessions there were, and held only until the commit.
+                $this->log->record($command->realm, 'yorvoid.session.end_all', Outcome::Success, $origin, $actor, 'principal', (string) $command->principalId, [
+                    'count' => \count($ended),
+                    'reason' => $command->reason->value,
+                ]);
+
+                $this->transactions->afterCommit(function () use ($ended, $origin, $actor): void {
+                    foreach ($ended as $session) {
+                        $this->events->dispatch(new SessionEnded($session, $origin, $actor));
+                    }
+                });
             }
 
-            return $ended;
+            return \count($ended);
         });
     }
 
