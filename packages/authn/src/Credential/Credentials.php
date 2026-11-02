@@ -68,13 +68,15 @@ final readonly class Credentials
      *
      * @param string $operation         E.g. "yorvoid.credential.add"
      * @param bool   $heldAfterRecovery Whether the operation waits out a recovery's cool-down
+     * @param bool   $phishingResistant Whether the proof must be phishing-resistant, e.g. a passkey: for what
+     *                                  takes the owner's way back in away, which a stolen code mustn't do
      *
      * @throws StepUpRequired    When the session is ended, or its principal didn't prove who they are recently
      * @throws HeldAfterRecovery
      */
-    public function requireStepUp(Session $session, string $operation, bool $heldAfterRecovery = false): void
+    public function requireStepUp(Session $session, string $operation, bool $heldAfterRecovery = false, bool $phishingResistant = false): void
     {
-        $this->stepUp->require($session, new AuthenticationRequirement($this->reauthenticationWindow, operation: $operation, heldAfterRecovery: $heldAfterRecovery));
+        $this->stepUp->require($session, new AuthenticationRequirement($this->reauthenticationWindow, phishingResistant: $phishingResistant, operation: $operation, heldAfterRecovery: $heldAfterRecovery));
     }
 
     /**
@@ -113,7 +115,7 @@ final readonly class Credentials
     {
         $this->transactions->run(function () use ($command, $session, $origin): void {
             $credential = $this->own($command->realm, $command->credentialId, $session);
-            $this->requireStepUp($session, 'yorvoid.credential.remove', heldAfterRecovery: true);
+            $this->requireStepUp($session, 'yorvoid.credential.remove', heldAfterRecovery: true, phishingResistant: true);
 
             $this->events->dispatch(new CredentialRemoving($credential, $origin));
             $this->store->remove($credential->realm, $credential->id);

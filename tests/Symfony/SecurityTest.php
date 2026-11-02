@@ -284,7 +284,11 @@ final class SecurityTest extends TestCase
 
         $principals = $this->container->get(Principals::class);
         \assert($principals instanceof Principals);
-        $codeAgain = $codes->generate(new GenerateRecoveryCodes(Realm::default()), $this->session($ana), new Origin(OriginKind::Web))[0];
+        $clock = $this->container->get(\Psr\Clock\ClockInterface::class);
+        \assert($clock instanceof \Symfony\Component\Clock\MockClock);
+        $clock->sleep(86400);
+        // After the recovery's cool-down, replacing the codes takes a passkey's proof.
+        $codeAgain = $codes->generate(new GenerateRecoveryCodes(Realm::default()), $this->session($ana, AuthenticationMethod::Passkey), new Origin(OriginKind::Web))[0];
         $principals->suspend(new SuspendPrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
         self::assertSame(['error' => 'This account can\'t sign in.'], $this->post('/yorvoid/recover/code', ['email' => 'ana@example.com', 'code' => $codeAgain->reveal()]));
         self::assertSame(401, $this->statusCode());
@@ -464,12 +468,14 @@ final class SecurityTest extends TestCase
         return $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: $email, emailVerified: true), new Origin(OriginKind::Console));
     }
 
-    private function session(Principal $principal): Session
+    private function session(Principal $principal, AuthenticationMethod $method = AuthenticationMethod::SetupCode): Session
     {
         $sessions = $this->container->get(Sessions::class);
-        \assert($sessions instanceof Sessions);
+        $clock = $this->container->get(\Psr\Clock\ClockInterface::class);
+        \assert($sessions instanceof Sessions && $clock instanceof \Psr\Clock\ClockInterface);
+        $passkey = AuthenticationMethod::Passkey === $method;
 
-        return $sessions->start(new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, new \DateTimeImmutable()))), new Origin(OriginKind::Web))->session;
+        return $sessions->start(new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor($method, $clock->now(), $passkey, $passkey))), new Origin(OriginKind::Web))->session;
     }
 
     private function passkey(Principal $principal): VirtualAuthenticator

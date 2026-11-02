@@ -5,8 +5,10 @@ Some operations need more than a signed-in session: removing a passkey, replacin
 ```php
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 
-$stepUp->require($session, new AuthenticationRequirement(Duration::minutes(5), operation: 'acme.site.remove'));
+$stepUp->require($session, new AuthenticationRequirement(Duration::minutes(5), phishingResistant: true, operation: 'acme.site.remove'));
 ```
+
+Ask for `phishingResistant: true` (a passkey) before anything that can't be undone or that takes the owner's way in away. Without it, a session that signed in with a recovery code, a setup code or a link a few minutes ago meets the requirement, and a code is something people print, photograph and lose.
 
 ## Requirements
 
@@ -24,7 +26,7 @@ A proof from **signing in** counts for any operation. A proof from a **step-up**
 
 `require()` reads the session as it is now, so a step-up in another request counts at once. An ended or expired session never meets a requirement.
 
-The [credential registry](credentials.md) asks for a proof within 5 minutes before adding (`yorvoid.credential.add`) or removing (`yorvoid.credential.remove`) a credential, and [recovery codes](recovery-codes.md) before replacing a set.
+The [credential registry](credentials.md) asks for a proof within 5 minutes before adding (`yorvoid.credential.add`) or removing (`yorvoid.credential.remove`) a credential, and [recovery codes](recovery-codes.md) before replacing a set. Removing and replacing ask for a phishing-resistant one: someone in with a recovery code can add a passkey, but needs a passkey's proof to take the owner's away.
 
 ## Stepping up
 
@@ -53,8 +55,9 @@ Someone who recovers an account that isn't theirs (with stolen recovery codes, o
 $stepUp = new StepUp($sessions, $coolDownStore, $log, coolDown: Duration::hours(24));
 ```
 
-- It's off unless configured.
+- It's off unless configured in `StepUp`. The [Symfony bundle's presets](symfony.md#presets) all set one: 24 hours.
 - [Recovery codes](recovery-codes.md) and [recovery links](recovery-links.md) start it; the security log records it.
 - Removing a credential and replacing recovery codes wait it out. Adding one doesn't: someone who lost their passkeys recovers to add a new one.
+- The owner can't remove a passkey an attacker added during the cool-down either. The "This wasn't me" link in the [notification](notifications.md) disables it at once, and ends the attacker's sessions.
 - A held operation throws `HeldAfterRecovery` with the moment it's possible again. Stepping up doesn't help; tell the person when.
 - `coolDownEndsAt()` tells whether a principal is cooling down, e.g. to show it on their security page. Purge ended cool-downs daily with `$stepUp->purge()`.

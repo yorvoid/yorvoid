@@ -113,8 +113,9 @@ final readonly class RecoveryCodes
             if (null === $credential) {
                 $credential = $this->credentials->add(new AddCredential($session->realm, CredentialKind::RecoveryCodes, ''), $session, $origin);
             } else {
-                // A new set makes the owner's saved codes useless: it waits out a recovery's cool-down.
-                $this->credentials->requireStepUp($session, self::GENERATE, heldAfterRecovery: true);
+                // A new set makes the owner's saved codes useless: it waits out a recovery's cool-down, and
+                // needs a passkey's proof, not a code's.
+                $this->credentials->requireStepUp($session, self::GENERATE, heldAfterRecovery: true, phishingResistant: true);
             }
 
             $codes = [];

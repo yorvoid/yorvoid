@@ -57,7 +57,7 @@ yorvoid:
 ```
 
 - **The relying party ID** is the domain passkeys belong to: they work on it and its subdomains, nowhere else. In production it's your site's domain, e.g. `example.com`, with `https://example.com` as the origin.
-- **Notifications** email people about new sign-ins and passkeys. They need Symfony Mailer; turn them on once it's set up ([notifications](../concepts/notifications.md)).
+- **Notifications** email people about recoveries, new sign-ins and passkeys. They need Symfony Mailer, so they're off here, for the quickstart only. Turn them on before anyone relies on the site ([notifications](../concepts/notifications.md)): without them, nobody hears that someone else recovered their account. `yorvoid:doctor` warns about it outside development.
 
 ## 5. Sign in through your firewall
 

@@ -120,7 +120,8 @@ final class BundleTest extends TestCase
 
         self::assertSame('1000/15m', $this->boot(['preset' => 'internal_tool'], fresh: true)->getParameter('yorvoid.limits.per_address'));
         $default = $this->boot(fresh: true);
-        self::assertSame(['consumer_site', '5m', null], [$default->getParameter('yorvoid.preset'), $default->getParameter('yorvoid.step_up.window'), $default->getParameter('yorvoid.step_up.cool_down')]);
+        self::assertSame(['consumer_site', '5m', '24h'], [$default->getParameter('yorvoid.preset'), $default->getParameter('yorvoid.step_up.window'), $default->getParameter('yorvoid.step_up.cool_down')]);
+        self::assertSame('24h', $this->boot(['preset' => 'internal_tool'], fresh: true)->getParameter('yorvoid.step_up.cool_down'), 'Every preset waits after a recovery.');
     }
 
     public function testNotificationsOffNeedNoSettings(): void

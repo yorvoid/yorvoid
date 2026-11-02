@@ -20,6 +20,7 @@ $credentials->remove(new RemoveCredential($realm, $credentialId, endOtherSession
 Packages add credentials as part of their own flow, e.g. [registering a passkey](passkeys.md).
 
 - **Adding or removing needs a recent proof of identity:** the session must have signed in, or [stepped up](step-up.md) for the change, within the last 5 minutes (configurable). Otherwise `StepUpRequired` names what to prove. A session taken over hours ago can't add the attacker's passkey or remove the owner's. Packages call `requireStepUp($session, 'yorvoid.credential.add')` before starting a ceremony.
+- **Removing needs a phishing-resistant proof**, e.g. a passkey: a session that signed in with a recovery code can add a passkey, but not remove the owner's.
 - **Removing waits out the [cool-down after a recovery](step-up.md#the-cool-down-after-a-recovery)**, if one is configured (`HeldAfterRecovery`). Adding doesn't.
 - **The last way to sign in can't be removed** (`LastCredential`). Passkeys and passwords sign in; recovery codes and authenticator apps don't count, and neither do disabled credentials.
 - Removing can **end the principal's other sessions** (`endOtherSessions`), e.g. because the passkey was on a lost phone. The session that asked stays.

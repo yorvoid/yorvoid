@@ -22,24 +22,26 @@ final class Presets
      * The settings each preset gives, as dotted names under "yorvoid:".
      */
     public const array ALL = [
-        // A public site: AAL2 sessions, the limits sized for people signing in from anywhere.
+        // A public site: AAL2 sessions, the limits sized for people signing in from anywhere, and a day's
+        // wait after a recovery before the account's credentials change.
         'consumer_site' => [
             'sessions.preset' => 'aal2',
             'sessions.recognise_devices' => true,
             'passkeys.user_verification' => 'required',
             'step_up.window' => '5m',
-            'step_up.cool_down' => null,
+            'step_up.cool_down' => '24h',
             'limits.per_account_and_address' => '10/15m',
             'limits.per_account' => '100/1h',
             'limits.per_address' => '300/15m',
         ],
-        // Staff in an office: working-day sessions, and many people behind one address.
+        // Staff in an office: working-day sessions, many people behind one address, and the same wait
+        // after a recovery.
         'internal_tool' => [
             'sessions.preset' => 'console',
             'sessions.recognise_devices' => true,
             'passkeys.user_verification' => 'required',
             'step_up.window' => '5m',
-            'step_up.cool_down' => null,
+            'step_up.cool_down' => '24h',
             'limits.per_account_and_address' => '10/15m',
             'limits.per_account' => '100/1h',
             'limits.per_address' => '1000/15m',

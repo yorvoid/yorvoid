@@ -30,6 +30,10 @@ final readonly class MailerCheck implements Check
     public function findings(): iterable
     {
         if (!$this->notifications) {
+            if (!$this->debug) {
+                yield Finding::warning('Notifications are off: nobody hears about recoveries, new passkeys or new devices, so a taken-over account goes unnoticed.', 'Turn them on with notifications.enabled: true, and configure Symfony Mailer.', 'concepts/notifications.md#configuration');
+            }
+
             return;
         }
 

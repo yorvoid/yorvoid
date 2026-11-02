@@ -89,14 +89,14 @@ A preset is a documented starting point for a kind of application (PLT-090). It 
 | `sessions.recognise_devices` | `true` | `true` | `true` | `true` |
 | `passkeys.user_verification` | `required` | `required` | `required` | `required` |
 | `step_up.window` | `5m` | `5m` | `2m` | `5m` |
-| `step_up.cool_down` | none | none | `24h` | `24h` |
+| `step_up.cool_down` | `24h` | `24h` | `24h` | `24h` |
 | `limits.per_account_and_address` | `10/15m` | `10/15m` | `5/15m` | `10/15m` |
 | `limits.per_account` | `100/1h` | `100/1h` | `50/1h` | `100/1h` |
 | `limits.per_address` | `300/15m` | `1000/15m` (an office behind one address) | `300/15m` | `300/15m` |
 
-- **consumer_site:** a public site; AAL2 sessions.
-- **internal_tool:** staff signing in for a working day, many of them from one address.
-- **regulated:** AAL3 session limits, fresher proofs for changing sign-in methods, a day's cool-down after an account recovery, tighter limits. Quorum intents and strict audit join it when YorvoID has them.
+- **consumer_site:** a public site; AAL2 sessions, and a day's [cool-down](step-up.md#the-cool-down-after-a-recovery) after an account recovery before credentials change.
+- **internal_tool:** staff signing in for a working day, many of them from one address; the same cool-down.
+- **regulated:** AAL3 session limits, fresher proofs for changing sign-in methods, tighter limits. Quorum intents and strict audit join it when YorvoID has them.
 - **agent_platform:** people delegating to agents: a taken-over account hands over its agents too, so a recovery waits a day before sensitive operations. Delegation limits join it when YorvoID has agents.
 
 ## What the bundle wires
@@ -303,7 +303,7 @@ It answers only in debug mode, wherever it's imported.
 | Assurance level | The configuration reaches the level its `sessions.preset` targets ([assurance levels](../security/assurance-levels.md)): passkeys require user verification, sessions last no longer than the level allows, and no AAL3 with synced passkeys. |
 | Preset | Your settings are no weaker than your [preset's](#presets): session preset, device recognition, step-up window and cool-down, limits. |
 | Cookies | The PHP session is on, its cookie is `Secure` (or `auto`), `HttpOnly` and `SameSite=Lax` or `Strict`, and the device cookie has the `__Host-` prefix. |
-| Mailer | With notifications on: the sender is an email address, and outside development the default transport delivers (not `null://`, not Symfony's `smtp://null`). It sends nothing. |
+| Mailer | With notifications on: the sender is an email address, and outside development the default transport delivers (not `null://`, not Symfony's `smtp://null`). With them off, outside development: a warning, since nobody would hear about a recovery. It sends nothing. |
 | Flow pages | The pages have what each step needs (as `yorvoid:templates:lint`), and the templates you published kept up with YorvoID's (as `yorvoid:templates:diff`). |
 
 A **problem** breaks something: sign-in, emails, the pages. The command then fails, so a deployment can stop on it. A **warning** works, but less safely than it could, or than the configuration says; `--strict` fails on warnings too.
