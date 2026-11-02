@@ -190,6 +190,31 @@ final readonly class Credentials
     }
 
     /**
+     * Removes every credential of a principal that is deleted, with no session or step-up: for
+     * ForgetCredentialsOfDeletedPrincipals. Each is announced with CredentialRemoving first, so the
+     * packages that keep their secrets remove them in the same transaction; one log entry says how many.
+     *
+     * @return int How many
+     */
+    public function forgetAllOf(Realm $realm, PrincipalId $principalId, Origin $origin, ?PrincipalId $actor = null): int
+    {
+        return $this->transactions->run(function () use ($realm, $principalId, $origin, $actor): int {
+            $credentials = $this->store->of($realm, $principalId);
+
+            foreach ($credentials as $credential) {
+                $this->events->dispatch(new CredentialRemoving($credential, $origin));
+                $this->store->remove($realm, $credential->id);
+            }
+
+            if ([] !== $credentials) {
+                $this->log->record($realm, 'yorvoid.credential.forget_all', Outcome::Success, $origin, $actor, 'principal', (string) $principalId, ['count' => \count($credentials)]);
+            }
+
+            return \count($credentials);
+        });
+    }
+
+    /**
      * A principal's credentials, the oldest first: for "your sign-in methods".
      *
      * @return list<Credential>

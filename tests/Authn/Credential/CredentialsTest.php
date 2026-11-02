@@ -15,6 +15,7 @@ use YorvoID\Authn\Credential\CredentialStatus;
 use YorvoID\Authn\Credential\Event\CredentialAdded;
 use YorvoID\Authn\Credential\Event\CredentialRemoved;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
+use YorvoID\Authn\Credential\ForgetCredentialsOfDeletedPrincipals;
 use YorvoID\Authn\Credential\LastCredential;
 use YorvoID\Authn\Credential\RemoveCredential;
 use YorvoID\Authn\Credential\RenameCredential;
@@ -40,8 +41,11 @@ use YorvoID\Core\Log\Event\SecurityLogEntryRecorded;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\DeletePrincipal;
+use YorvoID\Core\Principal\Event\PrincipalStatusChanging;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
+use YorvoID\Core\Principal\SuspendPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
@@ -151,6 +155,36 @@ final class CredentialsTest extends DatabaseTestCase
         self::assertCount(2, $credentials->of(new Realm('acme'), $owner->principalId));
         $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $owner, new Origin(OriginKind::Web));
         self::assertCount(1, $credentials->of(new Realm('acme'), $owner->principalId), 'A passkey\'s proof didn\'t remove one.');
+    }
+
+    #[DataProvider('implementations')]
+    public function testADeletedPrincipalsCredentialsAndCodesAreForgotten(string $implementation): void
+    {
+        $credentials = $this->credentials($implementation);
+        $session = $this->session();
+        $other = $this->session();
+        $phone = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
+        $codes = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::RecoveryCodes, ''), $session, new Origin(OriginKind::Web));
+        $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $other, new Origin(OriginKind::Web));
+        $this->stack->recoveryCodes->replace(new Realm('acme'), $session->principalId, [hash('sha256', 'a')], $this->clock->now());
+        $this->events->listen(PrincipalStatusChanging::class, new ForgetCredentialsOfDeletedPrincipals($credentials, $this->stack->recoveryCodes, $this->clock)(...));
+        $principals = new Principals($this->stack->principals, $this->stack->identifiers, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, events: $this->events, clock: $this->clock);
+
+        $principals->suspend(new SuspendPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
+        self::assertCount(2, $credentials->of(new Realm('acme'), $session->principalId), 'Suspending forgot credentials.');
+        $this->events->dispatched = [];
+
+        $principals->delete(new DeletePrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
+
+        self::assertSame([], $credentials->of(new Realm('acme'), $session->principalId));
+        self::assertSame(0, $this->stack->recoveryCodes->count(new Realm('acme'), $session->principalId));
+        self::assertCount(1, $credentials->of(new Realm('acme'), $other->principalId), 'Someone else\'s credential went.');
+        self::assertEquals([$phone, $codes], array_map(static fn (CredentialRemoving $event): Credential => $event->credential, $this->events->of(CredentialRemoving::class)), 'The packages weren\'t told, to remove what they keep.');
+        $entries = iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false);
+        $forgot = array_values(array_filter($entries, static fn ($entry): bool => 'yorvoid.credential.forget_all' === $entry->action));
+        self::assertSame([['principal', (string) $session->principalId, ['count' => 2]]], array_map(static fn ($entry): array => [$entry->subjectType, $entry->subjectId, $entry->details], $forgot));
+        self::assertSame(0, $credentials->forgetAllOf(new Realm('acme'), $session->principalId, new Origin(OriginKind::Console)));
+        self::assertCount(1, array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn ($entry): bool => 'yorvoid.credential.forget_all' === $entry->action), 'Nothing forgotten was recorded.');
     }
 
     public function testTheWindowIsConfigurable(): void

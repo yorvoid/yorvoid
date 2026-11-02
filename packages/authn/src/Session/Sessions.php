@@ -254,22 +254,20 @@ final readonly class Sessions
         return $this->transactions->run(function () use ($command, $origin, $actor): int {
             $ended = $this->store->endCurrent($command->realm, $command->principalId, Time::stored($this->clock->now()), $command->reason, $command->except);
 
-            if ([] === $ended) {
-                return 0;
+            if ([] !== $ended) {
+                // One entry for them all, recorded last: the realm's log lock is taken at the end, however
+                // many sessions there were, and held only until the commit.
+                $this->log->record($command->realm, 'yorvoid.session.end_all', Outcome::Success, $origin, $actor, 'principal', (string) $command->principalId, [
+                    'count' => \count($ended),
+                    'reason' => $command->reason->value,
+                ]);
+
+                $this->transactions->afterCommit(function () use ($ended, $origin, $actor): void {
+                    foreach ($ended as $session) {
+                        $this->events->dispatch(new SessionEnded($session, $origin, $actor));
+                    }
+                });
             }
-
-            // One entry for them all, recorded last: the realm's log lock is taken at the end, however many
-            // sessions there were, and held only until the commit.
-            $this->log->record($command->realm, 'yorvoid.session.end_all', Outcome::Success, $origin, $actor, 'principal', (string) $command->principalId, [
-                'count' => \count($ended),
-                'reason' => $command->reason->value,
-            ]);
-
-            $this->transactions->afterCommit(function () use ($ended, $origin, $actor): void {
-                foreach ($ended as $session) {
-                    $this->events->dispatch(new SessionEnded($session, $origin, $actor));
-                }
-            });
 
             return \count($ended);
         });

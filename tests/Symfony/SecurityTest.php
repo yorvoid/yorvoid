@@ -210,6 +210,29 @@ final class SecurityTest extends TestCase
         self::assertNull($this->browser->getRequest()->getSession()->get('yorvoid_session'), 'The ended session\'s token stayed.');
     }
 
+    public function testADeletedPrincipalLeavesNoWayToSignIn(): void
+    {
+        $this->boot();
+        $ana = $this->principal();
+        $this->signIn($ana);
+        $codes = $this->container->get(RecoveryCodes::class);
+        $principals = $this->container->get(Principals::class);
+        $credentials = $this->container->get(\YorvoID\Authn\Credential\Credentials::class);
+        $passkeys = $this->container->get(Passkeys::class);
+        \assert($codes instanceof RecoveryCodes && $principals instanceof Principals && $credentials instanceof \YorvoID\Authn\Credential\Credentials && $passkeys instanceof Passkeys);
+        $codes->generate(new GenerateRecoveryCodes(Realm::default()), $this->session($ana), new Origin(OriginKind::Web));
+        self::assertCount(2, $credentials->of(Realm::default(), $ana->id));
+        self::assertCount(1, $passkeys->of(Realm::default(), $ana->id));
+
+        $principals->delete(new \YorvoID\Core\Principal\DeletePrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
+
+        self::assertSame([], $credentials->of(Realm::default(), $ana->id));
+        self::assertSame([], $passkeys->of(Realm::default(), $ana->id), 'A deleted principal\'s public key stayed.');
+        $store = $this->container->get(\YorvoID\Authn\Recovery\RecoveryCodeStore::class);
+        \assert($store instanceof \YorvoID\Authn\Recovery\RecoveryCodeStore);
+        self::assertSame(0, $store->count(Realm::default(), $ana->id), 'A deleted principal\'s recovery codes stayed.');
+    }
+
     public function testASuspendedPrincipalIsSignedOut(): void
     {
         $this->boot();

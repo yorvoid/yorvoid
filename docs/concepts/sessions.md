@@ -85,7 +85,7 @@ $sessions->endAll(new EndSessions($realm, $principalId, SessionEndReason::EndedB
 
 ### When a principal is suspended or deleted
 
-Register `EndSessionsOfInactivePrincipals` as a listener of `PrincipalStatusChanging`: a principal's sessions then end in the same transaction as its suspension or deletion, and lists are right at once. (Without it, those sessions are refused anyway.)
+Register `EndSessionsOfInactivePrincipals` as a listener of `PrincipalStatusChanging`: a principal's sessions then end in the same transaction as its suspension or deletion, and lists are right at once. (Without it, those sessions are refused anyway.) Register `ForgetCredentialsOfDeletedPrincipals` too: a deleted principal's credentials, passkeys and recovery codes then go with it. The Symfony bundle registers both.
 
 ## Recognising devices
 
