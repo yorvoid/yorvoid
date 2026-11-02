@@ -127,11 +127,13 @@ final readonly class RecoveryCodes
                 $hashes[] = self::hash($code);
             }
 
-            $this->store->replace($session->realm, $session->principalId, $hashes, Time::stored($this->clock->now()));
+            // Recording first takes the realm's log lock, so two new sets at once are made one after the
+            // other: the later replaces the earlier, and only one set works.
             $this->log->record($session->realm, self::GENERATE, Outcome::Success, $origin, $session->principalId, 'credential', (string) $credential->id, [
                 'count' => $this->count,
                 'principal' => (string) $session->principalId,
             ]);
+            $this->store->replace($session->realm, $session->principalId, $hashes, Time::stored($this->clock->now()));
 
             $this->transactions->afterCommit(function () use ($session, $origin): void {
                 $this->events->dispatch(new RecoveryCodesGenerated($session->realm, $session->principalId, $this->count, $origin));
