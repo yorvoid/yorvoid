@@ -77,6 +77,29 @@ final class SecurityLogStoreTest extends DatabaseTestCase
         self::assertSame($entry->hash, $read[0]->computeHash());
     }
 
+    /**
+     * What PostgreSQL can't hold as text, NUL, and a detail longer than its column, are recorded all the
+     * same, and the chain holds.
+     */
+    #[DataProvider('implementations')]
+    public function testKeepsNulsAndLongDetails(string $implementation): void
+    {
+        $stack = $this->stack($implementation);
+        $realm = Realm::default();
+        $origin = new Origin(OriginKind::Web, "/login\0".str_repeat('é', 300), 'req-1');
+
+        $entry = $stack->transactions->run(static fn (): LogEntry => $stack->log->append($realm, static fn (int $sequence, ?string $previous): LogEntry => LogEntry::create(
+            $realm, $sequence, new UuidV7(), new \DateTimeImmutable(), 'yorvoid.session.sign_in', Outcome::Denied,
+            $origin, null, 'identifier', "grace\0", ['typed' => "a\0b", "k\0" => ["\0"]], $previous ?? 'genesis',
+        )));
+
+        self::assertSame([255, "/login\u{FFFD}".str_repeat('é', 248)], [mb_strlen((string) $origin->detail), $origin->detail]);
+        self::assertSame(["grace\u{FFFD}", ['k'."\u{FFFD}" => ["\u{FFFD}"], 'typed' => "a\u{FFFD}b"]], [$entry->subjectId, $entry->details]);
+        $read = iterator_to_array($stack->log->entries($realm, 1), false);
+        self::assertEquals([$entry], $read);
+        self::assertSame($entry->hash, $read[0]->computeHash());
+    }
+
     #[DataProvider('implementations')]
     public function testListsEntriesInOrderFromANumber(string $implementation): void
     {

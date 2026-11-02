@@ -33,8 +33,9 @@ final readonly class Origin
         ?string $detail = null,
         ?string $correlationId = null,
     ) {
-        // What ran can come from a request (a route, a path): it's recorded, so it's made valid UTF-8.
-        $this->detail = null === $detail ? null : Text::utf8($detail);
+        // What ran can come from a request (a route, a path): it's recorded, so it's made valid UTF-8, and
+        // kept to the 255 characters the log has room for.
+        $this->detail = null === $detail ? null : mb_substr(Text::utf8($detail), 0, 255);
 
         $correlationId ??= bin2hex(random_bytes(16));
 

@@ -12,9 +12,10 @@ namespace YorvoID\Core;
 final class Text
 {
     /**
-     * The text as valid UTF-8: every invalid byte sequence replaced by U+FFFD, the same way on every
-     * system (unlike mb_scrub(), which depends on an ini setting). Recording attacker-controlled text
-     * must never fail, or an attacker could keep their attempts out of the security log.
+     * The text as valid UTF-8 that every database keeps: every invalid byte sequence replaced by U+FFFD,
+     * the same way on every system (unlike mb_scrub(), which depends on an ini setting), and so is every
+     * NUL, which PostgreSQL's text can't hold. Recording attacker-controlled text must never fail, or an
+     * attacker could keep their attempts out of the security log.
      */
     public static function utf8(string $text): string
     {
@@ -22,6 +23,6 @@ final class Text
         $scrubbed = json_decode((string) json_encode($text, \JSON_INVALID_UTF8_SUBSTITUTE));
         \assert(\is_string($scrubbed));
 
-        return $scrubbed;
+        return str_replace("\0", "\u{FFFD}", $scrubbed);
     }
 }

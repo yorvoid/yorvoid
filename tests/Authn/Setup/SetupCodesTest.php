@@ -214,6 +214,15 @@ final class SetupCodesTest extends DatabaseTestCase
         self::assertLessThan(430, max($counts));
     }
 
+    public function testACodeWorksAWeekAtMost(): void
+    {
+        self::assertTrue(new CreateSetupCode(new Realm('acme'), Duration::days(7))->lifetime->equals(Duration::days(7)));
+
+        $this->expectExceptionObject(new IntegratorError('A setup code for 8d works too long.', 'Give it at most 7 days: it claims the installation for whoever has it. 24 hours is usual.', 'concepts/setup-codes.md'));
+
+        new CreateSetupCode(new Realm('acme'), Duration::days(8));
+    }
+
     public function testCreatingACodeIsAnOperation(): void
     {
         self::assertNull(new OperationCatalogue([CreateSetupCode::class])->get('yorvoid.setup.create_code')->ability);
