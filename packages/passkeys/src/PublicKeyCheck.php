@@ -54,13 +54,15 @@ final class PublicKeyCheck
 
     private static function integer(mixed $value): ?int
     {
-        return \is_string($value) && 1 === preg_match('/^-?[0-9]{1,4}$/D', $value) ? (int) $value : null;
+        $integer = filter_var($value, \FILTER_VALIDATE_INT);
+
+        return false === $integer ? null : $integer;
     }
 
     private static function ec2(Ec2Key $key): bool
     {
-        // OpenSSL refuses a point that isn't on the curve.
-        return Ec2Key::CURVE_P256 === $key->curveId() && 32 === \strlen($key->x()) && 32 === \strlen($key->y()) && false !== openssl_pkey_get_public($key->asPEM());
+        // Ec2Key refuses coordinates of another length than the curve's, and OpenSSL a point off the curve.
+        return Ec2Key::CURVE_P256 === $key->curveId() && false !== openssl_pkey_get_public($key->asPEM());
     }
 
     private static function okp(OkpKey $key): bool
@@ -70,6 +72,6 @@ final class PublicKeyCheck
 
     private static function rsa(RsaKey $key): bool
     {
-        return \strlen(ltrim($key->n(), "\0")) >= 256 && "\x01\x00\x01" === ltrim($key->e(), "\0");
+        return \strlen(ltrim($key->n(), "\0")) >= 256 && "\x01\x00\x01" === $key->e();
     }
 }

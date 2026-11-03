@@ -39,6 +39,15 @@ final readonly class FileVerifierLog implements VerifierLog
     }
 
     /**
+     * Reads back from the last entry to the first recorded before $since; through the archive when the
+     * log was rotated since.
+     */
+    public function usedNonce(string $nonce, \DateTimeImmutable $since): bool
+    {
+        return LockedFile::run($this->path, 'The verifier\'s log', fn ($file): bool => self::mentions($file, \dirname($this->path), $nonce, $since->getTimestamp()));
+    }
+
+    /**
      * Moves every entry to the archive, which must not exist, and starts the log again with an entry
      * that names the archive and holds its last entry's hash: the chain goes on. Keep the archives: each
      * is checked on its own (isIntact()), and the link between them by that first entry.
@@ -110,6 +119,70 @@ final readonly class FileVerifierLog implements VerifierLog
         $entry = ['at' => $at->getTimestamp(), 'details' => (object) $details, 'event' => $event, 'previous' => $previous];
         LockedFile::expect(0 === fseek($file, 0, \SEEK_END), 'The verifier\'s log', $this->path);
         LockedFile::expect(fwrite($file, CanonicalJson::encode([...$entry, 'hash' => hash('sha256', CanonicalJson::encode($entry))])."\n"), 'The verifier\'s log', $this->path);
+    }
+
+    /**
+     * @param resource $file
+     */
+    private static function mentions($file, string $directory, string $nonce, int $since): bool
+    {
+        foreach (self::backwards($file) as $line) {
+            $entry = json_decode($line, true);
+
+            if (!\is_array($entry) || !\is_int($entry['at'] ?? null) || !\is_array($entry['details'] ?? null)) {
+                throw new StorageError('The verifier\'s log isn\'t what the verifier wrote.');
+            }
+
+            if ($entry['at'] < $since) {
+                return false;
+            }
+
+            if ('prepared' !== ($entry['event'] ?? null) && $nonce === ($entry['details']['nonce'] ?? null)) {
+                return true;
+            }
+
+            if (self::ROTATED === ($entry['event'] ?? null) && \is_string($entry['details']['archive'] ?? null)) {
+                $archive = $directory.'/'.basename($entry['details']['archive']);
+
+                return is_file($archive) && LockedFile::run($archive, 'The verifier\'s log archive', static fn ($older): bool => self::mentions($older, $directory, $nonce, $since));
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The file's lines, the last first, read from the end a block at a time.
+     *
+     * @param resource $file
+     *
+     * @return \Generator<string>
+     */
+    private static function backwards($file): \Generator
+    {
+        $stat = fstat($file);
+        \assert(false !== $stat);
+        $position = $stat['size'];
+        $rest = '';
+
+        while ($position > 0) {
+            $read = min(self::BLOCK, $position);
+            $position -= $read;
+            fseek($file, $position);
+            $lines = explode("\n", (string) fread($file, $read).$rest);
+            // The first may be the end of a line that begins in the block before.
+            $rest = array_shift($lines);
+
+            foreach (array_reverse($lines) as $line) {
+                if ('' !== $line) {
+                    yield $line;
+                }
+            }
+        }
+
+        if ('' !== $rest) {
+            yield $rest;
+        }
     }
 
     /**

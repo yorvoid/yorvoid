@@ -18,6 +18,7 @@ use Webauthn\AuthenticatorAttestationResponse;
 use Webauthn\AuthenticatorAttestationResponseValidator;
 use Webauthn\AuthenticatorSelectionCriteria;
 use Webauthn\CeremonyStep\CeremonyStepManagerFactory;
+use Webauthn\CollectedClientData;
 use Webauthn\CredentialRecord;
 use Webauthn\Denormalizer\WebauthnSerializerFactory;
 use Webauthn\PublicKeyCredential;
@@ -57,6 +58,12 @@ use Webauthn\TrustPath\EmptyTrustPath;
  */
 final readonly class Verifier
 {
+    /** How many intents and registrations may wait at once: each is read and written with the whole state */
+    public const int MAX_WAITING = 1000;
+
+    /** A nonce as begin() makes it: 18 random bytes, base64url */
+    private const string NONCE = '/^[A-Za-z0-9_-]{24}$/D';
+
     private SerializerInterface $serializer;
 
     public function __construct(
@@ -76,6 +83,7 @@ final readonly class Verifier
      * @param array<string, mixed> $parameters
      *
      * @throws ConfigurationError When the operation isn't listed, or its parameters aren't its own
+     * @throws IntentRefused      When MAX_WAITING intents and registrations wait already (Refusal::TooManyWaiting)
      */
     public function prepare(string $action, array $parameters): PreparedIntent
     {
@@ -99,16 +107,20 @@ final readonly class Verifier
      * @param string $label     What the owner calls it, e.g. "Ana's YubiKey"
      * @param bool   $bootstrap Whether it's added with the bootstrap secret, signing its own addition; otherwise one
      *                          of the verifier's keys signs it
+     *
+     * @throws ConfigurationError When the label is empty, longer than 64 characters, or has characters that can't be seen
+     * @throws IntentRefused      When MAX_WAITING intents and registrations wait already (Refusal::TooManyWaiting)
      */
     public function prepareRegistration(string $label, bool $bootstrap = false): PendingRegistration
     {
         $label = trim($label);
 
-        if ('' === $label || mb_strlen($label) > 64) {
-            throw new ConfigurationError('A key\'s label has 1 to 64 characters.');
+        if ('' === $label || mb_strlen($label) > 64 || !ParameterType::String->accepts($label)) {
+            throw new ConfigurationError('A key\'s label has 1 to 64 characters, all of them visible.');
         }
 
         return $this->transaction(function (VerifierState $state) use ($label, $bootstrap): PendingRegistration {
+            $this->makeRoom($state);
             $known = [...array_values($state->keys), ...array_map(static fn (KeyChange $change): Key => $change->key, array_values($state->keyChanges))];
             $options = PublicKeyCredentialCreationOptions::create(
                 PublicKeyCredentialRpEntity::create('', $this->config->relyingPartyId),
@@ -473,6 +485,7 @@ final readonly class Verifier
         $pending = new PendingIntent($intent, $bootstrap);
 
         $keys = $this->transaction(function (VerifierState $state) use ($pending): array {
+            $this->makeRoom($state);
             $state->pending[$pending->intent->nonce] = $pending;
             $this->log->record('prepared', ['action' => $pending->intent->action, 'nonce' => $pending->intent->nonce, 'bootstrap' => $pending->bootstrap], $this->clock->now());
 
@@ -480,6 +493,24 @@ final readonly class Verifier
         });
 
         return $this->ready($pending, $keys);
+    }
+
+    /**
+     * Forgets the intents and registrations that expired; refuses another when MAX_WAITING still wait.
+     *
+     * @throws IntentRefused
+     */
+    private function makeRoom(VerifierState $state): void
+    {
+        $now = $this->clock->now();
+        $state->pending = array_filter($state->pending, static fn (PendingIntent $pending): bool => $now < $pending->intent->expiresAt);
+        $state->registrations = array_filter($state->registrations, static fn (PendingRegistration $registration): bool => $now < $registration->expiresAt);
+
+        if (\count($state->pending) + \count($state->registrations) >= self::MAX_WAITING) {
+            $this->log->record('refused', ['reason' => Refusal::TooManyWaiting->value], $now);
+
+            throw new IntentRefused(Refusal::TooManyWaiting);
+        }
     }
 
     /**
@@ -529,8 +560,20 @@ final readonly class Verifier
      */
     private function take(VerifierState $state, string $nonce, \Closure $expected): PendingIntent
     {
+        // Not one the verifier made: recorded by a short hash, whatever its size or encoding (FUZZ-08).
+        if (1 !== preg_match(self::NONCE, $nonce)) {
+            $this->log->record('refused', ['nonce_hash' => substr(hash('sha256', $nonce), 0, 16), 'reason' => Refusal::UnknownIntent->value], $this->clock->now());
+
+            throw new IntentRefused(Refusal::UnknownIntent);
+        }
+
         $pending = $state->pending[$nonce] ?? null;
         unset($state->pending[$nonce]);
+
+        // The log has the nonce used already: the state was restored from an older copy (INTENTS-07).
+        if (null !== $pending && $this->log->usedNonce($nonce, $pending->intent->issuedAt)) {
+            $pending = null;
+        }
 
         if (null === $pending || $this->clock->now() >= $pending->intent->expiresAt) {
             $this->log->record('refused', ['nonce' => $nonce, 'reason' => Refusal::UnknownIntent->value], $this->clock->now());
@@ -563,7 +606,7 @@ final readonly class Verifier
 
         $response = $credential instanceof PublicKeyCredential ? $credential->response : null;
 
-        if (!$response instanceof AuthenticatorAssertionResponse) {
+        if (!$response instanceof AuthenticatorAssertionResponse || !$this->isOwnClientData($response->clientDataJSON, 'webauthn.get')) {
             $this->refuse($pending->intent, Refusal::InvalidSignature);
         }
 
@@ -643,7 +686,7 @@ final readonly class Verifier
 
         $response = $credential instanceof PublicKeyCredential ? $credential->response : null;
 
-        if (!$response instanceof AuthenticatorAttestationResponse) {
+        if (!$response instanceof AuthenticatorAttestationResponse || !$this->isOwnClientData($response->clientDataJSON, 'webauthn.create')) {
             throw new IntentRefused(Refusal::InvalidRegistration);
         }
 
@@ -660,6 +703,15 @@ final readonly class Verifier
         $key = Key::fromParameters(['credential_id' => Base64Url::encode($record->publicKeyCredentialId), 'public_key' => Base64Url::encode($record->credentialPublicKey), 'user_handle' => Base64Url::encode($record->userHandle), 'label' => $pending->label], new \DateTimeImmutable('@'.$this->clock->now()->getTimestamp()));
 
         return $key ?? throw new IntentRefused(Refusal::InvalidKey);
+    }
+
+    /**
+     * What the library leaves (INTENTS-08): the answer is for this kind of ceremony, not from a frame,
+     * and from one of the signing origins exactly as configured, byte for byte.
+     */
+    private function isOwnClientData(CollectedClientData $clientData, string $type): bool
+    {
+        return $type === $clientData->type && !$clientData->crossOrigin && null === $clientData->topOrigin && \in_array($clientData->origin, array_map(static fn (string $origin): string => rtrim($origin, '/'), $this->config->origins), true);
     }
 
     private function steps(): CeremonyStepManagerFactory

@@ -10,6 +10,7 @@ use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\PendingIntent;
 use YorvoID\IntentVerifier\Storage\FileVerifierLog;
 use YorvoID\IntentVerifier\Storage\FileVerifierStore;
+use YorvoID\IntentVerifier\Storage\InMemoryVerifierLog;
 use YorvoID\IntentVerifier\Storage\InMemoryVerifierStore;
 use YorvoID\IntentVerifier\Storage\StorageError;
 use YorvoID\IntentVerifier\VerifierState;
@@ -216,6 +217,68 @@ final class StorageTest extends TestCase
             \assert(\is_array($before) && \is_array($entry));
             self::assertSame($before['hash'], $entry['previous'], \sprintf('Entry %d doesn\'t hold the one before.', $i));
         }
+    }
+
+    /**
+     * Read back from the end, block by block, as far as the time asked for, and into the archive of a
+     * rotation since.
+     */
+    public function testTheLogTellsANonceUsedSinceATime(): void
+    {
+        $log = new FileVerifierLog($this->path);
+        $archive = $this->path.'-1.jsonl';
+
+        try {
+            $log->record('prepared', ['nonce' => 'early'], new \DateTimeImmutable('@1793210000'));
+            $log->record('verified', ['nonce' => 'early'], new \DateTimeImmutable('@1793210010'));
+            $log->record('prepared', ['nonce' => 'a'], new \DateTimeImmutable('@1793210400'));
+            $log->record('verified', ['nonce' => 'a', 'padding' => str_repeat('x', 9000)], new \DateTimeImmutable('@1793210460'));
+            $log->rotate($archive, new \DateTimeImmutable('@1793210500'));
+            $log->record('prepared', ['nonce' => 'b'], new \DateTimeImmutable('@1793210560'));
+
+            foreach ([0, 1, 7] as $i) {
+                $log->record('refused', ['nonce' => 'c'.$i, 'padding' => str_repeat('y', 3000 * $i)], new \DateTimeImmutable('@1793210570'));
+            }
+
+            self::assertTrue($log->usedNonce('a', new \DateTimeImmutable('@1793210400')), 'The archive wasn\'t read.');
+            self::assertTrue($log->usedNonce('c1', new \DateTimeImmutable('@1793210400')));
+            self::assertTrue($log->usedNonce('c7', new \DateTimeImmutable('@1793210570')));
+            self::assertFalse($log->usedNonce('b', new \DateTimeImmutable('@1793210400')), 'Preparing a nonce used it.');
+            self::assertFalse($log->usedNonce('early', new \DateTimeImmutable('@1793210400')), 'The log was read before the time asked for.');
+            self::assertTrue($log->usedNonce('early', new \DateTimeImmutable('@1793210000')));
+            self::assertFalse(new FileVerifierLog($this->path.'-none')->usedNonce('a', new \DateTimeImmutable('@1793210000')));
+
+            unlink($archive);
+            self::assertFalse($log->usedNonce('a', new \DateTimeImmutable('@1793210400')), 'A missing archive isn\'t read.');
+        } finally {
+            foreach ([$archive, $this->path.'-none'] as $file) {
+                if (file_exists($file)) {
+                    unlink($file);
+                }
+            }
+        }
+    }
+
+    public function testTheLogInMemoryTellsANonceUsedSinceATime(): void
+    {
+        $log = new InMemoryVerifierLog();
+        $log->record('prepared', ['nonce' => 'a'], new \DateTimeImmutable('@100'));
+        $log->record('verified', ['nonce' => 'a'], new \DateTimeImmutable('@200'));
+        $log->record('prepared', ['nonce' => 'b'], new \DateTimeImmutable('@200'));
+
+        self::assertTrue($log->usedNonce('a', new \DateTimeImmutable('@200')));
+        self::assertFalse($log->usedNonce('a', new \DateTimeImmutable('@201')));
+        self::assertFalse($log->usedNonce('b', new \DateTimeImmutable('@100')), 'Preparing a nonce used it.');
+        self::assertFalse($log->usedNonce('c', new \DateTimeImmutable('@100')));
+    }
+
+    public function testRefusesALogItDidntWriteWhenAskedForANonce(): void
+    {
+        file_put_contents($this->path, "not json\n");
+
+        $this->expectException(StorageError::class);
+
+        new FileVerifierLog($this->path)->usedNonce('a', new \DateTimeImmutable('@0'));
     }
 
     public function testARotatedLogGoesOnFromItsArchive(): void

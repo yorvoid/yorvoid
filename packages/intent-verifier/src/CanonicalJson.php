@@ -77,6 +77,11 @@ final class CanonicalJson
         $sorted = [];
 
         foreach (array_keys($members) as $name) {
+            // Checked before sorting: a name that isn't UTF-8 would sort as another (FUZZ-07).
+            if (!mb_check_encoding((string) $name, 'UTF-8')) {
+                throw new ConfigurationError('A member\'s name isn\'t UTF-8.');
+            }
+
             $sorted[self::utf16((string) $name)] = $name;
         }
 

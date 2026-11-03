@@ -37,7 +37,7 @@ final readonly class PasskeyPolicy
         ?Duration $timeout = null,
     ) {
         // A domain, and not an IP address: its last label isn't a number.
-        if (1 !== preg_match('/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/D', $relyingPartyId) || 1 === preg_match('/(?:^|\.)[0-9]+$/D', $relyingPartyId)) {
+        if (1 !== preg_match('/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/D', $relyingPartyId) || 1 === preg_match('/(?:^|\.)[0-9]+$/', $relyingPartyId)) {
             throw new IntegratorError(\sprintf('"%s" isn\'t a domain to use as the relying party ID.', $relyingPartyId), 'Use the site\'s domain in lowercase, without a scheme, port or path, e.g. "example.com".', 'concepts/passkeys.md#configuration');
         }
 

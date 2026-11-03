@@ -25,6 +25,7 @@ final class PasskeyPolicyTest extends TestCase
         self::assertSame(300000, $policy->timeoutMilliseconds);
         self::assertSame(30000, new PasskeyPolicy('localhost', ['http://localhost:8000'], timeout: Duration::seconds(30))->timeoutMilliseconds, 'Plain HTTP only on localhost, for development.');
         self::assertSame(600000, new PasskeyPolicy('example.com', ['https://example.com'], timeout: Duration::minutes(10))->timeoutMilliseconds);
+        self::assertSame('1password.com', new PasskeyPolicy('1password.com', ['https://1password.com'])->relyingPartyId, 'A domain that begins with a number isn\'t an address.');
     }
 
     /**
