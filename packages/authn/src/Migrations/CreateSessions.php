@@ -54,6 +54,9 @@ final class CreateSessions implements Migration
             $table->addPrimaryKeyConstraint(PrimaryKeyConstraint::editor()->setUnquotedColumnNames('id')->create());
             $table->addIndex(Index::editor()->setUnquotedName($context->name('authentication_session_token'))->setType(Index\IndexType::UNIQUE)->setUnquotedColumnNames('token_hash')->create());
             $table->addIndex(Index::editor()->setUnquotedName($context->name('authentication_session_principal'))->setUnquotedColumnNames('realm', 'principal_id')->create());
+            // For the purge. Not idle_expires_at: every request writes it (SessionStore::purge()).
+            $table->addIndex(Index::editor()->setUnquotedName($context->name('authentication_session_ended'))->setUnquotedColumnNames('ended_at')->create());
+            $table->addIndex(Index::editor()->setUnquotedName($context->name('authentication_session_expiry'))->setUnquotedColumnNames('expires_at')->create());
         });
     }
 

@@ -58,7 +58,7 @@ final readonly class DbalThrottleStore implements ThrottleStore
 
     public function purge(int $now): int
     {
-        return (int) $this->database->connection->executeStatement(\sprintf('DELETE FROM %s WHERE clear_at <= ?', $this->database->table(self::TABLE)), [$now]);
+        return $this->database->deleteInBatches(self::TABLE, 'clear_at <= ?', [$now]);
     }
 
     private function refuseInsideATransaction(): void

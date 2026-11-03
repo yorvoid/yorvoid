@@ -55,6 +55,6 @@ final readonly class DbalCoolDownStore implements CoolDownStore
 
     public function purge(\DateTimeImmutable $before): int
     {
-        return (int) $this->database->connection->executeStatement(\sprintf('DELETE FROM %s WHERE ends_at < ?', $this->database->table(self::TABLE)), [$before], [Types::DATETIMETZ_IMMUTABLE]);
+        return $this->database->deleteInBatches(self::TABLE, 'ends_at < ?', [$before], [Types::DATETIMETZ_IMMUTABLE]);
     }
 }

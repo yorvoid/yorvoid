@@ -37,12 +37,20 @@
             "ignoreSourceCodeByRegex": [
                 // Equivalent: any size of block finds the same last line, a block or two later.
                 ".*private const int BLOCK = 4096;.*",
+                // Equivalent: any size of batch deletes the same rows, in more or fewer statements.
+                ".*public function deleteInBatches\\(.*int \\$batch = 10_000\\).*",
                 // Equivalent: the same pause; and a different default wait can't be observed without
                 // waiting that long.
                 ".*usleep\\(100_000\\).*",
                 ".*Duration::minutes\\(1\\);.*",
                 // Equivalent: a scenario's made-up email address is unique at any length of randomness.
                 ".*bin2hex\\(random_bytes\\(6\\)\\).*"
+            ]
+        },
+        "CastInt": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: PDO counts affected rows as an int, on PostgreSQL and on SQLite.
+                ".*\\$count = \\(int\\) \\$this->connection->executeStatement\\(.*"
             ]
         },
         "CastString": {
@@ -74,6 +82,7 @@
             "ignoreSourceCodeByRegex": [
                 // Equivalent: see DecrementInteger.
                 ".*private const int BLOCK = 4096;.*",
+                ".*public function deleteInBatches\\(.*int \\$batch = 10_000\\).*",
                 // Equivalent: asset names have at most one dot, and only the start of the name is
                 // compared, so a higher limit can't change the result.
                 ".*explode\\('\\.', \\$assetName, 2\\).*",

@@ -47,6 +47,6 @@ final readonly class DbalKnownDeviceStore implements KnownDeviceStore
 
     public function purge(\DateTimeImmutable $unusedSince): int
     {
-        return (int) $this->database->connection->executeStatement(\sprintf('DELETE FROM %s WHERE last_seen_at < ?', $this->database->table(self::TABLE)), [$unusedSince], [Types::DATETIMETZ_IMMUTABLE]);
+        return $this->database->deleteInBatches(self::TABLE, 'last_seen_at < ?', [$unusedSince], [Types::DATETIMETZ_IMMUTABLE]);
     }
 }
