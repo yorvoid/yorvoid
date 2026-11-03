@@ -15,7 +15,12 @@ export class YorvoID {
     #statics;
     #pending;
     constructor(options = {}) {
-        this.#endpoint = (options.endpoint ?? '/yorvoid').replace(/\/+$/, '');
+        let endpoint = options.endpoint ?? '/yorvoid';
+        // Not a regular expression: /\/+$/ takes quadratic time on many slashes followed by anything else.
+        while (endpoint.endsWith('/')) {
+            endpoint = endpoint.slice(0, -1);
+        }
+        this.#endpoint = endpoint;
         this.#messages = options.messages ?? {};
         this.#signals = options.signals ?? true;
         this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);

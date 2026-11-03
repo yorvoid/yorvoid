@@ -60,6 +60,18 @@ describe('signing in', () => {
     assert.deepEqual(server.paths(), ['/auth/sign-in/options', '/auth/sign-in']);
   });
 
+  test('reads an endpoint of many slashes in linear time', async () => {
+    const prefix = `/auth${'/'.repeat(100_000)}x`;
+    const server = new FakeServer().on(`${prefix}/sign-in/options`, { ceremony: 'c1', options: REQUEST_OPTIONS }).on(`${prefix}/sign-in`, { signed_in: true });
+    const started = performance.now();
+
+    // A regular expression for the trailing slashes takes seconds on this; the loop, a millisecond.
+    await new YorvoID({ endpoint: `${prefix}///`, fetch: server.fetch, credentials: new FakeCredentials(), publicKeyCredential: undefined }).signIn();
+
+    assert.ok(performance.now() - started < 1_000);
+    assert.deepEqual(server.paths(), [`${prefix}/sign-in/options`, `${prefix}/sign-in`]);
+  });
+
   test('offers passkeys in autofill where the browser can', async () => {
     const { credentials, yorvoid } = setUp();
 
