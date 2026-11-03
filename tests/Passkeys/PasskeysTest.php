@@ -74,6 +74,34 @@ final class PasskeysTest extends DatabaseTestCase
     private StepUp $stepUp;
 
     #[DataProvider('implementations')]
+    public function testKeepsOnlyTheTransportsWebAuthnDefines(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation);
+        $session = $this->session(email: 'ana@example.com');
+        $authenticator = new VirtualAuthenticator();
+        $ceremony = $passkeys->beginRegistration($session);
+        // The browser's list isn't signed: anyone can send anything there.
+        $answer = json_decode($authenticator->register($ceremony->options), true, flags: \JSON_THROW_ON_ERROR);
+        \assert(\is_array($answer) && \is_array($answer['response']));
+        $answer['response']['transports'] = [1, 'usb', ['nfc'], 'carrier-pigeon', 'usb', null, str_repeat('x', 10_000)];
+
+        $passkeys->finishRegistration($session, $ceremony->id, json_encode($answer, \JSON_THROW_ON_ERROR), 'Key', new Origin(OriginKind::Web));
+
+        self::assertSame(['usb'], $passkeys->of(new Realm('acme'), $session->principalId)[0]->transports);
+        $this->assertThePrincipalCanStillUseItsPasskeys($passkeys, $session);
+
+        $database = $this->stack->database;
+
+        if (null !== $database) {
+            // A row that 0.1.0 stored as the browser sent it.
+            $database->connection->executeStatement(\sprintf('UPDATE %s SET transports = \'[1, "hybrid", {"a": 2}]\'', $database->table('passkey')));
+
+            self::assertSame(['hybrid'], $passkeys->of(new Realm('acme'), $session->principalId)[0]->transports);
+            $this->assertThePrincipalCanStillUseItsPasskeys($passkeys, $session);
+        }
+    }
+
+    #[DataProvider('implementations')]
     public function testRegistersAPasskeyAndSignsInWithIt(string $implementation): void
     {
         $passkeys = $this->passkeys($implementation);
@@ -662,6 +690,14 @@ final class PasskeysTest extends DatabaseTestCase
             self::assertSame($refusal, $exception->refusal, $message);
             self::assertSame($refusal->message(), $exception->getMessage());
         }
+    }
+
+    private function assertThePrincipalCanStillUseItsPasskeys(Passkeys $passkeys, Session $session): void
+    {
+        $options = json_decode($passkeys->beginStepUp($session, new AuthenticationRequirement(Duration::minutes(5), operation: 'acme.site.transfer'))->options, true, flags: \JSON_THROW_ON_ERROR);
+        \assert(\is_array($options) && \is_array($options['allowCredentials']) && \is_array($options['allowCredentials'][0]));
+        self::assertSame($passkeys->of(new Realm('acme'), $session->principalId)[0]->transports, $options['allowCredentials'][0]['transports'] ?? []);
+        self::assertStringContainsString('excludeCredentials', $passkeys->beginRegistration($session)->options);
     }
 
     private function passkeys(string $implementation, UserVerification $userVerification = UserVerification::Required, ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn, AttemptLimits $limits = new AttemptLimits()): Passkeys

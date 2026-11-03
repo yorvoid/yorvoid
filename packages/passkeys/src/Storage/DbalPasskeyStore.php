@@ -106,11 +106,8 @@ final readonly class DbalPasskeyStore implements PasskeyStore
     private function passkey(array $row): Passkey
     {
         $stored = Type::getType(Types::JSON)->convertToPHPValue($row['transports'], $this->database->connection->getDatabasePlatform());
-        $transports = [];
-
-        foreach (\is_array($stored) && array_is_list($stored) ? $stored : [null] as $transport) {
-            $transports[] = \is_string($transport) ? $transport : throw new StorageException('A passkey\'s transports aren\'t what YorvoID wrote: the row was changed.');
-        }
+        // Entries that aren't transports are left out (Passkey), as 0.1.0 could store them; a list it always wrote.
+        $transports = \is_array($stored) && array_is_list($stored) ? $stored : throw new StorageException('A passkey\'s transports aren\'t what YorvoID wrote: the row was changed.');
 
         return new Passkey(
             CredentialId::fromString(Row::string($row, 'credential_id')),
