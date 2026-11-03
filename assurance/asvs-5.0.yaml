@@ -432,9 +432,13 @@ requirements:
         status: partly
         tests:
             - 'YorvoID\Tests\Passkeys\PasskeyPolicyTest::testRefusalsDontTellAGuesserWhichPasskeysExist'
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testRecoveringAnswersCountsAndRecordsTheSameForEveryAccount'
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testRecoveringRunsAsManyStatementsForEveryAccount'
+            - 'YorvoID\Tests\Symfony\SecurityTest::testTheRecoveryCodeFormAnswersTheSameForEveryAccount'
         docs:
             - concepts/passkeys.md
-        note: 'Refused passkey sign-ins give one message whatever the reason; equal response times are not yet assessed.'
+            - concepts/recovery-codes.md
+        note: 'Refused passkey sign-ins give one message whatever the reason; recovery with a code answers, throttles and records the same, with the same database work, for an account with codes, one without and one that doesn''t exist. Response times are not measured.'
     V6.4.1:
         level: 1
         status: covered
@@ -641,8 +645,11 @@ requirements:
         tests:
             - 'YorvoID\Tests\Authn\Session\SessionsTest::testEndingASessionTakesEffectAtOnce'
             - 'YorvoID\Tests\Conformance\SessionStoreTest::testEndsASessionOnceAndThenNeverRenewsItsToken'
+            - 'YorvoID\Tests\Symfony\SecurityTest::testSigningOutInTheApplicationsOwnCodeSignsOutForGood'
+            - 'YorvoID\Tests\Symfony\SecurityTest::testEndingTheYorvoIDSessionSignsOutAtTheNextRequest'
         docs:
             - concepts/sessions.md
+            - concepts/symfony.md
     V7.4.2:
         level: 1
         status: covered
