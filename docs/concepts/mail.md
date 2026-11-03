@@ -24,7 +24,7 @@ $email = new Email('ana@example.com', 'Your export is ready', [
 
 ## Rendering
 
-`Renderer::text($email)` and `Renderer::html($email)` give the two parts of a multipart email. The HTML is accessible:
+`$renderer->text($email)` and `$renderer->html($email)` give the two parts of a multipart email (`$renderer = new Renderer()`). The HTML is accessible:
 
 - the language and its direction (`dir="rtl"` for Arabic, Hebrew, Persian and others);
 - one column, readable at 320 px, real text and no images;
@@ -33,6 +33,26 @@ $email = new Email('ana@example.com', 'Your export is ready', [
 - colours with enough contrast, and `color-scheme` for dark mode;
 - everything from the email escaped.
 
+The HTML is a Twig template, `email.html.twig`, in the package's `templates/` directory. To give emails your look, pass a Twig environment whose loader has your template in the `yorvoid_mail` namespace; to change only the frame's style, extend the package's and replace its `style` block:
+
+```php
+use Twig\Environment;
+use Twig\Loader\FilesystemLoader;
+
+$loader = new FilesystemLoader();
+$loader->addPath('/app/templates/mail', 'yorvoid_mail');               // your email.html.twig
+$loader->addPath(Renderer::TEMPLATES, 'yorvoid_mail_package');        // to extend the package's
+
+$renderer = new Renderer(new Environment($loader, ['autoescape' => 'html']));
+```
+
+```twig
+{% extends '@yorvoid_mail_package/email.html.twig' %}
+{% block style %}margin:0;padding:24px 16px;background:#f2f3f0;color:#0e1116;font-family:Arial,sans-serif;{% endblock %}
+```
+
+Keep auto-escaping on, and styles inline: mail clients drop style sheets.
+
 ## Delivering
 
 Implement `Mailer` with your application's way of sending email; the Symfony bridge provides one for Symfony Mailer.
@@ -40,15 +60,15 @@ Implement `Mailer` with your application's way of sending email; the Symfony bri
 ```php
 final class SymfonyMailer implements Mailer
 {
-    public function __construct(private MailerInterface $mailer) {}
+    public function __construct(private MailerInterface $mailer, private Renderer $renderer = new Renderer()) {}
 
     public function send(Email $email): void
     {
         $this->mailer->send(new \Symfony\Component\Mime\Email()
             ->to($email->to)
             ->subject($email->subject)
-            ->text(Renderer::text($email))
-            ->html(Renderer::html($email)));
+            ->text($this->renderer->text($email))
+            ->html($this->renderer->html($email)));
     }
 }
 ```

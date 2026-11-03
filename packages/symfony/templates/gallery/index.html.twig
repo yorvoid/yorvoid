@@ -1,0 +1,20 @@
+{# The template gallery's index: every flow page, in every state and language. For development only. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>YorvoID's flow pages</title>
+</head>
+<body>
+<main>
+    <h1>YorvoID's flow pages</h1>
+    <p>Every page with your templates, in every state, with made-up data. Their forms go nowhere.</p>
+    <ul>
+        {% for sample in samples %}
+            <li>{{ sample.template }}, {{ sample.state }}:{% for locale, url in sample.links %} <a href="{{ url }}" hreflang="{{ locale }}">{{ locale }}</a>{% endfor %}</li>
+        {% endfor %}
+    </ul>
+</main>
+</body>
+</html>

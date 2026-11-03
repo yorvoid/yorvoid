@@ -103,6 +103,18 @@ final readonly class FlowPages
     }
 
     /**
+     * The template gallery's index: "@YorvoID/gallery/index.html.twig".
+     *
+     * @param list<array{template: string, state: string, links: array<string, string>}> $samples Each sample's page, by language
+     *
+     * @internal
+     */
+    public function gallery(array $samples): string
+    {
+        return $this->render('@YorvoID/gallery/index.html.twig', ['samples' => $samples], 'en');
+    }
+
+    /**
      * @param array<string, mixed> $parameters
      */
     private function render(string $template, array $parameters, string $locale): string
