@@ -258,6 +258,18 @@ final class CredentialsTest extends DatabaseTestCase
         self::assertEquals([$laptop->id], array_map(static fn (Credential $credential): CredentialId => $credential->id, $credentials->of(new Realm('acme'), $session->principalId)));
     }
 
+    #[DataProvider('implementations')]
+    public function testALabelIsOneLineOfAtMost64Characters(string $implementation): void
+    {
+        $credentials = $this->credentials($implementation);
+        $session = $this->session();
+        $add = static fn (string $label): string => $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, $label), $session, new Origin(OriginKind::Web))->label;
+
+        self::assertSame(str_repeat('a', 63), $add(str_repeat('a', 63).' and more'), 'Cut at 64, with no space at the end.');
+        self::assertSame('Work laptop', $add("  Work\n\u{202E}laptop\u{202C}  "));
+        self::assertSame('Passkey', $add("\u{2028}\t\n"));
+    }
+
     public function testRefusesToAddACredentialInAnotherRealm(): void
     {
         $credentials = $this->credentials('memory');

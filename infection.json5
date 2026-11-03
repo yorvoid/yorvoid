@@ -47,6 +47,12 @@
                 ".*bin2hex\\(random_bytes\\(6\\)\\).*"
             ]
         },
+        "Coalesce": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: only one of the two is known there, the case of both is the match's first arm.
+                ".*default => \\$browser \\?\\? \\$system \\?\\? \\$this->text\\('unknown', \\$locale\\),.*"
+            ]
+        },
         "CastInt": {
             "ignoreSourceCodeByRegex": [
                 // Equivalent: PDO counts affected rows as an int, on PostgreSQL and on SQLite.

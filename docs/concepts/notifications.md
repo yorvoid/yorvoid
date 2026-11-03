@@ -13,6 +13,8 @@ People should hear about every change to how they sign in, and about sign-ins fr
 
 They go to the principal's email address when it's verified, in the principal's language, and can't be turned off.
 
+Whoever signed in or added a passkey may be the attacker the email warns about, so none of their words reach it as written. The device is the browser and system from short lists ("Chrome on Windows", else "Unknown"), never the User-Agent header; a sign-in method's name is on one line, without reading-direction tricks, and in quotes.
+
 ## Configuration
 
 ```php
