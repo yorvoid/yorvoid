@@ -95,6 +95,17 @@ final class OwnIdentifiersTest extends DatabaseTestCase
     }
 
     #[DataProvider('implementations')]
+    public function testTheWindowCanBeLonger(string $implementation): void
+    {
+        $this->identifiers($implementation);
+        $identifiers = new OwnIdentifiers($this->principals, $this->stepUp, $this->stack->transactions, Duration::minutes(10));
+        $session = $this->session();
+        $this->clock->sleep(599);
+
+        self::assertSame('ana@example.org', $identifiers->set(new SetIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session, new Origin(OriginKind::Web))->value);
+    }
+
+    #[DataProvider('implementations')]
     public function testOnlyOnesOwn(string $implementation): void
     {
         $identifiers = $this->identifiers($implementation);

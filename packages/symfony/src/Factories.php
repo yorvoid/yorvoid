@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony;
 
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use YorvoID\Authn\Attempt\AttemptLimits;
 use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Session\SessionPolicy;
@@ -48,6 +49,16 @@ final class Factories
     public static function duration(?string $duration): ?Duration
     {
         return null === $duration ? null : Duration::parse($duration);
+    }
+
+    /**
+     * Where an email verification link leads: the flow's page, as an absolute address.
+     *
+     * @return \Closure(string): string
+     */
+    public static function emailVerificationLink(UrlGeneratorInterface $urls): \Closure
+    {
+        return static fn (string $token): string => $urls->generate('yorvoid_flow_start', ['flow' => PasskeyFlows::VERIFY_EMAIL, 'token' => $token], UrlGeneratorInterface::ABSOLUTE_URL);
     }
 
     public static function notificationSettings(string $applicationName, string $notMeUrl, ?PrincipalLocales $locales): NotificationSettings

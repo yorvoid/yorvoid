@@ -129,6 +129,7 @@ final readonly class TemplateLint
             'recovery_code' => [...self::require($page, 'input[name="email"]', 'There\'s no email field: name="email".'), ...self::require($page, 'input[name="code"]', 'There\'s no recovery code field: name="code".')],
             'recovery_codes' => [...self::shows($text, array_map(self::text(...), (array) ($view['codes'] ?? [])), 'A recovery code isn\'t shown: "%s".'), ...self::require($page, 'input[name="saved"][type="checkbox"]', 'There\'s no way to confirm the codes were saved: a checkbox name="saved".')],
             'invitation' => null === $view['email'] ? [] : [...self::shows($text, [self::text($view['email'])], 'The page doesn\'t say who is invited: "%s".'), ...self::require($page, 'form button[type="submit"], form button:not([type])', 'There\'s no way to accept: a form with a button.')],
+            'verify_email' => null === $view['email'] ? [] : [...self::shows($text, [self::text($view['email'])], 'The page doesn\'t say which address is confirmed: "%s".'), ...self::require($page, 'form button[type="submit"], form button:not([type])', 'There\'s no way to confirm: a form with a button.')],
             'recovery_link' => self::require($page, 'form button[type="submit"], form button:not([type])', 'There\'s no way to continue: a form with a button.'),
             default => [],
         };

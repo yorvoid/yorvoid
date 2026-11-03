@@ -43,11 +43,13 @@ YorvoID's passkey-first journeys come from `PasskeyFlows` in `yorvoid/passkeys` 
 | `yorvoid.recover_with_link` | `recovery_link` (confirm), `passkey_registration` (or later), `recovery_codes` | `recovery_link.token`: the link's token |
 | `yorvoid.add_passkey` | `step_up`, `passkey_registration` | |
 | `yorvoid.step_up` | `step_up` | `step_up.operation`, and `step_up.multi_factor` if it needs two factors |
+| `yorvoid.verify_email` | `verify_email` (confirm; signs nobody in). Only with [`EmailVerification`](notifications.md#verifying-the-email-address) | `verify_email.token`: the link's token |
 
 - **`passkey_registration`** keeps the new credential's ID as `passkey_registration.credential`. After a recovery, the person may add one later, on a borrowed device for instance.
 - **`recovery_codes`** applies only when the account has no recovery codes left. The codes stay in the flow's state until the person confirms they saved them.
 - **`step_up`** applies only when the session's proof isn't recent enough; without a session it applies, and fails, so a step-up flow never completes without a proof.
-- **`invitation` and `recovery_link`** ask the person to confirm: an email scanner opening the link doesn't use it up.
+- **`setup_code`** sends the owner a link to verify their email address, when `PasskeyFlows` has an `EmailVerification`.
+- **`invitation`, `recovery_link` and `verify_email`** ask the person to confirm: an email scanner opening the link doesn't use it up.
 - **`confirm`** shows an operation the [verifier](signed-intents.md) prepared, and has the person sign it. When the flow completes, send `intent.nonce` and `intent.assertion` to the verifier: it checks the signature, not this step.
 - Refusals while signing in don't say why, except an unknown passkey (`reason: unknown_passkey`), which the browser tells the passkey provider.
 - Every message is in English and German, in the `yorvoid` domain.

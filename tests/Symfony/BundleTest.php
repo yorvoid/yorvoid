@@ -15,6 +15,7 @@ use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Mailer\EventListener\MessageLoggerListener;
 use Symfony\Component\Mime\Email;
 use YorvoID\Authn\Attempt\AttemptLimits;
+use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Notification\SecurityNotifications;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
@@ -129,6 +130,9 @@ final class BundleTest extends TestCase
         $container = $this->boot(['notifications' => ['enabled' => false, 'application_name' => null, 'not_me_url' => null, 'from' => null]]);
 
         self::assertFalse($container->has(SecurityNotifications::class));
+        self::assertFalse($container->has(EmailVerification::class), 'Without a mailer, nothing sends the link.');
+        self::assertTrue($this->boot(fresh: true)->has(EmailVerification::class));
+        self::assertTrue($this->kernel?->getContainer()->has(EmailVerification::class), 'The application can send a link again.');
     }
 
     public function testAddsTheMiddlewareToYorvoIDsConnectionOnly(): void

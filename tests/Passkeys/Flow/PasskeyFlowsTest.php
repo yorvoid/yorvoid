@@ -7,8 +7,10 @@ namespace YorvoID\Tests\Passkeys\Flow;
 use Symfony\Component\Clock\MockClock;
 use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Credential\Credentials;
+use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Invitation\Invite;
+use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Recovery\IssueRecoveryLink;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryLinks;
@@ -22,6 +24,7 @@ use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Authn\Setup\SetupCodes;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
+use YorvoID\Authn\Translations;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -41,6 +44,9 @@ use YorvoID\Flows\Input;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\Progress;
 use YorvoID\Flows\Storage\InMemoryFlowStore;
+use YorvoID\Mail\Email;
+use YorvoID\Mail\InMemoryMailer;
+use YorvoID\Mail\Mailer;
 use YorvoID\Passkeys\Flow\InvitationStep;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\Flow\RecoveryLinkStep;
@@ -53,7 +59,9 @@ use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\Refusal;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Stack;
 use YorvoID\Throttle\Throttle;
+use YorvoID\Translation\Translator;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
@@ -87,9 +95,11 @@ final class PasskeyFlowsTest extends DatabaseTestCase
 
     private Realm $realm;
 
+    private Stack $stack;
+
     protected function setUp(): void
     {
-        $stack = $this->stack('memory');
+        $this->stack = $stack = $this->stack('memory');
         $this->clock = new MockClock('2026-10-28 18:00:00 UTC');
         $this->realm = new Realm('acme');
         $ids = new UuidV7Generator($this->clock);
@@ -105,7 +115,8 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         $this->recoveryLinks = new RecoveryLinks($tokens, $this->sessions, $this->principals, $stepUp, $stack->transactions, $this->clock);
         $this->setupCodes = new SetupCodes($stack->setup, $this->principals, $log, $stack->transactions, $attempts, $this->clock);
         $this->invitations = new Invitations($this->principals, $tokens, $stack->transactions, new Throttle($stack->throttle, $this->clock));
-        $this->journeys = $journeys = new PasskeyFlows($this->passkeys, $this->sessions, $this->principals, $this->setupCodes, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, Duration::minutes(5), $this->clock);
+        $verification = new EmailVerification($this->principals, $tokens, new InMemoryMailer(), new Translator([Translations::DIRECTORY]), new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}'), $stack->transactions, static fn (string $token): string => 'https://acme.example/verify?token='.$token);
+        $this->journeys = $journeys = new PasskeyFlows($this->passkeys, $this->sessions, $this->principals, $this->setupCodes, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, Duration::minutes(5), $this->clock, $verification);
         $this->flows = new Flows($journeys->all(), new InMemoryFlowStore(), $this->sessions, clock: $this->clock);
         $this->context = new FlowContext(new Origin(OriginKind::Web), device: 'Firefox on Linux', address: '192.0.2.10');
     }
@@ -321,6 +332,29 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertEquals(new Problem('yorvoid.flow.signed_out'), $this->submit($registering, 'step_up', [])->failure);
     }
 
+    public function testClaimingDoesntNeedTheEmailToGo(): void
+    {
+        $failing = new class implements Mailer {
+            public function send(Email $email): void
+            {
+                throw new \RuntimeException('The mail server is down.');
+            }
+        };
+        $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, new SecurityLog($this->stack->log, $this->stack->transactions), $this->stack->transactions, clock: $this->clock);
+        $verification = new EmailVerification($this->principals, $tokens, $failing, new Translator([Translations::DIRECTORY]), new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}'), $this->stack->transactions, static fn (string $token): string => 'https://acme.example/verify?token='.$token);
+        $stepUp = new StepUp($this->sessions, $this->stack->coolDowns, new SecurityLog($this->stack->log, $this->stack->transactions));
+
+        foreach (['acme' => $verification, 'globex' => null] as $realm => $with) {
+            $flows = new Flows(new PasskeyFlows($this->passkeys, $this->sessions, $this->principals, $this->setupCodes, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, Duration::minutes(5), $this->clock, $with)->all(), new InMemoryFlowStore(), $this->sessions, clock: $this->clock);
+            $code = $this->setupCodes->create(new CreateSetupCode(new Realm($realm), Duration::days(1)), new Origin(OriginKind::Console));
+            $flow = $flows->start(PasskeyFlows::SETUP, new Realm($realm), $this->context);
+            $claimed = $flows->submit($flow->state->id, 'setup_code', new Input(['code' => $code->reveal(), 'email' => 'ana@example.com']), $this->context);
+
+            self::assertNotNull($claimed?->signedIn, \sprintf('The owner of %s isn\'t signed in.', $realm));
+            self::assertSame('passkey_registration', $claimed->step);
+        }
+    }
+
     public function testTheJourneysRequireWhatMakesThemSafe(): void
     {
         $required = [];
@@ -337,7 +371,9 @@ final class PasskeyFlowsTest extends DatabaseTestCase
             'yorvoid.recover_with_link' => ['recovery_link'],
             'yorvoid.add_passkey' => ['passkey_registration'],
             'yorvoid.step_up' => ['step_up'],
+            'yorvoid.verify_email' => ['verify_email'],
         ], $required);
+        self::assertNotContains(PasskeyFlows::VERIFY_EMAIL, array_map(static fn ($flow): string => $flow->name, new PasskeyFlows($this->passkeys, $this->sessions, $this->principals, $this->setupCodes, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, new StepUp($this->sessions, $this->stack('memory')->coolDowns, new SecurityLog($this->stack('memory')->log, $this->stack('memory')->transactions)), Duration::minutes(5))->all()), 'Without EmailVerification, nothing to verify with.');
     }
 
     public function testRefusalsHaveMessagesToTranslate(): void

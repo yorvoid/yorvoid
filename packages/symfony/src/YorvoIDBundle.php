@@ -13,8 +13,10 @@ use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Address;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Translation\Translator;
 use Twig\Extension\AbstractExtension;
+use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Notification\SecurityNotifications;
 use YorvoID\Authn\Session\Sessions;
@@ -187,6 +189,12 @@ final class YorvoIDBundle extends AbstractBundle
         }
 
         $builder->register(SignedOperationNotification::class)->setAutowired(true)->addTag('kernel.event_listener');
+
+        // A new address, or the claiming owner's, gets a link to confirm it: notifications go only there.
+        $builder->register(EmailVerification::class)->setAutowired(true)->setPublic(true)
+            ->setArgument('$translator', new Reference('yorvoid.translator.used'))
+            ->setArgument('$link', (new Definition(\Closure::class))->setFactory([Factories::class, 'emailVerificationLink'])->setArguments([new Reference(UrlGeneratorInterface::class)]))
+            ->addTag('kernel.event_listener', ['method' => 'identifierChanged']);
     }
 
     public function build(ContainerBuilder $container): void

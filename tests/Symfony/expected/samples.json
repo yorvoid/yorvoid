@@ -233,6 +233,24 @@
         "problems": []
     },
     {
+        "template": "verify_email",
+        "state": "default",
+        "flow": "yorvoid.verify_email",
+        "view": {
+            "email": "ana@example.com"
+        },
+        "problems": []
+    },
+    {
+        "template": "verify_email",
+        "state": "not_working",
+        "flow": "yorvoid.verify_email",
+        "view": {
+            "email": null
+        },
+        "problems": []
+    },
+    {
         "template": "recovery_code",
         "state": "default",
         "flow": "yorvoid.recover_with_code",

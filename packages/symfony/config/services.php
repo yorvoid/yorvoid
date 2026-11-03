@@ -12,6 +12,7 @@ use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
 use YorvoID\Authn\Credential\ForgetCredentialsOfDeletedPrincipals;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
+use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Identifier\OwnIdentifiers;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Notification\NotMe;
@@ -208,7 +209,7 @@ return static function (ContainerConfigurator $container): void {
     $window = inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]);
     $services->set(SessionFlowStore::class);
     $services->alias(FlowStore::class, SessionFlowStore::class);
-    $services->set(PasskeyFlows::class)->arg('$window', $window);
+    $services->set(PasskeyFlows::class)->arg('$window', $window)->arg('$emailVerification', service(EmailVerification::class)->nullOnInvalid());
     $services->set(Flows::class)->arg('$flows', inline_service()->factory([Factories::class, 'flows'])->args([service(PasskeyFlows::class), tagged_iterator('yorvoid.flow_customizer')]))->public();
     $services->set(FlowContexts::class)->arg('$deviceCookie', param('yorvoid.cookies.device'))->public();
     $services->set(SessionAuthenticator::class)->public();

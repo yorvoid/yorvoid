@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Passkeys\Flow;
 
 use Psr\Clock\ClockInterface;
+use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -27,7 +28,8 @@ use YorvoID\Passkeys\Flow\View\SetupCodeView;
 
 /**
  * Claims a fresh installation with its setup code (ATN-040), and signs the new owner in: inputs
- * "code" and "email". The owner then adds a passkey.
+ * "code" and "email". The owner then adds a passkey. With EmailVerification, the owner's address gets a
+ * link to confirm it, so that security notifications reach them.
  *
  * @api
  */
@@ -39,6 +41,7 @@ final readonly class SetupCodeStep implements Step
         private SetupCodes $setupCodes,
         private Sessions $sessions,
         private ClockInterface $clock,
+        private ?EmailVerification $emailVerification = null,
     ) {
     }
 
@@ -79,6 +82,15 @@ final readonly class SetupCodeStep implements Step
             return StepResult::refused(new Problem('yorvoid.flow.email.invalid', field: 'email'));
         }
 
-        return StepResult::done(signedIn: $this->sessions->start(new StartSession($state->realm, $owner->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now())), $context->device, $context->address, $context->deviceCookie), $context->origin));
+        $signedIn = $this->sessions->start(new StartSession($state->realm, $owner->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now())), $context->device, $context->address, $context->deviceCookie), $context->origin);
+
+        try {
+            $this->emailVerification?->send($state->realm, $owner->id, $context->origin);
+        } catch (\Exception) {
+            // The realm is claimed and the owner signed in: an email that couldn't go mustn't lock them out
+            // of their own installation. Changing the address later sends another.
+        }
+
+        return StepResult::done(signedIn: $signedIn);
     }
 }

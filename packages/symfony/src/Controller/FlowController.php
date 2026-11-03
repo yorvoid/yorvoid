@@ -20,6 +20,7 @@ use YorvoID\Flows\FlowStatus;
 use YorvoID\Flows\Input;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\Progress;
+use YorvoID\Passkeys\Flow\EmailVerificationStep;
 use YorvoID\Passkeys\Flow\InvitationStep;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\Flow\RecoveryLinkStep;
@@ -54,6 +55,7 @@ final readonly class FlowController
         PasskeyFlows::ADD_PASSKEY => [],
         PasskeyFlows::INVITATION => ['token' => InvitationStep::TOKEN],
         PasskeyFlows::RECOVER_WITH_LINK => ['token' => RecoveryLinkStep::TOKEN],
+        PasskeyFlows::VERIFY_EMAIL => ['token' => EmailVerificationStep::TOKEN],
         PasskeyFlows::STEP_UP => ['operation' => 'step_up.operation', 'multi_factor' => 'step_up.multi_factor'],
     ];
 

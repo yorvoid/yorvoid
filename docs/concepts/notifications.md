@@ -9,6 +9,7 @@ People should hear about every change to how they sign in, and about sign-ins fr
 | `CredentialRemoved` | A sign-in method was removed |
 | `RecoveryCodeUsed` | A recovery code was used, with how many are left |
 | `RecoveryCodesGenerated` | New recovery codes replaced the old ones |
+| `IdentifierChanged` | The email address was changed or removed: to the **old** address |
 
 They go to the principal's email address when it's verified, in the principal's language, and can't be turned off.
 
@@ -46,3 +47,21 @@ $principalId = $notMe->confirm($realm, Secret::fromString($request->request->get
 - If the email was about a new sign-in method, that method is disabled, so whoever added it can't sign in with it.
 - It's recorded, and `NotMeReported` follows the commit.
 - Then lead the person to recovery: their recovery codes, or a recovery link from an operator. `null` means the link doesn't work (used, expired, or altered).
+
+## Verifying the email address
+
+Notifications go only to a verified address, so an address nobody confirmed hears nothing: the owner who claimed the installation, or someone who just changed theirs. `EmailVerification` sends a link to confirm it:
+
+```php
+use YorvoID\Authn\Identifier\EmailVerification;
+
+$verification = new EmailVerification($principals, $oneTimeTokens, $mailer, $translator, $settings, $transactions,
+    fn (string $token): string => 'https://example.com/verify-email?token='.rawurlencode($token));
+
+$yourDispatcher->addListener(IdentifierChanged::class, [$verification, 'identifierChanged']);
+```
+
+- The listener sends a link to every new address that isn't verified. `send($realm, $principalId, $origin)` sends one yourself, e.g. if the person asks again.
+- The link works once, for a day, only while the address is still the principal's, and a newer link replaces an older one.
+- Your page shows what `peek()` gives and asks the person to confirm; on POST, `confirm()` verifies the address. As with "This wasn't me", opening the link must change nothing.
+- The Symfony bridge does all of this when notifications are on: the link leads to the `yorvoid.verify_email` [flow](flows.md), and claiming a fresh installation sends the owner one.

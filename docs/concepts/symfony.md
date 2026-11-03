@@ -104,7 +104,7 @@ A preset is a documented starting point for a kind of application (PLT-090). It 
 - **Storage:** YorvoID's DBAL stores on your connection, and its transaction middleware added to that connection (and no other) through DoctrineBundle, so YorvoID's "-ed" events wait for your commits.
 - **Services:** `Principals`, `Sessions`, `StepUp`, `Credentials`, `Passkeys`, `RecoveryCodes`, `RecoveryLinks`, `SetupCodes`, `Invitations`, `NotMe`, `IntentSigning` and the rest, ready to inject.
 - **Events:** YorvoID's events go through Symfony's dispatcher, so your listeners hear them. Suspending a principal ends their sessions in the same transaction; removing a passkey from the registry removes its key.
-- **Mail:** [security notifications](notifications.md) through Symfony Mailer, as plain text and HTML, from the address you configure, after every commit.
+- **Mail:** [security notifications](notifications.md) through Symfony Mailer, as plain text and HTML, from the address you configure, after every commit; and a link to [verify](notifications.md#verifying-the-email-address) every new address that isn't verified, the claiming owner's included.
 - **Translations:** YorvoID's catalogues added to Symfony's translator; without one, YorvoID uses its own.
 
 ## Signing in

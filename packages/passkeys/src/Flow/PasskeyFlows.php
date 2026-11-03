@@ -6,6 +6,7 @@ namespace YorvoID\Passkeys\Flow;
 
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
+use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryLinks;
@@ -47,6 +48,9 @@ final readonly class PasskeyFlows
     /** A step-up for "step_up.operation" */
     public const string STEP_UP = 'yorvoid.step_up';
 
+    /** Confirming an email address with the link sent to it: "verify_email.token". Only with EmailVerification */
+    public const string VERIFY_EMAIL = 'yorvoid.verify_email';
+
     /**
      * @param Duration $window How recent a step-up must be, as for the credentials (5 minutes by default)
      */
@@ -61,6 +65,7 @@ final readonly class PasskeyFlows
         private StepUp $stepUp,
         private Duration $window,
         private ClockInterface $clock = new NativeClock(),
+        private ?EmailVerification $emailVerification = null,
     ) {
     }
 
@@ -77,12 +82,13 @@ final readonly class PasskeyFlows
 
         return [
             new Flow(self::SIGN_IN, [new PasskeySignInStep($this->passkeys)], [PasskeySignInStep::NAME]),
-            new Flow(self::SETUP, [new SetupCodeStep($this->setupCodes, $this->sessions, $this->clock), $passkey, $codes], [SetupCodeStep::NAME, PasskeyRegistrationStep::NAME]),
+            new Flow(self::SETUP, [new SetupCodeStep($this->setupCodes, $this->sessions, $this->clock, $this->emailVerification), $passkey, $codes], [SetupCodeStep::NAME, PasskeyRegistrationStep::NAME]),
             new Flow(self::INVITATION, [new InvitationStep($this->invitations, $this->principals, $this->sessions, $this->clock), $passkey, $codes], [InvitationStep::NAME]),
             new Flow(self::RECOVER_WITH_CODE, [new RecoveryCodeStep($this->recoveryCodes), $later, $codes], [RecoveryCodeStep::NAME]),
             new Flow(self::RECOVER_WITH_LINK, [new RecoveryLinkStep($this->recoveryLinks), $later, $codes], [RecoveryLinkStep::NAME]),
             new Flow(self::ADD_PASSKEY, [new StepUpStep($this->passkeys, $this->stepUp, $this->window, 'yorvoid.credential.add'), $passkey], [PasskeyRegistrationStep::NAME]),
             new Flow(self::STEP_UP, [new StepUpStep($this->passkeys, $this->stepUp, $this->window)], [StepUpStep::NAME]),
+            ...(null === $this->emailVerification ? [] : [new Flow(self::VERIFY_EMAIL, [new EmailVerificationStep($this->emailVerification)], [EmailVerificationStep::NAME])]),
         ];
     }
 }

@@ -94,6 +94,8 @@ $ownIdentifiers->set(new SetIdentifier($realm, $session->principalId, Identifier
 // StepUpRequired: send them through a step-up, then try again.
 ```
 
+A new email address isn't verified, so it gets no security notifications until its owner confirms it: [`EmailVerification`](notifications.md#verifying-the-email-address) sends them a link.
+
 `Principals::setIdentifier()` checks none of that: it's for administrators and the console, after your application checked they may (`yorvoid.principals.manage`).
 
 - **Verified** means the owner showed it's theirs, e.g. by opening a link sent to the address. Only the code that saw them do so marks it; `verifyIdentifier()` checks the address is still the one that was verified. Setting a different address makes it unverified again.
