@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\IntentVerifier;
 
 use PHPUnit\Framework\TestCase;
+use YorvoID\IntentVerifier\CanonicalJson;
 use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\PendingIntent;
 use YorvoID\IntentVerifier\Storage\FileVerifierLog;
@@ -189,6 +190,78 @@ final class StorageTest extends TestCase
             self::fail('The file was used: '.$message);
         } catch (StorageError $exception) {
             self::assertStringContainsString($message, $exception->getMessage());
+        }
+    }
+
+    /**
+     * An entry is appended after reading only the last line: entries longer than a read's block, and
+     * many of them, chain all the same.
+     */
+    public function testTheLogContinuesFromItsLastLineHoweverLong(): void
+    {
+        $log = new FileVerifierLog($this->path);
+        $at = new \DateTimeImmutable('@1793210400');
+
+        foreach ([10, 5000, 3, 9000, 4100, 1] as $i => $length) {
+            $log->record('prepared', ['nonce' => str_repeat((string) $i, $length)], $at);
+        }
+
+        self::assertTrue($log->isIntact());
+        $lines = file($this->path, \FILE_IGNORE_NEW_LINES);
+        \assert(\is_array($lines) && 6 === \count($lines));
+
+        for ($i = 1; $i < 6; ++$i) {
+            $before = json_decode($lines[$i - 1], true);
+            $entry = json_decode($lines[$i], true);
+            \assert(\is_array($before) && \is_array($entry));
+            self::assertSame($before['hash'], $entry['previous'], \sprintf('Entry %d doesn\'t hold the one before.', $i));
+        }
+    }
+
+    public function testARotatedLogGoesOnFromItsArchive(): void
+    {
+        $log = new FileVerifierLog($this->path);
+        $archive = $this->path.'-1.jsonl';
+        $log->record('prepared', ['nonce' => 'a'], new \DateTimeImmutable('@1793210400'));
+        $log->record('verified', ['nonce' => 'a'], new \DateTimeImmutable('@1793210460'));
+        $archived = (string) file_get_contents($this->path);
+        $lines = explode("\n", trim($archived));
+        $last = json_decode($lines[1], true);
+        \assert(\is_array($last));
+
+        try {
+            $log->rotate($archive, new \DateTimeImmutable('@1793210500'));
+            $log->record('prepared', ['nonce' => 'b'], new \DateTimeImmutable('@1793210560'));
+
+            self::assertSame($archived, file_get_contents($archive), 'The archive isn\'t the log as it was.');
+            self::assertSame(0o600, fileperms($archive) & 0o777);
+            self::assertTrue(new FileVerifierLog($archive)->isIntact());
+            self::assertTrue($log->isIntact());
+            $rotated = file($this->path, \FILE_IGNORE_NEW_LINES);
+            \assert(\is_array($rotated) && 2 === \count($rotated));
+            $first = json_decode($rotated[0], true);
+            \assert(\is_array($first));
+            self::assertSame([FileVerifierLog::ROTATED, ['archive' => basename($archive)], $last['hash'], 1793210500], [$first['event'], $first['details'], $first['previous'], $first['at']]);
+
+            // Only the first entry may link to an archive.
+            file_put_contents($this->path, $rotated[1]."\n");
+            self::assertFalse($log->isIntact(), 'A log began in the middle.');
+            file_put_contents($this->path, $rotated[0]."\n".$rotated[0]."\n");
+            self::assertFalse($log->isIntact(), 'A second rotation entry linked to nothing before it.');
+            $forged = json_decode($rotated[0], true);
+            \assert(\is_array($forged));
+            $forged['event'] = 'prepared';
+            file_put_contents($this->path, CanonicalJson::encode($forged)."\n");
+            self::assertFalse($log->isIntact());
+
+            try {
+                $log->rotate($archive, new \DateTimeImmutable('@1793210600'));
+                self::fail('An archive was written over.');
+            } catch (StorageError $exception) {
+                self::assertStringContainsString('exists already, or can\'t be created', $exception->getMessage());
+            }
+        } finally {
+            is_file($archive) && unlink($archive);
         }
     }
 

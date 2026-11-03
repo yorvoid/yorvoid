@@ -57,7 +57,7 @@ $verifier = new Verifier(
 
 - **The policy lists every operation** the verifier runs, with its parameters and their types (strings, integers, booleans), and whether it needs a signature. An operation that isn't listed isn't run, and one with other parameters isn't prepared (INT-008).
 - **The state file** holds the keys, the changes to them waiting, the prepared intents and registrations, and the bootstrap secret's hash. Each change holds an exclusive lock, so processes take turns, and it survives restarts: a nonce works once, also across them (INT-009). It must be a regular file, not a link, owned by the verifier's user and readable by no one else (`chmod 600`); otherwise the verifier refuses it. So must the log.
-- **The log** records what was prepared, registered, verified and refused, and every change to the keys, as JSON lines in a hash chain: `isIntact()` tells whether an entry was changed or reordered (INT-010). Someone who can write the file can still rewrite it whole; keep a copy elsewhere if that matters. The console keeps its side in YorvoID's security log.
+- **The log** records what was prepared, registered, verified and refused, and every change to the keys, as JSON lines in a hash chain: `isIntact()` tells whether an entry was changed or reordered (INT-010). Appending reads only its last line, and `isIntact()` a line at a time. `rotate($archive, $now)` moves the entries to an archive and starts the file again, linked to the archive's last entry: rotate it, e.g. monthly, and keep the archives. Someone who can write the file can still rewrite it whole; keep a copy elsewhere if that matters. The console keeps its side in YorvoID's security log.
 
 ## The signing pages
 
