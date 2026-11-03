@@ -47,7 +47,8 @@
         "doctrine/doctrine-bundle": "Adds YorvoID's transaction middleware to the DBAL connection for you",
         "symfony/mailer": "Sends YorvoID's emails through Symfony Mailer",
         "symfony/translation": "Translates YorvoID's messages with Symfony's translator",
-        "symfony/twig-bundle": "Renders the flows' reference pages"
+        "symfony/twig-bundle": "Renders the flows' reference pages",
+        "symfony/var-dumper": "dump() and the profiler then show YorvoID's secrets redacted"
     },
     "autoload": {
         "psr-4": {

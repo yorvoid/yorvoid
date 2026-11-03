@@ -43,7 +43,10 @@ final readonly class KeyRing
             }
         }
 
-        if (1 !== \count($active)) {
+        // A public set, as toJwks() gives it without private parts, only verifies: no key signs.
+        $public = [] === $active && [] === array_filter($byId, static fn (SigningKey $key): bool => null !== $key->seed);
+
+        if (1 !== \count($active) && !$public) {
             throw new IntegratorError(\sprintf('The key ring has %d active keys (%s).', \count($active), implode(', ', $active)), 'Exactly one key is active: it signs. Make the others verify-only.', 'concepts/keys.md#rotating-keys');
         }
 
@@ -52,6 +55,8 @@ final readonly class KeyRing
 
     /**
      * The key that signs.
+     *
+     * @throws IntegratorError When the ring is a public set, which has none
      */
     public function signer(): SigningKey
     {
@@ -61,7 +66,7 @@ final readonly class KeyRing
             }
         }
 
-        throw new \LogicException('Unreachable: a key ring has exactly one active key.');
+        throw new IntegratorError('This key set is public: it only verifies.', 'Sign with the key file, which has the private parts; deploy only the public set where signatures are checked.', 'concepts/keys.md#where-keys-are-kept');
     }
 
     public function get(string $id): ?SigningKey
@@ -127,9 +132,21 @@ final readonly class KeyRing
             throw new IntegratorError(\sprintf('The key file "%s" can\'t be written.', $path), 'Check that its folder exists, and that the application\'s user may write to it.', 'concepts/keys.md#where-keys-are-kept');
         }
 
-        // tempnam() creates the file for its owner only (0600).
-        file_put_contents($temporary, $this->toJwks(true)->reveal());
-        rename($temporary, $path);
+        // tempnam() creates the file for its owner only (0600). A write that fails, e.g. on a full disk,
+        // leaves the key file as it was: it's replaced only by a complete, synced copy.
+        $json = $this->toJwks(true)->reveal();
+        $file = @fopen($temporary, 'w');
+        $written = false !== $file && \strlen($json) === @fwrite($file, $json) && @fflush($file) && @fsync($file);
+
+        if (false !== $file) {
+            fclose($file);
+        }
+
+        if (!$written || !@rename($temporary, $path)) {
+            @unlink($temporary);
+
+            throw new IntegratorError(\sprintf('The key file "%s" couldn\'t be written; it\'s as it was.', $path), 'Check that the disk has room, and that the application\'s user may write to its folder.', 'concepts/keys.md#where-keys-are-kept');
+        }
     }
 
     private function known(string $id): SigningKey
@@ -145,8 +162,9 @@ final readonly class KeyRing
         try {
             // A set, its list, a key, a key's own lists (e.g. "key_ops") and their values: nothing deeper.
             $set = json_decode($json->reveal(), true, 5, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException $exception) {
-            throw new IntegratorError('The key set isn\'t valid JSON.', 'Provide the key set as YorvoID generates it: {"keys": [ … ]}.', 'concepts/keys.md#where-keys-are-kept', $exception);
+        } catch (\JsonException) {
+            // Not chained: the exception's trace holds the whole key set, private parts included.
+            throw new IntegratorError('The key set isn\'t valid JSON.', 'Provide the key set as YorvoID generates it: {"keys": [ … ]}.', 'concepts/keys.md#where-keys-are-kept');
         }
 
         if (!\is_array($set) || !isset($set['keys']) || !\is_array($set['keys']) || !array_is_list($set['keys'])) {
@@ -178,14 +196,16 @@ final readonly class KeyRing
     }
 
     /**
-     * The key set as JSON; with private parts only when asked, e.g. to store it after generating.
+     * The key set as JSON; with private parts only when asked, e.g. to store it after generating. Without
+     * them every key is verify-only: the public set is what a verifier loads, and it can't sign.
      */
     public function toJwks(bool $withPrivateParts = false): Secret
     {
         $keys = [];
 
         foreach ($this->keys as $key) {
-            $jwk = ['kid' => $key->id, 'kty' => 'OKP', 'crv' => 'Ed25519', 'alg' => SigningKey::ALGORITHM, 'use' => 'sig', 'status' => $key->status->value, 'x' => self::base64url($key->publicKey)];
+            $status = $withPrivateParts ? $key->status : KeyStatus::VerifyOnly;
+            $jwk = ['kid' => $key->id, 'kty' => 'OKP', 'crv' => 'Ed25519', 'alg' => SigningKey::ALGORITHM, 'use' => 'sig', 'status' => $status->value, 'x' => self::base64url($key->publicKey)];
 
             if ($withPrivateParts && null !== $key->seed) {
                 $jwk['d'] = self::base64url($key->seed->reveal());

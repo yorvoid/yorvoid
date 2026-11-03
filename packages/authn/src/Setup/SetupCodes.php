@@ -25,7 +25,8 @@ use YorvoID\Throttle\Throttled;
 /**
  * Setup codes (ATN-034): whoever installs the application gets a code, and whoever enters it first
  * claims the fresh realm, becoming its first principal. A realm is claimed once; after that, codes are
- * refused and access is recovered another way.
+ * refused and access is recovered another way. A realm that has an active principal already, however it
+ * came, gets no code either.
  *
  * A code is 130 random bits, written as 26 characters of Crockford's base 32 in groups of five
  * ("7KQ2M-…"), so it can be read aloud and typed: case, hyphens and spaces don't matter, and O, I and L
@@ -55,6 +56,11 @@ final readonly class SetupCodes
     public function create(CreateSetupCode $command, Origin $origin): Secret
     {
         return $this->transactions->run(function () use ($command, $origin): Secret {
+            // Only while no owner exists (ATN-034): people who came another way, e.g. invited, count.
+            if ($this->principals->hasActive($command->realm)) {
+                throw new RealmAlreadyClaimed($command->realm);
+            }
+
             $code = HumanCode::random(self::LENGTH, 5);
             $now = Time::stored($this->clock->now());
 
@@ -86,11 +92,31 @@ final readonly class SetupCodes
 
         $this->attempts->count('setup_code', $realm, null, $address);
 
+        try {
+            return $this->claimWith($realm, $code, $owner, $origin);
+        } catch (InvalidSetupCode $invalid) {
+            // After the rollback: a failed attempt is recorded, without what was typed.
+            $this->log->record($realm, 'yorvoid.setup.claim', Outcome::Failed, $origin);
+
+            throw $invalid;
+        }
+    }
+
+    public function isClaimed(Realm $realm): bool
+    {
+        return true === $this->store->get($realm)?->isClaimed();
+    }
+
+    /**
+     * @throws InvalidSetupCode
+     */
+    private function claimWith(Realm $realm, #[\SensitiveParameter] Secret $code, CreatePrincipal $owner, Origin $origin): Principal
+    {
         return $this->transactions->run(function () use ($realm, $code, $owner, $origin): Principal {
             $state = $this->store->get($realm);
             $hash = self::hash(HumanCode::normalize($code->reveal()));
 
-            if (null === $state || $state->isClaimed() || $this->clock->now() >= $state->expiresAt || !hash_equals($state->codeHash, $hash)) {
+            if (null === $state || $state->isClaimed() || $this->clock->now() >= $state->expiresAt || !hash_equals($state->codeHash, $hash) || $this->principals->hasActive($realm)) {
                 throw new InvalidSetupCode();
             }
 
@@ -104,11 +130,6 @@ final readonly class SetupCodes
 
             return $principal;
         });
-    }
-
-    public function isClaimed(Realm $realm): bool
-    {
-        return true === $this->store->get($realm)?->isClaimed();
     }
 
     private static function hash(string $code): string

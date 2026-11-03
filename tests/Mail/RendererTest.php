@@ -144,6 +144,10 @@ final class RendererTest extends TestCase
         yield 'relative' => ['/not-me?token=abc'];
         yield 'mail' => ['mailto:ana@example.com'];
         yield 'not a URL' => ['https://'];
+        yield 'plain HTTP' => ['http://example.com/not-me'];
+        yield 'a user before the host' => ['https://example.com@evil.example/not-me'];
+        yield 'a password before the host' => ['https://a:b@example.com/not-me'];
+        yield 'plain HTTP to a host named like localhost' => ['http://localhost.evil.example/a'];
     }
 
     #[DataProvider('badLinks')]

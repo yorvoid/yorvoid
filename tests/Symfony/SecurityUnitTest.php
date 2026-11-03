@@ -16,6 +16,8 @@ use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\User\InMemoryUser;
+use Symfony\Component\VarDumper\Cloner\VarCloner;
+use Symfony\Component\VarDumper\Dumper\CliDumper;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -59,6 +61,16 @@ final class SecurityUnitTest extends TestCase
         $this->expectExceptionObject(new \LogicException('There is no request to hold a session in.'));
 
         $current->hold(Secret::fromString('token'));
+    }
+
+    public function testSymfonysDumperShowsSecretsRedacted(): void
+    {
+        $this->service(Sessions::class);
+        $dumped = new CliDumper()->dump(new VarCloner()->cloneVar(['token' => Secret::fromString('the-raw-token')]), true);
+
+        self::assertIsString($dumped);
+        self::assertStringNotContainsString('the-raw-token', $dumped);
+        self::assertMatchesRegularExpression('/^ +value: "\[redacted\]"$/m', $dumped, 'Shown as the dumper shows what an object computes, not as a property.');
     }
 
     public function testTheEntryPointSendsPagesToSignInAndJsonA401(): void

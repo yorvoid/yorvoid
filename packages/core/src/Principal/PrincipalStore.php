@@ -21,6 +21,11 @@ interface PrincipalStore
     public function get(Realm $realm, PrincipalId $id): ?Principal;
 
     /**
+     * Whether the realm has an active principal, e.g. so a setup code can't create a second first one.
+     */
+    public function hasActive(Realm $realm): bool;
+
+    /**
      * Writes the principal's new status, if it's still at the status version $before has: another
      * transaction may have changed it since it was read.
      *

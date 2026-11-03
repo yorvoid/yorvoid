@@ -49,6 +49,10 @@ final class PasskeyPolicyTest extends TestCase
         yield 'a query' => ['example.com', ['https://example.com?x=1'], 'can\'t use passkeys'];
         yield 'not a URL' => ['example.com', ['example.com'], 'can\'t use passkeys'];
         yield 'unparseable' => ['example.com', ['https://'], 'can\'t use passkeys'];
+        yield 'a fragment' => ['example.com', ['https://example.com#x'], 'can\'t use passkeys'];
+        yield 'a host with a line break' => ['example.com', ["https://\r\n.example.com"], 'can\'t use passkeys'];
+        yield 'a host with a backslash' => ['example.com', ['https://a\\.example.com'], 'can\'t use passkeys'];
+        yield 'a host in capitals' => ['example.com', ['https://EXAMPLE.com'], 'can\'t use passkeys'];
     }
 
     /**

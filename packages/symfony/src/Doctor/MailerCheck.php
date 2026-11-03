@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony\Doctor;
 
-use Symfony\Component\Mime\Address;
-use Symfony\Component\Mime\Exception\RfcComplianceException;
-
 /**
  * Whether security notifications can leave: an address to send them from, and a transport that
  * delivers. It sends nothing.
@@ -18,12 +15,15 @@ final readonly class MailerCheck implements Check
     /**
      * @param array<string, string>|null $transports Symfony Mailer's transports' DSNs, by name, the default first;
      *                                               null without Symfony Mailer
+     * @param bool                       $own        Whether the application sends YorvoID's emails its own way, not
+     *                                               through Symfony Mailer: then its transports aren't YorvoID's
      */
     public function __construct(
         private bool $notifications,
         private ?string $from,
         private ?array $transports,
         private bool $debug,
+        private bool $own = false,
     ) {
     }
 
@@ -37,10 +37,13 @@ final readonly class MailerCheck implements Check
             return;
         }
 
-        try {
-            new Address((string) $this->from);
-        } catch (RfcComplianceException) {
+        // Without Symfony Mime, which an application's own mailer may not need.
+        if (false === filter_var((string) $this->from, \FILTER_VALIDATE_EMAIL)) {
             yield Finding::problem(\sprintf('Notifications come from "%s", which isn\'t an email address.', $this->from), 'Set notifications.from to an address, e.g. "security@example.com".', 'concepts/notifications.md#configuration');
+        }
+
+        if ($this->own) {
+            return;
         }
 
         $default = null === $this->transports ? null : array_first($this->transports);

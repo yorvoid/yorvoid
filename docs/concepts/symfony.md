@@ -73,8 +73,10 @@ yorvoid:
     flows:
         completed_path: /               # where people go when a flow completes
         completed_paths: {}             # by flow, e.g. {yorvoid.sign_in: /dashboard}
-        script: /bundles/yorvoid/browser/forms.js   # the pages' passkey script
+        script: /bundles/yorvoid/browser/forms.js   # the pages' passkey script: a path, or https:// on one of passkeys.origins
 ```
+
+- **A mistake stops the application from starting**, naming the option: a realm, table prefix, duration, limit, origin, cookie name, script or notification address YorvoID would refuse later is refused when the container is compiled. A value from an environment variable is checked when it's used, and by `yorvoid:doctor`.
 
 - Durations are written `90s`, `15m`, `8h`, `30d`; limits as attempts per duration, `10/15m`.
 - Each principal's language comes from your profiles: implement `PrincipalLocales` and give its service ID as `notifications.locales`; English otherwise.

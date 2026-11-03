@@ -8,6 +8,7 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Mail\Block\Action;
 
 /**
  * What security notifications need from the application: its name, the page that handles "this wasn't
@@ -33,8 +34,11 @@ final readonly class NotificationSettings
         public ?\Closure $localeOf = null,
         ?Duration $notMeLifetime = null,
     ) {
-        if (!str_contains($notMeUrl, '{token}') || !\in_array(parse_url($notMeUrl, \PHP_URL_SCHEME), ['https', 'http'], true)) {
-            throw new IntegratorError(\sprintf('"%s" isn\'t a web address with {token} in it.', $notMeUrl), 'Give the absolute address of the page that confirms "this wasn\'t me", with {token} where the token goes.', 'concepts/notifications.md#configuration');
+        // The token goes in the path or the query: in the host it would travel to DNS servers.
+        $with = static fn (string $token): string => strtr($notMeUrl, ['{token}' => $token, '{credential}' => 'c']);
+
+        if (!str_contains($notMeUrl, '{token}') || !Action::isSafe($with('a')) || parse_url($with('a'), \PHP_URL_HOST) !== parse_url($with('b'), \PHP_URL_HOST)) {
+            throw new IntegratorError(\sprintf('"%s" isn\'t a web address with {token} in it.', $notMeUrl), 'Give the absolute https:// address of the page that confirms "this wasn\'t me", with {token} in its path or query where the token goes.', 'concepts/notifications.md#configuration');
         }
 
         $this->notMeLifetime = $notMeLifetime ?? Duration::days(7);

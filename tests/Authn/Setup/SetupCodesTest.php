@@ -129,7 +129,8 @@ final class SetupCodesTest extends DatabaseTestCase
     {
         $setup = $this->setupCodes($implementation);
         $code = $setup->create(new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
-        $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Console));
+        // Invited, not active: the realm still has no owner.
+        $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Invited, email: 'ana@example.com'), new Origin(OriginKind::Console));
 
         try {
             $setup->claim(new Realm('acme'), $code, new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Web));
@@ -152,6 +153,27 @@ final class SetupCodesTest extends DatabaseTestCase
         self::assertFalse($setup->isClaimed(new Realm('acme')));
         $setup->claim(new Realm('acme'), $code, new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Web));
         self::assertTrue($setup->isClaimed(new Realm('acme')), 'The code stopped working after a failed claim.');
+    }
+
+    #[DataProvider('implementations')]
+    public function testOnlyWhileNoOwnerExists(string $implementation): void
+    {
+        $setup = $this->setupCodes($implementation);
+        $code = $setup->create(new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
+        $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Console));
+
+        try {
+            $setup->claim(new Realm('acme'), $code, new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Web));
+            self::fail('A realm with people in it got a second first principal.');
+        } catch (InvalidSetupCode) {
+        }
+
+        self::assertSame(['yorvoid.setup.create_code', 'yorvoid.principal.create', 'yorvoid.setup.claim'], array_map(static fn ($entry): string => $entry->action, iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false)));
+        self::assertSame('failed', iterator_to_array($this->stack->log->entries(new Realm('acme'), 3), false)[0]->outcome->value, 'The failed claim is recorded, with nothing typed.');
+        self::assertSame([], iterator_to_array($this->stack->log->entries(new Realm('acme'), 3), false)[0]->details);
+        $this->expectException(RealmAlreadyClaimed::class);
+
+        $setup->create(new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
     }
 
     #[DataProvider('implementations')]

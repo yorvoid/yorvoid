@@ -73,12 +73,13 @@ final class OneTimeTokensTest extends DatabaseTestCase
         self::assertNull($tokens->peek(new Realm('acme'), 'acme.password_reset', $issued->secret));
 
         $entries = \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), 1);
-        self::assertSame(['yorvoid.token.issue', 'yorvoid.token.consume'], array_map(static fn ($entry): string => $entry->action, $entries));
+        self::assertSame([['yorvoid.token.issue', 'success'], ['yorvoid.token.consume', 'success'], ['yorvoid.token.consume', 'failed']], array_map(static fn ($entry): array => [$entry->action, $entry->outcome->value], $entries));
+        self::assertSame([null, ['purpose' => 'acme.password_reset']], [$entries[2]->actor, $entries[2]->details], 'A failed use is recorded, without the token.');
         self::assertSame(['expires_at' => '2026-10-27T19:45:30+00:00', 'purpose' => 'acme.password_reset', 'sent_to_email' => true], $entries[0]->details, 'The log holds no address or token.');
         self::assertEquals($actor, $entries[0]->actor);
         self::assertSame(['purpose' => 'acme.password_reset'], $entries[1]->details);
         self::assertEquals($principal->id, $entries[1]->actor);
-        self::assertSame([SecurityLogEntryRecorded::class, OneTimeTokenIssued::class, SecurityLogEntryRecorded::class, OneTimeTokenConsumed::class], $this->events->classes());
+        self::assertSame([SecurityLogEntryRecorded::class, OneTimeTokenIssued::class, SecurityLogEntryRecorded::class, OneTimeTokenConsumed::class, SecurityLogEntryRecorded::class], $this->events->classes());
     }
 
     #[DataProvider('implementations')]

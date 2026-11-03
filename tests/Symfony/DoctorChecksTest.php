@@ -130,6 +130,10 @@ final class DoctorChecksTest extends DatabaseTestCase
         self::assertCount(1, iterator_to_array(new MailerCheck(true, 'security@example.com', ['main' => 'smtp://null'], false)->findings(), false));
         self::assertSame([], iterator_to_array(new MailerCheck(true, 'security@example.com', ['main' => 'smtp://null'], true)->findings(), false));
         self::assertSame([], iterator_to_array(new MailerCheck(true, 'security@example.com', ['main' => 'smtp://mail.example.com', 'other' => 'null://null'], false)->findings(), false));
+
+        // The application's own mailer, maybe without Symfony Mailer: its transports aren't YorvoID's to check.
+        self::assertSame([], iterator_to_array(new MailerCheck(true, 'security@example.com', null, false, own: true)->findings(), false));
+        self::assertCount(1, iterator_to_array(new MailerCheck(true, 'security', null, false, own: true)->findings(), false), 'The address is checked all the same.');
     }
 
     public function testWarnsOfSettingsWeakerThanThePresetsOnly(): void

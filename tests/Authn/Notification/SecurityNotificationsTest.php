@@ -355,7 +355,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         self::assertEquals(Duration::days(1), new NotificationSettings('Acme', 'https://acme.example/{token}', notMeLifetime: Duration::days(1))->notMeLifetime);
         self::assertSame('en', $settings->localeOf(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next())));
 
-        foreach (['https://acme.example/not-me', 'javascript:{token}', '/not-me?token={token}'] as $url) {
+        foreach (['https://acme.example/not-me', 'javascript:{token}', '/not-me?token={token}', 'http://acme.example/not-me?token={token}', 'https://{token}.acme.example/not-me', 'https://evil.example@acme.example/{token}', 'http:{token}', "https://acme.example/\0/{token}"] as $url) {
             try {
                 new NotificationSettings('Acme', $url);
                 self::fail(\sprintf('"%s" was accepted.', $url));

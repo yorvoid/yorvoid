@@ -17,8 +17,21 @@ final readonly class Action implements Block
         public string $label,
         public string $url,
     ) {
-        if (!\in_array(parse_url($url, \PHP_URL_SCHEME), ['https', 'http'], true) || false === filter_var($url, \FILTER_VALIDATE_URL)) {
-            throw new IntegratorError(\sprintf('"%s" isn\'t a web address for an email\'s action.', $url), 'Use an absolute https:// address of your application.', 'concepts/mail.md#emails');
+        if (!self::isSafe($url)) {
+            throw new IntegratorError(\sprintf('"%s" isn\'t a web address for an email\'s action.', $url), 'Use an absolute https:// address of your application, without a user name or password in it; http:// only for localhost.', 'concepts/mail.md#emails');
         }
+    }
+
+    /**
+     * Whether a link may go in an email: https (http only for localhost, in development), and nothing
+     * before the host that could make "https://example.com@evil.example" read as example.com.
+     */
+    public static function isSafe(string $url): bool
+    {
+        $parts = false === filter_var($url, \FILTER_VALIDATE_URL) ? false : parse_url($url);
+
+        return \is_array($parts)
+            && !isset($parts['user']) && !isset($parts['pass'])
+            && ('https' === ($parts['scheme'] ?? null) || ('http' === ($parts['scheme'] ?? null) && 'localhost' === ($parts['host'] ?? null)));
     }
 }

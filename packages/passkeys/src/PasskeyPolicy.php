@@ -50,7 +50,8 @@ final readonly class PasskeyPolicy
             $host = \is_array($parts) ? ($parts['host'] ?? '') : '';
             $secure = 'https' === ($parts['scheme'] ?? null) || ('http' === ($parts['scheme'] ?? null) && 'localhost' === $host);
 
-            if (!\is_array($parts) || !$secure || isset($parts['path']) || isset($parts['query']) || isset($parts['user']) || ($host !== $relyingPartyId && !str_ends_with($host, '.'.$relyingPartyId))) {
+            // As browsers write them: a lowercase scheme and host, an optional port; no space, backslash or fragment.
+            if (1 !== preg_match('#^https?://[a-z0-9.-]+(?::[0-9]{1,5})?$#D', $origin) || !\is_array($parts) || !$secure || isset($parts['path']) || isset($parts['query']) || isset($parts['user']) || ($host !== $relyingPartyId && !str_ends_with($host, '.'.$relyingPartyId))) {
                 throw new IntegratorError(\sprintf('"%s" can\'t use passkeys of "%s".', $origin, $relyingPartyId), 'Origins are "https://" and a host at or under the relying party ID, with an optional port and nothing else, e.g. "https://example.com" or "https://app.example.com:8443"; "http://localhost" only for development.', 'concepts/passkeys.md#configuration');
             }
         }

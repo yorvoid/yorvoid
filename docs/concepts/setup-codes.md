@@ -13,6 +13,7 @@ $output->writeln('Open https://example.com/setup and enter '.$code->reveal()); /
 - A code is 130 random bits, written as 26 characters in groups of five. Case, hyphens and spaces don't matter, and O, I and L count as 0, 1 and 1, so it can be read aloud and typed.
 - Only its hash is kept. Creating a new code replaces the old one.
 - A realm is claimed **once**. After that, creating a code throws `RealmAlreadyClaimed`: someone who lost access recovers it with a [recovery link](recovery-links.md).
+- **Only while no owner exists:** a realm that has an active principal, however they came (an invitation, an import), gets no code, and a code made before then stops working. A setup script left in a deployment can't mint a second "first" principal.
 
 ## Claiming a realm
 

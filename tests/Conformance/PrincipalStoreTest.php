@@ -45,6 +45,22 @@ final class PrincipalStoreTest extends DatabaseTestCase
     }
 
     #[DataProvider('implementations')]
+    public function testKnowsWhetherARealmHasAnActivePrincipal(string $implementation): void
+    {
+        $store = $this->stack($implementation)->principals;
+        self::assertFalse($store->hasActive(new Realm('acme')));
+
+        foreach ([PrincipalStatus::Invited, PrincipalStatus::Suspended, PrincipalStatus::Deleted] as $status) {
+            $store->add(new Principal(new PrincipalId(new UuidV7()), new Realm('acme'), PrincipalKind::Human, $status, new \DateTimeImmutable(), new \DateTimeImmutable(), new \DateTimeImmutable()));
+        }
+
+        $store->add(self::principal(new Realm('globex')));
+        self::assertFalse($store->hasActive(new Realm('acme')), 'Only an active principal of the realm counts.');
+        $store->add(self::principal(new Realm('acme')));
+        self::assertTrue($store->hasActive(new Realm('acme')));
+    }
+
+    #[DataProvider('implementations')]
     public function testRefusesADuplicateIdEvenInAnotherRealm(string $implementation): void
     {
         $store = $this->stack($implementation)->principals;

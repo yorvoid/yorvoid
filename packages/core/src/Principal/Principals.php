@@ -212,6 +212,14 @@ final readonly class Principals
      * The principal with this email address or username, e.g. to sign in. Deleted principals have no
      * identifiers, so they're never found.
      */
+    /**
+     * Whether the realm has an active principal.
+     */
+    public function hasActive(Realm $realm): bool
+    {
+        return $this->store->hasActive($realm);
+    }
+
     public function findByIdentifier(Realm $realm, IdentifierKind $kind, string $value): ?Principal
     {
         try {

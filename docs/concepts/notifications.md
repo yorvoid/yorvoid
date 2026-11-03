@@ -33,7 +33,7 @@ foreach (SecurityNotifications::events() as $event => $method) {
 ```
 
 - `$mailer` delivers the emails ([mail](mail.md)); `$translator` is any Symfony `TranslatorInterface` with YorvoID's [catalogues](translations.md).
-- `notMeUrl` is your page for "This wasn't me", with `{token}` and `{credential}` where they go.
+- `notMeUrl` is your page for "This wasn't me", with `{token}` and `{credential}` where they go: an `https://` address (`http://` only for `localhost`), with the token in its path or query, never in the host, and no user name or password before the host.
 - The events come after the commit; the listeners issue a one-time token each, so run your work through `$transactions->run()` ([storage](storage.md#transactions)).
 
 ## "This wasn't me"
