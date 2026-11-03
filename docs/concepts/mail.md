@@ -58,13 +58,20 @@ Keep auto-escaping on, and styles inline: mail clients drop style sheets.
 Implement `Mailer` with your application's way of sending email; the Symfony bridge provides one for Symfony Mailer.
 
 ```php
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Address;
+use YorvoID\Mail\Email;
+use YorvoID\Mail\Mailer;
+use YorvoID\Mail\Renderer;
+
 final class SymfonyMailer implements Mailer
 {
-    public function __construct(private MailerInterface $mailer, private Renderer $renderer = new Renderer()) {}
+    public function __construct(private MailerInterface $mailer, private Address $from, private Renderer $renderer = new Renderer()) {}
 
     public function send(Email $email): void
     {
         $this->mailer->send(new \Symfony\Component\Mime\Email()
+            ->from($this->from)   // Symfony Mailer refuses an email without one
             ->to($email->to)
             ->subject($email->subject)
             ->text($this->renderer->text($email))

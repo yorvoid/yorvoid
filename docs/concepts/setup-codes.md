@@ -18,7 +18,7 @@ $output->writeln('Open https://example.com/setup and enter '.$code->reveal()); /
 ## Claiming a realm
 
 ```php
-$transactions->run(function () use ($setupCodes, $code): void {
+$transactions->run(function () use ($setupCodes, $code, $yourRoles): void {
     $owner = $setupCodes->claim(
         Realm::default(),
         Secret::fromString($code),

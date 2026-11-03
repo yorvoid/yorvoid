@@ -59,6 +59,19 @@ If part of the work fails inside your transaction (a savepoint rolls back) and y
 
 Listeners of "-ed" events may write in transactions of their own, e.g. a [notification](notifications.md) that issues a link. When the outermost transaction is YorvoID's (`$transactions->run()`), they run once DBAL has finished committing. When you commit a transaction yourself with `$connection->commit()`, they run during that commit, while DBAL still counts the transaction as open: such listeners can't start transactions then. So run work that YorvoID joins through `$transactions->run()`.
 
+### Without a database
+
+In tests, or an application that keeps nothing between runs, YorvoID's stores can live in memory. A failed change must then undo what it did in every store, as a database's rollback does: YorvoID relies on it, e.g. the last way to sign in can't be removed. Build them all at once, registered, with `InMemoryStorage` from `yorvoid/testing`:
+
+```php
+use YorvoID\Testing\InMemoryStorage;
+
+$memory = new InMemoryStorage();
+$principals = new Principals($memory->principals, $memory->identifiers, new SecurityLog($memory->log, $memory->transactions), $memory->transactions);
+```
+
+A store built on its own and not registered with `InMemoryTransactions::register()` keeps half of a failed change.
+
 ## Migrations
 
 YorvoID's tables are created and changed by its own migrations, separately from your application's. Their history is kept in YorvoID's location (`yorvoid_migration`).

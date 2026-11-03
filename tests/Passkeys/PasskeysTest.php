@@ -795,6 +795,13 @@ final class PasskeysTest extends DatabaseTestCase
             'displayName' => 'ana@example.com',
         ], $signals->toArray());
 
+        // Without RemovePasskeyWithCredential, a passkey whose sign-in method is gone keeps its row.
+        $phones = $passkeys->of(new Realm('acme'), $session->principalId)[0];
+        $credential = $this->credentials->get(new Realm('acme'), $phones->credentialId);
+        \assert(null !== $credential);
+        $this->credentials->disable($credential, 'Lost', new Origin(OriginKind::Console));
+        self::assertSame([VirtualAuthenticator::encode($laptop->credentials[0]['id'])], $passkeys->signals($session)?->toArray()['allAcceptedCredentialIds'], 'The browser was told a disabled passkey is accepted.');
+
         $other = $this->session(username: 'bob');
         $ceremony = $passkeys->beginRegistration($other);
         $passkeys->finishRegistration($other, $ceremony->id, new VirtualAuthenticator()->register($ceremony->options), 'Passkey', new Origin(OriginKind::Web));

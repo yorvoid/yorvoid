@@ -15,6 +15,7 @@ use YorvoID\Symfony\Doctor\Check;
 use YorvoID\Symfony\Doctor\ClockCheck;
 use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
+use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\Finding;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
@@ -109,6 +110,16 @@ final class DoctorChecksTest extends DatabaseTestCase
         foreach ([null, '', '10.0.0.0/8,192.0.2.0/24', 'REMOTE_ADDR', ['10.0.0.0/8', 'private_ranges'], '0.0.0.0/1', [5, null]] as $trusted) {
             self::assertSame([], $check($trusted), (string) json_encode($trusted));
         }
+    }
+
+    public function testProductionRunsWithoutDebugAndWithASecret(): void
+    {
+        self::assertSame([], iterator_to_array(new EnvironmentCheck('dev', true, '')->findings(), false), 'Development is development.');
+        self::assertSame([], iterator_to_array(new EnvironmentCheck('prod', false, 'a-long-random-secret')->findings(), false));
+        $findings = iterator_to_array(new EnvironmentCheck('prod', true, ' ')->findings(), false);
+
+        self::assertSame(['Production runs with debug on: error pages show source code and stack traces to anyone.', 'Production has no APP_SECRET: what Symfony signs with it, e.g. links and CSRF tokens, can be made by anyone.'], array_map(static fn (Finding $finding): string => $finding->what, $findings));
+        self::assertTrue($findings[0]->problem && $findings[1]->problem);
     }
 
     public function testTestHelpersAreAProblemOutsideDevelopment(): void

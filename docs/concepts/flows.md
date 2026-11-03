@@ -63,8 +63,9 @@ Each change gives a new `Flow`; the original stays as it was:
 ```php
 $setup = $flows->flow('yorvoid.setup')
     ->withStepAfter('passkey_registration', new AcceptTermsStep(), required: true)
-    ->withStepReplaced(new MyRecoveryCodesStep())  // same name as the step it replaces
-    ->withoutStep('optional_step');                // only steps the flow doesn't require
+    ->withStepReplaced(new MyRecoveryCodesStep());  // same name as the step it replaces
+
+$withoutCodes = $flows->flow('yorvoid.setup')->withoutStep('recovery_codes');  // only steps the flow doesn't require
 ```
 
 - Flows are named in lowercase segments separated by dots: YorvoID's start with `yorvoid.`, give yours your own prefix.
@@ -85,6 +86,7 @@ A step implements `Step`:
 | `submit($state, $context, $input)` | Checks the answer: `StepResult::done()`, `refused()`, `throttled()`, `failed()`, or `reopen()` to go back to earlier steps |
 
 - **Keep what the step needs in the flow's state**, never in properties: one instance serves every flow, and a flow may continue in another request or on another server.
+- **Under a prefix of your own,** e.g. the step's name: `acme_terms.accepted`. All steps of a flow share its state, and YorvoID's keep theirs under their names (`passkey_registration.credential`, `step_up.operation`, `intent.summary`): a key of another step's changes what it shows. `flows.` and `yorvoid.` are reserved: a step that keeps data there is an integrator's error.
 - **The state holds plain data:** strings, numbers, booleans, null, and lists and maps of them. Keep an object's ID, and load it again; anything else is an integrator's error.
 - **Problems are messages to translate** (domain `yorvoid`), with parameters, the field they're about, and a reason for logs.
 - `Input` reads what was sent, from a form or the browser client: `string()`, `isChecked()`, `json()` (a passkey ceremony's answer, sent as an object or a JSON string), and `action()`, which is `Input::SKIP` when the person passes over a step that offers it.

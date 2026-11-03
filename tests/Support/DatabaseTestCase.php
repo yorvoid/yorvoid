@@ -11,41 +11,28 @@ use Doctrine\DBAL\Logging\Middleware as LoggingMiddleware;
 use Doctrine\DBAL\Tools\DsnParser;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
-use YorvoID\Authn\Credential\Storage\InMemoryCredentialStore;
 use YorvoID\Authn\Migrations\AuthnMigrations;
 use YorvoID\Authn\Recovery\Storage\DbalRecoveryCodeStore;
-use YorvoID\Authn\Recovery\Storage\InMemoryRecoveryCodeStore;
 use YorvoID\Authn\Session\Storage\DbalKnownDeviceStore;
 use YorvoID\Authn\Session\Storage\DbalSessionStore;
-use YorvoID\Authn\Session\Storage\InMemoryKnownDeviceStore;
-use YorvoID\Authn\Session\Storage\InMemorySessionStore;
 use YorvoID\Authn\Setup\Storage\DbalSetupStore;
-use YorvoID\Authn\Setup\Storage\InMemorySetupStore;
 use YorvoID\Authn\StepUp\Storage\DbalCoolDownStore;
-use YorvoID\Authn\StepUp\Storage\InMemoryCoolDownStore;
 use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
-use YorvoID\Authn\Token\Storage\InMemoryOneTimeTokenStore;
 use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
-use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Migrations\CoreMigrations;
 use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
 use YorvoID\Core\Principal\Storage\DbalPrincipalStore;
-use YorvoID\Core\Principal\Storage\InMemoryIdentifierStore;
-use YorvoID\Core\Principal\Storage\InMemoryPrincipalStore;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
-use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Core\Storage\Migration\Migrator;
 use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Passkeys\Migrations\PasskeysMigrations;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
-use YorvoID\Passkeys\Storage\InMemoryCeremonyStore;
-use YorvoID\Passkeys\Storage\InMemoryPasskeyStore;
+use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Throttle\Migrations\ThrottleMigrations;
 use YorvoID\Throttle\Storage\DbalThrottleStore;
-use YorvoID\Throttle\Storage\InMemoryThrottleStore;
 
 /**
  * Runs a test against every database YorvoID supports (PLT-024, PLT-025), each test in a location of its
@@ -92,33 +79,9 @@ abstract class DatabaseTestCase extends TestCase
     protected function stack(string $implementation, ?StatementLog $statements = null): Stack
     {
         if ('memory' === $implementation) {
-            $transactions = new InMemoryTransactions();
-            $principals = new InMemoryPrincipalStore();
-            $identifiers = new InMemoryIdentifierStore();
-            $log = new InMemorySecurityLogStore();
-            $sessions = new InMemorySessionStore();
-            $tokens = new InMemoryOneTimeTokenStore();
-            $setup = new InMemorySetupStore();
-            $credentials = new InMemoryCredentialStore();
-            $passkeys = new InMemoryPasskeyStore();
-            $ceremonies = new InMemoryCeremonyStore();
-            $recoveryCodes = new InMemoryRecoveryCodeStore();
-            $coolDowns = new InMemoryCoolDownStore();
-            $devices = new InMemoryKnownDeviceStore();
-            $transactions->register($principals);
-            $transactions->register($identifiers);
-            $transactions->register($log);
-            $transactions->register($sessions);
-            $transactions->register($tokens);
-            $transactions->register($setup);
-            $transactions->register($credentials);
-            $transactions->register($passkeys);
-            $transactions->register($ceremonies);
-            $transactions->register($recoveryCodes);
-            $transactions->register($coolDowns);
-            $transactions->register($devices);
+            $memory = new InMemoryStorage();
 
-            return new Stack($implementation, $transactions, $principals, $identifiers, $log, $sessions, $tokens, $setup, $credentials, $passkeys, $ceremonies, $recoveryCodes, $coolDowns, new InMemoryThrottleStore(), $devices);
+            return new Stack($implementation, $memory->transactions, $memory->principals, $memory->identifiers, $memory->log, $memory->sessions, $memory->tokens, $memory->setup, $memory->credentials, $memory->passkeys, $memory->ceremonies, $memory->recoveryCodes, $memory->coolDowns, $memory->throttle, $memory->devices);
         }
 
         $middleware = new TransactionMiddleware();

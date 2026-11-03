@@ -195,8 +195,10 @@ final class BundleTest extends TestCase
         self::assertStringContainsString('YorvoID\'s tables are up to date.', $migrate->getDisplay());
 
         $setup = new CommandTester($application->find('yorvoid:setup-code'));
-        self::assertSame(0, $setup->execute(['--lifetime' => '1h']));
-        self::assertMatchesRegularExpression('/^[0-9A-Z]{5}(-[0-9A-Z]{5}){4}-[0-9A-Z]$/m', $setup->getDisplay());
+        self::assertSame(0, $setup->execute(['--lifetime' => '1h'], ['capture_stderr_separately' => true]));
+        self::assertMatchesRegularExpression('/^[0-9A-Z]{5}(-[0-9A-Z]{5}){4}-[0-9A-Z]$/D', trim($setup->getDisplay()), 'Only the code goes to standard output.');
+        self::assertStringContainsString('That\'s the setup code for the realm "default": it\'s a secret.', (string) preg_replace('/\s+/', ' ', $setup->getErrorOutput()));
+        self::assertStringContainsString('it works once, for 1h.', (string) preg_replace('/\s+/', ' ', $setup->getErrorOutput()));
 
         $principals = $container->get(Principals::class);
         \assert($principals instanceof Principals);

@@ -15,7 +15,7 @@ browser                    console (web)                   privileged side: veri
    │◄── redirect back to the console ──────────────────────────│ → notify the owners
 ```
 
-How the console asks the verifier for a nonce, and learns what became of it (a queue, a socket), is your application's choice: the verifier only needs the operation.
+How the console asks the verifier for a nonce, and learns what became of it (a queue, a socket), is your application's choice: the verifier only needs the operation. [Sign operations with a Symfony console](../how-to/signed-operations.md) puts both sides together.
 
 ## Why a signing origin of its own
 

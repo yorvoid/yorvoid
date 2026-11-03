@@ -166,6 +166,7 @@ final class Flows
             return new Progress(FlowStatus::InProgress, $state, $current->name(), $current->view($state), $result->problems, $result->retryAfter);
         }
 
+        self::refuseReservedKeys($current, [...array_keys($result->data), ...$result->forget]);
         $state = $state->with($result->data)->without($result->forget)->passing($current->name());
 
         if (null !== $result->signedIn) {
@@ -270,6 +271,23 @@ final class Flows
             throw new StepFailed(new Problem(self::CONFIRM_AGAIN));
         } catch (HeldAfterRecovery) {
             throw new StepFailed(new Problem(self::HELD));
+        }
+    }
+
+    /**
+     * A step keeps its data under a prefix of its own: "flows." is where Flows keeps a session it holds
+     * back, and "yorvoid." is YorvoID's for later.
+     *
+     * @param list<array-key> $keys
+     *
+     * @throws IntegratorError
+     */
+    private static function refuseReservedKeys(Step $step, array $keys): void
+    {
+        foreach ($keys as $key) {
+            if (str_starts_with((string) $key, 'flows.') || str_starts_with((string) $key, 'yorvoid.')) {
+                throw new IntegratorError(\sprintf('The step "%s" keeps "%s" in the flow\'s state: "flows." and "yorvoid." are reserved.', $step->name(), $key), 'Keep a step\'s data under a prefix of your own, e.g. its name: "acme_terms.accepted".', 'concepts/flows.md#writing-a-step');
+            }
         }
     }
 

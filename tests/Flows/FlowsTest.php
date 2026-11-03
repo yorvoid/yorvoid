@@ -238,6 +238,25 @@ final class FlowsTest extends DatabaseTestCase
         self::assertEquals([FlowStatus::InProgress, [new Problem('yorvoid.flow.confirm_again')]], [$refused->submit($started->state->id, 'case', new Input(), $this->context)?->status, $refused->submit($started->state->id, 'case', new Input(), $this->context)?->problems]);
     }
 
+    public function testAStepCantKeepDataUnderAReservedPrefix(): void
+    {
+        foreach (['data' => StepResult::done(['flows.signed_in.token' => 'mine']), 'yorvoid' => StepResult::done(['yorvoid.anything' => 1]), 'forget' => StepResult::done(forget: ['flows.signed_in.token'])] as $what => $result) {
+            $flows = $this->flows(new Flow('acme.terms', [new TestStep('terms', static fn (): StepResult => $result)]));
+            $started = $flows->start('acme.terms', new Realm('acme'), $this->context);
+
+            try {
+                $flows->submit($started->state->id, 'terms', new Input(), $this->context);
+                self::fail('A step kept data under a reserved prefix: '.$what);
+            } catch (IntegratorError $error) {
+                self::assertStringStartsWith('The step "terms" keeps "', $error->problem);
+                self::assertStringEndsWith('" in the flow\'s state: "flows." and "yorvoid." are reserved.', $error->problem);
+            }
+        }
+
+        $fine = $this->flows(new Flow('acme.terms', [new TestStep('terms', static fn (): StepResult => StepResult::done(['acme_terms.accepted' => true, 'flowsy' => 1]))]));
+        self::assertSame(FlowStatus::Completed, $fine->submit($fine->start('acme.terms', new Realm('acme'), $this->context)->state->id, 'terms', new Input(), $this->context)?->status);
+    }
+
     public function testOnlyTheCurrentStepTakesAnswers(): void
     {
         $gate = new TestStep('gate', static fn (): StepResult => StepResult::refused(new Problem('acme.gate.closed')));

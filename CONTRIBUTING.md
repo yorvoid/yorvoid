@@ -87,7 +87,7 @@ So each package directory carries what its repository needs on its own: a README
    ```bash
    docker compose run --rm -w /app/site node npm ci
    docker compose run --rm -w /app/site node npm run build
-   docker compose run --rm -p 5173:5173 -w /app/site node npm run dev
+   docker compose run --rm -p 127.0.0.1:5173:5173 -w /app/site node npm run dev
    ```
 
    `site/package.json` pins Vite to a release with the dev server's security fixes, which VitePress 1 doesn't depend on yet: drop the override when VitePress does. The reference pages are written from the code: `composer docs-reference` after changing the configuration or a command.

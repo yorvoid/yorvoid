@@ -448,7 +448,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
             'yorvoid.invitation' => ['invitation', 'passkey_registration'],
             'yorvoid.recover_with_code' => ['recovery_code'],
             'yorvoid.recover_with_link' => ['recovery_link'],
-            'yorvoid.add_passkey' => ['passkey_registration'],
+            'yorvoid.add_passkey' => ['step_up', 'passkey_registration'],
             'yorvoid.step_up' => ['step_up'],
             'yorvoid.verify_email' => ['verify_email'],
         ], $required);

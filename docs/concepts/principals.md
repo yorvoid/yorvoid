@@ -122,7 +122,7 @@ final readonly class KeepAnOwner implements GuardRule
     }
 }
 
-$principals = new Principals(/* … */, guardRules: [new KeepAnOwner($owners)]);
+$principals = new Principals($principalStore, $identifierStore, $log, $transactions, guardRules: [new KeepAnOwner($owners)]);
 ```
 
 A rule runs inside the change's transaction, after the change is written, and sees the state as it will be if the change commits. Changes in a realm wait for each other while rules run, so two administrators suspending the last two owners at the same moment can't both succeed. A rule that refuses throws `GuardRuleViolated` with its reason, and nothing changes.

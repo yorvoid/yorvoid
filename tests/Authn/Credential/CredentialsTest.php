@@ -396,10 +396,26 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials('memory');
         $session = $this->session();
-        $labels = array_map(static fn (CredentialKind $kind): string => $credentials->add(new AddCredential(new Realm('acme'), $kind, ' '), $session, new Origin(OriginKind::Web))->label, CredentialKind::cases());
+        $labels = array_map(static fn (CredentialKind $kind): string => $credentials->add(new AddCredential(new Realm('acme'), $kind, ' '), $session, new Origin(OriginKind::Web))->label, [CredentialKind::Passkey, CredentialKind::RecoveryCodes]);
 
-        self::assertSame(['Passkey', 'Password', 'Authenticator app', 'Recovery codes'], $labels);
+        self::assertSame(['Passkey', 'Recovery codes'], $labels);
         self::assertSame([true, true, false, false], array_map(static fn (CredentialKind $kind): bool => $kind->signsIn(), CredentialKind::cases()));
+    }
+
+    public function testKindsNoPackageChecksYetCantBeAdded(): void
+    {
+        $credentials = $this->credentials('memory');
+        $session = $this->session();
+        self::assertSame([true, false, false, true], array_map(static fn (CredentialKind $kind): bool => $kind->isBuilt(), CredentialKind::cases()));
+
+        foreach ([CredentialKind::Password, CredentialKind::Totp] as $kind) {
+            try {
+                $credentials->add(new AddCredential(new Realm('acme'), $kind, 'Mine'), $session, new Origin(OriginKind::Web));
+                self::fail('A credential nothing checks was added: '.$kind->value);
+            } catch (IntegratorError $error) {
+                self::assertSame(\sprintf('YorvoID can\'t check %s credentials yet.', $kind->value), $error->problem);
+            }
+        }
     }
 
     public function testCredentialCommandsAreOperations(): void

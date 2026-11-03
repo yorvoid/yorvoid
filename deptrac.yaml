@@ -87,5 +87,6 @@ deptrac:
       - Authn
       - Passkeys
       - Symfony
+      - Throttle
       - VirtualAuthenticator
     VirtualAuthenticator: ~

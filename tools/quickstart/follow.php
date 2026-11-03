@@ -114,7 +114,8 @@ foreach ($steps as $step) {
             break;
 
         case 'setup-code':
-            file_put_contents($work.'/setup-code.txt', trim($run(trim($body), $cwd)));
+            // The code is the first line; what it is follows, for people.
+            file_put_contents($work.'/setup-code.txt', strtok(trim($run(trim($body), $cwd)), "\n"));
 
             break;
 

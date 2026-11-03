@@ -35,4 +35,4 @@ SQLite is for development and tests. In production, YorvoID's tables go in Postg
    php bin/console yorvoid:doctor
    ```
 
-YorvoID doesn't copy data between databases: start production with a fresh installation, and [claim it](../tutorials/symfony-quickstart.md#_8-claim-the-first-account) with a setup code. How the tables are named and migrated is in [storage](../concepts/storage.md).
+YorvoID doesn't copy data between databases: start production with a fresh installation, and [claim it](../tutorials/symfony-quickstart.md) with a setup code. How the tables are named and migrated is in [storage](../concepts/storage.md).
