@@ -12,6 +12,7 @@ return [
     'yorvoid.flow.setup_code.invalid' => 'Dieser Einrichtungscode hat nicht funktioniert. Prüfen Sie ihn, oder erstellen Sie auf dem Server einen neuen.',
     'yorvoid.flow.email.invalid' => 'Geben Sie eine gültige E-Mail-Adresse ein, zum Beispiel name@example.com.',
     'yorvoid.flow.invitation.not_working' => 'Diese Einladung funktioniert nicht mehr. Bitten Sie um eine neue.',
+    'yorvoid.flow.verify_email.not_working' => 'Dieser Link funktioniert nicht mehr: Er wurde schon benutzt, ist abgelaufen oder wurde durch einen neueren ersetzt.',
     'yorvoid.flow.recovery_code.invalid' => 'Dieser Code hat nicht funktioniert. Prüfen Sie ihn, oder verwenden Sie einen anderen.',
     'yorvoid.flow.recovery_link.not_working' => 'Dieser Link funktioniert nicht mehr. Bitten Sie um einen neuen.',
     'yorvoid.flow.recovery_codes.not_saved' => 'Bestätigen Sie, dass Sie Ihre Wiederherstellungscodes gespeichert haben.',

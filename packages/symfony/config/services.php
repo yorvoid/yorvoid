@@ -12,6 +12,8 @@ use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
 use YorvoID\Authn\Credential\ForgetCredentialsOfDeletedPrincipals;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
+use YorvoID\Authn\Identifier\EmailVerification;
+use YorvoID\Authn\Identifier\OwnIdentifiers;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Notification\NotMe;
 use YorvoID\Authn\Recovery\RecoveryCodes;
@@ -167,6 +169,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(Sessions::class)->arg('$devices', service(KnownDeviceStore::class)->nullOnInvalid());
     $services->set(StepUp::class)->arg('$coolDown', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.cool_down')]));
     $services->set(Credentials::class)->arg('$reauthenticationWindow', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
+    $services->set(OwnIdentifiers::class)->arg('$reauthenticationWindow', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
     $services->set(OneTimeTokens::class);
     $services->set(Throttle::class);
     $services->set(Attempts::class);
@@ -206,7 +209,7 @@ return static function (ContainerConfigurator $container): void {
     $window = inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]);
     $services->set(SessionFlowStore::class);
     $services->alias(FlowStore::class, SessionFlowStore::class);
-    $services->set(PasskeyFlows::class)->arg('$window', $window);
+    $services->set(PasskeyFlows::class)->arg('$window', $window)->arg('$emailVerification', service(EmailVerification::class)->nullOnInvalid());
     $services->set(Flows::class)->arg('$flows', inline_service()->factory([Factories::class, 'flows'])->args([service(PasskeyFlows::class), tagged_iterator('yorvoid.flow_customizer')]))->public();
     $services->set(FlowContexts::class)->arg('$deviceCookie', param('yorvoid.cookies.device'))->public();
     $services->set(SessionAuthenticator::class)->public();
@@ -246,7 +249,7 @@ return static function (ContainerConfigurator $container): void {
     }
 
     // The application uses these.
-    foreach ([Principals::class, Sessions::class, StepUp::class, Credentials::class, OneTimeTokens::class, Throttle::class, Attempts::class, SetupCodes::class, Invitations::class, RecoveryLinks::class, RecoveryCodes::class, NotMe::class, Passkeys::class, IntentSummaries::class, IntentSigning::class, SecurityLog::class] as $public) {
+    foreach ([Principals::class, Sessions::class, StepUp::class, Credentials::class, OwnIdentifiers::class, OneTimeTokens::class, Throttle::class, Attempts::class, SetupCodes::class, Invitations::class, RecoveryLinks::class, RecoveryCodes::class, NotMe::class, Passkeys::class, IntentSummaries::class, IntentSigning::class, SecurityLog::class] as $public) {
         $services->get($public)->public();
     }
 };

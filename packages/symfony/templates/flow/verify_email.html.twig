@@ -1,0 +1,15 @@
+{# Confirming an email address. View: EmailVerificationView. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+
+{% block title %}{{ 'yorvoid.ui.verify_email.title'|yorvoid_trans }}{% endblock %}
+
+{% block content %}
+    {% if view.email is null %}
+        <p>{{ 'yorvoid.flow.verify_email.not_working'|yorvoid_trans }}</p>
+    {% else %}
+        <p>{{ 'yorvoid.ui.verify_email.intro'|yorvoid_trans({email: view.email}) }}</p>
+        <form method="post" action="{{ action }}">
+            <p><button type="submit">{{ 'yorvoid.ui.verify_email.submit'|yorvoid_trans }}</button></p>
+        </form>
+    {% endif %}
+{% endblock %}

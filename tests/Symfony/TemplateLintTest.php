@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Symfony;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\StepView;
+use YorvoID\Passkeys\Flow\View\EmailVerificationView;
 use YorvoID\Passkeys\Flow\View\InvitationView;
 use YorvoID\Passkeys\Flow\View\PasskeyRegistrationView;
 use YorvoID\Passkeys\Flow\View\PasskeySignInView;
@@ -148,6 +149,9 @@ final class TemplateLintTest extends TestCase
             'There\'s no way to accept: a form with a button.',
         ], $this->check('invitation', new InvitationView('ana@example.com'), self::FORM.'<button type="button">Accept</button></form>'));
         self::assertSame([], $this->check('invitation', new InvitationView(null), '<p>It doesn\'t work any more.</p>'));
+        self::assertSame(['The page doesn\'t say which address is confirmed: "ana@example.com".', 'There\'s no way to confirm: a form with a button.'], $this->check('verify_email', new EmailVerificationView('ana@example.com'), '<p>Confirm?</p>'));
+        self::assertSame([], $this->check('verify_email', new EmailVerificationView('ana@example.com'), '<p>ana@example.com</p>'.self::FORM.'<button>Yes</button></form>'));
+        self::assertSame([], $this->check('verify_email', new EmailVerificationView(null), '<p>It doesn\'t work any more.</p>'));
 
         self::assertSame(['There\'s no way to continue: a form with a button.'], $this->check('recovery_link', new RecoveryLinkView(), '<button>Outside</button>'));
         self::assertSame([], $this->check('expired', null, '<p>Gone</p>'), 'Pages without a step have no step rules.');

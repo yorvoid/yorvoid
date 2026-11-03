@@ -36,10 +36,13 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
+use YorvoID\Core\Principal\RemoveIdentifier;
+use YorvoID\Core\Principal\SetIdentifier;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Mail\Block\Action;
@@ -184,6 +187,41 @@ final class SecurityNotificationsTest extends DatabaseTestCase
     }
 
     #[DataProvider('implementations')]
+    public function testTheOldAddressHearsWhenTheEmailChanges(string $implementation): void
+    {
+        $this->notifications($implementation);
+        $ana = $this->principal('ana@example.com');
+        $this->signIn($ana);
+        $thief = $this->signIn($ana)->session;
+        // The new device's notice: its link is bound to the address it went to.
+        $bound = self::link($this->only())[0];
+        $this->mailer->sent = [];
+
+        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'thief@example.net'), new Origin(OriginKind::Web), $ana->id);
+        $changed = $this->only();
+        self::assertSame('ana@example.com', $changed->to, 'Not the new address: that may be whoever took the account.');
+        self::assertSame('The email address of your Acme account was changed', $changed->subject);
+        self::assertStringStartsWith('Your Acme account\'s email address was changed: security emails go to the new address', self::paragraph($changed, 0));
+        self::assertSame(['When'], array_keys(self::facts($changed)));
+        self::assertStringStartsWith('If it wasn\'t you, use the link below. It signs everyone out', self::paragraph($changed, 2));
+        self::assertNull($this->notMe->confirm(new Realm('acme'), $bound, null, new Origin(OriginKind::Web)), 'A link sent to the old address before the change still works.');
+        // This one works though the address isn't the principal's any more.
+        self::assertEquals($ana->id, $this->notMe->confirm(new Realm('acme'), self::link($changed)[0], null, new Origin(OriginKind::Web)));
+        self::assertSame(SessionEndReason::Reported, $this->sessions->get(new Realm('acme'), $thief->id)?->endReason);
+
+        // The new address isn't verified: the next change tells nobody, and nor does a change of case.
+        $this->mailer->sent = [];
+        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'ana@example.com', verified: true), new Origin(OriginKind::Web), $ana->id);
+        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'ANA@example.com', verified: true), new Origin(OriginKind::Web), $ana->id);
+        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Username, 'ana'), new Origin(OriginKind::Web), $ana->id);
+        self::assertSame([], $this->mailer->sent);
+
+        $this->principals->removeIdentifier(new RemoveIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email), new Origin(OriginKind::Web), $ana->id);
+        $removed = $this->only();
+        self::assertSame(['ANA@example.com', 'The email address was removed from your Acme account'], [$removed->to, $removed->subject]);
+    }
+
+    #[DataProvider('implementations')]
     public function testNotMeSignsEveryoneOutOnce(string $implementation): void
     {
         $this->notifications($implementation);
@@ -279,7 +317,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $this->events = new RecordingDispatcher();
         $ids = new UuidV7Generator($this->clock);
         $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
-        $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
+        $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, $this->events, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, events: $this->events, ids: $ids, clock: $this->clock, devices: $this->stack->devices);
         $this->credentials = new Credentials($this->stack->credentials, $this->sessions, new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock), $log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock);

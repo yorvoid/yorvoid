@@ -6,6 +6,7 @@ namespace YorvoID\Symfony\Templates;
 
 use YorvoID\Flows\Problem;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
+use YorvoID\Passkeys\Flow\View\EmailVerificationView;
 use YorvoID\Passkeys\Flow\View\InvitationView;
 use YorvoID\Passkeys\Flow\View\PasskeyRegistrationView;
 use YorvoID\Passkeys\Flow\View\PasskeySignInView;
@@ -23,7 +24,7 @@ use YorvoID\Passkeys\Flow\View\StepUpView;
 final class Samples
 {
     /** The templates YorvoID ships, in "@YorvoID/flow/" */
-    public const array TEMPLATES = ['layout', 'fields', 'passkey', 'setup_code', 'passkey_registration', 'recovery_codes', 'invitation', 'recovery_code', 'recovery_link', 'step_up', 'failed', 'expired'];
+    public const array TEMPLATES = ['layout', 'fields', 'passkey', 'setup_code', 'passkey_registration', 'recovery_codes', 'invitation', 'verify_email', 'recovery_code', 'recovery_link', 'step_up', 'failed', 'expired'];
 
     private const string GET = '{"challenge":"c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ","rpId":"example.com","allowCredentials":[],"userVerification":"required","timeout":300000}';
 
@@ -50,6 +51,8 @@ final class Samples
             new Sample('recovery_codes', 'problems', PasskeyFlows::SETUP, new RecoveryCodesView($codes), [new Problem('yorvoid.flow.recovery_codes.not_saved', field: 'saved')]),
             new Sample('invitation', 'default', PasskeyFlows::INVITATION, new InvitationView('ana@example.com')),
             new Sample('invitation', 'not_working', PasskeyFlows::INVITATION, new InvitationView(null)),
+            new Sample('verify_email', 'default', PasskeyFlows::VERIFY_EMAIL, new EmailVerificationView('ana@example.com')),
+            new Sample('verify_email', 'not_working', PasskeyFlows::VERIFY_EMAIL, new EmailVerificationView(null)),
             new Sample('recovery_code', 'default', PasskeyFlows::RECOVER_WITH_CODE, new RecoveryCodeView()),
             new Sample('recovery_code', 'problems', PasskeyFlows::RECOVER_WITH_CODE, new RecoveryCodeView(), [new Problem('yorvoid.flow.recovery_code.invalid', field: 'code')]),
             new Sample('recovery_code', 'too_many_attempts', PasskeyFlows::RECOVER_WITH_CODE, new RecoveryCodeView(), [new Problem('yorvoid.flow.too_many_attempts', ['minutes' => 15])]),

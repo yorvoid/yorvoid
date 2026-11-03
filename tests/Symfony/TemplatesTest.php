@@ -55,7 +55,7 @@ final class TemplatesTest extends TestCase
 
         self::assertSame([], array_map(strval(...), $lint->lint()));
         self::assertSame([], array_map(strval(...), $lint->lint('de')));
-        self::assertSame('Command OK: 21 pages checked: each has what its step needs.', 'Command OK: '.trim((string) preg_replace('/\s+/', ' ', strtr($this->command('yorvoid:templates:lint')[1], ['[OK]' => '']))));
+        self::assertSame('Command OK: 23 pages checked: each has what its step needs.', 'Command OK: '.trim((string) preg_replace('/\s+/', ' ', strtr($this->command('yorvoid:templates:lint')[1], ['[OK]' => '']))));
     }
 
     public function testTheLintFindsWhatAnApplicationsTemplatesLeftOut(): void
@@ -261,7 +261,7 @@ final class TemplatesTest extends TestCase
 
     public function testPublishingRefusesAnUnknownTemplate(): void
     {
-        $this->expectExceptionObject(new IntegratorError('YorvoID has no flow template "../../etc".', 'Publish one of: expired, failed, fields, invitation, layout, passkey, passkey_registration, recovery_code, recovery_codes, recovery_link, setup_code, step_up.', 'concepts/symfony.md#changing-the-templates'));
+        $this->expectExceptionObject(new IntegratorError('YorvoID has no flow template "../../etc".', 'Publish one of: expired, failed, fields, invitation, layout, passkey, passkey_registration, recovery_code, recovery_codes, recovery_link, setup_code, step_up, verify_email.', 'concepts/symfony.md#changing-the-templates'));
 
         new TemplatePublisher($this->directory)->publish('../../etc');
     }

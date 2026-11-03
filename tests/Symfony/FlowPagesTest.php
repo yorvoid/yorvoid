@@ -12,6 +12,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpFoundation\Cookie;
+use Symfony\Component\Mailer\EventListener\MessageLoggerListener;
+use Symfony\Component\Mime\Email;
 use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Session\AuthenticationContext;
@@ -25,6 +27,7 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
@@ -86,6 +89,14 @@ final class FlowPagesTest extends TestCase
 
         $this->browser->submit($refused->filter('form')->form(), ['code' => $code->reveal(), 'email' => 'ana@example.com']);
         self::assertSame(303, $this->statusCode());
+        $logger = $this->container->get('mailer.message_logger_listener');
+        \assert($logger instanceof MessageLoggerListener);
+        $messages = $logger->getEvents()->getMessages();
+        self::assertCount(1, $messages);
+        $email = $messages[0];
+        \assert($email instanceof Email);
+        self::assertSame(['ana@example.com', 'Confirm your email address for Acme'], [$email->getTo()[0]->getAddress(), $email->getSubject()]);
+        self::assertSame(1, preg_match('#https://example\.com/yorvoid/flows/yorvoid\.verify_email\?token=[^\s"<]+#', (string) $email->getTextBody(), $link));
         $device = $this->browser->getResponse()->headers->getCookies()[0] ?? null;
         \assert($device instanceof Cookie);
         self::assertSame(['__Host-yorvoid_device', true, true, 'lax', false], [$device->getName(), $device->isSecure(), $device->isHttpOnly(), $device->getSameSite(), $device->isPartitioned()]);
@@ -122,7 +133,26 @@ final class FlowPagesTest extends TestCase
         self::assertSame(['setup_code'], $me['methods'], 'Signed in to the firewall from the YorvoID session the flow started.');
         $principals = $this->container->get(Principals::class);
         \assert($principals instanceof Principals);
-        self::assertSame((string) $principals->findByIdentifier(Realm::default(), \YorvoID\Core\Principal\IdentifierKind::Email, 'ana@example.com')?->id, $me['user']);
+        $owner = $principals->findByIdentifier(Realm::default(), IdentifierKind::Email, 'ana@example.com');
+        \assert(null !== $owner);
+        self::assertSame((string) $owner->id, $me['user']);
+
+        // The owner's address got a link: notifications go only to a verified one.
+        self::assertFalse($principals->identifiers(Realm::default(), $owner->id)['email']->isVerified());
+
+        // Opening it only asks, as a mail scanner would open it too.
+        $this->browser->request('GET', html_entity_decode($link[0]));
+        $confirm = $this->browser->followRedirect();
+        self::assertSame('Confirm your email address', $confirm->filter('h1')->text());
+        self::assertStringContainsString('ana@example.com', $confirm->filter('main')->text());
+        self::assertFalse($principals->identifiers(Realm::default(), $owner->id)['email']->isVerified());
+
+        $this->browser->submit($confirm->filter('form')->form());
+        self::assertSame([303, '/'], [$this->statusCode(), $this->browser->getResponse()->headers->get('Location')]);
+        self::assertTrue($principals->identifiers(Realm::default(), $owner->id)['email']->isVerified());
+
+        $this->browser->request('GET', html_entity_decode($link[0]));
+        self::assertSame('This link doesn\'t work any more: it was used, it expired, or a newer one replaced it.', $this->browser->followRedirect()->filter('main p')->first()->text());
     }
 
     public function testSignsInWithTheBrowserClientsJson(): void

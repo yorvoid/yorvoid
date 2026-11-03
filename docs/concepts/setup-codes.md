@@ -29,7 +29,7 @@ $transactions->run(function () use ($setupCodes, $code): void {
 });
 ```
 
-`claim()` checks the code, creates the principal (active, in the realm being claimed), and marks the realm claimed, in one transaction. Give the principal its authority in the same transaction, as above: if that fails, the realm stays unclaimed and the code keeps working.
+`claim()` checks the code, creates the principal (active, in the realm being claimed), and marks the realm claimed, in one transaction. The owner's email address isn't verified yet, so they get no [security notifications](notifications.md) until they confirm it: send them a link with `EmailVerification` (the setup flow does). Give the principal its authority in the same transaction, as above: if that fails, the realm stays unclaimed and the code keeps working.
 
 A code that doesn't work throws `InvalidSetupCode`, without saying why.
 
