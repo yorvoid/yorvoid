@@ -135,9 +135,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertEquals([new Problem('yorvoid.flow.setup_code.invalid', field: 'code')], $this->submit($flow, 'setup_code', ['code' => '', 'email' => ''])->problems, 'The code first.');
 
         $claimed = $this->submit($flow, 'setup_code', ['code' => $code->reveal(), 'email' => ' ana@example.com ']);
-        $owner = $claimed->signedIn;
-        self::assertNotNull($owner);
-        self::assertSame([AuthenticationMethod::SetupCode, 'Firefox on Linux', '192.0.2.10'], [$owner->session->authentication->factors[0]->method, $owner->session->device, $owner->session->address]);
+        self::assertNull($claimed->signedIn, 'The owner gets the session only with a passkey: leaving now signs nobody in.');
         self::assertSame('passkey_registration', $claimed->step);
         $view = $claimed->view;
         self::assertInstanceOf(PasskeyRegistrationView::class, $view);
@@ -145,12 +143,18 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertSame('ana@example.com', ((array) ((array) $view->jsonSerialize()['options'])['user'])['name']);
 
         $authenticator = new VirtualAuthenticator();
-        $context = $this->context->withSession($owner->session);
+        // Requests without the session: the flow holds it.
+        $context = $this->context;
         self::assertSame('passkey_registration', $this->submit($flow, 'passkey_registration', ['action' => Input::SKIP], $context)->step, 'Not skippable here.');
         $registration = $this->flows->resume($flow->state->id, $context)?->view;
         self::assertInstanceOf(PasskeyRegistrationView::class, $registration);
         $registered = $this->submit($flow, 'passkey_registration', ['response' => json_decode($authenticator->register((string) $registration->options), true), 'label' => 'Laptop'], $context);
         self::assertSame('recovery_codes', $registered->step);
+        // The passkey was the last required step: now the owner gets the session.
+        $owner = $registered->signedIn;
+        self::assertNotNull($owner);
+        self::assertSame([AuthenticationMethod::SetupCode, 'Firefox on Linux', '192.0.2.10'], [$owner->session->authentication->factors[0]->method, $owner->session->device, $owner->session->address]);
+        $context = $this->context->withSession($owner->session);
         $credential = $registered->state->string('passkey_registration.credential');
         self::assertNotNull($credential);
         self::assertSame('Laptop', $this->credentials->get($this->realm, \YorvoID\Authn\Credential\CredentialId::fromString($credential))?->label);
@@ -165,6 +169,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
 
         $done = $this->submit($flow, 'recovery_codes', ['saved' => '1'], $context);
         self::assertSame(FlowStatus::Completed, $done->status);
+        self::assertNull($done->signedIn, 'Handed over already.');
         self::assertFalse($done->state->has('recovery_codes.codes'), 'The codes are forgotten.');
         self::assertCount(1, $this->passkeys->of($this->realm, $owner->session->principalId));
         self::assertSame(10, $this->recoveryCodes->remaining($this->realm, $owner->session->principalId));
@@ -203,10 +208,15 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertSame(['email' => 'Bo@Example.com'], $flow->view?->jsonSerialize());
 
         $accepted = $this->submit($flow, 'invitation', []);
-        self::assertSame(AuthenticationMethod::EmailLink, $accepted->signedIn?->session->authentication->factors[0]->method);
+        self::assertNull($accepted->signedIn, 'The invitee gets the session with a passkey.');
         self::assertSame('passkey_registration', $accepted->step);
         self::assertFalse($accepted->state->has(InvitationStep::TOKEN), 'The token is forgotten.');
-        self::assertSame(['Firefox on Linux', '192.0.2.10'], [$accepted->signedIn->session->device, $accepted->signedIn->session->address]);
+        $view = $accepted->view;
+        self::assertInstanceOf(PasskeyRegistrationView::class, $view);
+        self::assertFalse($view->canSkip);
+        $registered = $this->submit($flow, 'passkey_registration', ['response' => json_decode(new VirtualAuthenticator()->register((string) $view->options), true)]);
+        self::assertSame(AuthenticationMethod::EmailLink, $registered->signedIn?->session->authentication->factors[0]->method);
+        self::assertSame(['Firefox on Linux', '192.0.2.10'], [$registered->signedIn->session->device, $registered->signedIn->session->address]);
 
         $gone = $this->flows->start(PasskeyFlows::INVITATION, $this->realm, $this->context, [InvitationStep::TOKEN => $invitation->token->secret->reveal()]);
         self::assertEquals(new InvitationView(null), $gone->view);
@@ -350,8 +360,8 @@ final class PasskeyFlowsTest extends DatabaseTestCase
             $flow = $flows->start(PasskeyFlows::SETUP, new Realm($realm), $this->context);
             $claimed = $flows->submit($flow->state->id, 'setup_code', new Input(['code' => $code->reveal(), 'email' => 'ana@example.com']), $this->context);
 
-            self::assertNotNull($claimed?->signedIn, \sprintf('The owner of %s isn\'t signed in.', $realm));
-            self::assertSame('passkey_registration', $claimed->step);
+            // Claimed, though the email didn't go: on to the passkey, which hands the session over.
+            self::assertSame([FlowStatus::InProgress, 'passkey_registration', []], [$claimed?->status, $claimed?->step, $claimed?->problems], \sprintf('The owner of %s didn\'t claim it.', $realm));
         }
     }
 
@@ -366,7 +376,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertSame([
             'yorvoid.sign_in' => ['passkey'],
             'yorvoid.setup' => ['setup_code', 'passkey_registration'],
-            'yorvoid.invitation' => ['invitation'],
+            'yorvoid.invitation' => ['invitation', 'passkey_registration'],
             'yorvoid.recover_with_code' => ['recovery_code'],
             'yorvoid.recover_with_link' => ['recovery_link'],
             'yorvoid.add_passkey' => ['passkey_registration'],

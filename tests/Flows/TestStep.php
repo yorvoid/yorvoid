@@ -19,6 +19,9 @@ final class TestStep implements Step
     /** @var list<FlowContext> */
     public array $entered = [];
 
+    /** @var list<FlowContext> */
+    public array $submitted = [];
+
     /**
      * @param (\Closure(FlowState, FlowContext, Input): StepResult)|null $submit
      * @param (\Closure(FlowState, FlowContext): bool)|null              $applies
@@ -54,6 +57,8 @@ final class TestStep implements Step
 
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult
     {
+        $this->submitted[] = $context;
+
         return null === $this->submit ? StepResult::done() : ($this->submit)($state, $context, $input);
     }
 }

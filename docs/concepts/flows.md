@@ -23,7 +23,7 @@ $progress = $flows->submit($id, 'passkey', new Input($fields), $context); // the
 - **A refused answer** shows the step again with its problems, prepared afresh (a new passkey ceremony, for instance). Too many attempts are refused with `yorvoid.flow.too_many_attempts` and the seconds to wait.
 - **A step can end the flow**, e.g. an invitation that doesn't work any more.
 - **A flow takes at most 30 minutes** by default, and is forgotten when it completes, fails or expires.
-- **Signing in happens in the step that does it.** The `Progress` carries the started session for the application to hold, and the following steps run in it. A step-up's new token comes the same way.
+- **Signing in happens in the step that does it, but the person gets the session once every required step is done.** Until then the flow holds it, and its steps run in it; then the `Progress` carries it for the application to hold. So leaving setup before adding a passkey, or an inserted terms step that's required, leaves nobody signed in. Steps that aren't required don't hold it back. A step-up's new token comes the same way.
 - **When a flow completes**, `FlowCompleted` carries its state: keep what your own steps collected.
 
 The context says who is signed in, and what steps that sign people in record: the origin, the device's description, the client's address, the device cookie, and the language to prepare things in. The Symfony bridge builds it for each request.
@@ -37,8 +37,8 @@ YorvoID's passkey-first journeys come from `PasskeyFlows` in `yorvoid/passkeys` 
 | Flow | Steps | Start it with |
 |---|---|---|
 | `yorvoid.sign_in` | `passkey` | |
-| `yorvoid.setup` | `setup_code` (code and email; signs the owner in), `passkey_registration`, `recovery_codes` | |
-| `yorvoid.invitation` | `invitation` (confirm; signs the invitee in), `passkey_registration`, `recovery_codes` | `invitation.token`: the link's token |
+| `yorvoid.setup` | `setup_code` (code and email; signs the owner in once their passkey is added), `passkey_registration`, `recovery_codes` | |
+| `yorvoid.invitation` | `invitation` (confirm; signs the invitee in once their passkey is added), `passkey_registration`, `recovery_codes` | `invitation.token`: the link's token |
 | `yorvoid.recover_with_code` | `recovery_code` (email and code), `passkey_registration` (or later), `recovery_codes` | |
 | `yorvoid.recover_with_link` | `recovery_link` (confirm), `passkey_registration` (or later), `recovery_codes` | `recovery_link.token`: the link's token |
 | `yorvoid.add_passkey` | `step_up`, `passkey_registration` | |
@@ -60,7 +60,7 @@ Each change gives a new `Flow`; the original stays as it was:
 
 ```php
 $setup = $flows->flow('yorvoid.setup')
-    ->withStepAfter('passkey', new AcceptTermsStep())
+    ->withStepAfter('passkey_registration', new AcceptTermsStep(), required: true)
     ->withStepReplaced(new MyRecoveryCodesStep())  // same name as the step it replaces
     ->withoutStep('optional_step');                // only steps the flow doesn't require
 ```
@@ -68,6 +68,7 @@ $setup = $flows->flow('yorvoid.setup')
 - Flows are named in lowercase segments separated by dots: YorvoID's start with `yorvoid.`, give yours your own prefix.
 - Every step of a flow has a name of its own.
 - A flow lists the steps it can't do without, because it isn't safe without them: claiming the setup code, for instance. Removing one is an integrator's error; replacing it with one of your own is up to you.
+- A step you insert with `required: true` joins that list: it can't be removed, and someone who signs in during the flow is signed in only once it's done. Without it, a step after signing in is a page people can leave.
 
 ## Writing a step
 

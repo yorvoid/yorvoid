@@ -71,19 +71,25 @@ final readonly class Flow
     }
 
     /**
+     * @param bool $required Whether the flow needs it: it can't be removed, and whoever signs in during the
+     *                       flow gets their session only once it's done, e.g. accepting terms
+     *
      * @throws IntegratorError If there's no such step, or one with the new step's name already
      */
-    public function withStepBefore(string $before, Step $step): self
+    public function withStepBefore(string $before, Step $step, bool $required = false): self
     {
-        return $this->inserted($before, $step, 0);
+        return $this->inserted($before, $step, 0, $required);
     }
 
     /**
+     * @param bool $required Whether the flow needs it: it can't be removed, and whoever signs in during the
+     *                       flow gets their session only once it's done, e.g. accepting terms
+     *
      * @throws IntegratorError If there's no such step, or one with the new step's name already
      */
-    public function withStepAfter(string $after, Step $step): self
+    public function withStepAfter(string $after, Step $step, bool $required = false): self
     {
-        return $this->inserted($after, $step, 1);
+        return $this->inserted($after, $step, 1, $required);
     }
 
     /**
@@ -120,12 +126,12 @@ final readonly class Flow
         return new self($this->name, $this->steps, $this->required, $lifetime);
     }
 
-    private function inserted(string $next, Step $step, int $offset): self
+    private function inserted(string $next, Step $step, int $offset, bool $required): self
     {
         $steps = $this->steps;
         array_splice($steps, $this->position($next) + $offset, 0, [$step]);
 
-        return new self($this->name, $steps, $this->required, $this->lifetime);
+        return new self($this->name, $steps, $required ? [...$this->required, $step->name()] : $this->required, $this->lifetime);
     }
 
     private function position(string $name): int

@@ -34,3 +34,6 @@ $transactions->run(function () use ($setupCodes, $code): void {
 A code that doesn't work throws `InvalidSetupCode`, without saying why.
 
 Pass the client's address (`address: $request->getClientIp()`) so attempts from one address are [throttled](throttling.md): at 130 bits, guessing isn't practical, but limiting attempts costs nothing. Inside your own transaction, as above, the throttle needs a database connection of its own (see [storage](throttling.md#storage)).
+
+
+If the owner leaves the setup flow before adding a passkey, the realm is claimed and the code used, but they're signed in nowhere and have no way to sign in. Send them a [recovery link](recovery-links.md) (`yorvoid:recovery-link owner@example.com` in Symfony): it leads them to adding a passkey. The same goes for an invitee who left before adding theirs.
