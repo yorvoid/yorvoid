@@ -4558,15 +4558,18 @@
             "dist": {
                 "type": "path",
                 "url": "packages/passkeys",
-                "reference": "d1460cb24f5556ecdcbf767f57240541db86d3aa"
+                "reference": "2362bea6290c8be3cd0e9d74c0068d4425cabe9b"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
+                "ext-openssl": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
+                "spomky-labs/cbor-php": "^3.4",
                 "symfony/clock": "^8.1",
                 "symfony/translation-contracts": "^3.6",
+                "web-auth/cose-lib": "^4.8",
                 "web-auth/webauthn-lib": "^5.3.9",
                 "yorvoid/authn": "^0.1",
                 "yorvoid/core": "^0.1",

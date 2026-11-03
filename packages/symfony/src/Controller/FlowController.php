@@ -11,6 +11,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use YorvoID\Core\Operation\Operation;
@@ -27,6 +28,7 @@ use YorvoID\Passkeys\Flow\RecoveryLinkStep;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Templates\FlowPages;
+use YorvoID\Throttle\Throttled;
 
 /**
  * Flows over HTTP: the browser client's JSON, or the reference templates' pages. A step's page is
@@ -95,7 +97,13 @@ final readonly class FlowController
             throw new BadRequestHttpException('That isn\'t an operation\'s name.');
         }
 
-        return self::secured($this->answer($request, $this->flows->start($flow, $this->realm, $this->contexts->of($request), $data), true));
+        try {
+            $progress = $this->flows->start($flow, $this->realm, $this->contexts->of($request), $data);
+        } catch (Throttled $exception) {
+            throw new TooManyRequestsHttpException($exception->seconds, $exception->getMessage(), $exception);
+        }
+
+        return self::secured($this->answer($request, $progress, true));
     }
 
     public function show(Request $request, string $flow, string $id): Response

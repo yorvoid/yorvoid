@@ -20,7 +20,7 @@ use Webauthn\AuthenticatorAttestationResponse;
 use Webauthn\AuthenticatorAttestationResponseValidator;
 use Webauthn\AuthenticatorSelectionCriteria;
 use Webauthn\CeremonyStep\CeremonyStepManagerFactory;
-use Webauthn\CredentialRecord;
+use Webauthn\CollectedClientData;
 use Webauthn\Denormalizer\WebauthnSerializerFactory;
 use Webauthn\PublicKeyCredential;
 use Webauthn\PublicKeyCredentialCreationOptions;
@@ -148,6 +148,7 @@ final readonly class Passkeys
             throw new PasskeyRefused(Refusal::InvalidResponse);
         }
 
+        self::requireClientData($answer->clientDataJSON, 'webauthn.create');
         // Checked first, so the refusal says why; refusing on what isn't verified yet can't let anything in.
         $this->requireUserVerification($answer->attestationObject->authData->isUserVerified());
 
@@ -157,8 +158,19 @@ final readonly class Passkeys
             throw new PasskeyRefused(Refusal::InvalidResponse, $exception);
         }
 
+        if (!PublicKeyCheck::accepts($record->credentialPublicKey)) {
+            throw new PasskeyRefused(Refusal::InvalidResponse);
+        }
+
         return $this->transactions->run(function () use ($session, $record, $label, $origin): Credential {
             $credential = $this->credentials->add(new AddCredential($session->realm, CredentialKind::Passkey, $label), $session, $origin);
+            $existing = $this->store->of($session->realm, $session->principalId);
+
+            // Adding the credential took the realm's log lock, so this sees a first passkey registered at the
+            // same time, under another user handle: one handle per principal, so this one starts again.
+            if ([] !== $existing && $existing[0]->userHandle !== $record->userHandle) {
+                throw new PasskeyRefused(Refusal::CeremonyExpired);
+            }
             $passkey = new Passkey($credential->id, $session->realm, $session->principalId, $record->publicKeyCredentialId, $record->credentialPublicKey, $record->userHandle, $record->counter, $record->transports, $record->aaguid, true === $record->backupEligible, true === $record->backupStatus, true === $record->uvInitialized, $record->attestationType);
 
             // The store refuses an authenticator's ID that's registered already; the credential is rolled back.
@@ -172,9 +184,15 @@ final readonly class Passkeys
 
     /**
      * Begins signing in: the browser offers the person's passkeys for the site.
+     *
+     * @param string|null $address The client's IP address; pass it, so one address can't begin ceremonies without limit
+     *
+     * @throws Throttled When the address began too many; nothing was begun
      */
-    public function beginSignIn(Realm $realm): BegunCeremony
+    public function beginSignIn(Realm $realm, ?string $address = null): BegunCeremony
     {
+        $this->attempts->count('passkey_ceremony', $realm, null, $address);
+
         return $this->begin($realm, CeremonyKind::SignIn, PublicKeyCredentialRequestOptions::create(
             random_bytes(32),
             $this->policy->relyingPartyId,
@@ -199,10 +217,10 @@ final readonly class Passkeys
     {
         $this->attempts->count('passkey_sign_in', $realm, null, $address);
         $ceremony = $this->take($realm, $ceremonyId, CeremonyKind::SignIn);
-        [$passkey, $credential, $record, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.sign_in');
+        [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.sign_in');
 
-        return $this->transactions->run(function () use ($passkey, $credential, $record, $userVerified, $counter, $origin, $device, $address, $deviceCookie): StartedSession {
-            $this->recordUse($passkey, $credential, $record, $counter, $origin);
+        return $this->transactions->run(function () use ($passkey, $credential, $userVerified, $counter, $origin, $device, $address, $deviceCookie): StartedSession {
+            $this->recordUse($passkey, $credential, $counter, $origin);
 
             try {
                 return $this->sessions->start(new StartSession($passkey->realm, $passkey->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true)), $device, $address, $deviceCookie), $origin);
@@ -250,10 +268,10 @@ final readonly class Passkeys
     public function finishStepUp(Session $session, string $ceremonyId, string $response, Origin $origin): Secret
     {
         $ceremony = $this->takeForSession($session, $ceremonyId, CeremonyKind::StepUp);
-        [$passkey, $credential, $record, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.step_up', $session->principalId);
+        [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.step_up', $session->principalId);
 
-        return $this->transactions->run(function () use ($session, $ceremony, $passkey, $credential, $record, $userVerified, $counter, $origin): Secret {
-            $this->recordUse($passkey, $credential, $record, $counter, $origin);
+        return $this->transactions->run(function () use ($session, $ceremony, $passkey, $credential, $userVerified, $counter, $origin): Secret {
+            $this->recordUse($passkey, $credential, $counter, $origin);
             $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true, $ceremony->operation);
 
             // The session ended, or its principal was suspended, while the person was at their authenticator.
@@ -339,8 +357,8 @@ final readonly class Passkeys
      *
      * @param string $action What a refusal is recorded as, e.g. "yorvoid.passkey.sign_in"
      *
-     * @return array{Passkey, Credential, CredentialRecord, bool, CounterSuspicion} The passkey, its credential, what
-     *                                                                              the library checked, whether the user was verified, and whether the passkey may be a copy
+     * @return array{Passkey, Credential, bool, CounterSuspicion} The passkey, its credential, whether the user was
+     *                                                            verified, and whether the passkey may be a copy
      */
     private function verify(Ceremony $ceremony, string $response, Origin $origin, string $action, ?PrincipalId $principalId = null): array
     {
@@ -352,6 +370,7 @@ final readonly class Passkeys
             throw new PasskeyRefused(Refusal::InvalidResponse);
         }
 
+        self::requireClientData($assertion->clientDataJSON, 'webauthn.get');
         $passkey = $this->store->find($ceremony->realm, $answer->rawId);
         $credential = null === $passkey ? null : $this->credentials->get($ceremony->realm, $passkey->credentialId);
 
@@ -380,6 +399,17 @@ final readonly class Passkeys
             $this->refuse($passkey, $action, Refusal::InvalidResponse, $origin, $exception);
         }
 
+        // Backup eligibility is fixed when a passkey is created: another value is another authenticator.
+        if ($passkey->backupEligible !== (true === $record->backupEligible)) {
+            $counter->suspected = true;
+        }
+
+        // Recorded at once, and only over a lower counter: of two answers with the same counter at the same
+        // time, one passes (PK-05).
+        if (!$counter->suspected && !$this->store->update(new Passkey($passkey->credentialId, $passkey->realm, $passkey->principalId, $passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, $record->counter, $passkey->transports, $passkey->aaguid, $passkey->backupEligible, true === $record->backupStatus, true === $record->uvInitialized, $passkey->attestationType))) {
+            $counter->suspected = true;
+        }
+
         if ($counter->suspected && ClonePolicy::Allow !== $this->policy->clonePolicy) {
             if (ClonePolicy::DisablePasskey === $this->policy->clonePolicy) {
                 $this->credentials->disable($credential, 'signature counter didn\'t go up: the passkey may have been copied', $origin);
@@ -388,15 +418,14 @@ final readonly class Passkeys
             $this->refuse($passkey, $action, Refusal::SuspectedCopy, $origin);
         }
 
-        return [$passkey, $credential, $record, $userVerified, $counter];
+        return [$passkey, $credential, $userVerified, $counter];
     }
 
     /**
-     * Records a passkey's use: its new counter and backup state, and when it was last used.
+     * Records a passkey's use, when it was last used; verify() recorded its counter and backup state.
      */
-    private function recordUse(Passkey $passkey, Credential $credential, CredentialRecord $record, CounterSuspicion $counter, Origin $origin): void
+    private function recordUse(Passkey $passkey, Credential $credential, CounterSuspicion $counter, Origin $origin): void
     {
-        $this->store->update(new Passkey($passkey->credentialId, $passkey->realm, $passkey->principalId, $passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, $record->counter, $passkey->transports, $passkey->aaguid, true === $record->backupEligible, true === $record->backupStatus, true === $record->uvInitialized, $passkey->attestationType));
         $this->credentials->markUsed($credential);
 
         if ($counter->suspected) {
@@ -440,6 +469,17 @@ final readonly class Passkeys
         $steps->setCounterChecker($counter);
 
         return $steps;
+    }
+
+    /**
+     * What the library leaves: the answer must be for this kind of ceremony (WebAuthn §7.1 step 7, §7.2
+     * step 11), and not from a frame on another site, which browsers don't always say (PK-03, PK-04).
+     */
+    private static function requireClientData(CollectedClientData $clientData, string $type): void
+    {
+        if ($type !== $clientData->type || $clientData->crossOrigin || null !== $clientData->topOrigin) {
+            throw new PasskeyRefused(Refusal::InvalidResponse);
+        }
     }
 
     private function requireUserVerification(bool $verified): void

@@ -48,13 +48,18 @@ final class InMemoryPasskeyStore implements PasskeyStore, InMemoryStore
         return array_values(array_filter($this->passkeys, static fn (Passkey $passkey): bool => $passkey->realm->equals($realm) && $passkey->principalId->equals($principalId)));
     }
 
-    public function update(Passkey $passkey): void
+    public function update(Passkey $passkey): bool
     {
         $existing = $this->passkeys[(string) $passkey->credentialId] ?? null;
 
-        if (null !== $existing && $existing->realm->equals($passkey->realm)) {
-            $this->passkeys[(string) $passkey->credentialId] = $passkey;
+        if (null === $existing || !$existing->realm->equals($passkey->realm) || (0 !== $passkey->signCount && $existing->signCount >= $passkey->signCount)) {
+            return false;
         }
+
+        // Backup eligibility stays the registration's.
+        $this->passkeys[(string) $passkey->credentialId] = new Passkey($existing->credentialId, $existing->realm, $existing->principalId, $existing->webauthnId, $existing->publicKey, $existing->userHandle, $passkey->signCount, $existing->transports, $existing->aaguid, $existing->backupEligible, $passkey->backedUp, $passkey->userVerificationInitialized, $existing->attestationType);
+
+        return true;
     }
 
     public function remove(Realm $realm, CredentialId $credentialId): void

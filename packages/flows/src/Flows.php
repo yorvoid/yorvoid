@@ -7,6 +7,7 @@ namespace YorvoID\Flows;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Clock\NativeClock;
+use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Core\Event\NoEventListeners;
@@ -41,6 +42,8 @@ final class Flows
 
     /**
      * @param iterable<Flow> $flows
+     * @param Attempts|null  $attempts Limits how many flows one address starts, as for the forms that check secrets:
+     *                                 each flow is stored, and the first step may begin a ceremony
      */
     public function __construct(
         iterable $flows,
@@ -48,6 +51,7 @@ final class Flows
         private readonly Sessions $sessions,
         private readonly EventDispatcherInterface $events = new NoEventListeners(),
         private readonly ClockInterface $clock = new NativeClock(),
+        private readonly ?Attempts $attempts = null,
     ) {
         foreach ($flows as $flow) {
             $this->flows[$flow->name] = $flow;
@@ -68,9 +72,11 @@ final class Flows
      * @param array<string, mixed> $data What its steps need, e.g. an invitation's token
      *
      * @throws IntegratorError If there's no such flow
+     * @throws Throttled       When the context's address started too many flows; nothing was started
      */
     public function start(string $flow, Realm $realm, FlowContext $context, array $data = []): Progress
     {
+        $this->attempts?->count('flow_start', $realm, null, $context->address);
         $state = new FlowState(rtrim(strtr(base64_encode(Secret::random(32)->reveal()), '+/', '-_'), '='), $flow, $realm, $this->flow($flow)->lifetime->after($this->clock->now()));
 
         return $this->advance($state->with($data), $context);

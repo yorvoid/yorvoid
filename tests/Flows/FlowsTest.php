@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Flows;
 
 use Symfony\Component\Clock\MockClock;
+use YorvoID\Authn\Attempt\AttemptLimits;
+use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -36,6 +38,9 @@ use YorvoID\Flows\StepResult;
 use YorvoID\Flows\Storage\InMemoryFlowStore;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
+use YorvoID\Throttle\Limit;
+use YorvoID\Throttle\Storage\InMemoryThrottleStore;
+use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;
 
 final class FlowsTest extends DatabaseTestCase
@@ -284,6 +289,17 @@ final class FlowsTest extends DatabaseTestCase
         $this->expectExceptionObject(new IntegratorError('There\'s no flow "acme.three".', 'Start one of the flows: acme.one, acme.two.', 'concepts/flows.md#the-flows'));
 
         $flows->start('acme.three', new Realm('acme'), $this->context);
+    }
+
+    public function testOneAddressStartsFlowsUpToTheLimit(): void
+    {
+        $flows = new Flows([new Flow('acme.one', [new TestStep('a')])], $this->store, $this->sessions, $this->events, $this->clock, new Attempts(new Throttle(new InMemoryThrottleStore(), $this->clock), new AttemptLimits(perAddress: new Limit(1, Duration::minutes(15)))));
+        $flows->start('acme.one', new Realm('acme'), new FlowContext(new Origin(OriginKind::Web), address: '203.0.113.7'));
+        $flows->start('acme.one', new Realm('acme'), new FlowContext(new Origin(OriginKind::Web), address: '203.0.113.8'));
+
+        $this->expectException(Throttled::class);
+
+        $flows->start('acme.one', new Realm('acme'), new FlowContext(new Origin(OriginKind::Web), address: '203.0.113.7'));
     }
 
     public function testDefaultsToNoListenersAndTheSystemClock(): void

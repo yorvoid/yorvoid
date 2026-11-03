@@ -70,13 +70,13 @@ final class PasskeyStoreTest extends DatabaseTestCase
         $store = $this->stack($implementation)->passkeys;
         $passkey = self::passkey(new Realm('acme'), new PrincipalId(new UuidV7()), random_bytes(16));
         $store->add($passkey);
-        $used = new Passkey($passkey->credentialId, $passkey->realm, $passkey->principalId, $passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, 42, $passkey->transports, $passkey->aaguid, true, true, true, $passkey->attestationType);
+        $used = new Passkey($passkey->credentialId, $passkey->realm, $passkey->principalId, $passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, 42, $passkey->transports, $passkey->aaguid, $passkey->backupEligible, true, true, $passkey->attestationType);
 
         $elsewhere = new Passkey($passkey->credentialId, new Realm('globex'), $passkey->principalId, $passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, 99, $passkey->transports, $passkey->aaguid, false, false, false, $passkey->attestationType);
-        $store->update($elsewhere);
+        self::assertFalse($store->update($elsewhere));
         self::assertEquals($passkey, $store->find(new Realm('acme'), $passkey->webauthnId), 'A passkey was changed from another realm.');
 
-        $store->update($used);
+        self::assertTrue($store->update($used));
         self::assertEquals($used, $store->find(new Realm('acme'), $passkey->webauthnId));
         $store->remove(new Realm('acme'), new CredentialId(new UuidV7()));
 
@@ -84,6 +84,23 @@ final class PasskeyStoreTest extends DatabaseTestCase
         self::assertNotNull($store->find(new Realm('acme'), $passkey->webauthnId));
         $store->remove(new Realm('acme'), $passkey->credentialId);
         self::assertNull($store->find(new Realm('acme'), $passkey->webauthnId));
+    }
+
+    #[DataProvider('implementations')]
+    public function testRecordsACounterOnlyOverALowerOne(string $implementation): void
+    {
+        $store = $this->stack($implementation)->passkeys;
+        $passkey = self::passkey(new Realm('acme'), new PrincipalId(new UuidV7()), random_bytes(16));
+        $store->add($passkey);
+        $counted = static fn (int $count, bool $eligible = false): Passkey => new Passkey($passkey->credentialId, $passkey->realm, $passkey->principalId, $passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, $count, $passkey->transports, $passkey->aaguid, $eligible, true, true, $passkey->attestationType);
+
+        self::assertTrue($store->update($counted(8, true)));
+        self::assertFalse($store->find($passkey->realm, $passkey->webauthnId)?->backupEligible, 'Backup eligibility changed after registration.');
+        self::assertFalse($store->update($counted(8)), 'The same counter was recorded twice.');
+        self::assertFalse($store->update($counted(3)));
+        self::assertSame(8, $store->find($passkey->realm, $passkey->webauthnId)->signCount);
+        self::assertTrue($store->update($counted(0)));
+        self::assertTrue($store->update($counted(0)), 'A passkey without a counter was refused.');
     }
 
     #[DataProvider('platforms')]

@@ -17,9 +17,11 @@ $policy = new PasskeyPolicy(
 |---|---|---|
 | `userVerification` | `Required` | The device checks it's its owner (PIN, fingerprint, face). See below. |
 | `clonePolicy` | `RefuseSignIn` | What a suspected copy does. See below. |
-| `timeout` | 5 minutes | How long a registration or sign-in may take. |
+| `timeout` | 5 minutes | How long a registration or sign-in may take: 30 seconds to 10 minutes. |
 
-Origins are `https://` and a host at or under the relying party ID, with an optional port; `http://localhost` only for development.
+The relying party ID is a domain, not an IP address. Origins are `https://` and a host at or under the relying party ID, with an optional port; `http://localhost` only for development.
+
+Passkeys work only on these origins' own pages. An answer from a frame embedded by another site is refused, whether or not the browser says which site embedded it.
 
 ## Registering a passkey
 
@@ -75,17 +77,19 @@ With `UserVerification::Preferred`, a passkey used without it counts as **one fa
 
 ## Ceremonies
 
-Each registration and sign-in is a ceremony kept in the database: any server can finish what another began. A ceremony works once, expires after the timeout, and its challenge is 256 random bits. A registration or a step-up can only be finished by the session that began it. Purge expired ceremonies daily with `$passkeys->purge()`.
+Each registration and sign-in is a ceremony kept in the database: any server can finish what another began. A ceremony works once, expires after the timeout, and its challenge is 256 random bits. A registration or a step-up can only be finished by the session that began it. Pass the client's address to `beginSignIn()`: one address may begin 300 sign-ins in 15 minutes (the attempt limits' per-address limit). Purge expired ceremonies daily with `$passkeys->purge()`.
+
+An answer must say it's for its kind of ceremony (`webauthn.create` or `webauthn.get`). A new passkey's public key must be one that can verify: a P-256 point on the curve, a 32-byte Ed25519 key, or an RSA key of 2048 bits or more with the exponent 65537.
 
 ## Suspected copies
 
-Hardware keys count their signatures. If a sign-in reports a count that didn't go up, the key may have been copied:
+Hardware keys count their signatures. If a sign-in reports a count that didn't go up, the key may have been copied. Each count is recorded only over a lower one, in one step: of two sign-ins with the same count at the same time, the second is suspected. A passkey whose backup eligibility changed since it was registered is suspected too: that's fixed when a passkey is created.
 
 | `clonePolicy` | |
 |---|---|
 | `RefuseSignIn` (default) | Refuse this sign-in, and record it |
 | `DisablePasskey` | Also disable the passkey: its owner signs in another way and removes it |
-| `Allow` | Let it through, and record it |
+| `Allow` | Let it through, and record it. `yorvoid:doctor` warns about this |
 
 Passkeys that sync between devices always report 0 and are never suspected. Whether a passkey syncs (its backup flags) is recorded, and isn't a reason to refuse it.
 
