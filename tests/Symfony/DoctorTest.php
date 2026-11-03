@@ -152,7 +152,8 @@ final class DoctorTest extends TestCase
         self::assertStringContainsString('Warning: Passkeys are created for "localhost" outside development', $display);
         self::assertStringContainsString('Problem: The application\'s clock is a MockClock outside development', $display);
         self::assertStringContainsString('Problem: Notifications go to a transport that drops them', $display);
-        self::assertStringContainsString('2 problems, 1 warning.', $display);
+        self::assertStringContainsString('Warning: The session cookie is "Secure" only when the request looks like HTTPS', $display);
+        self::assertStringContainsString('2 problems, 2 warnings.', $display);
     }
 
     public function testNoticesTemplatesThatFellBehindYorvoIDs(): void

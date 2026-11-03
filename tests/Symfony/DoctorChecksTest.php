@@ -19,6 +19,7 @@ use YorvoID\Symfony\Doctor\Finding;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
+use YorvoID\Symfony\Doctor\ProxiesCheck;
 use YorvoID\Symfony\Migrations;
 use YorvoID\Symfony\Presets;
 use YorvoID\Tests\Support\DatabaseTestCase;
@@ -68,19 +69,45 @@ final class DoctorChecksTest extends DatabaseTestCase
 
     public function testTheSessionNeedsSafeCookies(): void
     {
-        $none = iterator_to_array(new CookiesCheck(new ParameterBag(), '__Host-yorvoid_device', true)->findings(), false);
+        $none = iterator_to_array(new CookiesCheck(new ParameterBag(), '__Host-yorvoid_device', true, true)->findings(), false);
         self::assertSame(['The application has no PHP session: YorvoID\'s flows and sign-in keep their state in it.'], array_map(static fn (Finding $finding): string => $finding->what, $none));
         self::assertTrue($none[0]->problem);
 
         $unsafe = new ParameterBag(['session.storage.options' => ['cookie_secure' => false, 'cookie_httponly' => false, 'cookie_samesite' => 'none']]);
-        $findings = iterator_to_array(new CookiesCheck($unsafe, '__Host-yorvoid_device', true)->findings(), false);
+        $findings = iterator_to_array(new CookiesCheck($unsafe, '__Host-yorvoid_device', true, true)->findings(), false);
 
         self::assertSame([
             'The session cookie is sent over plain HTTP too, where anyone on the network can take it and act as whoever is signed in.',
             'Scripts can read the session cookie: a cross-site scripting flaw would leak sessions.',
             'The session cookie\'s SameSite is "none": other sites\' requests carry it.',
         ], array_map(static fn (Finding $finding): string => $finding->what, $findings));
-        self::assertSame('The session cookie\'s SameSite is not set: other sites\' requests carry it.', iterator_to_array(new CookiesCheck(new ParameterBag(['session.storage.options' => []]), '__Host-d', true)->findings(), false)[0]->what);
+        self::assertSame('The session cookie\'s SameSite is not set: other sites\' requests carry it.', iterator_to_array(new CookiesCheck(new ParameterBag(['session.storage.options' => []]), '__Host-d', true, true)->findings(), false)[0]->what);
+    }
+
+    public function testOutsideDevelopmentTheSessionCookieIsAlwaysSecure(): void
+    {
+        $what = static fn (mixed $secure, bool $debug): array => array_map(static fn (Finding $finding): string => $finding->what, iterator_to_array(new CookiesCheck(new ParameterBag(['session.storage.options' => [...(null === $secure ? [] : ['cookie_secure' => $secure]), 'cookie_samesite' => 'lax']]), '__Host-d', true, $debug)->findings(), false));
+        $auto = 'The session cookie is "Secure" only when the request looks like HTTPS: behind a proxy that terminates HTTPS, it isn\'t, and the cookie goes over plain HTTP too.';
+
+        self::assertSame([$auto], $what('auto', false));
+        self::assertSame([$auto], $what(null, false), '"auto" is Symfony\'s default.');
+        self::assertSame([], $what(true, false));
+        self::assertSame([], $what('auto', true), 'While developing, over plain HTTP, "auto" is right.');
+        self::assertSame(['The session cookie is sent over plain HTTP too, where anyone on the network can take it and act as whoever is signed in.'], $what(false, true));
+    }
+
+    public function testNobodyChoosesTheirOwnAddress(): void
+    {
+        $everyone = 'Every sender is trusted as a proxy: anyone can name any address in X-Forwarded-For, and so slip past the limits per address, or exhaust someone else\'s.';
+        $check = static fn (mixed $trusted): array => array_map(static fn (Finding $finding): array => [$finding->what, $finding->problem], iterator_to_array(new ProxiesCheck(new ParameterBag(null === $trusted ? [] : ['kernel.trusted_proxies' => $trusted]))->findings(), false));
+
+        foreach (['0.0.0.0/0', ' ::/0 ', '10.0.0.0/8, 0.0.0.0/0', ['192.0.2.1', '::/0']] as $trusted) {
+            self::assertSame([[$everyone, true]], $check($trusted), (string) json_encode($trusted));
+        }
+
+        foreach ([null, '', '10.0.0.0/8,192.0.2.0/24', 'REMOTE_ADDR', ['10.0.0.0/8', 'private_ranges'], '0.0.0.0/1', [5, null]] as $trusted) {
+            self::assertSame([], $check($trusted), (string) json_encode($trusted));
+        }
     }
 
     public function testNotificationsNeedAnAddressAndATransportThatDelivers(): void
