@@ -85,6 +85,17 @@ $principals->removeIdentifier(new RemoveIdentifier($realm, $id, IdentifierKind::
 $principal = $principals->findByIdentifier($realm, IdentifierKind::Email, 'ANA@example.org');
 ```
 
+When people change **their own** email address or username, use `OwnIdentifiers` from yorvoid/authn with their session instead. The email address is where security notifications and recovery go, so it requires a recent [step-up](step-up.md) (`yorvoid.identifier.set`, `yorvoid.identifier.remove`), waits out a recovery's cool-down, and the old address is told (if it was verified):
+
+```php
+use YorvoID\Authn\Identifier\OwnIdentifiers;
+
+$ownIdentifiers->set(new SetIdentifier($realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session, $origin);
+// StepUpRequired: send them through a step-up, then try again.
+```
+
+`Principals::setIdentifier()` checks none of that: it's for administrators and the console, after your application checked they may (`yorvoid.principals.manage`).
+
 - **Verified** means the owner showed it's theirs, e.g. by opening a link sent to the address. Only the code that saw them do so marks it; `verifyIdentifier()` checks the address is still the one that was verified. Setting a different address makes it unverified again.
 - `IdentifierTaken` says another principal has it. Telling a stranger that tells them the address has an account: flows anyone can reach answer the same either way, and send an email instead.
 - The security log records which kind of identifier changed, never its value: the log can't forget, and an email address is personal data that must go when its owner does.
