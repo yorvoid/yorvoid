@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace YorvoID\Passkeys\Flow;
 
 use YorvoID\Authn\Recovery\RecoveryLinks;
+use YorvoID\Core\Principal\IdentifierKind;
+use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Secret;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
@@ -28,8 +30,14 @@ final readonly class RecoveryLinkStep implements Step
 
     public const string TOKEN = self::NAME.'.token';
 
+    private const string ACCOUNT = self::NAME.'.account';
+
+    /**
+     * @param Principals|null $principals To name the account on the page; without it, it isn't named
+     */
     public function __construct(
         private RecoveryLinks $links,
+        private ?Principals $principals = null,
     ) {
     }
 
@@ -43,14 +51,22 @@ final readonly class RecoveryLinkStep implements Step
         return true;
     }
 
+    /**
+     * Names the account the link is for, so the person sees whose account they'd be signed in to.
+     */
     public function enter(FlowState $state, FlowContext $context): FlowState
     {
-        return $state;
+        $token = $state->string(self::TOKEN) ?? '';
+        $principal = '' === $token ? null : $this->links->peek($state->realm, Secret::fromString($token));
+        $identifiers = null === $principal || null === $this->principals ? [] : $this->principals->identifiers($principal->realm, $principal->id);
+        $account = $identifiers[IdentifierKind::Email->value] ?? $identifiers[IdentifierKind::Username->value] ?? null;
+
+        return $state->with([self::ACCOUNT => $account?->value]);
     }
 
     public function view(FlowState $state): StepView
     {
-        return new RecoveryLinkView();
+        return new RecoveryLinkView($state->string(self::ACCOUNT));
     }
 
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult
@@ -58,6 +74,6 @@ final readonly class RecoveryLinkStep implements Step
         $token = $state->string(self::TOKEN) ?? '';
         $started = '' === $token ? null : $this->links->redeem($state->realm, Secret::fromString($token), $context->origin, $context->device, $context->address, $context->deviceCookie);
 
-        return null === $started ? StepResult::failed(new Problem('yorvoid.flow.recovery_link.not_working')) : StepResult::done(forget: [self::TOKEN], signedIn: $started);
+        return null === $started ? StepResult::failed(new Problem('yorvoid.flow.recovery_link.not_working')) : StepResult::done(forget: [self::TOKEN, self::ACCOUNT], signedIn: $started);
     }
 }

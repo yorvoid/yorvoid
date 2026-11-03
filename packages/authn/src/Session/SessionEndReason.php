@@ -14,6 +14,9 @@ enum SessionEndReason: string
     /** Its principal signed out */
     case SignedOut = 'signed_out';
 
+    /** The browser that held it signed in again, as the same principal or another, and holds the new session */
+    case Replaced = 'replaced';
+
     /** Its principal ended it from another session, e.g. "sign out everywhere else" */
     case EndedByPrincipal = 'ended_by_principal';
 

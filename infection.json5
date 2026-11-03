@@ -44,7 +44,10 @@
                 ".*usleep\\(100_000\\).*",
                 ".*Duration::minutes\\(1\\);.*",
                 // Equivalent: a scenario's made-up email address is unique at any length of randomness.
-                ".*bin2hex\\(random_bytes\\(6\\)\\).*"
+                ".*bin2hex\\(random_bytes\\(6\\)\\).*",
+                // Equivalent: a step-up that loses the race once reads again; more tries only matter
+                // under contention no test can keep up for every try.
+                ".*for \\(\\$attempt = 0; \\$attempt < 2; \\+\\+\\$attempt\\).*"
             ]
         },
         "Coalesce": {
@@ -101,7 +104,9 @@
         "LessThan": {
             "ignoreSourceCodeByRegex": [
                 // Equivalent: two readings of a microsecond clock are never exactly equal in practice.
-                ".*microtime\\(true\\) < \\$deadline.*"
+                ".*microtime\\(true\\) < \\$deadline.*",
+                // Equivalent: see DecrementInteger.
+                ".*for \\(\\$attempt = 0; \\$attempt < 2; \\+\\+\\$attempt\\).*"
             ]
         },
         "IncrementInteger": {

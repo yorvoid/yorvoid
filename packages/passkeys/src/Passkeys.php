@@ -272,7 +272,7 @@ final readonly class Passkeys
 
         return $this->transactions->run(function () use ($session, $ceremony, $passkey, $credential, $userVerified, $counter, $origin): Secret {
             $this->recordUse($passkey, $credential, $counter, $origin);
-            $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true, $ceremony->operation);
+            $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true, $ceremony->operation ?? AuthenticationFactor::NO_OPERATION);
 
             // The session ended, or its principal was suspended, while the person was at their authenticator.
             return $this->sessions->stepUp($session->realm, $session->id, $factor, $origin) ?? throw new PasskeyRefused(Refusal::CeremonyExpired);

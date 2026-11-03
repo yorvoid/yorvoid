@@ -4,6 +4,9 @@
 {% block title %}{{ 'yorvoid.ui.recovery_link.title'|yorvoid_trans }}{% endblock %}
 
 {% block content %}
+    {% if view.account is not null %}
+        <p>{{ 'yorvoid.ui.recovery_link.account'|yorvoid_trans({account: view.account}) }}</p>
+    {% endif %}
     <p>{{ 'yorvoid.ui.recovery_link.intro'|yorvoid_trans }}</p>
     <form method="post" action="{{ action }}">
         <p><button type="submit">{{ 'yorvoid.ui.recovery_link.submit'|yorvoid_trans }}</button></p>

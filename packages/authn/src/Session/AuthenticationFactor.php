@@ -14,6 +14,9 @@ use YorvoID\Core\Time;
  */
 final readonly class AuthenticationFactor
 {
+    /** The operation a step-up for no operation is recorded with: it counts for requirements without one only */
+    public const string NO_OPERATION = '-';
+
     public \DateTimeImmutable $at;
 
     /**
@@ -21,7 +24,8 @@ final readonly class AuthenticationFactor
      *                                       (something you have, unlocked by something you know or are). NIST SP 800-63B-4
      * @param bool        $phishingResistant Whether it can't be relayed by a look-alike site, e.g. a passkey
      * @param string|null $operation         The operation a step-up was for, e.g. "yorvoid.credential.remove": it counts
-     *                                       for that operation only (ATN-071). Null for signing in, which counts for any
+     *                                       for that operation only (ATN-071). NO_OPERATION for a step-up for none, which
+     *                                       counts only where no operation is named. Null for signing in, which counts for any
      */
     public function __construct(
         public AuthenticationMethod $method,

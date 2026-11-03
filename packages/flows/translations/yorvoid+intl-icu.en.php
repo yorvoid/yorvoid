@@ -6,6 +6,8 @@ declare(strict_types=1);
 // wording through your own translations, never by editing this file.
 
 return [
+    'yorvoid.flow.confirm_again' => 'It\'s been a while: confirm it\'s you again, then try once more.',
+    'yorvoid.flow.held_after_recovery' => 'Your account was recovered recently, so this has to wait a while. Try again later.',
     'yorvoid.flow.out_of_date' => 'This page was out of date. Here\'s where you are now.',
     'yorvoid.flow.too_many_attempts' => 'Too many attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.',
 ];

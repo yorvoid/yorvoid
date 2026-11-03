@@ -14,6 +14,7 @@ use YorvoID\Flows\FlowState;
 use YorvoID\Flows\Input;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\Step;
+use YorvoID\Flows\StepFailed;
 use YorvoID\Flows\StepResult;
 use YorvoID\Flows\StepView;
 use YorvoID\Passkeys\Flow\View\StepUpView;
@@ -23,7 +24,8 @@ use YorvoID\Passkeys\Passkeys;
 /**
  * Confirms it's the person, with a passkey, for an operation (ATN-028): input "response". Only when the
  * session hasn't proved it recently enough. The operation and whether it needs two factors come from
- * the flow's data, "step_up.operation" and "step_up.multi_factor", or else the step's own.
+ * the flow's data, "step_up.operation" and "step_up.multi_factor", or else the step's own; "step_up.within",
+ * in seconds, asks for a fresher proof than the step's window, as the refused requirement did.
  *
  * @api
  */
@@ -57,9 +59,20 @@ final readonly class StepUpStep implements Step
         return null === $context->session || !$this->isMet($context->session, $this->requirement($state));
     }
 
+    /**
+     * @throws StepFailed When the person has no passkey to confirm with, e.g. signed in with a recovery code
+     */
     public function enter(FlowState $state, FlowContext $context): FlowState
     {
-        return null === $context->session ? $state : Ceremonies::keep($state, self::NAME, $this->passkeys->beginStepUp($context->session, $this->requirement($state)));
+        if (null === $context->session) {
+            return $state;
+        }
+
+        try {
+            return Ceremonies::keep($state, self::NAME, $this->passkeys->beginStepUp($context->session, $this->requirement($state)));
+        } catch (PasskeyRefused $refused) {
+            throw new StepFailed(Ceremonies::problem($refused));
+        }
     }
 
     public function view(FlowState $state): StepView
@@ -82,7 +95,10 @@ final readonly class StepUpStep implements Step
 
     private function requirement(FlowState $state): AuthenticationRequirement
     {
-        return new AuthenticationRequirement($this->window, true === $state->get(self::NAME.'.multi_factor'), operation: $state->string(self::NAME.'.operation') ?? $this->operation);
+        $within = $state->get(self::NAME.'.within');
+        $window = \is_int($within) && $within > 0 ? Duration::seconds(min($within, $this->window->seconds)) : $this->window;
+
+        return new AuthenticationRequirement($window, true === $state->get(self::NAME.'.multi_factor'), operation: $state->string(self::NAME.'.operation') ?? $this->operation);
     }
 
     private function isMet(Session $session, AuthenticationRequirement $requirement): bool

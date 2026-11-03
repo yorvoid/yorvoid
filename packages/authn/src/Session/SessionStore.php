@@ -37,11 +37,12 @@ interface SessionStore
     public function replaceTokenHash(Realm $realm, SessionId $id, string $tokenHash): bool;
 
     /**
-     * Gives a session that isn't ended its new authentication context and a new token, together.
+     * Adds a proof to the authentication context of a session that isn't ended, as the context is stored
+     * at that moment, and gives it a new token, together: two step-ups at once both keep their proof.
      *
-     * @return bool Whether it did
+     * @return AuthenticationContext|null The context with the proof; null if the session is unknown or ended
      */
-    public function stepUp(Realm $realm, SessionId $id, AuthenticationContext $authentication, string $tokenHash): bool;
+    public function stepUp(Realm $realm, SessionId $id, AuthenticationFactor $factor, string $tokenHash): ?AuthenticationContext;
 
     public function touch(Realm $realm, SessionId $id, \DateTimeImmutable $lastSeenAt, \DateTimeImmutable $idleExpiresAt): void;
 

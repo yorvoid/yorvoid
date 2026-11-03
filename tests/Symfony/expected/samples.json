@@ -291,7 +291,9 @@
         "template": "recovery_link",
         "state": "default",
         "flow": "yorvoid.recover_with_link",
-        "view": [],
+        "view": {
+            "account": "ana@example.com"
+        },
         "problems": []
     },
     {
@@ -306,7 +308,7 @@
                 "userVerification": "required",
                 "timeout": 300000
             },
-            "operation": "acme.site.remove"
+            "operation": "yorvoid.credential.remove"
         },
         "problems": []
     },

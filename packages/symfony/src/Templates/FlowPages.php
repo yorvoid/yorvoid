@@ -9,6 +9,7 @@ use Twig\Environment;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\StepView;
+use YorvoID\Passkeys\Flow\View\StepUpView;
 
 /**
  * Renders the flow pages, with what every template gets: for the flows, the template gallery and the
@@ -59,7 +60,20 @@ final readonly class FlowPages
             'field_problems' => $fields,
             'action' => $action,
             'client_messages' => $messages,
+            'operation' => $view instanceof StepUpView ? $this->operation($view->operation, $locale) : null,
         ], $locale);
+    }
+
+    /**
+     * What a step-up is for, in the person's words: the message "yorvoid.operation.{name}", if there's
+     * one; YorvoID has its own operations', the application adds its own.
+     */
+    public function operation(?string $name, string $locale): ?string
+    {
+        $id = 'yorvoid.operation.'.$name;
+        $text = $this->translator->trans($id, [], 'yorvoid', $locale);
+
+        return $id === $text ? null : $text;
     }
 
     /**

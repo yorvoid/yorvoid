@@ -113,6 +113,8 @@ final readonly class SigningPages
             'summary' => $summary,
             'options' => $prepared->options,
             'bootstrap' => $prepared->bootstrap,
+            // Which passkeys can sign: one elsewhere, e.g. on a phone, isn't offered, and the browser only waits.
+            'keys' => array_map(static fn (Key $key): string => $key->label, $this->verifier->keys()),
         ]);
 
         // The page is the person's only view of what they sign: a template that hides any of it, or lets

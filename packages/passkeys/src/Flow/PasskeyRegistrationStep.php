@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
+use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
 use YorvoID\Flows\Input;
@@ -68,6 +69,9 @@ final readonly class PasskeyRegistrationStep implements Step
             $credential = $this->passkeys->finishRegistration($context->session, Ceremonies::id($state, self::NAME), $input->json('response') ?? '', $input->string('label') ?? '', $context->origin);
         } catch (PasskeyRefused $refused) {
             return StepResult::refused(Ceremonies::problem($refused));
+        } catch (StepUpRequired) {
+            // The proof lapsed at the authenticator: confirm again, where the flow has a step-up.
+            return StepResult::reopen(new Problem('yorvoid.flow.confirm_again'), StepUpStep::NAME);
         }
 
         return StepResult::done([self::NAME.'.credential' => (string) $credential->id]);

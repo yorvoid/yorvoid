@@ -19,6 +19,7 @@ final readonly class StepResult
      * @param array<string, mixed> $data
      * @param list<string>         $forget
      * @param list<Problem>        $problems
+     * @param list<string>         $reopen
      */
     private function __construct(
         public bool $done,
@@ -30,6 +31,7 @@ final readonly class StepResult
         public array $problems = [],
         public ?int $retryAfter = null,
         public ?Problem $failure = null,
+        public array $reopen = [],
     ) {
     }
 
@@ -60,6 +62,15 @@ final readonly class StepResult
     public static function throttled(Problem $problem, int $retryAfter): self
     {
         return new self(false, problems: [$problem], retryAfter: $retryAfter);
+    }
+
+    /**
+     * The step can't be done until earlier steps are done again, e.g. a step-up whose proof lapsed: the
+     * flow goes back to the first of them that applies, with the problem.
+     */
+    public static function reopen(Problem $problem, string $step, string ...$more): self
+    {
+        return new self(false, problems: [$problem], reopen: [$step, ...array_values($more)]);
     }
 
     /**

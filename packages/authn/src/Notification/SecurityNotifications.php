@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace YorvoID\Authn\Notification;
 
 use Psr\Clock\ClockInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Symfony\Component\Clock\NativeClock;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use YorvoID\Authn\Credential\Credential;
@@ -43,7 +45,8 @@ use YorvoID\Mail\Mailer;
  * recovery (NotMe).
  *
  * They go to the principal's email address if it's verified, in the principal's language. Register the
- * listeners for the events in events(), which come after the commit.
+ * listeners for the events in events(), which come after the commit. An email that can't be sent is
+ * logged as an error, and doesn't fail what it's about.
  *
  * @api
  */
@@ -67,6 +70,7 @@ final readonly class SecurityNotifications
         private TranslatorInterface $translator,
         private NotificationSettings $settings,
         private ClockInterface $clock = new NativeClock(),
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -227,13 +231,20 @@ final readonly class SecurityNotifications
             $labelled[$this->text('fact.'.$name, $locale)] = $value;
         }
 
-        $this->mailer->send(new Email($email->value, $this->text($notice.'.subject', $locale, $application), [
+        $sending = new Email($email->value, $this->text($notice.'.subject', $locale, $application), [
             new Paragraph($this->text($notice.'.body', $locale, [...$application, ...$parameters])),
             new Facts($labelled),
             new Paragraph($this->text(null === $suspect ? 'not_me.explanation' : 'not_me.explanation_method', $locale)),
             new Action($this->text('not_me', $locale), $url),
             new Footnote($this->text('footnote', $locale, $application)),
-        ], $locale));
+        ], $locale);
+
+        try {
+            $this->mailer->send($sending);
+        } catch (\Exception $exception) {
+            // What happened stays done: a mail outage doesn't fail the sign-in or the change it's about.
+            $this->logger->error('YorvoID couldn\'t send the "{notice}" notification: {message}', ['notice' => $notice, 'realm' => $realm->name, 'principal' => (string) $principalId, 'message' => $exception->getMessage(), 'exception' => $exception]);
+        }
     }
 
     /**

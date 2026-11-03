@@ -27,6 +27,7 @@ use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\Flow\RecoveryLinkStep;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Security\CurrentSession;
+use YorvoID\Symfony\Security\Json;
 use YorvoID\Symfony\Templates\FlowPages;
 use YorvoID\Throttle\Throttled;
 
@@ -58,7 +59,7 @@ final readonly class FlowController
         PasskeyFlows::INVITATION => ['token' => InvitationStep::TOKEN],
         PasskeyFlows::RECOVER_WITH_LINK => ['token' => RecoveryLinkStep::TOKEN],
         PasskeyFlows::VERIFY_EMAIL => ['token' => EmailVerificationStep::TOKEN],
-        PasskeyFlows::STEP_UP => ['operation' => 'step_up.operation', 'multi_factor' => 'step_up.multi_factor'],
+        PasskeyFlows::STEP_UP => ['operation' => 'step_up.operation', 'multi_factor' => 'step_up.multi_factor', 'within' => 'step_up.within'],
     ];
 
     /**
@@ -88,6 +89,10 @@ final readonly class FlowController
 
             if ('step_up.multi_factor' === $key) {
                 $data[$key] = true === $value || '1' === $value;
+            } elseif ('step_up.within' === $key) {
+                // Seconds: a requirement fresher than the step-up's window, which the step then asks for.
+                $within = filter_var($value, \FILTER_VALIDATE_INT);
+                $data[$key] = \is_int($within) ? $within : null;
             } elseif (\is_string($value)) {
                 $data[$key] = $value;
             }
@@ -228,7 +233,7 @@ final readonly class FlowController
     {
         $body = json_decode($request->getContent(), true);
 
-        if ('json' !== $request->getContentTypeFormat() || !\is_array($body) || array_is_list($body) && [] !== $body) {
+        if ('json' !== $request->getContentTypeFormat() || !\is_array($body) || array_is_list($body) && [] !== $body || !Json::isFinite($body)) {
             throw new BadRequestHttpException('Send a JSON object.');
         }
 

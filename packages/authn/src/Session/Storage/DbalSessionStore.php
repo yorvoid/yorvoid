@@ -8,6 +8,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Authn\Session\AuthenticationContext;
+use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\SessionId;
@@ -16,6 +17,7 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Row;
+use YorvoID\Core\Storage\SqlPlatform;
 use YorvoID\Core\Storage\StorageException;
 
 /**
@@ -98,13 +100,33 @@ final readonly class DbalSessionStore implements SessionStore
         );
     }
 
-    public function stepUp(Realm $realm, SessionId $id, AuthenticationContext $authentication, string $tokenHash): bool
+    public function stepUp(Realm $realm, SessionId $id, AuthenticationFactor $factor, string $tokenHash): ?AuthenticationContext
     {
-        return 1 === $this->database->connection->executeStatement(
-            \sprintf('UPDATE %s SET authentication = ?, token_hash = ? WHERE realm = ? AND id = ? AND ended_at IS NULL', $this->database->table(self::TABLE)),
-            [$authentication->toArray(), $tokenHash, $realm->name, $id->uuid->toRfc4122()],
-            [0 => Types::JSON],
-        );
+        $table = $this->database->table(self::TABLE);
+
+        // Compare-and-swap on the token: a step-up that read the context before another one wrote it reads again.
+        for ($attempt = 0; $attempt < 2; ++$attempt) {
+            $row = $this->database->connection->fetchAssociative(
+                \sprintf('SELECT authentication, token_hash FROM %s WHERE realm = ? AND id = ? AND ended_at IS NULL%s', $table, SqlPlatform::PostgreSQL === $this->database->platform ? ' FOR UPDATE' : ''),
+                [$realm->name, $id->uuid->toRfc4122()],
+            );
+
+            if (false === $row) {
+                return null;
+            }
+
+            $authentication = $this->authentication($row['authentication'])->with($factor);
+
+            if (1 === $this->database->connection->executeStatement(
+                \sprintf('UPDATE %s SET authentication = ?, token_hash = ? WHERE realm = ? AND id = ? AND ended_at IS NULL AND token_hash = ?', $table),
+                [$authentication->toArray(), $tokenHash, $realm->name, $id->uuid->toRfc4122(), Row::string($row, 'token_hash')],
+                [0 => Types::JSON],
+            )) {
+                return $authentication;
+            }
+        }
+
+        return null;
     }
 
     public function touch(Realm $realm, SessionId $id, \DateTimeImmutable $lastSeenAt, \DateTimeImmutable $idleExpiresAt): void

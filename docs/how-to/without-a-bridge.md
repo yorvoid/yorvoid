@@ -13,6 +13,10 @@ $request->getSession()->migrate(true);        // Symfony HttpFoundation
 // then: store $started->token->reveal()
 ```
 
+After a step-up, keep the old session rather than destroy it (`session_regenerate_id(false)`, `migrate(false)`): it holds the old token, which no longer works, and a request from another tab that was already waiting on it then doesn't delete the new session's cookie, signing the person out.
+
+**End the session the browser held before.** Signing in again, as the same person or someone else, starts a new YorvoID session; end the one your session held, with `SessionEndReason::Replaced`, unless the token you're storing is a step-up's for the same session. Otherwise it stays usable until its idle limit, under a token no one should have.
+
 A token in a cookie of its own, as in the tutorial, needs no such step: every sign-in sets a new one. Either way:
 
 - **Cookies:** `Secure`, `HttpOnly`, `SameSite=Lax` (or `Strict`), and the `__Host-` prefix where you can, so a subdomain can't set or overwrite them. The same goes for the device cookie (`StartedSession::$deviceCookie`), which the bridge keeps 400 days as `__Host-yorvoid_device`.

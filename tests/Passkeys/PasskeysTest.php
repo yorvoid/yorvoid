@@ -36,7 +36,6 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\SuspendPrincipal;
-use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Passkeys\Ceremony;
 use YorvoID\Passkeys\ClonePolicy;
@@ -621,7 +620,8 @@ final class PasskeysTest extends DatabaseTestCase
         $ghost = new Session(new SessionId(new UuidV7Generator()->next()), new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), 1, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now())), $this->clock->now(), $this->clock->now(), $this->clock->now()->modify('+1 hour'), $this->clock->now()->modify('+1 hour'));
         $this->stack->sessions->add($ghost, hash('sha256', 'ghost'));
 
-        $this->expectException(UnknownPrincipal::class);
+        // Its session is no use: StepUp reads it as Sessions::validate() would.
+        $this->expectException(StepUpRequired::class);
 
         $passkeys->beginRegistration($ghost);
     }

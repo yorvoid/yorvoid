@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\Identifier;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Token\IssueToken;
@@ -54,6 +56,7 @@ final readonly class EmailVerification
         private NotificationSettings $settings,
         private Transactions $transactions,
         private \Closure $link,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -118,8 +121,16 @@ final readonly class EmailVerification
     {
         $new = $event->after;
 
-        if (null !== $new && IdentifierKind::Email === $new->kind && !$new->isVerified()) {
+        // send() passes over a verified address.
+        if (null === $new || IdentifierKind::Email !== $new->kind) {
+            return;
+        }
+
+        try {
             $this->send($new->realm, $new->principalId, $event->origin);
+        } catch (\Exception $exception) {
+            // The address changed: a mail outage doesn't undo that. The person asks for the link again.
+            $this->logger->error('YorvoID couldn\'t send the link to verify an email address: {message}', ['realm' => $new->realm->name, 'principal' => (string) $new->principalId, 'message' => $exception->getMessage(), 'exception' => $exception]);
         }
     }
 

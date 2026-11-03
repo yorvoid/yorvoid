@@ -58,6 +58,15 @@ final class TemplatesTest extends TestCase
         self::assertSame('Command OK: 23 pages checked: each has what its step needs.', 'Command OK: '.trim((string) preg_replace('/\s+/', ' ', strtr($this->command('yorvoid:templates:lint')[1], ['[OK]' => '']))));
     }
 
+    public function testTheStepUpPageSaysWhatItConfirmsWhenItHasTheWords(): void
+    {
+        $pages = $this->service(FlowPages::class);
+
+        self::assertStringContainsString('This confirms: removing a sign-in method from your account.', $pages->sample(Samples::find('step_up', 'default') ?? self::fail(), 'en'));
+        self::assertStringNotContainsString('This confirms', $pages->sample(Samples::find('step_up', 'problems') ?? self::fail(), 'en'), 'An operation without words is named by nothing, not by its ID.');
+        self::assertNull($pages->operation(null, 'en'));
+    }
+
     public function testTheLintFindsWhatAnApplicationsTemplatesLeftOut(): void
     {
         $this->override('passkey', <<<'TWIG'

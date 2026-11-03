@@ -39,7 +39,7 @@ final class RecoveryLinkAuthenticator extends YorvoIDAuthenticator
     protected function signIn(array $body, Origin $origin, ?string $device, ?string $address, ?Secret $deviceCookie): StartedSession
     {
         $token = $body['token'] ?? null;
-        $started = \is_string($token) ? $this->links->redeem($this->realm, Secret::fromString($token), $origin, $device, $address, $deviceCookie) : null;
+        $started = \is_string($token) && '' !== $token ? $this->links->redeem($this->realm, Secret::fromString($token), $origin, $device, $address, $deviceCookie) : null;
 
         return $started ?? throw new SignInRefused('This link doesn\'t work any more. Ask for a new one.');
     }

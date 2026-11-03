@@ -278,6 +278,13 @@ final class FlowPagesTest extends TestCase
 
         // Signed in a moment ago, the step-up is done at once.
         self::assertSame('/stepped-up', $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove'])['redirect']);
+
+        // A route that asked for a proof of the last minute: the step-up asks for one too.
+        $this->clock()->sleep(120);
+        self::assertSame('step_up', $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove', 'within' => 60])['step']);
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove&within=60');
+        self::assertMatchesRegularExpression('#^/yorvoid/flows/yorvoid\.step_up/#', (string) $this->browser->getResponse()->headers->get('Location'));
+        self::assertSame('/stepped-up', $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove', 'within' => 'a minute'])['redirect']);
     }
 
     public function testExpiredAndUnknownFlows(): void

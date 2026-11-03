@@ -82,12 +82,13 @@ security:
                 - YorvoID\Symfony\Security\Authenticator\RecoveryCodeAuthenticator
                 - YorvoID\Symfony\Security\Authenticator\RecoveryLinkAuthenticator
                 - YorvoID\Symfony\Security\Authenticator\SessionAuthenticator
+            entry_point: YorvoID\Symfony\Security\SignInEntryPoint
             logout:
                 path: /sign-out
                 enable_csrf: true
 ```
 
-Signing out at `/sign-out` ends the YorvoID session too, not only the PHP session. It takes a form's POST with a CSRF token, so another site, or a browser fetching links ahead, can't sign anyone out. YorvoID's pages and endpoints go under `/yorvoid`:
+Someone who isn't signed in and opens a page that needs it, e.g. one with `#[IsGranted('ROLE_USER')]`, goes to YorvoID's sign-in page (the `entry_point`); a request for JSON gets 401. Signing out at `/sign-out` ends the YorvoID session too, not only the PHP session. It takes a form's POST with a CSRF token, so another site, or a browser fetching links ahead, can't sign anyone out. YorvoID's pages and endpoints go under `/yorvoid`:
 
 <!-- quickstart: write config/routes/yorvoid.yaml -->
 ```yaml

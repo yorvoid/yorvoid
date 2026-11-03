@@ -137,9 +137,7 @@ final readonly class Sessions
             return null;
         }
 
-        $principal = $this->principals->get($realm, $session->principalId);
-
-        if (null === $principal || !$principal->isActive() || $principal->statusVersion !== $session->principalStatusVersion) {
+        if (!$this->principalStillHolds($session)) {
             return null;
         }
 
@@ -194,22 +192,16 @@ final readonly class Sessions
     public function stepUp(Realm $realm, SessionId $id, AuthenticationFactor $factor, Origin $origin): ?Secret
     {
         return $this->transactions->run(function () use ($realm, $id, $factor, $origin): ?Secret {
-            $session = $this->store->get($realm, $id);
+            $session = $this->active($realm, $id);
 
-            if (null === $session || !$this->isValidAt($session, $this->clock->now())) {
-                return null;
-            }
-
-            $principal = $this->principals->get($realm, $session->principalId);
-
-            if (null === $principal || !$principal->isActive() || $principal->statusVersion !== $session->principalStatusVersion) {
+            if (null === $session) {
                 return null;
             }
 
             $token = self::newToken();
-            $authentication = $session->authentication->with($factor);
+            $authentication = $this->store->stepUp($realm, $id, $factor, self::hash($token));
 
-            if (!$this->store->stepUp($realm, $id, $authentication, self::hash($token))) {
+            if (null === $authentication) {
                 return null;
             }
 
@@ -287,9 +279,23 @@ final readonly class Sessions
         return array_values(array_filter($this->store->current($realm, $principalId, $now), fn (Session $session): bool => $this->isValidAt($session, $now)));
     }
 
+    /**
+     * The session, whatever its state: ended, expired or current. To know whether it may be used, see active().
+     */
     public function get(Realm $realm, SessionId $id): ?Session
     {
         return $this->store->get($realm, $id);
+    }
+
+    /**
+     * The session if it may be used now, as validate() decides: within its limits and the current policy's,
+     * and its principal active and unchanged since it started; null otherwise. Doesn't record a use.
+     */
+    public function active(Realm $realm, SessionId $id): ?Session
+    {
+        $session = $this->store->get($realm, $id);
+
+        return null !== $session && $this->isValidAt($session, $this->clock->now()) && $this->principalStillHolds($session) ? $session : null;
     }
 
     /**
@@ -370,6 +376,13 @@ final readonly class Sessions
         return $session->isCurrentAt($now)
             && $now < $this->policy->absolute->after($session->startedAt)
             && $now < $this->policy->idle->after($session->lastSeenAt);
+    }
+
+    private function principalStillHolds(Session $session): bool
+    {
+        $principal = $this->principals->get($session->realm, $session->principalId);
+
+        return null !== $principal && $principal->isActive() && $principal->statusVersion === $session->principalStatusVersion;
     }
 
     private static function newToken(): Secret

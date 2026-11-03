@@ -110,6 +110,41 @@ final class SecurityTest extends TestCase
         self::assertSame($cookie->getValue(), $again->getValue(), 'A known device got a new cookie.');
     }
 
+    public function testSigningInAgainEndsTheSessionTheBrowserHeld(): void
+    {
+        $this->boot();
+        $sessions = $this->container->get(Sessions::class);
+        \assert($sessions instanceof Sessions);
+        $ana = $this->principal();
+        $bob = $this->principal('bob@example.com');
+        $this->signIn($ana);
+        $first = $sessions->current(Realm::default(), $ana->id)[0];
+
+        $authenticator = $this->signIn($ana, again: true);
+        self::assertSame(SessionEndReason::Replaced, $sessions->get(Realm::default(), $first->id)?->endReason, 'The session the browser held is still current.');
+        $second = $sessions->current(Realm::default(), $ana->id)[0];
+
+        $options = $this->post('/yorvoid/step-up/options', ['operation' => 'acme.site.remove']);
+        self::assertSame(['stepped_up' => true], $this->post('/yorvoid/step-up', ['ceremony' => $options['ceremony'], 'response' => json_decode($authenticator->signIn((string) json_encode($options['options'])), true)]));
+        self::assertNull($sessions->get(Realm::default(), $second->id)?->endReason, 'A step-up ended the session it stepped up.');
+
+        $this->signIn($bob);
+        self::assertSame(SessionEndReason::Replaced, $sessions->get(Realm::default(), $second->id)?->endReason, 'Someone else\'s sign-in left the session current.');
+        self::assertSame((string) $bob->id, $this->get('/me')['user']);
+    }
+
+    public function testNumbersOutOfRangeAreABadRequest(): void
+    {
+        $this->boot();
+        $ana = $this->principal();
+        $this->signIn($ana);
+
+        foreach (['/yorvoid/sign-in', '/yorvoid/step-up', '/yorvoid/passkeys', '/yorvoid/flows/yorvoid.sign_in'] as $path) {
+            $this->browser->request('POST', $path, [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'], '{"ceremony":"x","response":{"id":"a","n":[1e999]}}');
+            self::assertContains($this->statusCode(), [400, 401, 415], $path);
+        }
+    }
+
     public function testDoesntStartAPhpSessionForVisitors(): void
     {
         $this->boot();
@@ -347,6 +382,8 @@ final class SecurityTest extends TestCase
         self::assertSame(['recovery_link'], $this->get('/me')['methods']);
         self::assertSame(['error' => 'This link doesn\'t work any more. Ask for a new one.'], $this->post('/yorvoid/recover/link', ['token' => $link->secret->reveal()]));
         self::assertSame(['error' => 'This link doesn\'t work any more. Ask for a new one.'], $this->post('/yorvoid/recover/link', []));
+        self::assertSame(['error' => 'This link doesn\'t work any more. Ask for a new one.'], $this->post('/yorvoid/recover/link', ['token' => '']));
+        self::assertSame(401, $this->statusCode(), 'An empty token is a wrong one.');
 
         $principals = $this->container->get(Principals::class);
         \assert($principals instanceof Principals);

@@ -15,7 +15,8 @@ use YorvoID\Core\Operation\Operation;
  * are within a time, optionally a strong one. When it isn't met, it's the remedy: what to prove to go on.
  *
  * A proof from signing in counts for any operation; a proof from a step-up counts only for the operation
- * it was for, so confirming one action doesn't open a window for every other.
+ * it was for, so confirming one action doesn't open a window for every other. A step-up for no operation
+ * counts only for requirements that name none.
  *
  * @api
  */
@@ -57,7 +58,7 @@ final readonly class AuthenticationRequirement
 
     private function isMetByFactor(AuthenticationFactor $factor, \DateTimeImmutable $now): bool
     {
-        return (null === $factor->operation || $factor->operation === $this->operation)
+        return (null === $factor->operation || $factor->operation === ($this->operation ?? AuthenticationFactor::NO_OPERATION))
             && $now < $this->within->after($factor->at)
             && ($factor->multiFactor || !$this->multiFactor)
             && ($factor->phishingResistant || !$this->phishingResistant);

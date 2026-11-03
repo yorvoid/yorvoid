@@ -24,6 +24,7 @@ use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\UnknownPrincipal;
@@ -70,6 +71,20 @@ final readonly class RecoveryLinks
         }
 
         return $this->tokens->issue(new IssueToken($command->realm, $command->principalId, self::PURPOSE, $command->lifetime ?? Duration::minutes(15)), $origin, $actor);
+    }
+
+    /**
+     * Whose the link is, without using it: to name the account on the page that confirms, so nobody is
+     * signed in to someone else's account by a link they were sent (login CSRF).
+     *
+     * @return Principal|null The principal; null if the link doesn't work, or its principal isn't active
+     */
+    public function peek(Realm $realm, #[\SensitiveParameter] Secret $token): ?Principal
+    {
+        $link = $this->tokens->peek($realm, self::PURPOSE, $token);
+        $principal = null === $link ? null : $this->principals->get($realm, $link->principalId);
+
+        return true === $principal?->isActive() ? $principal : null;
     }
 
     /**

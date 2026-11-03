@@ -101,6 +101,7 @@ use YorvoID\Symfony\Security\EndSessionOnSignOut;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
+use YorvoID\Symfony\Security\SignInEntryPoint;
 use YorvoID\Symfony\Security\ValidateSessionListener;
 use YorvoID\Symfony\Templates\FlowPages;
 use YorvoID\Symfony\Templates\TemplateLint;
@@ -214,6 +215,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(Flows::class)->arg('$flows', inline_service()->factory([Factories::class, 'flows'])->args([service(PasskeyFlows::class), tagged_iterator('yorvoid.flow_customizer')]))->public();
     $services->set(FlowContexts::class)->arg('$deviceCookie', param('yorvoid.cookies.device'))->public();
     $services->set(SessionAuthenticator::class)->public();
+    $services->set(SignInEntryPoint::class);
     $services->set(FlowPages::class)
         ->arg('$translator', service('yorvoid.translator.used'))
         ->arg('$twig', service('twig')->nullOnInvalid())

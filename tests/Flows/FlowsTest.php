@@ -15,6 +15,9 @@ use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\StepUp\AuthenticationRequirement;
+use YorvoID\Authn\StepUp\HeldAfterRecovery;
+use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -34,6 +37,7 @@ use YorvoID\Flows\FlowState;
 use YorvoID\Flows\FlowStatus;
 use YorvoID\Flows\Input;
 use YorvoID\Flows\Problem;
+use YorvoID\Flows\StepFailed;
 use YorvoID\Flows\StepResult;
 use YorvoID\Flows\Storage\InMemoryFlowStore;
 use YorvoID\Tests\Support\DatabaseTestCase;
@@ -178,6 +182,60 @@ final class FlowsTest extends DatabaseTestCase
         self::assertSame(['a', 'b'], array_map(static fn (Problem $problem): string => $problem->message, StepResult::refused(new Problem('a'), extra: new Problem('b'))->problems), 'Problems are a list, however they were passed.');
         self::assertNull($this->store->get($started->state->id));
         self::assertSame([], $this->events->of(FlowCompleted::class));
+    }
+
+    public function testAStepSendsTheFlowBackToStepsItNeedsDoneAgain(): void
+    {
+        $confirm = new TestStep('confirm');
+        $add = new TestStep('add', static fn (FlowState $state, FlowContext $context, Input $input): StepResult => 'late' === $input->string('when') ? StepResult::reopen(new Problem('acme.lapsed'), 'confirm', 'elsewhere') : StepResult::done());
+        $flows = $this->flows(new Flow('acme.add', [new TestStep('first'), $confirm, $add, new TestStep('last')]));
+        $started = $flows->start('acme.add', new Realm('acme'), $this->context);
+        $flows->submit($started->state->id, 'first', new Input(), $this->context);
+        $flows->submit($started->state->id, 'confirm', new Input(), $this->context);
+
+        $back = $flows->submit($started->state->id, 'add', new Input(['when' => 'late']), $this->context);
+
+        self::assertSame([FlowStatus::InProgress, 'confirm'], [$back?->status, $back?->step]);
+        self::assertEquals([new Problem('acme.lapsed')], $back?->problems);
+        self::assertSame(['first'], $back?->state->passed, 'Only the steps asked for come again.');
+        self::assertSame(['confirm', 'add'], new FlowState('id', 'acme.add', new Realm('acme'), new \DateTimeImmutable(), ['first', 'confirm', 'add'])->reopening(['first'])->passed, 'Still a list.');
+        self::assertFalse(StepResult::reopen(new Problem('a'), 'b')->done);
+        self::assertSame(['b', 'c'], StepResult::reopen(new Problem('a'), 'b', more: 'c')->reopen, 'Steps are a list, however they were passed.');
+        self::assertCount(2, $confirm->entered);
+        self::assertSame('add', $flows->submit($started->state->id, 'confirm', new Input(), $this->context)?->step);
+        self::assertSame('last', $flows->submit($started->state->id, 'add', new Input(), $this->context)?->step);
+    }
+
+    public function testWhatAStepCantDoEndsInAProblemNotAnError(): void
+    {
+        $lapsed = new AuthenticationRequirement(Duration::minutes(5));
+        $cases = [
+            [static fn (): never => throw new StepFailed(new Problem('acme.no_passkey')), null, 'acme.no_passkey'],
+            [static fn (): never => throw new StepUpRequired($lapsed), null, 'yorvoid.flow.confirm_again'],
+            [static fn (): never => throw new HeldAfterRecovery(new \DateTimeImmutable('+1 day')), null, 'yorvoid.flow.held_after_recovery'],
+            [static fn (int $times): null => 1 === $times ? null : throw new StepUpRequired($lapsed), static fn (): never => throw new StepUpRequired($lapsed), 'yorvoid.flow.confirm_again'],
+            [null, static fn (): never => throw new HeldAfterRecovery(new \DateTimeImmutable('+1 day')), 'yorvoid.flow.held_after_recovery'],
+        ];
+
+        foreach ($cases as $i => [$enter, $submit, $message]) {
+            $flows = $this->flows(new Flow('acme.case', [new TestStep('first'), new TestStep('case', $submit, enter: $enter)]));
+            $started = $flows->start('acme.case', new Realm('acme'), $this->context);
+            $progress = $flows->submit($started->state->id, 'first', new Input(), $this->context);
+
+            if (null !== $submit) {
+                $progress = $flows->submit($started->state->id, 'case', new Input(), $this->context);
+            }
+
+            self::assertSame(FlowStatus::Failed, $progress?->status, (string) $i);
+            self::assertSame($message, $progress->failure?->message, (string) $i);
+            self::assertNull($this->store->get($started->state->id), (string) $i);
+        }
+
+        self::assertSame('acme.no_passkey', new StepFailed(new Problem('acme.no_passkey'))->getMessage());
+
+        $refused = $this->flows(new Flow('acme.lapse', [new TestStep('case', static fn (): never => throw new StepUpRequired($lapsed))]));
+        $started = $refused->start('acme.lapse', new Realm('acme'), $this->context);
+        self::assertEquals([FlowStatus::InProgress, [new Problem('yorvoid.flow.confirm_again')]], [$refused->submit($started->state->id, 'case', new Input(), $this->context)?->status, $refused->submit($started->state->id, 'case', new Input(), $this->context)?->problems]);
     }
 
     public function testOnlyTheCurrentStepTakesAnswers(): void

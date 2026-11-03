@@ -74,12 +74,23 @@ final class CurrentSession implements ResetInterface
     }
 
     /**
-     * Keeps a session's token in the PHP session, under a new PHP session ID (SES-002).
+     * Keeps a session's token in the PHP session, under a new PHP session ID (SES-002). A session the PHP
+     * session held before ends, unless it's the same one with a new token, after a step-up (V7.2.4).
      */
-    public function hold(#[\SensitiveParameter] Secret $token): void
+    public function hold(#[\SensitiveParameter] Secret $token, Origin $origin = new Origin(OriginKind::Web)): void
     {
         $request = $this->requests->getMainRequest() ?? throw new \LogicException('There is no request to hold a session in.');
-        $request->getSession()->migrate(true);
+        $previous = $this->get();
+        $held = null === $previous ? null : $this->sessions->validate($this->realm, $token);
+        $same = null !== $previous && null !== $held && $previous->id->equals($held->id);
+
+        if (null !== $previous && !$same) {
+            $this->sessions->end(new EndSession($previous->realm, $previous->id, SessionEndReason::Replaced), $origin);
+        }
+
+        // After a step-up the old PHP session stays, holding the old token, which no longer works: a request
+        // of another tab already waiting on it then doesn't delete the new session's cookie (SES-08).
+        $request->getSession()->migrate(!$same);
         $request->getSession()->set($this->key, $token->reveal());
         $this->checked = new \WeakMap();
     }

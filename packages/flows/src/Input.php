@@ -47,11 +47,10 @@ final readonly class Input
     {
         $value = $this->fields[$field] ?? null;
 
-        return match (true) {
-            \is_string($value) => $value,
-            \is_array($value), $value instanceof \stdClass => json_encode($value, \JSON_THROW_ON_ERROR),
-            default => null,
-        };
+        // What can't be encoded again, e.g. 1e999 decoded as INF, is no answer.
+        $json = \is_array($value) || $value instanceof \stdClass ? json_encode($value) : $value;
+
+        return \is_string($json) ? $json : null;
     }
 
     /**

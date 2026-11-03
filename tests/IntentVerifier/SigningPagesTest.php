@@ -104,6 +104,7 @@ final class SigningPagesTest extends TestCase
         self::assertNull($document->querySelector('main b'), 'A parameter isn\'t escaped.');
         self::assertSame('acme.site.remove', $document->querySelector('[data-action]')?->textContent);
         self::assertNull($document->querySelector('input[name="secret"]'));
+        self::assertStringStartsWith('Only these passkeys can sign: ', (string) $document->querySelector('[data-signing-keys]')?->textContent, 'A passkey the verifier doesn\'t know gets no word from the browser.');
         self::assertSame('no-store', $page->headers['Cache-Control']);
         // The console's origin too: browsers check the redirect after a form's post against form-action.
         self::assertSame("default-src 'none'; script-src 'self'; form-action 'self' https://acme.example; frame-ancestors 'none'; base-uri 'none'", $page->headers['Content-Security-Policy']);
