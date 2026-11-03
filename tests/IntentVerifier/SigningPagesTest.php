@@ -285,7 +285,8 @@ final class SigningPagesTest extends TestCase
         $script = $this->pages->handle('GET', '/browser/forms.js');
 
         self::assertSame([200, 'text/javascript; charset=utf-8', 'no-store', 'nosniff'], [$script->status, $script->headers['Content-Type'], $script->headers['Cache-Control'], $script->headers['X-Content-Type-Options']]);
-        self::assertStringEqualsFile(\dirname(__DIR__, 2).'/packages/browser/dist/forms.js', $script->body, 'It isn\'t the browser client as built.');
+        // The copy the package ships; CI's browser job checks it's the client as built.
+        self::assertStringEqualsFile(\dirname(__DIR__, 2).'/packages/intent-verifier/public/browser/forms.js', $script->body, 'It isn\'t the browser client the package ships.');
         self::assertSame(200, $this->pages->handle('GET', '/browser/webauthn.js')->status, 'forms.js imports it.');
 
         foreach (['/browser/missing.js', '/browser/../composer.json', '/browser/forms.js/x', '/browser/Forms.js', "/browser/forms.js\n", '/x/browser/forms.js', '/browser/forms.ts'] as $path) {
