@@ -21,10 +21,21 @@ use YorvoID\Throttle\Throttled;
  * sends. Steps run in their flow's order, and only the current one takes answers: a step can't be
  * skipped by sending another's.
  *
+ * A session a step starts is held back until every required step is done: the steps run in it, but the
+ * person gets it only then. So a required step after signing in, such as adding the owner's passkey or
+ * accepting terms, can't be skipped by leaving the flow; steps that aren't required don't hold it back.
+ *
  * @api
  */
 final class Flows
 {
+    /** Where the state keeps a session a step started, until the flow completes */
+    private const string TOKEN = 'flows.signed_in.token';
+
+    private const string DEVICE_COOKIE = 'flows.signed_in.device_cookie';
+
+    private const string NEW_DEVICE = 'flows.signed_in.new_device';
+
     /** @var array<string, Flow> */
     private array $flows = [];
 
@@ -79,6 +90,7 @@ final class Flows
         }
 
         $step = null === $state->current ? null : $this->flow($state->flow)->step($state->current);
+        $context = $this->signedIn($state, $context);
 
         // A step an upgrade removed is passed over.
         return null === $step ? $this->advance($state, $context) : new Progress(FlowStatus::InProgress, $state, $step->name(), $step->view($state));
@@ -108,6 +120,8 @@ final class Flows
             return new Progress($progress->status, $progress->state, $progress->step, $progress->view, [new Problem('yorvoid.flow.out_of_date')]);
         }
 
+        $context = $this->signedIn($state, $context);
+
         try {
             $result = $current->submit($state, $context, $input);
         } catch (Throttled $exception) {
@@ -131,22 +145,47 @@ final class Flows
 
         if (null !== $result->signedIn) {
             $context = $context->withSession($result->signedIn->session);
+            $state = $state->with([
+                self::TOKEN => $result->signedIn->token->reveal(),
+                self::DEVICE_COOKIE => $result->signedIn->deviceCookie?->reveal(),
+                self::NEW_DEVICE => $result->signedIn->newDevice,
+            ]);
         }
 
-        if (null !== $result->renewedToken) {
-            $context = $context->withSession($this->sessions->validate($state->realm, $result->renewedToken));
+        $renewed = $result->renewedToken;
+
+        if (null !== $renewed) {
+            $context = $context->withSession($this->sessions->validate($state->realm, $renewed));
+
+            // Renewing the session the flow holds back: the person gets the new token with it.
+            if (null !== $state->string(self::TOKEN)) {
+                $state = $state->with([self::TOKEN => $renewed->reveal()]);
+                $renewed = null;
+            }
         }
 
-        return $this->advance($state, $context, $result->signedIn, $result->renewedToken);
+        return $this->advance($state, $context, $renewed);
+    }
+
+    /**
+     * The request's context, in the session a step of the flow started, if one did.
+     */
+    private function signedIn(FlowState $state, FlowContext $context): FlowContext
+    {
+        $token = $state->string(self::TOKEN);
+
+        return null === $token ? $context : $context->withSession($this->sessions->validate($state->realm, Secret::fromString($token)));
     }
 
     /**
      * Moves on to the first step not done or passed over that applies, and prepares it; or, after the
      * last, completes the flow.
      */
-    private function advance(FlowState $state, FlowContext $context, ?StartedSession $signedIn = null, ?Secret $renewedToken = null): Progress
+    private function advance(FlowState $state, FlowContext $context, ?Secret $renewedToken = null): Progress
     {
-        foreach ($this->flow($state->flow)->steps as $step) {
+        $flow = $this->flow($state->flow);
+
+        foreach ($flow->steps as $step) {
             if (\in_array($step->name(), $state->passed, true)) {
                 continue;
             }
@@ -157,6 +196,7 @@ final class Flows
                 continue;
             }
 
+            [$state, $signedIn] = [] === array_diff($flow->required, $state->passed) ? $this->release($state, $context) : [$state, null];
             $state = $step->enter($state->at($step->name()), $context);
             $this->store->save($state);
 
@@ -164,9 +204,25 @@ final class Flows
         }
 
         $this->store->delete($state->id);
+        [$state, $signedIn] = $this->release($state, $context);
         $this->events->dispatch(new FlowCompleted($state, $context->origin));
 
         return new Progress(FlowStatus::Completed, $state, signedIn: $signedIn, renewedToken: $renewedToken);
+    }
+
+    /**
+     * The session a step started, for the person, now that every required step is done; unless it ended
+     * meanwhile. The state forgets it.
+     *
+     * @return array{FlowState, StartedSession|null}
+     */
+    private function release(FlowState $state, FlowContext $context): array
+    {
+        $token = $state->string(self::TOKEN);
+        $deviceCookie = $state->string(self::DEVICE_COOKIE);
+        $signedIn = null === $token || null === $context->session ? null : new StartedSession($context->session, Secret::fromString($token), null === $deviceCookie ? null : Secret::fromString($deviceCookie), true === $state->get(self::NEW_DEVICE));
+
+        return [$state->without([self::TOKEN, self::DEVICE_COOKIE, self::NEW_DEVICE]), $signedIn];
     }
 
     private function load(string $id): ?FlowState

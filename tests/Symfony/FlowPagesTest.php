@@ -97,9 +97,7 @@ final class FlowPagesTest extends TestCase
         \assert($email instanceof Email);
         self::assertSame(['ana@example.com', 'Confirm your email address for Acme'], [$email->getTo()[0]->getAddress(), $email->getSubject()]);
         self::assertSame(1, preg_match('#https://example\.com/yorvoid/flows/yorvoid\.verify_email\?token=[^\s"<]+#', (string) $email->getTextBody(), $link));
-        $device = $this->browser->getResponse()->headers->getCookies()[0] ?? null;
-        \assert($device instanceof Cookie);
-        self::assertSame(['__Host-yorvoid_device', true, true, 'lax', false], [$device->getName(), $device->isSecure(), $device->isHttpOnly(), $device->getSameSite(), $device->isPartitioned()]);
+        self::assertSame([], $this->browser->getResponse()->headers->getCookies(), 'Nothing yet: the owner is signed in once their passkey is added.');
         $registration = $this->browser->followRedirect();
         self::assertSame('Add a passkey', $registration->filter('h1')->text());
         $form = $registration->filter('form[data-yorvoid-ceremony="create"]');
@@ -112,6 +110,9 @@ final class FlowPagesTest extends TestCase
 
         $authenticator = new VirtualAuthenticator();
         $this->browser->submit($form->form(), ['response' => $authenticator->register((string) $form->attr('data-yorvoid-options')), 'label' => 'Laptop']);
+        $device = $this->browser->getResponse()->headers->getCookies()[0] ?? null;
+        \assert($device instanceof Cookie);
+        self::assertSame(['__Host-yorvoid_device', true, true, 'lax', false], [$device->getName(), $device->isSecure(), $device->isHttpOnly(), $device->getSameSite(), $device->isPartitioned()]);
         $codes = $this->browser->followRedirect();
         self::assertSame('Save your recovery codes', $codes->filter('h1')->text());
         self::assertCount(10, $codes->filter('[data-yorvoid-recovery-codes] code'));

@@ -21,7 +21,8 @@ use YorvoID\Passkeys\Passkeys;
 /**
  * The passkey-first journeys (UX-009): signing in, claiming a fresh installation, accepting an
  * invitation, recovering, adding a passkey, stepping up, and confirming a signed operation. Each ends
- * with a way to sign in that works: there's no dead end.
+ * with a way to sign in that works: the owner and invitees are signed in only once their passkey is
+ * added, and whoever leaves before that gets back in with a recovery link.
  *
  * @api
  */
@@ -83,7 +84,7 @@ final readonly class PasskeyFlows
         return [
             new Flow(self::SIGN_IN, [new PasskeySignInStep($this->passkeys)], [PasskeySignInStep::NAME]),
             new Flow(self::SETUP, [new SetupCodeStep($this->setupCodes, $this->sessions, $this->clock, $this->emailVerification), $passkey, $codes], [SetupCodeStep::NAME, PasskeyRegistrationStep::NAME]),
-            new Flow(self::INVITATION, [new InvitationStep($this->invitations, $this->principals, $this->sessions, $this->clock), $passkey, $codes], [InvitationStep::NAME]),
+            new Flow(self::INVITATION, [new InvitationStep($this->invitations, $this->principals, $this->sessions, $this->clock), $passkey, $codes], [InvitationStep::NAME, PasskeyRegistrationStep::NAME]),
             new Flow(self::RECOVER_WITH_CODE, [new RecoveryCodeStep($this->recoveryCodes), $later, $codes], [RecoveryCodeStep::NAME]),
             new Flow(self::RECOVER_WITH_LINK, [new RecoveryLinkStep($this->recoveryLinks), $later, $codes], [RecoveryLinkStep::NAME]),
             new Flow(self::ADD_PASSKEY, [new StepUpStep($this->passkeys, $this->stepUp, $this->window, 'yorvoid.credential.add'), $passkey], [PasskeyRegistrationStep::NAME]),

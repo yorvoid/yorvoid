@@ -29,6 +29,11 @@ final class FlowTest extends TestCase
         self::assertSame(['code'], $changed->required);
         self::assertSame('yorvoid.setup', $changed->name);
 
+        // An inserted step can be required too: then it can't be removed, and holds back the session.
+        $gated = $flow->withStepAfter('passkey', new TestStep('terms'), required: true)->withStepBefore('code', new TestStep('consent'), required: true);
+        self::assertSame(['code', 'terms', 'consent'], $gated->required);
+        self::assertSame(['code'], $flow->required);
+
         $own = new TestStep('code');
         $replaced = $flow->withStepReplaced($own);
         self::assertSame($own, $replaced->step('code'));

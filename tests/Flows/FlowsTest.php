@@ -8,7 +8,10 @@ use Symfony\Component\Clock\MockClock;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
+use YorvoID\Authn\Session\EndSession;
+use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
+use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
@@ -20,6 +23,7 @@ use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Secret;
 use YorvoID\Flows\Event\FlowCompleted;
 use YorvoID\Flows\Flow;
 use YorvoID\Flows\FlowContext;
@@ -206,32 +210,57 @@ final class FlowsTest extends DatabaseTestCase
         $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
         $started = $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now()))), new Origin(OriginKind::Web));
         $renewed = $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
+        $terms = new TestStep('terms');
         $after = new TestStep('after');
         $later = new TestStep('later');
         $flows = $this->flows(new Flow('acme.sign_in', [
-            new TestStep('sign_in', static fn (): StepResult => StepResult::done(signedIn: $started)),
-            $after,
+            new TestStep('sign_in', static fn (): StepResult => StepResult::done(signedIn: new StartedSession($started->session, $started->token, Secret::fromString('device-cookie'), true))),
             new TestStep('step_up', static fn (): StepResult => StepResult::done(renewedToken: $renewed->token)),
+            $terms,
+            $after,
             $later,
-        ]));
+        ], ['sign_in', 'terms']));
         $flow = $flows->start('acme.sign_in', new Realm('acme'), $this->context);
 
+        // Held back until the last required step: leaving before it leaves the person signed out.
         $signedIn = $flows->submit($flow->state->id, 'sign_in', new Input(), $this->context);
-        self::assertSame($started, $signedIn?->signedIn);
-        self::assertNull($signedIn->renewedToken);
-        self::assertSame($started->session, $after->entered[0]->session);
-        self::assertSame($this->context->origin, $after->entered[0]->origin);
+        self::assertSame([FlowStatus::InProgress, null, null], [$signedIn?->status, $signedIn?->signedIn, $signedIn?->renewedToken]);
+        self::assertNull($flows->resume($flow->state->id, $this->context)?->signedIn);
 
+        // A renewed token is held back with it; the requests carry no session, the steps still run in it.
+        $stepped = $flows->submit($flow->state->id, 'step_up', new Input(), $this->context);
+        self::assertSame([null, null], [$stepped?->signedIn, $stepped?->renewedToken]);
+        self::assertSame((string) $renewed->session->id, (string) $terms->entered[0]->session?->id);
+        self::assertSame($this->context->origin, $terms->entered[0]->origin);
+
+        $accepted = $flows->submit($flow->state->id, 'terms', new Input(), $this->context);
+        self::assertSame(['device-cookie', true], [$accepted?->signedIn?->deviceCookie?->reveal(), $accepted?->signedIn?->newDevice], 'The device cookie comes with it.');
+        self::assertSame([FlowStatus::InProgress, 'after', null], [$accepted?->status, $accepted?->step, $accepted?->renewedToken]);
+        self::assertSame($renewed->token->reveal(), $accepted?->signedIn?->token->reveal(), 'The newest token, once the required steps are done.');
+        self::assertSame((string) $renewed->session->id, (string) $accepted->signedIn->session->id);
+        self::assertSame([], array_filter(array_keys($accepted->state->toArray()['data']), static fn (string $key): bool => str_starts_with($key, 'flows.')), 'The token isn\'t kept.');
+
+        // From then on, the request's own session.
         $flows->submit($flow->state->id, 'after', new Input(), $this->context->withSession($started->session));
-        $stepped = $flows->submit($flow->state->id, 'step_up', new Input(), $this->context->withSession($started->session));
-        self::assertSame($renewed->token, $stepped?->renewedToken);
-        self::assertNull($stepped->signedIn);
-        $session = $later->entered[0]->session;
-        self::assertNotNull($session);
-        self::assertTrue($renewed->session->id->equals($session->id));
-
+        self::assertSame($started->session, $after->submitted[0]->session);
         $last = $flows->submit($flow->state->id, 'later', new Input(), $this->context);
         self::assertSame([FlowStatus::Completed, null, null], [$last?->status, $last?->signedIn, $last?->renewedToken]);
+    }
+
+    public function testASessionThatEndedMeanwhileIsntHandedOver(): void
+    {
+        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $started = $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
+        $terms = new TestStep('terms');
+        $flows = $this->flows(new Flow('acme.sign_in', [new TestStep('sign_in', static fn (): StepResult => StepResult::done(signedIn: $started)), $terms], ['terms']));
+        $flow = $flows->start('acme.sign_in', new Realm('acme'), $this->context);
+        $flows->submit($flow->state->id, 'sign_in', new Input(), $this->context);
+
+        $this->sessions->end(new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        $done = $flows->submit($flow->state->id, 'terms', new Input(), $this->context);
+
+        self::assertSame([FlowStatus::Completed, null], [$done?->status, $done?->signedIn]);
+        self::assertNull($terms->submitted[0]->session, 'The step ran without it.');
     }
 
     public function testAStepThatsGoneAfterAnUpgradeIsPassedOver(): void
