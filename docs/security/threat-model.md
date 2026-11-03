@@ -72,7 +72,7 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 | A copied hardware key signs in | Signature counters recorded; a counter that doesn't go up is refused, or disables the passkey | In place |
 | A passkey sign-in or registration replayed | Each ceremony's 256-bit challenge works once, kept server-side, and expires | In place |
 | Recovery as the weakest way in | Recovery links only from the server's operator, short-lived; recovery codes of 120 random bits, stored hashed, each used once; every recovery ends every other session, is logged and emailed, and can start a cool-down that holds removing credentials | In place |
-| Session fixation, theft, revoked sessions still accepted | New token on sign-in, on refresh and on step-up; 256-bit tokens stored only hashed; short, server-side sessions checked on every request | In place |
+| Session fixation, theft, revoked sessions still accepted | New token on sign-in, on refresh and on step-up; 256-bit tokens stored only hashed; short, server-side sessions checked on every request; a new ID for the host's session when it holds a token | In place in the Symfony bridge; other hosts do it themselves ([without a bridge](../how-to/without-a-bridge.md)) |
 | A session left open, or taken over, runs a sensitive operation | Step-up: a recent proof of the required strength, which counts for that operation only | In place |
 | Someone who recovered an account that isn't theirs locks the owner out | An optional cool-down after every recovery holds removing credentials and replacing recovery codes | In place |
 | A suspension is undone, and sessions opened before it come back | A session is valid only while its principal keeps the status version it started with | In place |

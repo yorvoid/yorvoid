@@ -65,6 +65,7 @@ export default defineConfig({
           { text: 'Turn on notifications', link: '/how-to/notifications' },
           { text: 'Rotate the signing keys', link: '/how-to/rotate-keys' },
           { text: 'Change the sign-in pages', link: '/how-to/sign-in-pages' },
+          { text: 'Integrate without a bridge', link: '/how-to/without-a-bridge' },
         ],
       },
       {

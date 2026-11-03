@@ -186,7 +186,8 @@ final readonly class Sessions
     /**
      * Adds a proof to a current session, after its principal proved who they are again (ATN-070), and
      * gives it a new token (SES-002): the old token stops working. For the packages that check the proof,
-     * e.g. Passkeys::finishStepUp().
+     * e.g. Passkeys::finishStepUp(). Store the new token as on sign-in: under a new ID of the application's
+     * session.
      *
      * @return Secret|null The new token; null if the session isn't current, or its principal not active
      */
