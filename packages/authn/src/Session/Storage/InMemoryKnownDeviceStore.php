@@ -32,6 +32,11 @@ final class InMemoryKnownDeviceStore implements KnownDeviceStore, InMemoryStore
         return [] !== ($this->devices[$realm->name][(string) $principalId] ?? []);
     }
 
+    public function isKnown(Realm $realm, PrincipalId $principalId, string $cookieHash): bool
+    {
+        return isset($this->devices[$realm->name][(string) $principalId][$cookieHash]);
+    }
+
     public function purge(\DateTimeImmutable $unusedSince): int
     {
         $purged = 0;

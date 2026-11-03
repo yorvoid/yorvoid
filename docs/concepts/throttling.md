@@ -39,10 +39,13 @@ For addresses, use `AddressKey::of($ip)`: an IPv4 address counts on its own (als
 | Limit | Default | |
 |---|---|---|
 | `perAccountAndAddress` | 10 per 15 minutes | Someone trying one account from one place |
-| `perAccount` | 100 per hour | An attack on one account from many addresses slows down, without shutting the owner out for long |
+| `perAccount` | 100 per hour | An attack on one account from many addresses slows down. It doesn't apply to a browser the account signed in with before, so others can't keep the owner out by filling it |
 | `perAddress` | 300 per 15 minutes | One address trying many accounts; room for an office behind one address |
 
 Configure them with `new Attempts($throttle, new AttemptLimits(perAccount: new Limit(50, Duration::hours(1))))`.
+
+- An attempt is counted for every limit or for none: one that a limit refuses doesn't use up the others.
+- `count(..., knownDevice: true)` leaves out the limit for the account: pass `$sessions->isKnownDevice($realm, $principalId, $deviceCookie)`, as recovery codes do. It needs [device recognition](sessions.md#recognising-devices).
 
 - [Recovery codes](recovery-codes.md) count per account and address; a success forgets that account's attempts from that address.
 - [Passkey sign-in](passkeys.md#signing-in) counts per address.

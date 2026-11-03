@@ -25,7 +25,7 @@ final readonly class AttemptLimits
     /**
      * @param Limit|null $perAccountAndAddress One account from one address: 10 per 15 minutes if not given
      * @param Limit|null $perAccount           One account from anywhere: 100 per hour if not given, so an attack from many
-     *                                         addresses slows down without shutting out the owner for long
+     *                                         addresses slows down; the owner's own browser isn't held to it (Attempts::count())
      * @param Limit|null $perAddress           One address, whichever accounts: 300 per 15 minutes if not given, leaving room
      *                                         for an office behind one address
      */

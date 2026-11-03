@@ -64,6 +64,36 @@ final class AttemptsTest extends TestCase
         $this->throttled(fn () => $this->attempts->count('passkey_sign_in', new Realm('acme'), null, '2001:db8::2'), 'Another address of the same /64 counted apart.');
     }
 
+    public function testTheOwnersBrowserIsntKeptOutByAttemptsFromElsewhere(): void
+    {
+        $this->attempts(2, 3, 10);
+        $ana = self::principal();
+
+        // Others fill the account's limit from addresses of their own.
+        foreach (['2001:db8:1::1', '2001:db8:2::1', '2001:db8:3::1'] as $address) {
+            $this->attempts->count('recovery_code', new Realm('acme'), $ana, $address);
+        }
+
+        $this->throttled(fn () => $this->attempts->count('recovery_code', new Realm('acme'), $ana, '192.0.2.9'), 'The account\'s limit didn\'t apply.');
+        $this->attempts->count('recovery_code', new Realm('acme'), $ana, '192.0.2.9', knownDevice: true);
+        $this->attempts->count('recovery_code', new Realm('acme'), $ana, '192.0.2.9', knownDevice: true);
+        $this->throttled(fn () => $this->attempts->count('recovery_code', new Realm('acme'), $ana, '192.0.2.9', knownDevice: true), 'A known device went past the limit for the account from its address.');
+    }
+
+    public function testAnAttemptOneLimitRefusesCountsAgainstNone(): void
+    {
+        $this->attempts(5, 2, 1);
+        $ana = self::principal();
+        $ben = self::principal();
+        $this->attempts->count('recovery_code', new Realm('acme'), $ana, '192.0.2.1');
+
+        // The address is full: Ben's attempts from it are refused, and don't count for his account.
+        $this->throttled(fn () => $this->attempts->count('recovery_code', new Realm('acme'), $ben, '192.0.2.1'), 'The address went past its limit.');
+        $this->throttled(fn () => $this->attempts->count('recovery_code', new Realm('acme'), $ben, '192.0.2.1'), 'The address went past its limit.');
+        $this->attempts->count('recovery_code', new Realm('acme'), $ben, '192.0.2.2');
+        $this->attempts->count('recovery_code', new Realm('acme'), $ben, '192.0.2.3');
+    }
+
     public function testASuccessForgetsTheAccountsAttemptsFromTheAddressOnly(): void
     {
         $this->attempts(2, 3, 3);

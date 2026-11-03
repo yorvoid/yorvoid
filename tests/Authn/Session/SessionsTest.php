@@ -377,6 +377,15 @@ final class SessionsTest extends DatabaseTestCase
         self::assertFalse($first->newDevice, 'A first sign-in is no news.');
         self::assertSame([SessionStarting::class, SessionStarted::class], array_values(array_filter($this->events->classes(), static fn (string $class): bool => SecurityLogEntryRecorded::class !== $class)));
 
+        self::assertTrue($sessions->isKnownDevice(new Realm('acme'), $ana->id, $first->deviceCookie));
+        self::assertFalse($sessions->isKnownDevice(new Realm('acme'), $ana->id, Secret::fromString('another')));
+        self::assertFalse($sessions->isKnownDevice(new Realm('acme'), $ana->id, null));
+        self::assertFalse($this->sessions($implementation)->isKnownDevice(new Realm('acme'), $ana->id, $first->deviceCookie), 'Without device recognition, no device is known.');
+        $sessions = $this->sessions($implementation, devices: true);
+        $ana = $this->principal();
+        $first = $this->start($sessions, $ana);
+        \assert(null !== $first->deviceCookie);
+
         $again = $this->start($sessions, $ana, $first->deviceCookie);
         self::assertTrue($first->deviceCookie->equals($again->deviceCookie ?? Secret::fromString('')), 'A known device got another cookie.');
         self::assertFalse($again->newDevice);

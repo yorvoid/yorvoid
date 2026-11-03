@@ -314,6 +314,15 @@ final readonly class Sessions
     }
 
     /**
+     * Whether the browser's device cookie is one the principal signed in with before: e.g. to let the
+     * owner's own browser past limits that others can fill (Attempts). False without device recognition.
+     */
+    public function isKnownDevice(Realm $realm, PrincipalId $principalId, #[\SensitiveParameter] ?Secret $deviceCookie): bool
+    {
+        return null !== $deviceCookie && true === $this->devices?->isKnown($realm, $principalId, self::hash($deviceCookie));
+    }
+
+    /**
      * The device cookie to set, and whether the device is new to a principal that has used others.
      *
      * @return array{Secret|null, bool}
