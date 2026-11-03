@@ -169,7 +169,6 @@ final readonly class RecoveryCodes
             $account = null;
         }
 
-        $this->attempts->count('recovery_code', $realm, $account, $address);
         $principalId = null === $account ? null : $this->principals->findByIdentifier($realm, $kind, $identifier)?->id;
 
         if (null === $principalId) {
@@ -178,6 +177,9 @@ final readonly class RecoveryCodes
             $principalId = new PrincipalId($this->ids->next());
             $this->principals->get($realm, $principalId);
         }
+
+        // The owner's own browser isn't kept out by attempts at the account from elsewhere.
+        $this->attempts->count('recovery_code', $realm, $account, $address, $this->sessions->isKnownDevice($realm, $principalId, $deviceCookie));
 
         $started = $this->check($realm, $principalId, self::hash($code), $origin, $device, $address, $deviceCookie);
 
@@ -205,7 +207,7 @@ final readonly class RecoveryCodes
      */
     public function redeem(Realm $realm, PrincipalId $principalId, #[\SensitiveParameter] Secret $code, Origin $origin, ?string $device = null, ?string $address = null, #[\SensitiveParameter] ?Secret $deviceCookie = null): ?StartedSession
     {
-        $this->attempts->count('recovery_code', $realm, $principalId, $address);
+        $this->attempts->count('recovery_code', $realm, $principalId, $address, $this->sessions->isKnownDevice($realm, $principalId, $deviceCookie));
         $started = $this->check($realm, $principalId, self::hash($code->reveal()), $origin, $device, $address, $deviceCookie);
 
         if (null !== $started) {

@@ -27,6 +27,11 @@ interface KnownDeviceStore
     public function hasAny(Realm $realm, PrincipalId $principalId): bool;
 
     /**
+     * Whether the principal has signed in from the device before.
+     */
+    public function isKnown(Realm $realm, PrincipalId $principalId, string $cookieHash): bool;
+
+    /**
      * Forgets the devices not used since the moment, in every realm.
      *
      * @return int How many

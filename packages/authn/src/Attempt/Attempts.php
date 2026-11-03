@@ -28,29 +28,42 @@ final readonly class Attempts
     /**
      * Counts an attempt. Nothing is counted when neither the account nor the address is known.
      *
-     * @param string                  $form    What is attempted, e.g. "recovery_code"
-     * @param PrincipalId|string|null $account The principal, or what identifies the account as typed (e.g.
-     *                                         "email:ana@example.com", normalized), so attempts count the same
-     *                                         whether or not the account exists
-     * @param string|null             $address The client's IP address
+     * @param string                  $form        What is attempted, e.g. "recovery_code"
+     * @param PrincipalId|string|null $account     The principal, or what identifies the account as typed (e.g.
+     *                                             "email:ana@example.com", normalized), so attempts count the same
+     *                                             whether or not the account exists
+     * @param string|null             $address     The client's IP address
+     * @param bool                    $knownDevice Whether the browser is one the account signed in with before (Sessions::isKnownDevice()):
+     *                                             then the limit for the account isn't counted, which others can fill to keep
+     *                                             the owner out; the ones for the account from the address, and for the address, are
      *
-     * @throws Throttled When a limit is reached
+     * @throws Throttled When a limit is reached; then nothing is counted
      */
-    public function count(string $form, Realm $realm, PrincipalId|string|null $account, ?string $address): void
+    public function count(string $form, Realm $realm, PrincipalId|string|null $account, ?string $address, bool $knownDevice = false): void
     {
         $account = null === $account ? null : self::account($form, $realm, $account);
         $address = null === $address ? null : self::address($form, $address);
+        $keys = [];
 
         if (null !== $account && null !== $address) {
-            $this->throttle->hit($account.'@'.$address, $this->limits->perAccountAndAddress);
+            $keys[$account.'@'.$address] = $this->limits->perAccountAndAddress;
         }
 
-        if (null !== $account) {
-            $this->throttle->hit($account, $this->limits->perAccount);
+        if (null !== $account && !$knownDevice) {
+            $keys[$account] = $this->limits->perAccount;
         }
 
         if (null !== $address) {
-            $this->throttle->hit($address, $this->limits->perAddress);
+            $keys[$address] = $this->limits->perAddress;
+        }
+
+        // All or none: an attempt a later limit refuses doesn't use up the earlier ones.
+        foreach ($keys as $key => $limit) {
+            $this->throttle->check($key, $limit);
+        }
+
+        foreach ($keys as $key => $limit) {
+            $this->throttle->hit($key, $limit);
         }
     }
 

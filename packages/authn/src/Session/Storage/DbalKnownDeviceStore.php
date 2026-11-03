@@ -45,6 +45,11 @@ final readonly class DbalKnownDeviceStore implements KnownDeviceStore
         return false !== $this->database->connection->fetchOne(\sprintf('SELECT 1 FROM %s WHERE realm = ? AND principal_id = ?', $this->database->table(self::TABLE)), [$realm->name, $principalId->uuid->toRfc4122()]);
     }
 
+    public function isKnown(Realm $realm, PrincipalId $principalId, string $cookieHash): bool
+    {
+        return false !== $this->database->connection->fetchOne(\sprintf('SELECT 1 FROM %s WHERE realm = ? AND principal_id = ? AND cookie_hash = ?', $this->database->table(self::TABLE)), [$realm->name, $principalId->uuid->toRfc4122(), $cookieHash]);
+    }
+
     public function purge(\DateTimeImmutable $unusedSince): int
     {
         return $this->database->deleteInBatches(self::TABLE, 'last_seen_at < ?', [$unusedSince], [Types::DATETIMETZ_IMMUTABLE]);

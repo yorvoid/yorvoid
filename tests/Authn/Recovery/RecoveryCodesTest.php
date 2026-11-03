@@ -361,18 +361,48 @@ final class RecoveryCodesTest extends DatabaseTestCase
     public function testRecoveringRunsAsManyStatementsForEveryAccount(string $platform): void
     {
         $statements = new StatementLog();
-        $codes = $this->codes($platform, statements: $statements);
+        $codes = $this->codes($platform, statements: $statements, devices: true);
         $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $this->session('ana@example.com'), new Origin(OriginKind::Web));
         $this->session('bo@example.com');
         $counted = [];
 
         foreach (['has codes' => 'ana@example.com', 'has none' => 'bo@example.com', 'doesn\'t exist' => 'cy@example.com'] as $account => $email) {
-            $statements->take();
-            $codes->recover(new Realm('acme'), IdentifierKind::Email, $email, 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.1');
-            $counted[$account] = \count($statements->take());
+            foreach ([null, Secret::fromString('a-browser')] as $i => $cookie) {
+                $statements->take();
+                $codes->recover(new Realm('acme'), IdentifierKind::Email, $email, 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.1', deviceCookie: $cookie);
+                $counted[$account.' '.$i] = \count($statements->take());
+            }
         }
 
-        self::assertSame(array_fill_keys(array_keys($counted), $counted['has codes']), $counted, 'The work done tells whether an account exists or has codes.');
+        self::assertGreaterThan($counted['has codes 0'], $counted['has codes 1'], 'A device cookie is looked up.');
+        unset($counted['has codes 0'], $counted['has none 0'], $counted['doesn\'t exist 0']);
+
+        self::assertSame(array_fill_keys(array_keys($counted), $counted['has codes 1']), $counted, 'The work done tells whether an account exists or has codes.');
+    }
+
+    #[DataProvider('implementations')]
+    public function testOthersCantKeepTheOwnerFromRecoveringOnTheirOwnBrowser(string $implementation): void
+    {
+        $codes = $this->codes($implementation, devices: true);
+        $owner = $this->session('ana@example.com');
+        $generated = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $owner, new Origin(OriginKind::Web));
+        // The owner signed in on this browser before.
+        $browser = Secret::fromString('anas-browser');
+        $this->sessions->start(new StartSession(new Realm('acme'), $owner->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true)), deviceCookie: $browser), new Origin(OriginKind::Web));
+
+        // Someone fills the account's limit (100 an hour) from addresses of their own.
+        for ($i = 0; $i < 100; ++$i) {
+            $codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: \sprintf('2001:db8:%x::1', $i));
+        }
+
+        try {
+            $codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', $generated[0]->reveal(), new Origin(OriginKind::Web), address: '192.0.2.50', deviceCookie: Secret::fromString('someone-elses'));
+            self::fail('The account\'s limit didn\'t apply to another browser.');
+        } catch (Throttled) {
+        }
+
+        $recovered = $codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', $generated[0]->reveal(), new Origin(OriginKind::Web), address: '192.0.2.50', deviceCookie: $browser);
+        self::assertTrue($recovered?->session->principalId->equals($owner->principalId), 'The owner\'s own browser was kept out.');
     }
 
     #[DataProvider('implementations')]
@@ -444,7 +474,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
         self::assertNull($operation->ability, 'Only the owner generates their own codes.');
     }
 
-    private function codes(string $implementation, ?Duration $coolDown = null, ?StatementLog $statements = null): RecoveryCodes
+    private function codes(string $implementation, ?Duration $coolDown = null, ?StatementLog $statements = null, bool $devices = false): RecoveryCodes
     {
         $this->stack = $this->stack($implementation, $statements);
         $this->clock = new MockClock('2026-10-28 18:45:30 UTC');
@@ -452,7 +482,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
         $ids = new UuidV7Generator($this->clock);
         $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
-        $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, events: $this->events, ids: $ids, clock: $this->clock);
+        $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, events: $this->events, ids: $ids, clock: $this->clock, devices: $devices ? $this->stack->devices : null);
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock, $coolDown);
         $this->credentials = new Credentials($this->stack->credentials, $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
 
