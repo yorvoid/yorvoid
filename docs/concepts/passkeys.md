@@ -63,7 +63,7 @@ $token = $passkeys->finishStepUp($session, $ceremonyId, $responseFromTheBrowser,
 ```
 
 - The ceremony belongs to the session that began it, and the answer must come from one of its principal's active passkeys.
-- The proof counts for the requirement's operation only, and the session gets a new token: replace the old one in its cookie.
+- The proof counts for the requirement's operation only, and the session gets a new token: replace the old one in its cookie, or in your session under a new session ID ([sessions](sessions.md#starting-a-session)).
 - A requirement of two factors asks the device for user verification, whatever the policy.
 - A principal without an active passkey gets `PasskeyRefused` with `Refusal::NoPasskey`: offer another way, e.g. a recovery code.
 

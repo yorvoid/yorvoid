@@ -17,6 +17,7 @@ Documentation for two readers: **integrators**, who add YorvoID to an applicatio
 - [Turn on notifications](how-to/notifications.md) with Symfony Mailer.
 - [Rotate the signing keys](how-to/rotate-keys.md) without downtime.
 - [Change the sign-in pages](how-to/sign-in-pages.md) to your look.
+- [Integrate without a framework bridge](how-to/without-a-bridge.md): the security work the Symfony bridge does, for Laravel, Drupal or plain PHP.
 
 ## Reference
 

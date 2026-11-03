@@ -42,7 +42,7 @@ try {
 
 // When the browser answers:
 $token = $passkeys->finishStepUp($session, $ceremonyId, $responseFromTheBrowser, $origin);
-// The session has a new token: replace the old one in its cookie.
+// The session has a new token: replace the old one in its cookie, or in your session under a new ID.
 ```
 
 The proof is added to the session's [authentication context](sessions.md), and the session gets a new token: the old one stops working (SES-002). `SessionSteppedUp` follows the commit. A session's context keeps only the latest of identical proofs, so a long session doesn't grow with every step-up.

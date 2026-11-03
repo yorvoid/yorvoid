@@ -8,7 +8,8 @@ use YorvoID\Core\Secret;
 
 /**
  * A new session and its token. The token goes to the client once (in a cookie, or the application's PHP
- * session); YorvoID keeps only its hash, so it can't be shown again.
+ * session); YorvoID keeps only its hash, so it can't be shown again. Kept in the application's session,
+ * that session needs a new ID first, or a cookie planted beforehand shares it (session fixation).
  *
  * @api
  */

@@ -25,8 +25,11 @@ $started = $sessions->start(
     new Origin(OriginKind::Web, 'yorvoid_sign_in'),
 );
 
+$request->getSession()->migrate(true);   // a new ID for your session first: see below
 $request->getSession()->set('yorvoid_session', $started->token->reveal());
 ```
+
+**Give your session a new ID before you store the token in it,** on sign-in and whenever a step-up renews the token (`session_regenerate_id(true)` in plain PHP, `$request->session()->regenerate(true)` in Laravel). Otherwise someone who planted a session cookie in the person's browser beforehand shares the signed-in session afterwards (session fixation). The Symfony bridge does it; [without a bridge](../how-to/without-a-bridge.md) lists what else it does.
 
 - Only an **active** principal can have a session (`InactivePrincipal` otherwise).
 - The token is 256 random bits, URL-safe, and shown only now: YorvoID stores its SHA-256 hash, so a leaked database or backup holds no usable session.

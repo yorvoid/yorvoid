@@ -169,18 +169,78 @@ The browser creates the passkey with the WebAuthn API, and posts it back:
 ```js
 const { ceremony, options } = await (await fetch('/passkeys/options', { method: 'POST' })).json();
 const credential = await navigator.credentials.create({ publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options) });
-await fetch('/passkeys', { method: 'POST', body: JSON.stringify({ ceremony, response: credential.toJSON() }) });
+await fetch('/passkeys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ceremony, response: credential.toJSON() }) });
 ```
 
 <!-- test
+// The browser's request body, where php://input has it: for one read, then PHP's own php:// is back.
+final class TutorialInput
+{
+    public static string $body = '';
+    public mixed $context;
+    private int $read = 0;
+
+    public static function send(string $body): void
+    {
+        self::$body = $body;
+        $_SERVER['CONTENT_TYPE'] = 'application/json';
+        stream_wrapper_unregister('php');
+        stream_wrapper_register('php', self::class);
+    }
+
+    public function stream_close(): void
+    {
+        stream_wrapper_restore('php');
+    }
+
+    public function stream_open(string $path, string $mode, int $options, ?string &$opened): bool
+    {
+        $this->read = 0;
+
+        return 'php://input' === $path;
+    }
+
+    public function stream_read(int $count): string
+    {
+        $chunk = substr(self::$body, $this->read, $count);
+        $this->read += strlen($chunk);
+
+        return $chunk;
+    }
+
+    public function stream_eof(): bool
+    {
+        return $this->read >= strlen(self::$body);
+    }
+
+    public function stream_stat(): array
+    {
+        return [];
+    }
+}
+
 $authenticator = new YorvoID\VirtualAuthenticator\VirtualAuthenticator('https://example.com');
-$_POST = ['ceremony' => $ceremony->id, 'response' => $authenticator->register($ceremony->options)];
+TutorialInput::send(json_encode(['ceremony' => $ceremony->id, 'response' => json_decode($authenticator->register($ceremony->options))]));
 -->
 
-Your server finishes it with what the browser sent, the `response` as JSON:
+Your server takes JSON only. A form on another site can't send that, and a script on another site can't without the browser asking first, so these requests can't be forged (CSRF):
 
 ```php
-$passkeys->finishRegistration($session, $_POST['ceremony'], $_POST['response'], 'Laptop', new Origin(OriginKind::Web));
+/** @return array<string, mixed> What the browser sent */
+function json_request(): array
+{
+    if (!str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/json')) {
+        http_response_code(415);
+        exit;
+    }
+
+    $body = json_decode((string) file_get_contents('php://input'), true);
+
+    return is_array($body) ? $body : [];
+}
+
+$request = json_request();
+$passkeys->finishRegistration($session, (string) ($request['ceremony'] ?? ''), json_encode($request['response'] ?? null), 'Laptop', new Origin(OriginKind::Web));
 ```
 
 YorvoID checks the answer against the ceremony: the challenge, the origin, the relying party, user verification. A refused answer throws `PasskeyRefused` with the reason.
@@ -209,15 +269,16 @@ $ceremony = $passkeys->beginSignIn($realm);
 ```js
 const { ceremony, options } = await (await fetch('/sign-in/options', { method: 'POST' })).json();
 const credential = await navigator.credentials.get({ publicKey: PublicKeyCredential.parseRequestOptionsFromJSON(options) });
-await fetch('/sign-in', { method: 'POST', body: JSON.stringify({ ceremony, response: credential.toJSON() }) });
+await fetch('/sign-in', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ceremony, response: credential.toJSON() }) });
 ```
 
 <!-- test
-$_POST = ['ceremony' => $ceremony->id, 'response' => $authenticator->signIn($ceremony->options)];
+TutorialInput::send(json_encode(['ceremony' => $ceremony->id, 'response' => json_decode($authenticator->signIn($ceremony->options))]));
 -->
 
 ```php
-$started = $passkeys->finishSignIn($realm, $_POST['ceremony'], $_POST['response'], new Origin(OriginKind::Web), address: $_SERVER['REMOTE_ADDR'] ?? null);
+$request = json_request();
+$started = $passkeys->finishSignIn($realm, (string) ($request['ceremony'] ?? ''), json_encode($request['response'] ?? null), new Origin(OriginKind::Web), address: $_SERVER['REMOTE_ADDR'] ?? null);
 setcookie('__Host-session', $started->token->reveal(), ['secure' => true, 'httponly' => true, 'samesite' => 'Lax', 'path' => '/']);
 ```
 
@@ -230,6 +291,7 @@ echo "The tutorial works.\n";
 
 ## What's next
 
+- **Before going live:** [without a framework bridge](../how-to/without-a-bridge.md) lists the security work at the edges that's yours: cookies, CSRF, pages, flows, listeners and daily jobs.
 - **The browser:** the [browser client](../concepts/browser-client.md) does the JavaScript above, with autofill and errors to show.
 - **Journeys:** [flows](../concepts/flows.md) run sign-in, invitations and recovery as server-side steps.
 - **Recovery:** [recovery codes](../concepts/recovery-codes.md), so a lost device isn't a lost account.
