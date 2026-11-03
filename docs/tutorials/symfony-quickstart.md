@@ -182,4 +182,4 @@ Follow "Sign out", then "Sign in". The sign-in page offers your passkey in the e
 - **Your kind of application:** pick a [preset](../concepts/symfony.md#presets).
 - **Your users:** [sign in your own user objects](../concepts/symfony.md#your-own-users).
 - **Tests:** [sign in to functional tests](../concepts/testing.md) through YorvoID.
-- **Production:** HTTPS, your domain as the relying party ID, PostgreSQL, and `yorvoid:doctor --strict` in your deployment.
+- **Production:** HTTPS, your domain as the relying party ID, PostgreSQL, `cookie_secure: true`, your proxy in `trusted_proxies` if one terminates HTTPS ([behind a proxy](../concepts/symfony.md#behind-a-proxy)), and `yorvoid:doctor --strict` in your deployment.

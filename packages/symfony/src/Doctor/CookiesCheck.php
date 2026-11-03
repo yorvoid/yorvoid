@@ -18,6 +18,7 @@ final readonly class CookiesCheck implements Check
         private ParameterBagInterface $parameters,
         private string $deviceCookie,
         private bool $recogniseDevices,
+        private bool $debug,
     ) {
     }
 
@@ -36,8 +37,14 @@ final readonly class CookiesCheck implements Check
         $options = $this->parameters->get('session.storage.options');
         \assert(\is_array($options));
 
-        if (false === ($options['cookie_secure'] ?? 'auto')) {
-            yield Finding::warning('The session cookie is sent over plain HTTP too, where anyone on the network can take it and act as whoever is signed in.', 'Set framework.session.cookie_secure to "auto" (the default) or true.', 'concepts/symfony.md#configuration');
+        $secure = $options['cookie_secure'] ?? 'auto';
+
+        if (false === $secure) {
+            yield Finding::warning('The session cookie is sent over plain HTTP too, where anyone on the network can take it and act as whoever is signed in.', 'Set framework.session.cookie_secure to true.', 'concepts/symfony.md#behind-a-proxy');
+        } elseif (true !== $secure && !$this->debug) {
+            // Passkeys need HTTPS, so outside development true is always right; "auto" goes by the request,
+            // which is plain HTTP when a proxy in front terminates HTTPS and isn't trusted.
+            yield Finding::warning('The session cookie is "Secure" only when the request looks like HTTPS: behind a proxy that terminates HTTPS, it isn\'t, and the cookie goes over plain HTTP too.', 'Set framework.session.cookie_secure to true: passkeys need HTTPS anyway.', 'concepts/symfony.md#behind-a-proxy');
         }
 
         if (false === ($options['cookie_httponly'] ?? true)) {

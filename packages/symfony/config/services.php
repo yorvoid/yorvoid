@@ -85,6 +85,7 @@ use YorvoID\Symfony\Doctor\KeysCheck;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
+use YorvoID\Symfony\Doctor\ProxiesCheck;
 use YorvoID\Symfony\Doctor\TemplatesCheck;
 use YorvoID\Symfony\Factories;
 use YorvoID\Symfony\Flow\FlowContexts;
@@ -237,7 +238,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);
     $services->set(AssuranceCheck::class)->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle'), param('yorvoid.passkeys.user_verification')])->tag('yorvoid.doctor_check', ['name' => 'Assurance level']);
     $services->set(PresetCheck::class)->args([param('yorvoid.preset'), array_combine(PresetCheck::SETTINGS, array_map(static fn (string $name) => param('yorvoid.'.$name), PresetCheck::SETTINGS))])->tag('yorvoid.doctor_check', ['name' => 'Preset']);
-    $services->set(CookiesCheck::class)->args([service('parameter_bag'), param('yorvoid.cookies.device'), param('yorvoid.sessions.recognise_devices')])->tag('yorvoid.doctor_check', ['name' => 'Cookies']);
+    $services->set(CookiesCheck::class)->args([service('parameter_bag'), param('yorvoid.cookies.device'), param('yorvoid.sessions.recognise_devices'), param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Cookies']);
+    $services->set(ProxiesCheck::class)->args([service('parameter_bag')])->tag('yorvoid.doctor_check', ['name' => 'Proxies']);
     $services->set(MailerCheck::class)->args([param('yorvoid.notifications.enabled'), param('yorvoid.notifications.from'), null, param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Mailer']);
     $services->set(TemplatesCheck::class)->tag('yorvoid.doctor_check', ['name' => 'Flow pages']);
     $services->set(KeysRotateCommand::class)->arg('$file', param('yorvoid.keys.file'))->tag('console.command');

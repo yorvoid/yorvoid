@@ -99,6 +99,23 @@ A preset is a documented starting point for a kind of application (PLT-090). It 
 - **regulated:** AAL3 session limits, fresher proofs for changing sign-in methods, tighter limits. Quorum intents and strict audit join it when YorvoID has them.
 - **agent_platform:** people delegating to agents: a taken-over account hands over its agents too, so a recovery waits a day before sensitive operations. Delegation limits join it when YorvoID has agents.
 
+## Behind a proxy
+
+When a load balancer or reverse proxy in front terminates HTTPS, the application sees plain HTTP from the proxy's address unless it trusts the proxy. Then every client counts as one address, so one client can use up the [limits per address](throttling.md) for everyone; and with `cookie_secure: auto`, the session cookie loses `Secure`. Trust exactly your proxies:
+
+```yaml
+# config/packages/framework.yaml
+framework:
+    trusted_proxies: '%env(TRUSTED_PROXIES)%'   # e.g. 10.0.0.0/8, or REMOTE_ADDR if only the proxy reaches the application
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host', 'x-forwarded-port']
+    session:
+        cookie_secure: true   # passkeys need HTTPS anyway
+```
+
+- Never trust `0.0.0.0/0` or `::/0`: anyone could then name any address in `X-Forwarded-For`, and slip past the limits or exhaust someone else's. `yorvoid:doctor` refuses it.
+- `REMOTE_ADDR` trusts whoever connects: right only when nothing but the proxy can reach the application.
+- Send `Strict-Transport-Security` from the proxy, so browsers never try plain HTTP.
+
 ## What the bundle wires
 
 - **Storage:** YorvoID's DBAL stores on your connection, and its transaction middleware added to that connection (and no other) through DoctrineBundle, so YorvoID's "-ed" events wait for your commits.
@@ -295,7 +312,8 @@ It answers only in debug mode, wherever it's imported.
 | Clock | The application's clock agrees with the database's within 5 seconds; a `MockClock` outside development is a problem. |
 | Assurance level | The configuration reaches the level its `sessions.preset` targets ([assurance levels](../security/assurance-levels.md)): passkeys require user verification, sessions last no longer than the level allows, and no AAL3 with synced passkeys. |
 | Preset | Your settings are no weaker than your [preset's](#presets): session preset, device recognition, step-up window and cool-down, limits. |
-| Cookies | The PHP session is on, its cookie is `Secure` (or `auto`), `HttpOnly` and `SameSite=Lax` or `Strict`, and the device cookie has the `__Host-` prefix. |
+| Cookies | The PHP session is on, its cookie is `Secure` (outside development `cookie_secure: true`, not `auto`), `HttpOnly` and `SameSite=Lax` or `Strict`, and the device cookie has the `__Host-` prefix. |
+| Proxies | `framework.trusted_proxies` doesn't trust every address (`0.0.0.0/0`, `::/0`), which would let anyone choose their address. See [behind a proxy](#behind-a-proxy). |
 | Mailer | With notifications on: the sender is an email address, and outside development the default transport delivers (not `null://`, not Symfony's `smtp://null`). With them off, outside development: a warning, since nobody would hear about a recovery. It sends nothing. |
 | Flow pages | The pages have what each step needs (as `yorvoid:templates:lint`), and the templates you published kept up with YorvoID's (as `yorvoid:templates:diff`). |
 
