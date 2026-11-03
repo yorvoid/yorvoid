@@ -25,4 +25,17 @@ final class Text
 
         return str_replace("\0", "\u{FFFD}", $scrubbed);
     }
+
+    /**
+     * The text on one line, as someone else wrote it, safe to show among other text: valid UTF-8 (utf8()),
+     * every control character and line or paragraph separator a space, and no bidirectional controls,
+     * which could make it read in another order. Runs of spaces become one; no space at either end.
+     */
+    public static function line(string $text): string
+    {
+        $text = preg_replace(['/[\p{Cc}\x{2028}\x{2029}]/u', '/[\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '/\s+/u'], [' ', '', ' '], self::utf8($text));
+        \assert(\is_string($text));
+
+        return trim($text);
+    }
 }

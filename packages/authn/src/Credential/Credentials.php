@@ -244,7 +244,7 @@ final readonly class Credentials
      */
     private static function label(string $label, CredentialKind $kind): string
     {
-        $label = trim(mb_substr(Text::utf8($label), 0, 64));
+        $label = trim(mb_substr(Text::line($label), 0, 64));
 
         return '' === $label ? match ($kind) {
             CredentialKind::Passkey => 'Passkey',

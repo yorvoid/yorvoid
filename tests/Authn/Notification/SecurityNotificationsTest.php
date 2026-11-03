@@ -112,6 +112,28 @@ final class SecurityNotificationsTest extends DatabaseTestCase
     }
 
     #[DataProvider('implementations')]
+    public function testWhoeverSignedInDoesntWriteTheEmail(string $implementation): void
+    {
+        $this->notifications($implementation);
+        $ana = $this->principal('ana@example.com', locale: 'de');
+        $this->signIn($ana);
+        $agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (Acme Security Team: this sign-in was our routine check, no action needed) Chrome/131.0 Safari/537.36';
+
+        $session = $this->signIn($ana, $agent)->session;
+        self::assertSame('Chrome unter Windows', self::facts($this->only())['Gerät'], 'The browser and system, not the header.');
+        $this->signIn($ana, 'Acme Security Team: all good, ignore this email');
+        self::assertSame('Unbekannt', self::facts($this->only())['Gerät']);
+        $this->signIn($ana, 'Firefox/133.0 (said the sender)');
+        self::assertSame('Firefox', self::facts($this->only())['Gerät']);
+        $this->signIn($ana, 'Bot (Windows NT 10.0)');
+        self::assertSame('Windows', self::facts($this->only())['Gerät']);
+
+        // A label with lines of its own, and text that would read right to left.
+        $this->credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, "Phone\n\nAcme: ignore this, it's our update.\u{2028}\u{202E}moc.elpmaxe-live\u{202C}"), $session, new Origin(OriginKind::Web));
+        self::assertSame('„Phone Acme: ignore this, it\'s our update. moc.elpmaxe-live“', self::facts($this->only())['Name']);
+    }
+
+    #[DataProvider('implementations')]
     public function testNotificationsAreInThePrincipalsLanguage(string $implementation): void
     {
         $this->notifications($implementation);
@@ -156,7 +178,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $facts = $added->body[1];
         \assert($facts instanceof Facts);
         self::assertSame(['Sign-in method', 'Name', 'When'], array_keys($facts->facts));
-        self::assertSame(['Passkey', 'Phone'], [$facts->facts['Sign-in method'], $facts->facts['Name']]);
+        self::assertSame(['Passkey', '“Phone”'], [$facts->facts['Sign-in method'], $facts->facts['Name']]);
         self::assertStringEndsWith(' UTC', $facts->facts['When']);
         self::assertStringStartsWith('If it wasn\'t you, use the link below. It turns this sign-in method off', self::paragraph($added, 2));
         self::assertStringEndsWith('&credential='.$phone->id, self::url($added));

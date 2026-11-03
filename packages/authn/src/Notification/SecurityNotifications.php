@@ -15,6 +15,7 @@ use YorvoID\Authn\Recovery\Event\RecoveryCodesGenerated;
 use YorvoID\Authn\Recovery\Event\RecoveryCodeUsed;
 use YorvoID\Authn\Recovery\Event\RecoveryLinkUsed;
 use YorvoID\Authn\Session\Event\NewDeviceSignedIn;
+use YorvoID\Authn\Session\UserAgent;
 use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Translations;
@@ -26,6 +27,7 @@ use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Text;
 use YorvoID\Mail\Block\Action;
 use YorvoID\Mail\Block\Facts;
 use YorvoID\Mail\Block\Footnote;
@@ -91,7 +93,7 @@ final readonly class SecurityNotifications
         $session = $event->session;
         $this->send($session->realm, $session->principalId, 'new_device', [], fn (string $locale): array => [
             'when' => $this->time($session->startedAt, $locale),
-            'device' => $session->device ?? $this->text('unknown', $locale),
+            'device' => $this->device($session->device, $locale),
             'address' => $session->address ?? $this->text('unknown', $locale),
         ]);
     }
@@ -164,11 +166,25 @@ final readonly class SecurityNotifications
     /**
      * @return \Closure(string): array<string, string>
      */
+    /**
+     * The browser and system, from short lists: never the User-Agent, which whoever signed in wrote.
+     */
+    private function device(?string $userAgent, string $locale): string
+    {
+        [$browser, $system] = UserAgent::describe($userAgent);
+
+        return match (true) {
+            null !== $browser && null !== $system => $this->text('device', $locale, ['browser' => $browser, 'system' => $system]),
+            default => $browser ?? $system ?? $this->text('unknown', $locale),
+        };
+    }
+
     private function credentialFacts(Credential $credential): \Closure
     {
         return fn (string $locale): array => [
             'method' => $this->text('kind.'.$credential->kind->value, $locale),
-            'name' => $credential->label,
+            // Whoever added it chose it: on one line, and quoted, so it reads as a name, not as the email's words.
+            'name' => $this->text('quoted', $locale, ['text' => Text::line($credential->label)]),
             'when' => $this->time($credential->createdAt, $locale),
         ];
     }

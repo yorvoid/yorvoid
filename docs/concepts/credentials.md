@@ -24,7 +24,7 @@ Packages add credentials as part of their own flow, e.g. [registering a passkey]
 - **Removing waits out the [cool-down after a recovery](step-up.md#the-cool-down-after-a-recovery)**, if one is configured (`HeldAfterRecovery`). Adding doesn't.
 - **The last way to sign in can't be removed** (`LastCredential`). Passkeys and passwords sign in; recovery codes and authenticator apps don't count, and neither do disabled credentials.
 - Removing can **end the principal's other sessions** (`endOtherSessions`), e.g. because the passkey was on a lost phone. The session that asked stays.
-- Labels are kept to 64 characters; an empty one becomes the kind's name ("Passkey").
+- Labels are kept to 64 characters, on one line: line breaks and other control characters become spaces, and characters that change the reading direction are dropped. An empty one becomes the kind's name ("Passkey").
 - `CredentialAdded` follows the commit: tell the owner on every verified channel that a sign-in method was added. `CredentialRemoving` comes inside the transaction, for the package that keeps the secret part.
 - The security log records the kind, never the label: people write their names into labels.
 

@@ -34,6 +34,8 @@ return [
     'yorvoid.notification.fact.address' => 'IP-Adresse',
     'yorvoid.notification.fact.method' => 'Anmeldemethode',
     'yorvoid.notification.fact.name' => 'Name',
+    'yorvoid.notification.device' => '{browser} unter {system}',
+    'yorvoid.notification.quoted' => '„{text}“',
     'yorvoid.notification.unknown' => 'Unbekannt',
     'yorvoid.notification.kind.passkey' => 'Passkey',
     'yorvoid.notification.kind.password' => 'Passwort',
