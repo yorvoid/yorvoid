@@ -203,13 +203,13 @@ jobs:
           GID=$(id -g)
           export UID GID
           docker compose run --rm node npm run mutation
-      - name: Check the Symfony bridge ships the client as built
+      - name: Check the Symfony bridge and the intent verifier ship the client as built
         run: |
           GID=$(id -g)
           export UID GID
           docker compose run --rm node npm run assets
-          git add --intent-to-add packages/symfony/public/browser
-          git diff --exit-code -- packages/symfony/public/browser
+          git add --intent-to-add packages/symfony/public/browser packages/intent-verifier/public/browser
+          git diff --exit-code -- packages/symfony/public/browser packages/intent-verifier/public/browser
 
   site:
     name: Documentation site

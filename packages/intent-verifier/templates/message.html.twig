@@ -1,0 +1,9 @@
+{#- A page that only says something: not found, expired, refused. "refusal" is the Refusal, when there was one, for a page in another language. -#}
+{% extends '@yorvoid_signing/layout.html.twig' %}
+{% block title %}{{ title }}{% endblock %}
+{% block body %}
+<p data-message>{{ message }}</p>
+{% if back %}
+<p><a href="/keys">Back to the keys</a></p>
+{% endif %}
+{% endblock %}

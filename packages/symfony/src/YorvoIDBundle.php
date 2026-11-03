@@ -102,7 +102,7 @@ final class YorvoIDBundle extends AbstractBundle
             ->end();
         $flows = $children->arrayNode('flows')->addDefaultsIfNotSet()->children();
         $path($flows, 'completed_path', '/', 'Where people go when a flow completes, e.g. after signing in');
-        $flows->arrayNode('completed_paths')->useAttributeAsKey('flow')->info('Where to go after particular flows, e.g. {yorvoid.sign_intent: /console/confirmed}')
+        $flows->arrayNode('completed_paths')->useAttributeAsKey('flow')->info('Where to go after particular flows, e.g. {yorvoid.sign_in: /dashboard}')
             ->scalarPrototype()->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || !self::isLocalPath($value))->thenInvalid('%s is not a path on this site: start it with one "/", and use no "\\" or spaces.')->end()->end()->end();
         $flows->scalarNode('script')->defaultValue('/bundles/yorvoid/browser/forms.js')->info('Where the pages load the browser client\'s form script from')->end();
         $children->arrayNode('intents')->addDefaultsIfNotSet()->children()

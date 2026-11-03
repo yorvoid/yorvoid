@@ -114,7 +114,6 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                 ] + ($this->authenticators ? ['custom_authenticators' => [PasskeyAuthenticator::class, RecoveryCodeAuthenticator::class, RecoveryLinkAuthenticator::class, SessionAuthenticator::class]] : [])],
                 'access_control' => [['path' => '^/me', 'roles' => 'IS_AUTHENTICATED']],
             ]);
-            $container->register(IntentController::class)->setPublic(true)->setAutowired(true)->addTag('controller.service_arguments');
 
             if ($this->customize) {
                 $container->register(TermsCustomizer::class)->setAutoconfigured(true);

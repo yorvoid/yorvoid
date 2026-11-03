@@ -136,20 +136,33 @@ test('steps up before an operation', async ({ page }) => {
   await expect(page.getByTestId('who')).toHaveText('Signed in as ana@example.com');
 });
 
-test('signs operations that the verifier checks with its own keys', async ({ page }) => {
-  await Authenticator.on(page);
+test('signs operations at the signing origin, with passkeys of its own', async ({ page }) => {
+  const authenticator = await Authenticator.on(page);
   await claim(page);
+  const secret = await (await page.request.post('/_e2e/verifier/bootstrap-secret')).text();
 
-  await page.goto('/_e2e/verifier/add-key');
-  await expect(page.locator('[data-yorvoid-summary]')).toHaveText('Allow the passkey "E2E passkey" to sign operations');
+  // The first signing key: registered at the signing origin, for its relying party, with the secret
+  // typed there.
+  await page.goto('http://sign.localhost:8000/keys/bootstrap');
   await expectAccessible(page);
-  await page.getByRole('button', { name: 'Sign with a passkey' }).click();
-  await expect(page.getByTestId('signed')).toHaveText('Key added: E2E passkey');
+  await page.getByLabel('Name it').fill('E2E key');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Create the passkey' }).click();
+  await expect(page.getByText('Allow the passkey "E2E key" to sign operations')).toBeVisible();
+  await page.getByLabel('Bootstrap secret').fill(secret);
+  await page.getByRole('button', { name: 'Sign with your passkey' }).click();
+  await expect(page.getByText(/^E2E key, added/)).toBeVisible();
+  expect(await authenticator.passkeys()).toBe(2);
 
+  // The console asks; the person signs at the signing origin, seeing the operation in full; the
+  // operation runs there, and the browser goes back to the console.
   await page.goto('/_e2e/remove-site');
-  await expect(page.locator('[data-yorvoid-summary]')).toHaveText('Remove the site jane');
-  await expect(page.locator('[data-yorvoid-parameters] dd')).toHaveText(['jane']);
-  await page.getByRole('button', { name: 'Sign with a passkey' }).click();
+  await expect(page).toHaveURL(/^http:\/\/sign\.localhost:8000\/intents\//);
+  await expect(page.getByText('Remove the site jane')).toBeVisible();
+  await expect(page.getByRole('row', { name: 'site jane' })).toBeVisible();
+  await expectAccessible(page);
+  await page.getByRole('button', { name: 'Sign with your passkey' }).click();
+  await expect(page).toHaveURL(/^http:\/\/localhost:8000\/signed\?nonce=.+&outcome=ran$/);
   await expect(page.getByTestId('signed')).toHaveText('Ran acme.site.remove: site="jane"');
 });
 

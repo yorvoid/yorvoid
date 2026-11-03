@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
-use YorvoID\Tests\Symfony\App\IntentController;
 use YorvoID\Tests\Symfony\App\MeController;
 use YorvoID\Tests\Symfony\App\SignOutController;
 
@@ -14,5 +13,4 @@ return static function (RoutingConfigurator $routes): void {
     $routes->add('sign_out', '/sign-out')->methods(['GET']);
     $routes->add('sign_out_here', '/me/sign-out')->controller(SignOutController::class)->methods(['POST']);
     $routes->add('me', '/me')->controller(MeController::class)->methods(['GET']);
-    $routes->add('confirm_intent', '/confirm-intent')->controller(IntentController::class)->methods(['GET']);
 };

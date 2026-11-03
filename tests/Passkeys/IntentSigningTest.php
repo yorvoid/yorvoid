@@ -6,8 +6,6 @@ namespace YorvoID\Tests\Passkeys;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Clock\MockClock;
-use YorvoID\Authn\Attempt\Attempts;
-use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Notification\SecurityNotifications;
 use YorvoID\Authn\Session\AuthenticationContext;
@@ -16,7 +14,6 @@ use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
-use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Translations as AuthnTranslations;
 use YorvoID\Core\Duration;
@@ -31,6 +28,7 @@ use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
+use YorvoID\IntentVerifier\CollectingNotifier;
 use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\Key;
 use YorvoID\IntentVerifier\Operation;
@@ -47,8 +45,6 @@ use YorvoID\Passkeys\Intent\Event\SignedOperationRan;
 use YorvoID\Passkeys\Intent\IntentSigning;
 use YorvoID\Passkeys\Intent\IntentSummaries;
 use YorvoID\Passkeys\Intent\SignedOperationNotification;
-use YorvoID\Passkeys\PasskeyPolicy;
-use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\Translations;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
@@ -74,8 +70,6 @@ final class IntentSigningTest extends DatabaseTestCase
 
     private Principals $principals;
 
-    private Passkeys $passkeys;
-
     private InMemoryMailer $mailer;
 
     private IntentSummaries $summaries;
@@ -85,35 +79,31 @@ final class IntentSigningTest extends DatabaseTestCase
     {
         $signing = $this->signing($implementation);
         $session = $this->session();
-        $authenticator = new VirtualAuthenticator();
-        $registration = $this->passkeys->beginRegistration($session);
-        $this->passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'YubiKey', new Origin(OriginKind::Web));
-        $verifier = new Verifier(new VerifierConfig('acme-verifier', 'example.com', ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), $this->clock);
+        // A passkey for signing, registered at the signing origin: not one of the console's.
+        $authenticator = new VirtualAuthenticator('https://sign.example.com');
+        $verifier = new Verifier(new VerifierConfig('acme-verifier', 'sign.example.com', ['https://sign.example.com'], ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), new CollectingNotifier(), $this->clock);
 
         // The passkey becomes the verifier's first key, with the bootstrap secret.
-        $key = Passkeys::verifierKey($this->passkeys->of(new Realm('acme'), $session->principalId)[0], 'Ana\'s YubiKey');
-        $bootstrap = $verifier->prepareBootstrap($key);
-        $request = $signing->request($session, $bootstrap, 'en', new Origin(OriginKind::Web));
-        self::assertSame('Allow the passkey "Ana\'s YubiKey" to sign operations', $request->summary->text);
-        $added = $verifier->bootstrap($verifier->createBootstrapSecret(), $request->nonce, $authenticator->signIn($request->options));
+        $registration = $verifier->prepareRegistration('Ana\'s YubiKey', true);
+        $bootstrap = $verifier->finishRegistration($registration->id, $authenticator->register($registration->options));
+        $added = $verifier->bootstrap($verifier->createBootstrapSecret(), $bootstrap->intent->nonce, $authenticator->signIn($bootstrap->options))->key;
         self::assertSame([-7, 'Ana\'s YubiKey'], [$added->algorithm, $added->label]);
 
-        // An operation, signed on the confirming page, run by the verifier.
+        // An operation: the console records the request and sends the person to the signing page, where
+        // they sign it, and the verifier runs it.
         $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
-        $request = $signing->request($session, $prepared, 'en', new Origin(OriginKind::Web));
-        self::assertSame(['Remove the site jane', ['site' => 'jane'], $prepared->intent->expiresAt], [$request->summary->text, $request->summary->parameters, $request->summary->expiresAt]);
-        self::assertSame([$prepared->intent->nonce, $prepared->options], [$request->nonce, $request->options]);
-        $verified = $verifier->verify($request->nonce, $authenticator->signIn($request->options));
+        $signing->request($session, $prepared->intent, new Origin(OriginKind::Web));
+        $verified = $verifier->verify($prepared->intent->nonce, $authenticator->signIn($prepared->options));
         $this->events->dispatched = [];
 
         $signing->ran($session, $verified->intent, $verified->key->id(), new Origin(OriginKind::System, 'verifier'));
 
         $entries = array_values(array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => str_starts_with($entry->action, 'yorvoid.intent.')));
-        self::assertSame(['yorvoid.intent.request', 'yorvoid.intent.request', 'yorvoid.intent.run'], array_map(static fn (LogEntry $entry): string => $entry->action, $entries));
-        self::assertSame(['intent', $prepared->intent->nonce, Outcome::Success], [$entries[2]->subjectType, $entries[2]->subjectId, $entries[2]->outcome]);
-        self::assertEquals($session->principalId, $entries[2]->actor);
-        self::assertSame(['key' => $added->id(), 'operation' => 'acme.site.remove', 'principal' => (string) $session->principalId], $entries[2]->details);
-        self::assertSame(['operation' => 'acme.site.remove', 'principal' => (string) $session->principalId], $entries[1]->details);
+        self::assertSame(['yorvoid.intent.request', 'yorvoid.intent.run'], array_map(static fn (LogEntry $entry): string => $entry->action, $entries));
+        self::assertSame(['intent', $prepared->intent->nonce, Outcome::Success], [$entries[1]->subjectType, $entries[1]->subjectId, $entries[1]->outcome]);
+        self::assertEquals($session->principalId, $entries[1]->actor);
+        self::assertSame(['key' => $added->id(), 'operation' => 'acme.site.remove', 'principal' => (string) $session->principalId], $entries[1]->details);
+        self::assertSame(['intent', $prepared->intent->nonce, ['operation' => 'acme.site.remove', 'principal' => (string) $session->principalId]], [$entries[0]->subjectType, $entries[0]->subjectId, $entries[0]->details]);
 
         $ran = $this->events->of(SignedOperationRan::class);
         self::assertCount(1, $ran);
@@ -152,29 +142,29 @@ final class IntentSigningTest extends DatabaseTestCase
         $signing = $this->signing('memory', new Limit(2, Duration::hours(1)));
         $session = $this->session();
         $other = $this->session();
-        $verifier = new Verifier(new VerifierConfig('acme-verifier', 'example.com', ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), $this->clock);
+        $verifier = new Verifier(new VerifierConfig('acme-verifier', 'sign.example.com', ['https://sign.example.com'], ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), new CollectingNotifier(), $this->clock);
 
-        $signing->request($session, $verifier->prepare('acme.site.remove', ['site' => 'a']), 'en', new Origin(OriginKind::Web));
-        $signing->request($session, $verifier->prepare('acme.site.remove', ['site' => 'b']), 'en', new Origin(OriginKind::Web));
-        $signing->request($other, $verifier->prepare('acme.site.remove', ['site' => 'c']), 'en', new Origin(OriginKind::Web));
+        $signing->request($session, $verifier->prepare('acme.site.remove', ['site' => 'a'])->intent, new Origin(OriginKind::Web));
+        $signing->request($session, $verifier->prepare('acme.site.remove', ['site' => 'b'])->intent, new Origin(OriginKind::Web));
+        $signing->request($other, $verifier->prepare('acme.site.remove', ['site' => 'c'])->intent, new Origin(OriginKind::Web));
 
         $this->expectException(Throttled::class);
 
-        $signing->request($session, $verifier->prepare('acme.site.remove', ['site' => 'd']), 'en', new Origin(OriginKind::Web));
+        $signing->request($session, $verifier->prepare('acme.site.remove', ['site' => 'd'])->intent, new Origin(OriginKind::Web));
     }
 
     public function testTheDefaultLimitIsTwentyAnHour(): void
     {
         $signing = $this->signing('memory');
         $session = $this->session();
-        $prepared = new Verifier(new VerifierConfig('acme-verifier', 'example.com', ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), $this->clock)->prepare('acme.site.remove', ['site' => 'a']);
+        $prepared = new Verifier(new VerifierConfig('acme-verifier', 'sign.example.com', ['https://sign.example.com'], ['https://example.com']), new OperationPolicy([new Operation('acme.site.remove', ['site' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), new CollectingNotifier(), $this->clock)->prepare('acme.site.remove', ['site' => 'a']);
 
         for ($i = 0; $i < 20; ++$i) {
-            $signing->request($session, $prepared, 'en', new Origin(OriginKind::Web));
+            $signing->request($session, $prepared->intent, new Origin(OriginKind::Web));
         }
 
         try {
-            $signing->request($session, $prepared, 'en', new Origin(OriginKind::Web));
+            $signing->request($session, $prepared->intent, new Origin(OriginKind::Web));
             self::fail('A twenty-first request in an hour was made.');
         } catch (Throttled $exception) {
             self::assertSame(180, $exception->seconds);
@@ -218,21 +208,6 @@ final class IntentSigningTest extends DatabaseTestCase
         $this->summaries->summarize($intent, 'en');
     }
 
-    public function testAPasskeyBecomesAVerifierKey(): void
-    {
-        $this->signing('memory');
-        $session = $this->session();
-        $authenticator = new VirtualAuthenticator();
-        $registration = $this->passkeys->beginRegistration($session);
-        $this->passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'YubiKey', new Origin(OriginKind::Web));
-        $passkey = $this->passkeys->of(new Realm('acme'), $session->principalId)[0];
-
-        $key = Key::fromParameters(Passkeys::verifierKey($passkey, 'Ana\'s'), new \DateTimeImmutable('@0'));
-
-        self::assertNotNull($key);
-        self::assertSame([$passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, -7, 'Ana\'s'], [$key->credentialId, $key->publicKey, $key->userHandle, $key->algorithm, $key->label]);
-    }
-
     private function signing(string $implementation, ?Limit $limit = null): IntentSigning
     {
         $this->stack = $this->stack($implementation);
@@ -242,17 +217,14 @@ final class IntentSigningTest extends DatabaseTestCase
         $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, events: $this->events, ids: $ids, clock: $this->clock);
-        $stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock);
-        $credentials = new Credentials($this->stack->credentials, $this->sessions, $stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $throttle = new Throttle($this->stack->throttle, $this->clock);
-        $this->passkeys = new Passkeys($this->stack->passkeys, $this->stack->ceremonies, $credentials, $this->sessions, $this->principals, $log, $this->stack->transactions, new PasskeyPolicy('example.com', ['https://example.com']), new Attempts($throttle), $ids, $this->clock);
         $translator = new Translator([AuthnTranslations::DIRECTORY, Translations::DIRECTORY, __DIR__.'/catalogues']);
         $this->summaries = new IntentSummaries($translator, 'acme');
         $this->mailer = new InMemoryMailer();
         $notifications = new SecurityNotifications($this->principals, new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock), $this->mailer, $translator, new NotificationSettings('Acme', 'https://example.com/not-me?token={token}'), $this->clock);
         $this->events->listen(SignedOperationRan::class, new SignedOperationNotification($notifications, $this->summaries)(...));
 
-        return new IntentSigning($this->summaries, $log, $this->stack->transactions, $throttle, $limit, $this->events, $this->clock);
+        return new IntentSigning($log, $this->stack->transactions, $throttle, $limit, $this->events, $this->clock);
     }
 
     private function session(): Session

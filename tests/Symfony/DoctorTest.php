@@ -162,11 +162,11 @@ final class DoctorTest extends TestCase
 
         // As if YorvoID changed the templates after they were published: the application changed its copy
         // of one, not of the other, which also lost what its page needs; and YorvoID dropped a third.
-        $this->command('yorvoid:templates:publish', ['templates' => ['passkey', 'confirm', 'step_up']]);
+        $this->command('yorvoid:templates:publish', ['templates' => ['passkey', 'recovery_codes', 'step_up']]);
         $before = '{# what YorvoID had before #}';
         file_put_contents($this->directory.'/'.TemplatePublisher::UPSTREAM.'/passkey.html.twig', $before);
-        file_put_contents($this->directory.'/'.TemplatePublisher::UPSTREAM.'/confirm.html.twig', $before);
-        file_put_contents($this->directory.'/'.TemplatePublisher::OVERRIDES.'/confirm.html.twig', $before);
+        file_put_contents($this->directory.'/'.TemplatePublisher::UPSTREAM.'/recovery_codes.html.twig', $before);
+        file_put_contents($this->directory.'/'.TemplatePublisher::OVERRIDES.'/recovery_codes.html.twig', $before);
         file_put_contents($this->directory.'/'.TemplatePublisher::UPSTREAM.'/gone.html.twig', $before);
 
         // A new process, as the next command would be: Twig remembers where it found each template.
@@ -175,12 +175,12 @@ final class DoctorTest extends TestCase
         [$status, $display] = $this->doctor();
 
         self::assertSame(Command::FAILURE, $status, $display);
-        self::assertStringContainsString('Problem: @YorvoID/flow/confirm.html.twig', $display);
+        self::assertStringContainsString('Problem: @YorvoID/flow/recovery_codes.html.twig', $display);
         self::assertStringNotContainsString('Problem: @YorvoID/flow/passkey.html.twig', $display);
         self::assertStringContainsString('Warning: YorvoID changed the "passkey" template since you published it, and so did you.', $display);
         self::assertStringContainsString('How to fix it: Merge its changes into yours: yorvoid:templates:diff passkey shows them; then --accept.', $display);
-        self::assertStringContainsString('Warning: YorvoID changed the "confirm" template since you published it, and your copy didn\'t change.', $display);
-        self::assertStringContainsString('How to fix it: Take YorvoID\'s with yorvoid:templates:diff --accept confirm.', $display);
+        self::assertStringContainsString('Warning: YorvoID changed the "recovery_codes" template since you published it, and your copy didn\'t change.', $display);
+        self::assertStringContainsString('How to fix it: Take YorvoID\'s with yorvoid:templates:diff --accept recovery_codes.', $display);
         self::assertStringContainsString('Warning: YorvoID no longer has the "gone" template you published: nothing uses your copy.', $display);
         self::assertStringContainsString(', 3 warnings.', $display);
     }

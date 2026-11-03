@@ -72,7 +72,7 @@ yorvoid:
         summaries_domain: messages      # where your operations' summaries are translated
     flows:
         completed_path: /               # where people go when a flow completes
-        completed_paths: {}             # by flow, e.g. {yorvoid.sign_intent: /console/confirmed}
+        completed_paths: {}             # by flow, e.g. {yorvoid.sign_in: /dashboard}
         script: /bundles/yorvoid/browser/forms.js   # the pages' passkey script
 ```
 
@@ -186,15 +186,8 @@ YorvoID's [flows](flows.md) are at `/flows/{flow}` under YorvoID's routes: e.g. 
 
 - **Signing in happens in the flow.** The step that signs someone in keeps the YorvoID session's token in the PHP session; `SessionAuthenticator`, in your firewall, signs them in to it from the next request. Whoever was signed in before isn't any more.
 - **The flow's ID is in its address,** long and random, and the flow lives in the PHP session: a page elsewhere can neither guess it nor continue it, so the forms need no CSRF token.
-- **A request starts only the public flows,** with only their inputs: `yorvoid.invitation` and `yorvoid.recover_with_link` take `token`, `yorvoid.step_up` takes `operation` and `multi_factor`. Others, like confirming a signed operation, your application starts, then sends the person to the step's page:
-
-```php
-$progress = $flows->start(PasskeyFlows::SIGN_INTENT, $realm, $contexts->of($request), IntentConfirmationStep::data($signingRequest));
-
-return $this->redirectToRoute('yorvoid_flow_show', ['flow' => PasskeyFlows::SIGN_INTENT, 'id' => $progress->state->id]);
-```
-
-  When it completes, `FlowCompleted` has the nonce and the passkey's answer for your verifier.
+- **A request starts only the public flows,** with only their inputs: `yorvoid.invitation` and `yorvoid.recover_with_link` take `token`, `yorvoid.step_up` takes `operation` and `multi_factor`. A flow your own code starts, you send the person to with `yorvoid_flow_show` and the flow's ID.
+- **Signed operations aren't signed in the console's flows:** the person signs them on the verifier's own signing pages, at a signing origin of their own ([signed intents](signed-intents.md)).
 - **A browser keeps five flows going** at once; older ones are forgotten.
 - **To change a flow,** implement `FlowCustomizer`: every service implementing it is given each flow in turn, to insert, replace or remove steps. Give your own steps a template, `templates/bundles/YorvoIDBundle/flow/{step}.html.twig`.
 
@@ -214,7 +207,6 @@ Every step has an accessible, unstyled template, phone-first, in `@YorvoID/flow/
 | `recovery_code.html.twig` | `RecoveryCodeView` |
 | `recovery_link.html.twig` | `RecoveryLinkView` |
 | `step_up.html.twig` | `StepUpView` |
-| `confirm.html.twig` | `IntentConfirmationView`: the summary and every parameter, in full |
 | `failed.html.twig`, `expired.html.twig` | A flow that couldn't go on, or is gone |
 
 - **Give them your look** by overriding `layout.html.twig`, or one block of it ([below](#changing-the-templates)).

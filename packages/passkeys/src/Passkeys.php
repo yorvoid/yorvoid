@@ -292,20 +292,6 @@ final readonly class Passkeys
     }
 
     /**
-     * The parameters of the intent verifier's "add key" operation for one of the principal's passkeys
-     * (OperationPolicy::ADD_KEY): prepare it with them, at the verifier, to let the passkey sign
-     * operations there.
-     *
-     * @param string $label What the verifier calls it, e.g. "Ana's YubiKey"
-     *
-     * @return array{credential_id: string, public_key: string, user_handle: string, label: string}
-     */
-    public static function verifierKey(Passkey $passkey, string $label): array
-    {
-        return ['credential_id' => self::base64Url($passkey->webauthnId), 'public_key' => self::base64Url($passkey->publicKey), 'user_handle' => self::base64Url($passkey->userHandle), 'label' => $label];
-    }
-
-    /**
      * Deletes expired ceremonies; run it daily, e.g. from a scheduled job.
      */
     public function purge(): int

@@ -12,7 +12,6 @@ use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\KernelInterface;
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use YorvoID\Authn\Recovery\IssueRecoveryLink;
 use YorvoID\Authn\Recovery\RecoveryLinks;
 use YorvoID\Authn\Setup\CreateSetupCode;
@@ -23,13 +22,9 @@ use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
-use YorvoID\Flows\Flows;
-use YorvoID\IntentVerifier\PreparedIntent;
+use YorvoID\IntentVerifier\SigningPages;
 use YorvoID\IntentVerifier\Verifier;
-use YorvoID\Passkeys\Flow\IntentConfirmationStep;
-use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\Intent\IntentSigning;
-use YorvoID\Passkeys\Passkeys;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Security\CurrentSession;
 
@@ -45,12 +40,9 @@ final readonly class AppController
         private Principals $principals,
         private SetupCodes $setupCodes,
         private RecoveryLinks $recoveryLinks,
-        private Passkeys $passkeys,
         private Verifier $verifier,
         private IntentSigning $signing,
-        private Flows $flows,
         private FlowContexts $contexts,
-        private UrlGeneratorInterface $urls,
     ) {
     }
 
@@ -66,20 +58,21 @@ final readonly class AppController
     }
 
     /**
-     * What became of the last signed operation.
+     * Where the signing page sends the browser back: what the operation did, as the console would learn it
+     * from the verifier, not from the query.
      */
     public function signed(Request $request): Response
     {
-        $result = $request->getSession()->get(SignedOperations::RESULT);
+        $ran = is_file(Signing::ran()) ? (string) file_get_contents(Signing::ran()) : 'Nothing ran';
 
-        return self::page('Signed', \sprintf('<p data-testid="signed">%s</p>', htmlspecialchars(\is_string($result) ? $result : 'Nothing signed')));
+        return self::page('Signed', \sprintf('<p data-testid="outcome">%s</p><p data-testid="signed">%s</p>', htmlspecialchars($request->query->getString('outcome')), htmlspecialchars($ran)));
     }
 
     public function reset(): Response
     {
         $this->connection->close();
 
-        foreach (['yorvoid.sqlite', 'verifier.json', 'verifier.jsonl'] as $file) {
+        foreach (['yorvoid.sqlite', 'verifier.json', 'verifier.jsonl', 'ran.txt'] as $file) {
             @unlink(Kernel::data().'/'.$file);
         }
 
@@ -104,34 +97,25 @@ final readonly class AppController
     }
 
     /**
-     * Lets the signed-in person's passkey sign operations at the verifier: it signs its own "add key"
-     * intent, with the bootstrap secret the server's root would give them.
+     * A bootstrap secret, as the host's root would create one with a console command.
      */
-    public function addKey(Request $request): Response
+    public function bootstrapSecret(): Response
     {
-        $session = $this->current->get();
-        \assert(null !== $session);
-        $passkey = $this->passkeys->of($session->realm, $session->principalId)[0];
-
-        return $this->sign($request, $this->verifier->prepareBootstrap(Passkeys::verifierKey($passkey, 'E2E passkey')), [SignedOperations::BOOTSTRAP => $this->verifier->createBootstrapSecret()]);
-    }
-
-    public function removeSite(Request $request): Response
-    {
-        return $this->sign($request, $this->verifier->prepare('acme.site.remove', ['site' => 'jane']));
+        return new Response($this->verifier->createBootstrapSecret());
     }
 
     /**
-     * @param array<string, mixed> $data
+     * Asks for an operation, as a console would: the verifier prepares it, and the person is sent to the
+     * signing page to sign it.
      */
-    private function sign(Request $request, PreparedIntent $prepared, array $data = []): Response
+    public function removeSite(Request $request): Response
     {
         $session = $this->current->get();
         \assert(null !== $session);
-        $context = $this->contexts->of($request);
-        $progress = $this->flows->start(PasskeyFlows::SIGN_INTENT, $session->realm, $context, IntentConfirmationStep::data($this->signing->request($session, $prepared, 'en', $context->origin)) + $data);
+        $prepared = $this->verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $this->signing->request($session, $prepared->intent, $this->contexts->of($request)->origin);
 
-        return new RedirectResponse($this->urls->generate('yorvoid_flow_show', ['flow' => PasskeyFlows::SIGN_INTENT, 'id' => $progress->state->id]));
+        return new RedirectResponse(SigningPages::url(Signing::config(), $prepared));
     }
 
     private static function page(string $title, string $body): Response

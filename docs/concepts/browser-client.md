@@ -59,17 +59,6 @@ async function addPasskey(label: string): Promise<void> {
 
 `stepUp({ operation, multiFactor })` works the same way for your own operations: your endpoint answers 403 with `step_up`, as YorvoID's do ([step-up](step-up.md)).
 
-## Signing intents
-
-For an operation the verifier prepared ([signed intents](signed-intents.md)), show the person the summary, then have them sign:
-
-```ts
-const signed = await yorvoid.signIntent(request.options);
-await fetch('/console/operations/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nonce: request.nonce, assertion: signed }) });
-```
-
-The client only runs the ceremony: your console sends the signature to the verifier, the way it talks to it.
-
 ## Keeping passkey lists right
 
 Passkey providers (password managers, the operating system) list people's passkeys. With the WebAuthn signal API, the client tells them which still work here, and the name to show them with:

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "c7187fc2ee7c79cf66e629f9530df30e",
+    "content-hash": "2aeaf4aa39b5e7894e3c5d2e95487d86",
     "packages": [
         {
             "name": "brick/math",
@@ -3964,6 +3964,86 @@
             "time": "2026-10-07T07:28:40+00:00"
         },
         {
+            "name": "twig/twig",
+            "version": "v3.30.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/twigphp/Twig.git",
+                "reference": "8c737079b726af72ff8ef3c595be9f6a810ea1ef"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/twigphp/Twig/zipball/8c737079b726af72ff8ef3c595be9f6a810ea1ef",
+                "reference": "8c737079b726af72ff8ef3c595be9f6a810ea1ef",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.1.0",
+                "symfony/deprecation-contracts": "^2.5|^3",
+                "symfony/polyfill-ctype": "^1.8",
+                "symfony/polyfill-mbstring": "^1.3"
+            },
+            "require-dev": {
+                "php-cs-fixer/shim": "^3.0@stable",
+                "phpstan/phpstan": "^2.0@stable",
+                "psr/container": "^1.0|^2.0",
+                "symfony/phpunit-bridge": "^5.4.9|^6.4|^7.0"
+            },
+            "type": "library",
+            "autoload": {
+                "files": [
+                    "src/Resources/core.php",
+                    "src/Resources/debug.php",
+                    "src/Resources/escaper.php",
+                    "src/Resources/string_loader.php"
+                ],
+                "psr-4": {
+                    "Twig\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "BSD-3-Clause"
+            ],
+            "authors": [
+                {
+                    "name": "Fabien Potencier",
+                    "email": "fabien@symfony.com",
+                    "homepage": "http://fabien.potencier.org",
+                    "role": "Lead Developer"
+                },
+                {
+                    "name": "Twig Team",
+                    "role": "Contributors"
+                },
+                {
+                    "name": "Armin Ronacher",
+                    "email": "armin.ronacher@active-4.com",
+                    "role": "Project Founder"
+                }
+            ],
+            "description": "Twig, the flexible, fast, and secure template language for PHP",
+            "homepage": "https://twig.symfony.com",
+            "keywords": [
+                "templating"
+            ],
+            "support": {
+                "issues": "https://github.com/twigphp/Twig/issues",
+                "source": "https://github.com/twigphp/Twig/tree/v3.30.0"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/fabpot",
+                    "type": "github"
+                },
+                {
+                    "url": "https://tidelift.com/funding/github/packagist/twig/twig",
+                    "type": "tidelift"
+                }
+            ],
+            "time": "2026-09-25T13:20:01+00:00"
+        },
+        {
             "name": "web-auth/cose-lib",
             "version": "4.8.2",
             "source": {
@@ -4196,7 +4276,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "d7c4fd151473a5a9770d190f01938a0a6cb62a13"
+                "reference": "0721f8e6360abe5d4d0c13804225838697b98e4e"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4240,6 +4320,12 @@
                 "security",
                 "sessions"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/authn",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4250,7 +4336,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "287be56b130552197e4ff3fdc2d2f3412146e9af"
+                "reference": "337fc236e850beef351023762347651bba757ea4"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4291,6 +4377,12 @@
                 "identity",
                 "security"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/core",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4301,7 +4393,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/flows",
-                "reference": "5614e208a415cd0274477dc794e5fd0363685853"
+                "reference": "ffe74be95f1e7664e833cdf96f45236367d5ab16"
             },
             "require": {
                 "php": ">=8.5",
@@ -4340,6 +4432,12 @@
                 "iam",
                 "security"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/flows",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4350,7 +4448,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "9d8fcbdcb18944495c2044a28686f5a699527b56"
+                "reference": "dfa10e688b1ca8609fc14f088ad2e1ccde3a6df3"
             },
             "require": {
                 "ext-mbstring": "*",
@@ -4359,6 +4457,7 @@
                 "spomky-labs/cbor-php": "^3.4",
                 "symfony/serializer": "^8.1",
                 "symfony/uid": "^8.1",
+                "twig/twig": "^3.30",
                 "web-auth/webauthn-lib": "^5.3.9"
             },
             "type": "library",
@@ -4390,6 +4489,12 @@
                 "transaction-signing",
                 "webauthn"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/intent-verifier",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4400,7 +4505,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/mail",
-                "reference": "e873d0501b318d00e8b7a3556c6b4eb3404cec58"
+                "reference": "413cf725b8ed2b7a14f5388a14732c4987bcd2ce"
             },
             "require": {
                 "ext-mbstring": "*",
@@ -4435,6 +4540,12 @@
                 "mail",
                 "notifications"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/mail",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4445,7 +4556,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/passkeys",
-                "reference": "e4e9ab3e4784ef832cdcc516dea190138086583c"
+                "reference": "d1460cb24f5556ecdcbf767f57240541db86d3aa"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4491,6 +4602,12 @@
                 "security",
                 "webauthn"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/passkeys",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4501,7 +4618,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "1a0e976fa1b3e516a8c05399ff9a42245948f81e"
+                "reference": "647d39a53d498328a183d198eeffedf13021cf2a"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4558,6 +4675,12 @@
                 "security",
                 "symfony"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/symfony",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4568,7 +4691,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/testing",
-                "reference": "bbe1fad95385f7c8c201e043fc4c34479c1fe97f"
+                "reference": "b93bbc3a5bc2322469d1d2217561d112ffe833e2"
             },
             "require": {
                 "php": ">=8.5",
@@ -4613,6 +4736,12 @@
                 "symfony",
                 "testing"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/testing",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4623,7 +4752,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/throttle",
-                "reference": "1324f10bb6e3c785fb1ae3b7b4497292c31b19a8"
+                "reference": "cddeb1ec6d8acf013ba044ef1319ae376682e6c9"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4661,6 +4790,12 @@
                 "security",
                 "throttling"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/throttle",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4671,7 +4806,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/translation",
-                "reference": "9fad8d6fd3dcb66b221f6a1f810ae32e8b390529"
+                "reference": "c93144b3ef4f4036936b9b3a275e6d956edde27a"
             },
             "require": {
                 "ext-intl": "*",
@@ -4707,6 +4842,12 @@
                 "messageformat",
                 "translation"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/translation",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -4717,7 +4858,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/virtual-authenticator",
-                "reference": "f9faab256639d4c0c1f38e7a0f072e445648cbac"
+                "reference": "487580f69d746aa81ff7e3a4909780ad66b05970"
             },
             "require": {
                 "ext-openssl": "*",
@@ -4753,6 +4894,12 @@
                 "virtual-authenticator",
                 "webauthn"
             ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/virtual-authenticator",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -11587,86 +11734,6 @@
                 }
             ],
             "time": "2025-12-08T11:19:18+00:00"
-        },
-        {
-            "name": "twig/twig",
-            "version": "v3.30.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/twigphp/Twig.git",
-                "reference": "8c737079b726af72ff8ef3c595be9f6a810ea1ef"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/twigphp/Twig/zipball/8c737079b726af72ff8ef3c595be9f6a810ea1ef",
-                "reference": "8c737079b726af72ff8ef3c595be9f6a810ea1ef",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=8.1.0",
-                "symfony/deprecation-contracts": "^2.5|^3",
-                "symfony/polyfill-ctype": "^1.8",
-                "symfony/polyfill-mbstring": "^1.3"
-            },
-            "require-dev": {
-                "php-cs-fixer/shim": "^3.0@stable",
-                "phpstan/phpstan": "^2.0@stable",
-                "psr/container": "^1.0|^2.0",
-                "symfony/phpunit-bridge": "^5.4.9|^6.4|^7.0"
-            },
-            "type": "library",
-            "autoload": {
-                "files": [
-                    "src/Resources/core.php",
-                    "src/Resources/debug.php",
-                    "src/Resources/escaper.php",
-                    "src/Resources/string_loader.php"
-                ],
-                "psr-4": {
-                    "Twig\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "BSD-3-Clause"
-            ],
-            "authors": [
-                {
-                    "name": "Fabien Potencier",
-                    "email": "fabien@symfony.com",
-                    "homepage": "http://fabien.potencier.org",
-                    "role": "Lead Developer"
-                },
-                {
-                    "name": "Twig Team",
-                    "role": "Contributors"
-                },
-                {
-                    "name": "Armin Ronacher",
-                    "email": "armin.ronacher@active-4.com",
-                    "role": "Project Founder"
-                }
-            ],
-            "description": "Twig, the flexible, fast, and secure template language for PHP",
-            "homepage": "https://twig.symfony.com",
-            "keywords": [
-                "templating"
-            ],
-            "support": {
-                "issues": "https://github.com/twigphp/Twig/issues",
-                "source": "https://github.com/twigphp/Twig/tree/v3.30.0"
-            },
-            "funding": [
-                {
-                    "url": "https://github.com/fabpot",
-                    "type": "github"
-                },
-                {
-                    "url": "https://tidelift.com/funding/github/packagist/twig/twig",
-                    "type": "tidelift"
-                }
-            ],
-            "time": "2026-09-25T13:20:01+00:00"
         },
         {
             "name": "ulrichsg/getopt-php",

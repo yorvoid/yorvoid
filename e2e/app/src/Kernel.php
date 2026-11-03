@@ -11,13 +11,7 @@ use Symfony\Bundle\TwigBundle\TwigBundle;
 use Symfony\Component\Config\Loader\LoaderInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Kernel as BaseKernel;
-use YorvoID\IntentVerifier\Operation;
-use YorvoID\IntentVerifier\OperationPolicy;
-use YorvoID\IntentVerifier\ParameterType;
-use YorvoID\IntentVerifier\Storage\FileVerifierLog;
-use YorvoID\IntentVerifier\Storage\FileVerifierStore;
 use YorvoID\IntentVerifier\Verifier;
-use YorvoID\IntentVerifier\VerifierConfig;
 use YorvoID\Symfony\Security\Authenticator\SessionAuthenticator;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
@@ -25,7 +19,8 @@ use YorvoID\Symfony\YorvoIDBundle;
 
 /**
  * The application the browser tests run against: YorvoID's flows and pages, as an application
- * would set them up, with a verifier of its own for signed operations, and endpoints only tests use.
+ * would set them up, with a verifier of its own for signed operations (its signing pages are at
+ * sign.localhost, see Signing), and endpoints only tests use.
  */
 final class Kernel extends BaseKernel
 {
@@ -87,17 +82,10 @@ final class Kernel extends BaseKernel
             $container->loadFromExtension('yorvoid', [
                 'passkeys' => ['relying_party_id' => 'localhost', 'origins' => [self::ORIGIN]],
                 'notifications' => ['enabled' => false],
-                'flows' => ['completed_paths' => ['yorvoid.sign_intent' => '/signed']],
             ]);
 
-            $container->register(Verifier::class)->setPublic(true)->setArguments([
-                new \Symfony\Component\DependencyInjection\Definition(VerifierConfig::class, ['e2e-verifier', 'localhost', [self::ORIGIN]]),
-                new \Symfony\Component\DependencyInjection\Definition(OperationPolicy::class, [[new \Symfony\Component\DependencyInjection\Definition(Operation::class, ['acme.site.remove', ['site' => ParameterType::String]])]]),
-                new \Symfony\Component\DependencyInjection\Definition(FileVerifierStore::class, [$data.'/verifier.json']),
-                new \Symfony\Component\DependencyInjection\Definition(FileVerifierLog::class, [$data.'/verifier.jsonl']),
-            ]);
+            $container->register(Verifier::class)->setPublic(true)->setFactory([Signing::class, 'verifier']);
             $container->register(AppController::class)->setAutowired(true)->setPublic(true)->addTag('controller.service_arguments')->setArgument('$kernel', new \Symfony\Component\DependencyInjection\Reference('kernel'));
-            $container->register(SignedOperations::class)->setAutowired(true)->addTag('kernel.event_listener');
         });
     }
 }

@@ -55,7 +55,7 @@ final class TemplatesTest extends TestCase
 
         self::assertSame([], array_map(strval(...), $lint->lint()));
         self::assertSame([], array_map(strval(...), $lint->lint('de')));
-        self::assertSame('Command OK: 23 pages checked: each has what its step needs.', 'Command OK: '.trim((string) preg_replace('/\s+/', ' ', strtr($this->command('yorvoid:templates:lint')[1], ['[OK]' => '']))));
+        self::assertSame('Command OK: 21 pages checked: each has what its step needs.', 'Command OK: '.trim((string) preg_replace('/\s+/', ' ', strtr($this->command('yorvoid:templates:lint')[1], ['[OK]' => '']))));
     }
 
     public function testTheLintFindsWhatAnApplicationsTemplatesLeftOut(): void
@@ -71,7 +71,6 @@ final class TemplatesTest extends TestCase
             <form method="post" action="{{ action }}"><input name="code"><input name="email" type="text"></form>
             </body></html>
             TWIG);
-        $this->override('confirm', "{% extends '@!YorvoID/flow/confirm.html.twig' %}{% block parameters %}{% endblock %}");
         $this->override('recovery_codes', "{% extends '@!YorvoID/flow/recovery_codes.html.twig' %}{% block content %}<p>{{ view.codes|first }}</p>{% endblock %}");
         $this->override('passkey_registration', <<<'TWIG'
             {% extends '@YorvoID/flow/layout.html.twig' %}
@@ -123,9 +122,6 @@ final class TemplatesTest extends TestCase
         ], \array_slice($violations, 0, 33));
         self::assertContains('@YorvoID/flow/recovery_codes.html.twig (default): There\'s no way to confirm the codes were saved: a checkbox name="saved".', $violations);
         self::assertContains('@YorvoID/flow/recovery_code.html.twig (problems): The field "code" doesn\'t say why it\'s invalid: aria-describedby, to its problem.', $violations);
-        self::assertContains('@YorvoID/flow/confirm.html.twig (default): The page doesn\'t show what is signed in full: "keep backups" is missing.', $violations);
-        self::assertContains('@YorvoID/flow/confirm.html.twig (default): The page doesn\'t show what is signed in full: "no" is missing.', $violations);
-        self::assertNotContains('@YorvoID/flow/confirm.html.twig (default): The page doesn\'t show what is signed in full: "Remove the site jane.example" is missing.', $violations, 'The summary is still there.');
 
         [$status, $output] = $this->command('yorvoid:templates:lint');
         self::assertSame(Command::FAILURE, $status);
@@ -189,30 +185,30 @@ final class TemplatesTest extends TestCase
         new Filesystem()->mirror(\dirname(__DIR__, 2).'/packages/symfony/templates/flow', $yorvoid);
         $publisher = new TemplatePublisher($this->directory.'/app', $yorvoid);
 
-        foreach (['passkey', 'setup_code', 'step_up', 'confirm'] as $template) {
+        foreach (['passkey', 'setup_code', 'step_up', 'recovery_codes'] as $template) {
             $publisher->publish($template);
         }
 
         file_put_contents($yorvoid.'/passkey.html.twig', "{# New in YorvoID #}\n".file_get_contents($yorvoid.'/passkey.html.twig'));
         file_put_contents($yorvoid.'/setup_code.html.twig', "{# New in YorvoID #}\n".file_get_contents($yorvoid.'/setup_code.html.twig'));
         file_put_contents($this->directory.'/app/templates/bundles/YorvoIDBundle/flow/setup_code.html.twig', "{# Ours #}\n", \FILE_APPEND);
-        unlink($yorvoid.'/confirm.html.twig');
+        unlink($yorvoid.'/recovery_codes.html.twig');
 
         self::assertSame(
             [TemplateStatus::Upgradable, TemplateStatus::Diverged, TemplateStatus::UpToDate, TemplateStatus::Removed, TemplateStatus::NotPublished],
-            array_map($publisher->status(...), ['passkey', 'setup_code', 'step_up', 'confirm', 'invitation']),
+            array_map($publisher->status(...), ['passkey', 'setup_code', 'step_up', 'recovery_codes', 'invitation']),
         );
         self::assertStringStartsWith("--- published\n+++ YorvoID's now\n@@ -1,", $publisher->changes('passkey'));
         self::assertStringContainsString("\n+{# New in YorvoID #}\n", $publisher->changes('setup_code'));
         self::assertSame('', $publisher->changes('step_up'));
 
-        foreach (['passkey', 'setup_code', 'step_up', 'confirm', 'invitation'] as $template) {
+        foreach (['passkey', 'setup_code', 'step_up', 'recovery_codes', 'invitation'] as $template) {
             $publisher->accept($template);
         }
 
         self::assertStringStartsWith('{# New in YorvoID #}', (string) file_get_contents($this->directory.'/app/templates/bundles/YorvoIDBundle/flow/passkey.html.twig'), 'Taken as it was.');
         self::assertStringEndsWith("{# Ours #}\n", (string) file_get_contents($this->directory.'/app/templates/bundles/YorvoIDBundle/flow/setup_code.html.twig'), 'The application\'s own changes are kept.');
-        self::assertSame([TemplateStatus::UpToDate, TemplateStatus::UpToDate, TemplateStatus::UpToDate, TemplateStatus::NotPublished, TemplateStatus::NotPublished], array_map($publisher->status(...), ['passkey', 'setup_code', 'step_up', 'confirm', 'invitation']));
+        self::assertSame([TemplateStatus::UpToDate, TemplateStatus::UpToDate, TemplateStatus::UpToDate, TemplateStatus::NotPublished, TemplateStatus::NotPublished], array_map($publisher->status(...), ['passkey', 'setup_code', 'step_up', 'recovery_codes', 'invitation']));
         self::assertFileDoesNotExist($this->directory.'/app/templates/bundles/YorvoIDBundle/invitation.html.twig');
         self::assertSame(['passkey', 'setup_code', 'step_up'], $publisher->published());
     }
@@ -265,7 +261,7 @@ final class TemplatesTest extends TestCase
 
     public function testPublishingRefusesAnUnknownTemplate(): void
     {
-        $this->expectExceptionObject(new IntegratorError('YorvoID has no flow template "../../etc".', 'Publish one of: confirm, expired, failed, fields, invitation, layout, passkey, passkey_registration, recovery_code, recovery_codes, recovery_link, setup_code, step_up.', 'concepts/symfony.md#changing-the-templates'));
+        $this->expectExceptionObject(new IntegratorError('YorvoID has no flow template "../../etc".', 'Publish one of: expired, failed, fields, invitation, layout, passkey, passkey_registration, recovery_code, recovery_codes, recovery_link, setup_code, step_up.', 'concepts/symfony.md#changing-the-templates'));
 
         new TemplatePublisher($this->directory)->publish('../../etc');
     }

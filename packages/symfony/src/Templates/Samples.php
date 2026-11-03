@@ -6,7 +6,6 @@ namespace YorvoID\Symfony\Templates;
 
 use YorvoID\Flows\Problem;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
-use YorvoID\Passkeys\Flow\View\IntentConfirmationView;
 use YorvoID\Passkeys\Flow\View\InvitationView;
 use YorvoID\Passkeys\Flow\View\PasskeyRegistrationView;
 use YorvoID\Passkeys\Flow\View\PasskeySignInView;
@@ -24,7 +23,7 @@ use YorvoID\Passkeys\Flow\View\StepUpView;
 final class Samples
 {
     /** The templates YorvoID ships, in "@YorvoID/flow/" */
-    public const array TEMPLATES = ['layout', 'fields', 'passkey', 'setup_code', 'passkey_registration', 'recovery_codes', 'invitation', 'recovery_code', 'recovery_link', 'step_up', 'confirm', 'failed', 'expired'];
+    public const array TEMPLATES = ['layout', 'fields', 'passkey', 'setup_code', 'passkey_registration', 'recovery_codes', 'invitation', 'recovery_code', 'recovery_link', 'step_up', 'failed', 'expired'];
 
     private const string GET = '{"challenge":"c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ","rpId":"example.com","allowCredentials":[],"userVerification":"required","timeout":300000}';
 
@@ -58,8 +57,6 @@ final class Samples
             new Sample('step_up', 'default', PasskeyFlows::STEP_UP, new StepUpView(self::GET, 'acme.site.remove')),
             new Sample('step_up', 'problems', PasskeyFlows::STEP_UP, new StepUpView(self::GET, 'acme.site.remove'), [new Problem('yorvoid.passkey.not_verified')]),
             new Sample('step_up', 'signed_out', PasskeyFlows::STEP_UP, new StepUpView(null, 'acme.site.remove')),
-            new Sample('confirm', 'default', PasskeyFlows::SIGN_INTENT, new IntentConfirmationView('Remove the site jane.example', ['site' => 'jane.example', 'keep backups' => 'no'], self::GET, '2026-10-28T18:05:00+00:00')),
-            new Sample('confirm', 'problems', PasskeyFlows::SIGN_INTENT, new IntentConfirmationView('Remove the site jane.example', ['site' => 'jane.example'], self::GET, '2026-10-28T18:05:00+00:00'), [$passkey]),
             new Sample('failed', 'default', PasskeyFlows::INVITATION, null, [new Problem('yorvoid.flow.invitation.not_working')]),
             new Sample('expired', 'default', PasskeyFlows::SIGN_IN, null, [new Problem('yorvoid.flow.expired')]),
         ];

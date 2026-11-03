@@ -114,15 +114,63 @@ final class StorageTest extends TestCase
 
     public function testRefusesAStateItDidntWrite(): void
     {
-        foreach (['{', '5', '{"version": 2, "keys": [], "pending": []}', '{"version": 1, "keys": 5, "pending": []}', '{"version": 1, "keys": [], "pending": 5}', '{"version": 1, "keys": [{"credential_id": "*"}], "pending": []}', '{"version": 1, "keys": [], "pending": [], "bootstrap_secret_hash": 5}'] as $contents) {
+        $valid = ['version' => 2, 'keys' => [], 'key_changes' => [], 'pending' => [], 'registrations' => [], 'bootstrap_secret_hash' => null, 'bootstrap_secret_expires_at' => null];
+        $wrong = ['{', '5', (string) json_encode(['version' => 1] + $valid)];
+
+        foreach (['keys' => 5, 'key_changes' => 5, 'pending' => 5, 'registrations' => 5, 'bootstrap_secret_hash' => 5, 'bootstrap_secret_expires_at' => 'soon'] as $field => $value) {
+            $wrong[] = (string) json_encode([$field => $value] + $valid);
+        }
+
+        $wrong[] = (string) json_encode(['keys' => [['credential_id' => '*']]] + $valid);
+        $wrong[] = (string) json_encode(['key_changes' => [['id' => 'a', 'kind' => 'replace']]] + $valid);
+
+        foreach ($wrong as $contents) {
             file_put_contents($this->path, $contents);
+            chmod($this->path, 0o600);
 
             try {
                 new FileVerifierStore($this->path)->transaction(static fn (VerifierState $state): null => null);
                 self::fail(\sprintf('The state %s was read.', $contents));
             } catch (StorageError $exception) {
-                self::assertSame('The verifier\'s state isn\'t what the verifier wrote.', $exception->getMessage());
+                self::assertSame('The verifier\'s state isn\'t what the verifier wrote.', $exception->getMessage(), $contents);
             }
+        }
+
+        file_put_contents($this->path, (string) json_encode($valid));
+        self::assertSame([], new FileVerifierStore($this->path)->transaction(static fn (VerifierState $state): array => $state->keys));
+    }
+
+    /**
+     * The state decides which keys sign: a file others can write, or a link to one, isn't trusted.
+     */
+    public function testRefusesAFileThatIsntPrivateToIt(): void
+    {
+        $store = new FileVerifierStore($this->path);
+        $store->transaction(static fn (VerifierState $state): null => null);
+
+        chmod($this->path, 0o640);
+        $this->refusesTheFile($store, 'can be read or written by other users: chmod 600 it.');
+        chmod($this->path, 0o602);
+        $this->refusesTheFile($store, 'can be read or written by other users');
+        chmod($this->path, 0o600);
+
+        $link = $this->path.'-link';
+        symlink($this->path, $link);
+
+        try {
+            $this->refusesTheFile(new FileVerifierStore($link), 'is a symbolic link: give the file itself.');
+            $this->refusesTheFile(new FileVerifierLog($link), 'is a symbolic link');
+        } finally {
+            unlink($link);
+        }
+
+        $directory = $this->path.'-directory';
+        mkdir($directory, 0o700);
+
+        try {
+            $this->refusesTheFile(new FileVerifierStore($directory), 'can\'t be');
+        } finally {
+            rmdir($directory);
         }
     }
 
@@ -132,6 +180,16 @@ final class StorageTest extends TestCase
         $this->expectExceptionMessage('can\'t be opened');
 
         new FileVerifierStore('/nonexistent/directory/state.json')->transaction(static fn (VerifierState $state): null => null);
+    }
+
+    private function refusesTheFile(FileVerifierStore|FileVerifierLog $file, string $message): void
+    {
+        try {
+            $file instanceof FileVerifierStore ? $file->transaction(static fn (VerifierState $state): null => null) : $file->record('test', [], new \DateTimeImmutable());
+            self::fail('The file was used: '.$message);
+        } catch (StorageError $exception) {
+            self::assertStringContainsString($message, $exception->getMessage());
+        }
     }
 
     public function testTheLogIsHashChained(): void

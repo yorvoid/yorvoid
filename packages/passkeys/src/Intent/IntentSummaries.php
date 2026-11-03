@@ -50,7 +50,7 @@ final readonly class IntentSummaries
             };
 
             if (mb_strlen($text) > self::DISPLAY_LIMIT) {
-                throw new IntegratorError(\sprintf('The parameter "%s" of %s is longer than a page can show in full (%d characters).', $name, $intent->action, self::DISPLAY_LIMIT), 'Pass a shorter value, e.g. an ID instead of a document: what can\'t be shown can\'t be signed safely.', 'concepts/signed-intents.md#the-confirming-page');
+                throw new IntegratorError(\sprintf('The parameter "%s" of %s is longer than a page can show in full (%d characters).', $name, $intent->action, self::DISPLAY_LIMIT), 'Pass a shorter value, e.g. an ID instead of a document: what can\'t be shown can\'t be signed safely.', 'concepts/signed-intents.md#summaries');
             }
 
             $parameters[$name] = $text;
@@ -61,7 +61,7 @@ final readonly class IntentSummaries
         $summary = $this->translator->trans($intent->action, $parameters, $domain, $locale);
 
         if ($summary === $intent->action) {
-            throw new IntegratorError(\sprintf('The operation %s has no summary in the "%s" translations.', $intent->action, $domain), \sprintf('Add the message "%s", saying what it does in words, e.g. "Remove the site {site}".', $intent->action), 'concepts/signed-intents.md#the-confirming-page');
+            throw new IntegratorError(\sprintf('The operation %s has no summary in the "%s" translations.', $intent->action, $domain), \sprintf('Add the message "%s", saying what it does in words, e.g. "Remove the site {site}".', $intent->action), 'concepts/signed-intents.md#summaries');
         }
 
         return new IntentSummary($summary, $parameters, $intent->expiresAt);

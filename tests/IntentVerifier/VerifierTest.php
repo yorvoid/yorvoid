@@ -7,18 +7,23 @@ namespace YorvoID\Tests\IntentVerifier;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
+use YorvoID\IntentVerifier\CollectingNotifier;
 use YorvoID\IntentVerifier\ConfigurationError;
 use YorvoID\IntentVerifier\IntentRefused;
 use YorvoID\IntentVerifier\Key;
+use YorvoID\IntentVerifier\KeyChange;
 use YorvoID\IntentVerifier\Operation;
 use YorvoID\IntentVerifier\OperationPolicy;
 use YorvoID\IntentVerifier\ParameterType;
+use YorvoID\IntentVerifier\PreparedIntent;
 use YorvoID\IntentVerifier\Refusal;
 use YorvoID\IntentVerifier\Storage\FileVerifierStore;
 use YorvoID\IntentVerifier\Storage\InMemoryVerifierLog;
 use YorvoID\IntentVerifier\Storage\InMemoryVerifierStore;
 use YorvoID\IntentVerifier\Verifier;
 use YorvoID\IntentVerifier\VerifierConfig;
+use YorvoID\IntentVerifier\VerifierNotice;
+use YorvoID\IntentVerifier\VerifierNotifier;
 use YorvoID\IntentVerifier\VerifierStore;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
@@ -30,6 +35,8 @@ final class VerifierTest extends TestCase
     private MockClock $clock;
 
     private InMemoryVerifierLog $log;
+
+    private CollectingNotifier $notifier;
 
     private VerifierStore $store;
 
@@ -54,24 +61,53 @@ final class VerifierTest extends TestCase
         $secret = $verifier->createBootstrapSecret();
         self::assertMatchesRegularExpression('/^[A-Za-z0-9_-]{43}$/D', $secret, '256 random bits.');
 
-        $prepared = $verifier->prepareBootstrap(self::keyOf($this->owner, 0, 'Ana\'s YubiKey'));
+        [$prepared] = $this->registered($verifier, $this->owner, 'Ana\'s YubiKey', true);
         $options = self::json($prepared->options);
         self::assertSame([['type' => 'public-key', 'id' => VirtualAuthenticator::encode($this->owner->credentials[0]['id'])]], $options['allowCredentials'], 'Only the key being added is asked for.');
-        self::assertSame(['acme.example', 'required', 300000], [$options['rpId'], $options['userVerification'], $options['timeout']]);
+        self::assertSame(['sign.acme.example', 'required', 300000], [$options['rpId'], $options['userVerification'], $options['timeout']]);
         self::assertSame(VirtualAuthenticator::encode($prepared->intent->challenge()), $options['challenge']);
 
-        $key = $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options));
+        $change = $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options));
+        $key = $change->key;
+        self::assertSame([VerifierNotice::KEY_CHANGE_REQUESTED, VerifierNotice::KEY_ADDED], array_map(static fn (VerifierNotice $notice): string => $notice->event, \array_slice($this->notifier->notices, 1)), 'The first key wasn\'t added at once.');
 
         self::assertSame([-7, 'Ana\'s YubiKey', 1], [$key->algorithm, $key->label, $key->signCount]);
-        self::assertEquals([$key], $verifier->keys());
-        self::assertSame(['bootstrap_secret_created', 'prepared', 'bootstrapped'], array_column($this->log->entries, 'event'));
-        self::assertSame(['keys' => 0], $this->log->entries[0]['details']);
-        self::assertSame(['action' => OperationPolicy::ADD_KEY, 'nonce' => $prepared->intent->nonce, 'key' => $key->id(), 'algorithm' => -7, 'added' => $key->id()], $this->log->entries[2]['details']);
+        self::assertEquals([$key], $verifier->keys(), 'The first key waits for nothing: there\'s no owner to tell.');
+        self::assertEquals([KeyChange::ADD, $change->requestedAt, $key->id()], [$change->kind, $change->effectiveAt, $change->signer]);
+        self::assertSame(['bootstrap_secret_created', 'registration_prepared', 'registered', 'prepared', 'key_change_requested', 'key_added'], array_column($this->log->entries, 'event'));
+        self::assertSame(['keys' => 0, 'expires_at' => $this->clock->now()->getTimestamp() + 3600], $this->log->entries[0]['details'], 'An hour by default.');
+        self::assertSame(['action' => OperationPolicy::ADD_KEY, 'nonce' => $prepared->intent->nonce, 'key' => $key->id(), 'algorithm' => -7, 'change' => $change->id, 'kind' => 'add', 'subject' => $key->id(), 'effective_at' => $change->effectiveAt->getTimestamp()], $this->log->entries[4]['details']);
+        self::assertSame(['change' => $change->id, 'key' => $key->id(), 'signer' => $key->id()], $this->log->entries[5]['details']);
 
         // The secret works once.
-        $other = $this->owner->create();
-        $again = $verifier->prepareBootstrap(self::keyOf($this->owner, $other));
+        [$again, $other] = $this->registered($verifier, $this->owner, 'Passkey', true);
         $this->refused(Refusal::InvalidBootstrapSecret, fn () => $verifier->bootstrap($secret, $again->intent->nonce, $this->owner->signIn($again->options, $other)));
+    }
+
+    public function testABootstrapSecretExpires(): void
+    {
+        $verifier = $this->verifier('memory');
+        $secret = $verifier->createBootstrapSecret(60);
+        [$prepared] = $this->registered($verifier, $this->owner, 'Passkey', true);
+        $this->clock->sleep(60);
+
+        $this->refused(Refusal::InvalidBootstrapSecret, fn () => $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options)), 'An expired secret worked.');
+
+        foreach ([59, 86401] as $lifetime) {
+            try {
+                $verifier->createBootstrapSecret($lifetime);
+                self::fail(\sprintf('A secret for %d seconds was created.', $lifetime));
+            } catch (ConfigurationError $exception) {
+                self::assertSame('A bootstrap secret works between a minute and a day.', $exception->getMessage());
+            }
+        }
+
+        // A day's secret still works just before the day is over.
+        $secret = $verifier->createBootstrapSecret(86400);
+        $this->clock->sleep(86000);
+        [$prepared, $index] = $this->registered($verifier, $this->owner, 'Passkey', true);
+        $this->clock->sleep(299);
+        self::assertSame(KeyChange::ADD, $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options, $index))->kind);
     }
 
     #[DataProvider('stores')]
@@ -79,19 +115,16 @@ final class VerifierTest extends TestCase
     {
         $verifier = $this->verifier($store);
         $secret = $verifier->createBootstrapSecret();
-        $stranger = new VirtualAuthenticator('https://acme.example');
+        $stranger = new VirtualAuthenticator('https://sign.acme.example');
         $stranger->create();
-        $prepared = $verifier->prepareBootstrap(self::keyOf($this->owner, 0));
+        [$prepared] = $this->registered($verifier, $this->owner, 'Passkey', true);
 
         $this->refused(Refusal::UnknownKey, static fn () => $verifier->bootstrap($secret, $prepared->intent->nonce, $stranger->signIn($prepared->options)));
         $this->refused(Refusal::UnknownIntent, fn () => $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options)), 'A refused attempt didn\'t use its nonce up.');
 
-        $prepared = $verifier->prepareBootstrap(self::keyOf($this->owner, 0));
+        [$prepared] = $this->registered($verifier, $this->owner, 'Passkey', true);
         $this->refused(Refusal::InvalidBootstrapSecret, fn () => $verifier->bootstrap('wrong', $prepared->intent->nonce, $this->owner->signIn($prepared->options)));
         self::assertSame([], $verifier->keys());
-
-        $prepared = $verifier->prepareBootstrap([...self::keyOf($this->owner, 0), 'public_key' => 'not-a-key']);
-        $this->refused(Refusal::InvalidKey, fn () => $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options)));
     }
 
     #[DataProvider('stores')]
@@ -125,14 +158,117 @@ final class VerifierTest extends TestCase
         self::assertSame(['refused', ['nonce' => 'never-prepared', 'reason' => 'unknown_intent']], [$entry['event'], $entry['details']]);
     }
 
+    /**
+     * Signing passkeys aren't discoverable: browsers answer without a user handle, and one that's there
+     * must be the key's.
+     */
+    public function testAnAnswerWithoutAUserHandleIsTheKeysAnswer(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $answer = self::json($this->owner->signIn($prepared->options));
+        $response = (array) $answer['response'];
+        unset($response['userHandle']);
+        $answer['response'] = $response;
+
+        self::assertSame('acme.site.remove', $verifier->verify($prepared->intent->nonce, (string) json_encode($answer))->intent->action);
+
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'joe']);
+        $this->refused(Refusal::InvalidSignature, fn () => $verifier->verify($prepared->intent->nonce, $this->owner->signIn($prepared->options, userHandle: random_bytes(32))), 'Another user handle was accepted.');
+    }
+
+    public function testARegistrationsOptionsAndRecords(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        $phone = $verifier->keys()[0]->id();
+        [$addition] = $this->registered($verifier, $this->owner, 'Laptop');
+        $laptop = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options))->key->id();
+
+        $label = str_repeat('é', 64);
+        $registration = $verifier->prepareRegistration($label);
+        $options = self::json($registration->options);
+
+        self::assertMatchesRegularExpression('/^[A-Za-z0-9_-]{24}$/D', $registration->id, '144 random bits.');
+        $user = (array) $options['user'];
+        \assert(\is_string($user['id']) && \is_string($options['challenge']));
+        self::assertSame([43, 43, 300000], [\strlen($user['id']), \strlen($options['challenge']), $options['timeout']], '256 random bits each, and the intents\' lifetime.');
+        self::assertSame([['type' => 'public-key', 'id' => $phone], ['type' => 'public-key', 'id' => $laptop]], $options['excludeCredentials'], 'A list of the keys there and coming.');
+        $entry = $this->log->entries[\count($this->log->entries) - 1];
+        self::assertSame(['registration_prepared', ['registration' => $registration->id, 'bootstrap' => false]], [$entry['event'], $entry['details']]);
+
+        $verifier->finishRegistration($registration->id, $this->owner->register($registration->options));
+        $entry = $this->log->entries[\count($this->log->entries) - 2];
+        self::assertSame(['registered', ['registration' => $registration->id, 'subject' => VirtualAuthenticator::encode($this->owner->credentials[\count($this->owner->credentials) - 1]['id']), 'algorithm' => -7]], [$entry['event'], $entry['details']]);
+        self::assertMatchesRegularExpression('/^[A-Za-z0-9_-]{16}$/D', $verifier->keyChanges()[0]->id, '96 random bits.');
+    }
+
+    /**
+     * Changes taking effect together all do, in the order asked for; a key coming doesn't count against
+     * removing one there.
+     */
+    public function testChangesDueTogetherAllTakeEffect(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        [$addition, $laptop] = $this->registered($verifier, $this->owner, 'Laptop');
+        $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
+        $this->clock->sleep(86400);
+        $phone = $verifier->keys()[0]->id();
+        [$addition] = $this->registered($verifier, $this->owner, 'Tablet');
+        $tablet = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
+        $removal = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $phone]);
+        $removed = $verifier->removeKey($removal->intent->nonce, $this->owner->signIn($removal->options, $laptop));
+
+        self::assertSame([$tablet->id, $removed->id], array_map(static fn (KeyChange $change): string => $change->id, $verifier->keyChanges()));
+        $this->clock->sleep(86400);
+        $notices = \count($this->notifier->notices);
+
+        self::assertSame(2, $verifier->applyKeyChanges());
+        self::assertSame(['Laptop', 'Tablet'], array_map(static fn (Key $key): string => $key->label, $verifier->keys()));
+        self::assertSame([VerifierNotice::KEY_ADDED, VerifierNotice::KEY_REMOVED], array_map(static fn (VerifierNotice $notice): string => $notice->event, \array_slice($this->notifier->notices, $notices)));
+        self::assertSame(0, $verifier->applyKeyChanges());
+    }
+
+    public function testWhatExpiresIsGoneAtTheMomentItExpires(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $verifier->prepareRegistration('Laptop');
+        $this->clock->sleep(299);
+        self::assertNotNull($verifier->prepared($prepared->intent->nonce));
+        $kept = $verifier->prepareRegistration('Tablet');
+        $this->clock->sleep(1);
+
+        self::assertNull($verifier->prepared($prepared->intent->nonce), 'An intent outlived its expiry.');
+        self::assertSame(2, $verifier->purge(), 'The intent and the first registration, not the second.');
+        self::assertSame(0, $verifier->purge());
+        $verifier->finishRegistration($kept->id, $this->owner->register($kept->options));
+    }
+
+    public function testTheDelayBeforeAKeyChangeIsBounded(): void
+    {
+        foreach ([0, 30 * 86400] as $delay) {
+            self::assertSame($delay, self::config($delay)->keyChangeDelay);
+        }
+
+        foreach ([-1, 30 * 86400 + 1] as $delay) {
+            try {
+                self::config($delay);
+                self::fail(\sprintf('A delay of %d seconds was accepted.', $delay));
+            } catch (ConfigurationError $exception) {
+                self::assertSame('A key change waits between no time and 30 days.', $exception->getMessage());
+            }
+        }
+
+        self::assertSame(86400, new VerifierConfig('acme', 'sign.acme.example', ['https://sign.acme.example'], ['https://acme.example'])->keyChangeDelay, 'A day by default.');
+    }
+
     public function testAcceptsEdDsaKeys(): void
     {
         $verifier = $this->verifier('memory');
-        $edwards = new VirtualAuthenticator('https://acme.example', edwards: true);
-        $edwards->create();
+        $edwards = new VirtualAuthenticator('https://sign.acme.example', edwards: true);
         $secret = $verifier->createBootstrapSecret();
-        $prepared = $verifier->prepareBootstrap(self::keyOf($edwards, 0));
-        self::assertSame(-8, $verifier->bootstrap($secret, $prepared->intent->nonce, $edwards->signIn($prepared->options))->algorithm);
+        [$prepared] = $this->registered($verifier, $edwards, 'Passkey', true);
+        self::assertSame(-8, $verifier->bootstrap($secret, $prepared->intent->nonce, $edwards->signIn($prepared->options))->key->algorithm);
 
         $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
         self::assertSame(-8, $verifier->verify($prepared->intent->nonce, $edwards->signIn($prepared->options))->key->algorithm);
@@ -150,7 +286,7 @@ final class VerifierTest extends TestCase
     public static function badSignatures(): iterable
     {
         yield 'another site' => [Refusal::InvalidSignature, ['origin' => 'https://evil.example']];
-        yield 'an origin of the site the verifier doesn\'t list' => [Refusal::InvalidSignature, ['origin' => 'https://other.acme.example']];
+        yield 'an origin of the site the verifier doesn\'t list' => [Refusal::InvalidSignature, ['origin' => 'https://other.sign.acme.example']];
         yield 'another relying party' => [Refusal::InvalidSignature, ['rpId' => 'evil.example']];
         yield 'another intent' => [Refusal::InvalidSignature, ['challenge' => VirtualAuthenticator::encode(random_bytes(32))]];
         yield 'without user verification' => [Refusal::UserNotVerified, ['userVerified' => false]];
@@ -176,7 +312,7 @@ final class VerifierTest extends TestCase
     public function testRefusesWhatIsntASignatureByItsKeys(): void
     {
         $verifier = $this->bootstrapped('memory');
-        $stranger = new VirtualAuthenticator('https://acme.example');
+        $stranger = new VirtualAuthenticator('https://sign.acme.example');
         $stranger->create();
 
         foreach (['', 'null', '{}', $this->owner->register(self::registration())] as $garbage) {
@@ -229,15 +365,13 @@ final class VerifierTest extends TestCase
     public function testEachKindOfIntentGoesWhereItBelongs(): void
     {
         $verifier = $this->bootstrapped('memory');
-        $second = $this->owner->create();
-
-        $addition = $verifier->prepare(OperationPolicy::ADD_KEY, self::keyOf($this->owner, $second));
+        [$addition, $second] = $this->registered($verifier, $this->owner);
         $this->refused(Refusal::WrongOperation, fn () => $verifier->verify($addition->intent->nonce, $this->owner->signIn($addition->options)), 'A key\'s addition ran as an operation.');
 
         $operation = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
         $this->refused(Refusal::WrongOperation, fn () => $verifier->addKey($operation->intent->nonce, $this->owner->signIn($operation->options)));
 
-        $bootstrap = $verifier->prepareBootstrap(self::keyOf($this->owner, $second));
+        [$bootstrap, $second] = $this->registered($verifier, $this->owner, 'Passkey', true);
         $this->refused(Refusal::WrongOperation, fn () => $verifier->addKey($bootstrap->intent->nonce, $this->owner->signIn($bootstrap->options, $second)), 'A self-signed addition went past the bootstrap secret.');
 
         $operation = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
@@ -246,41 +380,217 @@ final class VerifierTest extends TestCase
         $this->refused(Refusal::WrongOperation, fn () => $verifier->removeKey($operation->intent->nonce, $this->owner->signIn($operation->options)));
     }
 
+    /**
+     * A key comes from a registration at the signing origin, for its relying party, with the user verified:
+     * nobody's word for its public key. The console can't hand the verifier a key of its own.
+     */
+    public function testAKeyComesFromItsRegistrationAtTheSigningOrigin(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+
+        try {
+            $verifier->prepare(OperationPolicy::ADD_KEY, ['credential_id' => 'a', 'public_key' => 'b', 'user_handle' => 'c', 'label' => 'd']);
+            self::fail('A key was prepared from its parameters.');
+        } catch (ConfigurationError $exception) {
+            self::assertSame('A key is added from its registration at the signing origin: use prepareRegistration().', $exception->getMessage());
+        }
+
+        $registration = $verifier->prepareRegistration('  Laptop ');
+        $options = self::json($registration->options);
+        self::assertSame(['sign.acme.example', 'required', 'Laptop'], [((array) $options['rp'])['id'], ((array) $options['authenticatorSelection'])['userVerification'], ((array) $options['user'])['name']]);
+        self::assertSame([VirtualAuthenticator::encode($this->owner->credentials[0]['id'])], array_column((array) $options['excludeCredentials'], 'id'), 'The keys there already are excluded.');
+
+        $this->refused(Refusal::UserNotVerified, fn () => $verifier->finishRegistration($registration->id, $this->owner->register($registration->options, userVerified: false)));
+        $this->refused(Refusal::InvalidRegistration, fn () => $verifier->finishRegistration($registration->id, $this->owner->register($registration->options)), 'A registration was answered twice.');
+        $registration = $verifier->prepareRegistration('Laptop');
+        $this->refused(Refusal::InvalidRegistration, fn () => $verifier->finishRegistration($registration->id, $this->owner->register($registration->options, origin: 'https://acme.example')), 'A registration at the console was accepted.');
+        $registration = $verifier->prepareRegistration('Laptop');
+        $this->refused(Refusal::InvalidRegistration, static fn () => $verifier->finishRegistration($registration->id, '{}'));
+        $this->refused(Refusal::InvalidRegistration, fn () => $verifier->finishRegistration('unknown', $this->owner->register($registration->options)));
+        $registration = $verifier->prepareRegistration('Laptop');
+        $this->clock->sleep(300);
+        $this->refused(Refusal::InvalidRegistration, fn () => $verifier->finishRegistration($registration->id, $this->owner->register($registration->options)), 'An expired registration was accepted.');
+        $entry = $this->log->entries[\count($this->log->entries) - 1];
+        self::assertSame(['refused', ['registration' => $registration->id, 'reason' => 'invalid_registration']], [$entry['event'], $entry['details']]);
+
+        $registration = $verifier->prepareRegistration('Laptop');
+        $prepared = $verifier->finishRegistration($registration->id, $this->owner->register($registration->options));
+        self::assertSame([OperationPolicy::ADD_KEY, 'Laptop', VirtualAuthenticator::encode($this->owner->credentials[\count($this->owner->credentials) - 1]['id'])], [$prepared->intent->action, $prepared->intent->parameters['label'], $prepared->intent->parameters['credential_id']]);
+        $entry = $this->log->entries[\count($this->log->entries) - 2];
+        self::assertSame(['registered', $registration->id], [$entry['event'], $entry['details']['registration']]);
+
+        $registration = $verifier->prepareRegistration('Later');
+        $this->clock->sleep(301);
+        self::assertSame(2, $verifier->purge(), 'An expired registration and an expired intent stay.');
+
+        foreach (['', str_repeat('x', 65)] as $label) {
+            try {
+                $verifier->prepareRegistration($label);
+                self::fail('A key was given the label "'.$label.'".');
+            } catch (ConfigurationError $exception) {
+                self::assertSame('A key\'s label has 1 to 64 characters.', $exception->getMessage());
+            }
+        }
+    }
+
     #[DataProvider('stores')]
     public function testKeysAreAddedAndRemovedOnlyBySignedIntents(string $store): void
     {
         $verifier = $this->bootstrapped($store);
-        $laptop = $this->owner->create();
-
-        $addition = $verifier->prepare(OperationPolicy::ADD_KEY, self::keyOf($this->owner, $laptop, 'Laptop'));
-        $added = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
-        self::assertSame(['Laptop', 0], [$added->label, $added->signCount]);
+        $phone = $verifier->keys()[0]->id();
+        [$addition, $laptop] = $this->registered($verifier, $this->owner, 'Laptop');
+        $change = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
+        $added = $change->key;
+        self::assertSame(['Laptop', 0, KeyChange::ADD, $phone], [$added->label, $added->signCount, $change->kind, $change->signer]);
+        self::assertEquals(new \DateTimeImmutable('2026-10-29 18:00:00 UTC'), $change->effectiveAt, 'A day later.');
         $entry = $this->log->entries[\count($this->log->entries) - 1];
-        self::assertSame(['key_added', ['action' => OperationPolicy::ADD_KEY, 'nonce' => $addition->intent->nonce, 'key' => $verifier->keys()[0]->id(), 'algorithm' => -7, 'added' => $added->id()]], [$entry['event'], $entry['details']]);
-        self::assertCount(2, $verifier->keys());
+        self::assertSame(['key_change_requested', ['action' => OperationPolicy::ADD_KEY, 'nonce' => $addition->intent->nonce, 'key' => $phone, 'algorithm' => -7, 'change' => $change->id, 'kind' => 'add', 'subject' => $added->id(), 'effective_at' => $change->effectiveAt->getTimestamp()]], [$entry['event'], $entry['details']]);
+        self::assertSame([$phone], array_map(static fn (Key $key): string => $key->id(), $verifier->keys()), 'A key signs before its addition takes effect.');
+        self::assertEquals([$change], $verifier->keyChanges());
+        $again = $verifier->prepareRegistration('Laptop');
+        $again = $verifier->finishRegistration($again->id, $this->owner->register($again->options, credentialId: $this->owner->credentials[$laptop]['id']));
+        $this->refused(Refusal::InvalidKey, fn () => $verifier->addKey($again->intent->nonce, $this->owner->signIn($again->options)), 'A key was asked for twice.');
+
+        $this->clock->sleep(86400);
+        self::assertSame([$phone, $added->id()], array_map(static fn (Key $key): string => $key->id(), $verifier->keys()));
+        self::assertSame([], $verifier->keyChanges());
+        $entry = $this->log->entries[\count($this->log->entries) - 1];
+        self::assertSame(['key_added', ['change' => $change->id, 'key' => $added->id(), 'signer' => $phone]], [$entry['event'], $entry['details']]);
 
         // The new key signs too.
         $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
         self::assertEquals($added->id(), $verifier->verify($prepared->intent->nonce, $this->owner->signIn($prepared->options, $laptop))->key->id());
 
-        $again = $verifier->prepare(OperationPolicy::ADD_KEY, self::keyOf($this->owner, $laptop));
+        $again = $verifier->prepareRegistration('Laptop');
+        $again = $verifier->finishRegistration($again->id, $this->owner->register($again->options, credentialId: $this->owner->credentials[$laptop]['id']));
         $this->refused(Refusal::InvalidKey, fn () => $verifier->addKey($again->intent->nonce, $this->owner->signIn($again->options)), 'A key was added twice.');
 
-        $garbage = $verifier->prepare(OperationPolicy::ADD_KEY, [...self::keyOf($this->owner, $laptop), 'credential_id' => 'new', 'public_key' => VirtualAuthenticator::encode($this->owner->credentials[$laptop]['publicKey']."\x00")]);
-        $this->refused(Refusal::InvalidKey, fn () => $verifier->addKey($garbage->intent->nonce, $this->owner->signIn($garbage->options)), 'A key with bytes after it was added.');
-
-        $removal = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $verifier->keys()[0]->id()]);
+        $removal = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $phone]);
         $removed = $verifier->removeKey($removal->intent->nonce, $this->owner->signIn($removal->options, $laptop));
+        self::assertSame([KeyChange::REMOVE, $phone], [$removed->kind, $removed->key->id()]);
+
+        // Until the removal takes effect, the key signs; and the other can't go, or none would be left.
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'joe']);
+        self::assertSame($phone, $verifier->verify($prepared->intent->nonce, $this->owner->signIn($prepared->options))->key->id());
+        $last = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $added->id()]);
+        $this->refused(Refusal::LastKey, fn () => $verifier->removeKey($last->intent->nonce, $this->owner->signIn($last->options, $laptop)));
+        $twice = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $phone]);
+        $this->refused(Refusal::UnknownKey, fn () => $verifier->removeKey($twice->intent->nonce, $this->owner->signIn($twice->options, $laptop)), 'A key was asked to go twice.');
+
+        $this->clock->sleep(86400);
         self::assertSame([$added->id()], array_map(static fn (Key $key): string => $key->id(), $verifier->keys()));
-        self::assertNotSame($added->id(), $removed->id());
         $entry = $this->log->entries[\count($this->log->entries) - 1];
-        self::assertSame(['key_removed', $removed->id()], [$entry['event'], $entry['details']['removed']]);
+        self::assertSame(['key_removed', $phone], [$entry['event'], $entry['details']['key']]);
 
         $last = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $added->id()]);
         $this->refused(Refusal::LastKey, fn () => $verifier->removeKey($last->intent->nonce, $this->owner->signIn($last->options, $laptop)));
         $unknown = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => 'unknown']);
         $this->refused(Refusal::UnknownKey, fn () => $verifier->removeKey($unknown->intent->nonce, $this->owner->signIn($unknown->options, $laptop)));
         self::assertCount(1, $verifier->keys());
+    }
+
+    /**
+     * Someone who got a key change signed (a stolen key, a deceived owner) loses it if any owner cancels it
+     * in time: the owners were told when it was asked for.
+     */
+    #[DataProvider('stores')]
+    public function testAnyKeyCancelsAKeyChangeBeforeItTakesEffect(string $store): void
+    {
+        $verifier = $this->bootstrapped($store);
+        [$addition, $intruder] = $this->registered($verifier, $this->owner, 'Not mine');
+        $change = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
+        self::assertSame(VerifierNotice::KEY_CHANGE_REQUESTED, $this->notifier->notices[\count($this->notifier->notices) - 1]->event);
+        $this->clock->sleep(86399);
+
+        $cancel = $verifier->prepare(OperationPolicy::CANCEL_KEY_CHANGE, ['change' => $change->id]);
+        $this->refused(Refusal::UnknownKey, fn () => $verifier->cancelKeyChange($cancel->intent->nonce, $this->owner->signIn($cancel->options, $intruder)), 'A key not yet added cancelled.');
+        $cancel = $verifier->prepare(OperationPolicy::CANCEL_KEY_CHANGE, ['change' => $change->id]);
+        $cancelled = $verifier->cancelKeyChange($cancel->intent->nonce, $this->owner->signIn($cancel->options));
+
+        self::assertEquals($change, $cancelled);
+        $notice = $this->notifier->notices[\count($this->notifier->notices) - 1];
+        self::assertSame([VerifierNotice::KEY_CHANGE_CANCELLED, $change->id], [$notice->event, $notice->change?->id]);
+        $entry = $this->log->entries[\count($this->log->entries) - 1];
+        self::assertSame(['key_change_cancelled', $change->id], [$entry['event'], $entry['details']['change']]);
+        $this->clock->sleep(2);
+        self::assertCount(1, $verifier->keys(), 'A cancelled change took effect.');
+        self::assertSame([], $verifier->keyChanges());
+
+        $again = $verifier->prepare(OperationPolicy::CANCEL_KEY_CHANGE, ['change' => $change->id]);
+        $this->refused(Refusal::UnknownKeyChange, fn () => $verifier->cancelKeyChange($again->intent->nonce, $this->owner->signIn($again->options)));
+        $operation = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $this->refused(Refusal::WrongOperation, fn () => $verifier->cancelKeyChange($operation->intent->nonce, $this->owner->signIn($operation->options)));
+        $cancel = $verifier->prepare(OperationPolicy::CANCEL_KEY_CHANGE, ['change' => 'x']);
+        $this->refused(Refusal::WrongOperation, fn () => $verifier->verify($cancel->intent->nonce, $this->owner->signIn($cancel->options)), 'A cancellation went through verify().');
+    }
+
+    /**
+     * The owners hear of every operation verified and every change to the keys from the verifier itself,
+     * through its notifier: not from the console.
+     */
+    public function testTellsItsNotifierOfEveryOperationAndKeyChange(): void
+    {
+        $verifier = $this->verifier('memory', keyChangeDelay: 0);
+        $secret = $verifier->createBootstrapSecret();
+        [$bootstrap] = $this->registered($verifier, $this->owner, 'Passkey', true);
+        $verifier->bootstrap($secret, $bootstrap->intent->nonce, $this->owner->signIn($bootstrap->options));
+        [$addition] = $this->registered($verifier, $this->owner, 'Laptop');
+        $added = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $verified = $verifier->verify($prepared->intent->nonce, $this->owner->signIn($prepared->options));
+        $removal = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $added->key->id()]);
+        $verifier->removeKey($removal->intent->nonce, $this->owner->signIn($removal->options));
+        $phone = $verifier->keys()[0]->id();
+        $laptop = $added->key->id();
+
+        self::assertSame(
+            [
+                [VerifierNotice::BOOTSTRAP_SECRET_CREATED, null, null],
+                [VerifierNotice::KEY_CHANGE_REQUESTED, OperationPolicy::ADD_KEY, $phone],
+                [VerifierNotice::KEY_ADDED, null, $phone],
+                [VerifierNotice::KEY_CHANGE_REQUESTED, OperationPolicy::ADD_KEY, $laptop],
+                [VerifierNotice::KEY_ADDED, null, $laptop],
+                [VerifierNotice::VERIFIED, 'acme.site.remove', $phone],
+                [VerifierNotice::KEY_CHANGE_REQUESTED, OperationPolicy::REMOVE_KEY, $laptop],
+                [VerifierNotice::KEY_REMOVED, null, $laptop],
+            ],
+            array_map(static fn (VerifierNotice $notice): array => [$notice->event, $notice->intent?->action, $notice->key?->id()], $this->notifier->notices),
+        );
+        self::assertSame(['site' => 'jane'], $this->notifier->notices[5]->intent?->parameters);
+        self::assertEquals($this->clock->now(), $this->notifier->notices[5]->at);
+        self::assertSame($added->id, $this->notifier->notices[4]->change?->id);
+
+        // A refusal isn't notified: nothing ran.
+        $wrong = $verifier->prepare('acme.site.remove', ['site' => 'joe']);
+        $this->refused(Refusal::InvalidSignature, static fn () => $verifier->verify($wrong->intent->nonce, '{}'));
+        self::assertCount(8, $this->notifier->notices);
+    }
+
+    /**
+     * A notice that can't be sent stops the operation: verify() throws, so the operation doesn't run
+     * unannounced. The nonce is used up all the same.
+     */
+    public function testAnOperationWhoseNoticeCantBeSentDoesntRun(): void
+    {
+        $verifier = $this->bootstrapped('memory');
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $answer = $this->owner->signIn($prepared->options);
+        $failing = new class implements VerifierNotifier {
+            public function notify(VerifierNotice $notice): void
+            {
+                throw new \RuntimeException('The mail queue is down.');
+            }
+        };
+        $silent = new Verifier(self::config(), self::policy(), $this->store, $this->log, $failing, $this->clock);
+
+        try {
+            $silent->verify($prepared->intent->nonce, $answer);
+            self::fail('An operation was verified without its notice.');
+        } catch (\RuntimeException $exception) {
+            self::assertSame('The mail queue is down.', $exception->getMessage());
+        }
+
+        $this->refused(Refusal::UnknownIntent, static fn () => $verifier->verify($prepared->intent->nonce, $answer));
     }
 
     /**
@@ -291,18 +601,17 @@ final class VerifierTest extends TestCase
     #[DataProvider('stores')]
     public function testIntentsInFlightOutliveARotationOfTheVerifiersKeys(string $store): void
     {
-        $verifier = $this->bootstrapped($store);
+        $verifier = $this->bootstrapped($store, keyChangeDelay: 0);
         $phone = $verifier->keys()[0]->id();
         $first = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
         $second = $verifier->prepare('acme.site.remove', ['site' => 'joe']);
 
-        $laptop = $this->owner->create();
-        $addition = $verifier->prepare(OperationPolicy::ADD_KEY, self::keyOf($this->owner, $laptop, 'Laptop'));
+        [$addition, $laptop] = $this->registered($verifier, $this->owner, 'Laptop');
         $added = $verifier->addKey($addition->intent->nonce, $this->owner->signIn($addition->options));
         $removal = $verifier->prepare(OperationPolicy::REMOVE_KEY, ['credential_id' => $phone]);
         $verifier->removeKey($removal->intent->nonce, $this->owner->signIn($removal->options, $laptop));
 
-        self::assertEquals($added->id(), $verifier->verify($first->intent->nonce, $this->owner->signIn($first->options, $laptop))->key->id());
+        self::assertEquals($added->key->id(), $verifier->verify($first->intent->nonce, $this->owner->signIn($first->options, $laptop))->key->id());
         $this->refused(Refusal::UnknownKey, fn () => $verifier->verify($second->intent->nonce, $this->owner->signIn($second->options)), 'The removed key\'s signature was accepted.');
     }
 
@@ -311,16 +620,20 @@ final class VerifierTest extends TestCase
     {
         $verifier = $this->bootstrapped($store);
         $lostKeys = \count($verifier->keys());
-        $found = new VirtualAuthenticator('https://acme.example');
-        $found->create();
+        $found = new VirtualAuthenticator('https://sign.acme.example');
 
         $secret = $verifier->createBootstrapSecret();
-        $prepared = $verifier->prepareBootstrap(self::keyOf($found, 0, 'New phone'));
-        $verifier->bootstrap($secret, $prepared->intent->nonce, $found->signIn($prepared->options));
+        [$prepared] = $this->registered($verifier, $found, 'New phone', true);
+        $change = $verifier->bootstrap($secret, $prepared->intent->nonce, $found->signIn($prepared->options));
 
+        // With keys there, their owners get a day to cancel it: a host's root could be someone else.
+        self::assertCount($lostKeys, $verifier->keys());
+        self::assertSame([VerifierNotice::KEY_CHANGE_REQUESTED, $change->id], [$this->notifier->notices[\count($this->notifier->notices) - 1]->event, $this->notifier->notices[\count($this->notifier->notices) - 1]->change?->id]);
+        $this->clock->sleep(86400);
+        self::assertSame(1, $verifier->applyKeyChanges(), 'The due change wasn\'t applied once.');
         self::assertCount($lostKeys + 1, $verifier->keys());
         $created = array_values(array_filter($this->log->entries, static fn (array $entry): bool => 'bootstrap_secret_created' === $entry['event']));
-        self::assertSame(['keys' => 1], $created[1]['details'], 'A re-bootstrap with keys there isn\'t recorded as such.');
+        self::assertSame(1, $created[1]['details']['keys'], 'A re-bootstrap with keys there isn\'t recorded as such.');
     }
 
     public function testStateSurvivesARestart(): void
@@ -329,7 +642,7 @@ final class VerifierTest extends TestCase
         $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
         $answer = $this->owner->signIn($prepared->options);
 
-        $restarted = new Verifier(self::config(), self::policy(), new FileVerifierStore($this->files[0]), $this->log, $this->clock);
+        $restarted = new Verifier(self::config(), self::policy(), new FileVerifierStore($this->files[0]), $this->log, $this->notifier, $this->clock);
         self::assertEquals($verifier->keys(), $restarted->keys());
         $restarted->verify($prepared->intent->nonce, $answer);
         $this->refused(Refusal::UnknownIntent, static fn () => $verifier->verify($prepared->intent->nonce, $answer), 'A nonce worked again in another process.');
@@ -344,12 +657,11 @@ final class VerifierTest extends TestCase
         }
     }
 
-    private function verifier(string $store): Verifier
+    private function verifier(string $store, int $keyChangeDelay = 86400): Verifier
     {
         $this->clock = new MockClock('2026-10-28 18:00:00 UTC');
         $this->log = new InMemoryVerifierLog();
-        $this->owner = new VirtualAuthenticator('https://acme.example');
-        $this->owner->create();
+        $this->owner = new VirtualAuthenticator('https://sign.acme.example');
 
         if ('file' === $store) {
             $this->files[] = $path = \sprintf('%s/yorvoid-verifier-%s.json', sys_get_temp_dir(), bin2hex(random_bytes(6)));
@@ -358,22 +670,37 @@ final class VerifierTest extends TestCase
             $this->store = new InMemoryVerifierStore();
         }
 
-        return new Verifier(self::config(), self::policy(), $this->store, $this->log, $this->clock);
+        $this->notifier = new CollectingNotifier();
+
+        return new Verifier(self::config($keyChangeDelay), self::policy(), $this->store, $this->log, $this->notifier, $this->clock);
     }
 
-    private function bootstrapped(string $store): Verifier
+    private function bootstrapped(string $store, int $keyChangeDelay = 86400): Verifier
     {
-        $verifier = $this->verifier($store);
+        $verifier = $this->verifier($store, $keyChangeDelay);
         $secret = $verifier->createBootstrapSecret();
-        $prepared = $verifier->prepareBootstrap(self::keyOf($this->owner, 0));
+        [$prepared] = $this->registered($verifier, $this->owner, 'Passkey', true);
         $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options));
 
         return $verifier;
     }
 
-    private static function config(): VerifierConfig
+    /**
+     * Registers a new passkey of the authenticator at the signing origin, and prepares its addition.
+     *
+     * @return array{PreparedIntent, int} The addition, and the passkey's index in the authenticator
+     */
+    private function registered(Verifier $verifier, VirtualAuthenticator $authenticator, string $label = 'Passkey', bool $bootstrap = false): array
     {
-        return new VerifierConfig('acme-verifier:host-1', 'acme.example', ['https://acme.example']);
+        $registration = $verifier->prepareRegistration($label, $bootstrap);
+        $index = \count($authenticator->credentials);
+
+        return [$verifier->finishRegistration($registration->id, $authenticator->register($registration->options)), $index];
+    }
+
+    private static function config(int $keyChangeDelay = 86400): VerifierConfig
+    {
+        return new VerifierConfig('acme-verifier:host-1', 'sign.acme.example', ['https://sign.acme.example'], ['https://acme.example'], keyChangeDelay: $keyChangeDelay);
     }
 
     private static function policy(): OperationPolicy
@@ -384,19 +711,9 @@ final class VerifierTest extends TestCase
         ]);
     }
 
-    /**
-     * @return array<string, string>
-     */
-    private static function keyOf(VirtualAuthenticator $authenticator, int $credential, string $label = 'Passkey'): array
-    {
-        $passkey = $authenticator->credentials[$credential];
-
-        return ['credential_id' => VirtualAuthenticator::encode($passkey['id']), 'public_key' => VirtualAuthenticator::encode($passkey['publicKey']), 'user_handle' => VirtualAuthenticator::encode($passkey['userHandle']), 'label' => $label];
-    }
-
     private static function registration(): string
     {
-        return (string) json_encode(['rp' => ['id' => 'acme.example'], 'user' => ['id' => VirtualAuthenticator::encode(random_bytes(32))], 'challenge' => VirtualAuthenticator::encode(random_bytes(32))]);
+        return (string) json_encode(['rp' => ['id' => 'sign.acme.example'], 'user' => ['id' => VirtualAuthenticator::encode(random_bytes(32))], 'challenge' => VirtualAuthenticator::encode(random_bytes(32))]);
     }
 
     /**

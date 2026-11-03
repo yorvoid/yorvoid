@@ -1,0 +1,16 @@
+{#- Every signing page. The browser client's forms.js runs the passkey ceremonies; the pages say what to do without it. -#}
+<!DOCTYPE html>
+<html lang="{% block lang %}en{% endblock %}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ block('title') }}</title>
+<script type="module" src="{{ script }}"></script>
+</head>
+<body>
+<main>
+<h1>{{ block('title') }}</h1>
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>

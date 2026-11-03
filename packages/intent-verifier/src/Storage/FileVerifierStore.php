@@ -7,13 +7,15 @@ namespace YorvoID\IntentVerifier\Storage;
 use YorvoID\IntentVerifier\Base64Url;
 use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\Key;
+use YorvoID\IntentVerifier\KeyChange;
 use YorvoID\IntentVerifier\PendingIntent;
+use YorvoID\IntentVerifier\PendingRegistration;
 use YorvoID\IntentVerifier\VerifierState;
 use YorvoID\IntentVerifier\VerifierStore;
 
 /**
- * The verifier's state in one JSON file, readable only by its owner: the keys, the intents waiting for
- * a signature (so a nonce works once, also across restarts: INT-009), and the bootstrap secret's hash.
+ * The verifier's state in one JSON file, readable only by its owner: the keys and the changes to them
+ * waiting to take effect, the intents waiting for a signature (so a nonce works once, also across restarts: INT-009), and the bootstrap secret's hash.
  * Each transaction holds an exclusive lock on the file, so processes on the same host take turns.
  *
  * Keep it where only the verifier's user can write, e.g. /var/lib/acme-verifier/state.json.
@@ -22,7 +24,7 @@ use YorvoID\IntentVerifier\VerifierStore;
  */
 final readonly class FileVerifierStore implements VerifierStore
 {
-    private const int VERSION = 1;
+    private const int VERSION = 2;
 
     public function __construct(
         private string $path,
@@ -51,15 +53,15 @@ final readonly class FileVerifierStore implements VerifierStore
     {
         return [
             'version' => self::VERSION,
-            'keys' => array_map(static fn (Key $key): array => [
-                'credential_id' => Base64Url::encode($key->credentialId),
-                'public_key' => Base64Url::encode($key->publicKey),
-                'user_handle' => Base64Url::encode($key->userHandle),
-                'algorithm' => $key->algorithm,
-                'label' => $key->label,
-                'added_at' => $key->addedAt->getTimestamp(),
-                'sign_count' => $key->signCount,
-            ], $state->keys),
+            'keys' => array_map(self::key(...), $state->keys),
+            'key_changes' => array_map(static fn (KeyChange $change): array => [
+                'id' => $change->id,
+                'kind' => $change->kind,
+                'key' => self::key($change->key),
+                'requested_at' => $change->requestedAt->getTimestamp(),
+                'effective_at' => $change->effectiveAt->getTimestamp(),
+                'signer' => $change->signer,
+            ], $state->keyChanges),
             'pending' => array_map(static fn (PendingIntent $pending): array => [
                 'action' => $pending->intent->action,
                 'parameters' => $pending->intent->parameters,
@@ -69,8 +71,39 @@ final readonly class FileVerifierStore implements VerifierStore
                 'expires_at' => $pending->intent->expiresAt->getTimestamp(),
                 'bootstrap' => $pending->bootstrap,
             ], $state->pending),
+            'registrations' => array_map(static fn (PendingRegistration $registration): array => [
+                'id' => $registration->id,
+                'options' => $registration->options,
+                'label' => $registration->label,
+                'bootstrap' => $registration->bootstrap,
+                'expires_at' => $registration->expiresAt->getTimestamp(),
+            ], $state->registrations),
             'bootstrap_secret_hash' => $state->bootstrapSecretHash,
+            'bootstrap_secret_expires_at' => $state->bootstrapSecretExpiresAt?->getTimestamp(),
         ];
+    }
+
+    /**
+     * @return array<string, int|string>
+     */
+    private static function key(Key $key): array
+    {
+        return [
+            'credential_id' => Base64Url::encode($key->credentialId),
+            'public_key' => Base64Url::encode($key->publicKey),
+            'user_handle' => Base64Url::encode($key->userHandle),
+            'algorithm' => $key->algorithm,
+            'label' => $key->label,
+            'added_at' => $key->addedAt->getTimestamp(),
+            'sign_count' => $key->signCount,
+        ];
+    }
+
+    private static function keyFrom(mixed $key): Key
+    {
+        \assert(\is_array($key));
+
+        return new Key(self::bytes($key['credential_id']), self::bytes($key['public_key']), self::bytes($key['user_handle']), self::int($key['algorithm']), self::string($key['label']), self::time($key['added_at']), self::int($key['sign_count']));
     }
 
     /**
@@ -83,16 +116,21 @@ final readonly class FileVerifierStore implements VerifierStore
         try {
             $data = json_decode($contents, true, flags: \JSON_THROW_ON_ERROR);
 
-            if (!\is_array($data) || self::VERSION !== ($data['version'] ?? null) || !\is_array($data['keys'] ?? null) || !\is_array($data['pending'] ?? null)) {
+            if (!\is_array($data) || self::VERSION !== ($data['version'] ?? null) || !\is_array($data['keys'] ?? null) || !\is_array($data['key_changes'] ?? null) || !\is_array($data['pending'] ?? null) || !\is_array($data['registrations'] ?? null)) {
                 throw new \UnexpectedValueException('Not a state.');
             }
 
             $state = new VerifierState();
 
             foreach ($data['keys'] as $key) {
-                \assert(\is_array($key));
-                $key = new Key(self::bytes($key['credential_id']), self::bytes($key['public_key']), self::bytes($key['user_handle']), self::int($key['algorithm']), self::string($key['label']), self::time($key['added_at']), self::int($key['sign_count']));
+                $key = self::keyFrom($key);
                 $state->keys[$key->id()] = $key;
+            }
+
+            foreach ($data['key_changes'] as $change) {
+                \assert(\is_array($change) && \in_array($change['kind'] ?? null, [KeyChange::ADD, KeyChange::REMOVE], true));
+                $change = new KeyChange(self::string($change['id']), $change['kind'], self::keyFrom($change['key']), self::time($change['requested_at']), self::time($change['effective_at']), self::string($change['signer']));
+                $state->keyChanges[$change->id] = $change;
             }
 
             foreach ($data['pending'] as $pending) {
@@ -103,7 +141,14 @@ final readonly class FileVerifierStore implements VerifierStore
                 $state->pending[$intent->nonce] = new PendingIntent($intent, $pending['bootstrap']);
             }
 
+            foreach ($data['registrations'] as $registration) {
+                \assert(\is_array($registration) && \is_bool($registration['bootstrap']));
+                $registration = new PendingRegistration(self::string($registration['id']), self::string($registration['options']), self::string($registration['label']), $registration['bootstrap'], self::time($registration['expires_at']));
+                $state->registrations[$registration->id] = $registration;
+            }
+
             $state->bootstrapSecretHash = self::nullableString($data['bootstrap_secret_hash']);
+            $state->bootstrapSecretExpiresAt = null === $data['bootstrap_secret_expires_at'] ? null : self::time($data['bootstrap_secret_expires_at']);
 
             return $state;
         } catch (\Throwable $exception) {

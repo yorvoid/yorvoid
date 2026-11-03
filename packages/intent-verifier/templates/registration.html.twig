@@ -1,0 +1,11 @@
+{#- Creating the passkey, at the signing origin. -#}
+{% extends '@yorvoid_signing/layout.html.twig' %}
+{% block title %}Create the passkey{% endblock %}
+{% block body %}
+<p>Create a passkey named <strong data-label>{{ registration.label }}</strong> for signing.</p>
+<form method="post" action="/keys/registrations/{{ registration.id|url_encode }}" data-yorvoid-ceremony="create" data-yorvoid-options="{{ registration.options }}">
+<input type="hidden" name="response">
+<button>Create the passkey</button>
+<p data-yorvoid-error role="alert" hidden></p>
+</form>
+{% endblock %}

@@ -29,6 +29,7 @@
     ],
     "require": {
         "php": ">=8.5",
+        "twig/twig": "^3.30",
         "yorvoid/authn": "^0.1",
         "yorvoid/core": "^0.1",
         "yorvoid/flows": "^0.1",

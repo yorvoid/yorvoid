@@ -7,7 +7,6 @@ namespace YorvoID\Tests\Symfony;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\StepView;
-use YorvoID\Passkeys\Flow\View\IntentConfirmationView;
 use YorvoID\Passkeys\Flow\View\InvitationView;
 use YorvoID\Passkeys\Flow\View\PasskeyRegistrationView;
 use YorvoID\Passkeys\Flow\View\PasskeySignInView;
@@ -122,24 +121,6 @@ final class TemplateLintTest extends TestCase
         self::assertSame(['There\'s no way to add a passkey later: a button name="action" value="skip".'], $this->check('passkey_registration', new PasskeyRegistrationView('{}', true), self::ceremony('create').'<button name="action" value="later">Later</button></form>'.self::SCRIPT));
         self::assertSame([], $this->check('passkey_registration', new PasskeyRegistrationView('{}', true), self::ceremony('create').'<button name="action" value="skip">Not now</button></form>'.self::SCRIPT));
         self::assertSame([], $this->check('passkey_registration', new PasskeyRegistrationView(null, true), '<p>Signed out</p>'));
-    }
-
-    public function testTheSigningPageShowsEverythingSigned(): void
-    {
-        $view = new IntentConfirmationView('Remove the site jane.example', ['site' => 'jane.example', 'keep backups' => 'no'], '{}', '');
-
-        self::assertSame([], $this->check('confirm', $view, '<p>Remove the site jane.example</p><dl><dt>site</dt><dd>jane.example</dd><dt>keep backups</dt><dd>no</dd></dl>'.self::ceremony('get').'</form>'.self::SCRIPT));
-        self::assertSame([
-            'There\'s no passkey form: <form data-yorvoid-ceremony="get" data-yorvoid-options="{{ view.options }}">.',
-            'The page doesn\'t show what is signed in full: "Remove the site jane.example" is missing.',
-            'The page doesn\'t show what is signed in full: "jane.example" is missing.',
-            'The page doesn\'t show what is signed in full: "no" is missing.',
-        ], $this->check('confirm', $view, '<p>Remove the site jane-example</p><p>site: jane-example, keep backups: nothing</p>'));
-        self::assertSame(
-            [],
-            $this->check('confirm', self::view(['summary' => '', 'parameters' => [3 => 7, 'site' => ' jane ']]), '<p>site: jane.</p>'.self::ceremony('get').'</form>'.self::SCRIPT),
-            'What isn\'t text has nothing to show; space around a value doesn\'t count.',
-        );
     }
 
     public function testTheOtherStepsHaveTheirFields(): void

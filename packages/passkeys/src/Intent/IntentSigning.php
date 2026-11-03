@@ -11,12 +11,10 @@ use YorvoID\Authn\Session\Session;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\IntentVerifier\Intent;
-use YorvoID\IntentVerifier\PreparedIntent;
 use YorvoID\IntentVerifier\Refusal;
 use YorvoID\Passkeys\Intent\Event\SignedOperationRan;
 use YorvoID\Throttle\Limit;
@@ -24,12 +22,12 @@ use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;
 
 /**
- * The console's side of signed intents (INT-010…012): asking a signed-in person to sign an intent the
- * verifier prepared, and recording what became of it. The signature itself is checked by the verifier,
- * not here.
+ * The console's side of signed intents (INT-010…012): sending a signed-in person to sign an intent the
+ * verifier prepared, and recording what became of it. The person signs on the signing page, at the
+ * signing origin the privileged side serves (SigningPages): the console never sees the signature, and
+ * shows nothing to sign.
  *
- * - Each request is limited per principal (20 an hour by default; T-INT-3), recorded, and comes with the
- *   summary the page shows.
+ * - Each request is limited per principal (20 an hour by default; T-INT-3), and recorded.
  * - Each result the verifier sends back is recorded; an operation that ran is announced with
  *   SignedOperationRan, for the notification through a channel the console doesn't control.
  *
@@ -43,7 +41,6 @@ final readonly class IntentSigning
      * @param Limit|null $limit How many signatures a principal can be asked for: 20 an hour if not given
      */
     public function __construct(
-        private IntentSummaries $summaries,
         private SecurityLog $log,
         private Transactions $transactions,
         private Throttle $throttle,
@@ -55,21 +52,16 @@ final readonly class IntentSigning
     }
 
     /**
-     * Asks the session's principal to sign an intent the verifier prepared. Ask only in response to the
-     * person's own action (T-INT-3).
+     * Records that the session's principal is sent to sign an intent the verifier prepared: then send
+     * them to the signing page, SigningPages::url(). Ask only in response to the person's own action
+     * (T-INT-3).
      *
-     * @param string $locale The person's language, for the summary
-     *
-     * @throws Throttled       When the principal was asked too often
-     * @throws IntegratorError When the operation has no summary, or a parameter is too long to show
+     * @throws Throttled When the principal was asked too often
      */
-    public function request(Session $session, PreparedIntent $prepared, string $locale, Origin $origin): SigningRequest
+    public function request(Session $session, Intent $intent, Origin $origin): void
     {
-        $summary = $this->summaries->summarize($prepared->intent, $locale);
         $this->throttle->hit(\sprintf('intent_request:%s:%s', $session->realm->name, $session->principalId), $this->limit);
-        $this->record($session, 'yorvoid.intent.request', Outcome::Success, $prepared->intent, $origin);
-
-        return new SigningRequest($prepared->intent->nonce, $summary, $prepared->options);
+        $this->record($session, 'yorvoid.intent.request', Outcome::Success, $intent, $origin);
     }
 
     /**

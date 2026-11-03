@@ -107,19 +107,7 @@ export class YorvoID {
         await this.#post('/step-up', { ceremony: begun['ceremony'], response: passkey }, { session: true });
     }
     /**
-     * Signs an intent the verifier prepared: pass its options, as your console received them, and send
-     * what this gives back to the verifier the way your console talks to it. Show the person the intent's
-     * summary first: it's the only place they see what they sign.
-     *
-     * @param options The SigningRequest's options, as JSON or parsed
-     *
-     * @throws YorvoIDError
-     */
-    async signIntent(options, ceremony = {}) {
-        return this.authenticate(options, ceremony);
-    }
-    /**
-     * Runs navigator.credentials.get() with options a flow step or the verifier gave, and gives the
+     * Runs navigator.credentials.get() with options a flow step gave, and gives the
      * passkey's answer to send back: for your own pages.
      *
      * @param options The options, as JSON or parsed
@@ -263,7 +251,7 @@ export class YorvoID {
             .catch((error) => { throw this.#error(browserErrorCode(error), { cause: error }); });
     }
     /**
-     * The WebAuthn options the server or the verifier gave.
+     * The WebAuthn options the server gave.
      */
     #options(parse) {
         try {

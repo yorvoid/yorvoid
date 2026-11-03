@@ -18,6 +18,8 @@ final readonly class OperationPolicy
 
     public const string REMOVE_KEY = 'yorvoid.verifier.remove_key';
 
+    public const string CANCEL_KEY_CHANGE = 'yorvoid.verifier.cancel_key_change';
+
     /** @var array<string, Operation> By action */
     public array $operations;
 
@@ -29,6 +31,7 @@ final readonly class OperationPolicy
         $all = [
             self::ADD_KEY => new Operation(self::ADD_KEY, ['credential_id' => ParameterType::String, 'public_key' => ParameterType::String, 'user_handle' => ParameterType::String, 'label' => ParameterType::String]),
             self::REMOVE_KEY => new Operation(self::REMOVE_KEY, ['credential_id' => ParameterType::String]),
+            self::CANCEL_KEY_CHANGE => new Operation(self::CANCEL_KEY_CHANGE, ['change' => ParameterType::String]),
         ];
 
         foreach ($operations as $operation) {

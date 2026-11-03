@@ -43,7 +43,6 @@ YorvoID's passkey-first journeys come from `PasskeyFlows` in `yorvoid/passkeys` 
 | `yorvoid.recover_with_link` | `recovery_link` (confirm), `passkey_registration` (or later), `recovery_codes` | `recovery_link.token`: the link's token |
 | `yorvoid.add_passkey` | `step_up`, `passkey_registration` | |
 | `yorvoid.step_up` | `step_up` | `step_up.operation`, and `step_up.multi_factor` if it needs two factors |
-| `yorvoid.sign_intent` | `confirm` | `IntentConfirmationStep::data($signingRequest)` |
 
 - **`passkey_registration`** keeps the new credential's ID as `passkey_registration.credential`. After a recovery, the person may add one later, on a borrowed device for instance.
 - **`recovery_codes`** applies only when the account has no recovery codes left. The codes stay in the flow's state until the person confirms they saved them.
