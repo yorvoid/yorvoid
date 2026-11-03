@@ -144,11 +144,9 @@ final readonly class DbalSessionStore implements SessionStore
 
     public function purge(\DateTimeImmutable $before): int
     {
-        return (int) $this->database->connection->executeStatement(
-            \sprintf('DELETE FROM %s WHERE ended_at < ? OR expires_at < ? OR idle_expires_at < ?', $this->database->table(self::TABLE)),
-            [$before, $before, $before],
-            [Types::DATETIMETZ_IMMUTABLE, Types::DATETIMETZ_IMMUTABLE, Types::DATETIMETZ_IMMUTABLE],
-        );
+        // Not idle_expires_at: every request writes it, and an index on it would make every touch() a
+        // full update. A session that went idle goes once its absolute lifetime is over too.
+        return $this->database->deleteInBatches(self::TABLE, 'ended_at < ? OR expires_at < ?', [$before, $before], [Types::DATETIMETZ_IMMUTABLE, Types::DATETIMETZ_IMMUTABLE]);
     }
 
     /**

@@ -180,6 +180,8 @@ final class SchemaTest extends DatabaseTestCase
             'primary' => [['id'], true],
             'authentication_session_token' => [['token_hash'], true],
             'authentication_session_principal' => [['realm', 'principal_id'], false],
+            'authentication_session_ended' => [['ended_at'], false],
+            'authentication_session_expiry' => [['expires_at'], false],
         ],
         'one_time_token' => [
             'primary' => [['selector'], true],

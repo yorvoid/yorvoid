@@ -293,6 +293,7 @@ final readonly class Sessions
 
     /**
      * Removes sessions that ended or expired more than $keep ago; run it daily, e.g. from a scheduled job.
+     * A session that went idle counts as expired from its absolute expiry.
      *
      * @return int How many
      */

@@ -133,7 +133,7 @@ final class InMemorySessionStore implements SessionStore, InMemoryStore
     public function purge(\DateTimeImmutable $before): int
     {
         $count = \count($this->sessions);
-        $this->sessions = array_filter($this->sessions, static fn (array $entry): bool => !((null !== $entry[0]->endedAt && $entry[0]->endedAt < $before) || $entry[0]->expiresAt < $before || $entry[0]->idleExpiresAt < $before));
+        $this->sessions = array_filter($this->sessions, static fn (array $entry): bool => !((null !== $entry[0]->endedAt && $entry[0]->endedAt < $before) || $entry[0]->expiresAt < $before));
 
         return $count - \count($this->sessions);
     }

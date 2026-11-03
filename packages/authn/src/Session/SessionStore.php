@@ -60,7 +60,8 @@ interface SessionStore
     public function endCurrent(Realm $realm, PrincipalId $principalId, \DateTimeImmutable $now, SessionEndReason $reason, ?SessionId $except = null): array;
 
     /**
-     * Removes the sessions that ended or expired before the moment, in every realm.
+     * Removes the sessions that ended, or reached their absolute expiry, before the moment, in every realm.
+     * A session that went idle goes when its absolute expiry is past the moment too.
      *
      * @return int How many
      */

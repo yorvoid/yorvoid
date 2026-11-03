@@ -205,10 +205,12 @@ final class SessionStoreTest extends DatabaseTestCase
         $endedLongAgo = self::session(new Realm('acme'), $principal);
         $endedRecently = self::session(new Realm('acme'), $principal);
         $expired = self::session(new Realm('acme'), $principal, expires: '2026-10-27 19:59:59');
-        $idle = self::session(new Realm('globex'), $principal, idleExpires: '2026-10-27 19:59:59');
+        $idle = self::session(new Realm('globex'), $principal, expires: '2026-10-27 19:59:59', idleExpires: '2026-10-27 12:00:00');
+        // Idle, but its absolute expiry isn't past: it stays until it is.
+        $idleOnly = self::session(new Realm('globex'), $principal, idleExpires: '2026-10-27 19:59:59');
         $current = self::session(new Realm('acme'), $principal, expires: '2026-10-27 20:00:00', idleExpires: '2026-10-27 20:00:00');
 
-        foreach ([$endedLongAgo, $endedRecently, $expired, $idle, $current] as $i => $session) {
+        foreach ([$endedLongAgo, $endedRecently, $expired, $idle, $idleOnly, $current] as $i => $session) {
             $store->add($session, self::hash((string) $i));
         }
 
@@ -220,6 +222,7 @@ final class SessionStoreTest extends DatabaseTestCase
         self::assertNull($store->get(new Realm('acme'), $expired->id));
         self::assertNull($store->get(new Realm('globex'), $idle->id));
         self::assertNotNull($store->get(new Realm('acme'), $endedRecently->id));
+        self::assertNotNull($store->get(new Realm('globex'), $idleOnly->id));
         self::assertNotNull($store->get(new Realm('acme'), $current->id));
     }
 

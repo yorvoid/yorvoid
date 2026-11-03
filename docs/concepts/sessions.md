@@ -110,3 +110,5 @@ Ended and expired sessions stay until you purge them, so that "your devices" and
 ```php
 $sessions->purge(Duration::days(30)); // removes sessions that ended or expired over 30 days ago
 ```
+
+A session that went idle counts as expired from its absolute expiry: the purge looks only at when sessions ended and when they expire, which are indexed, and not at the idle time that every request writes. It deletes in batches, so it doesn't hold locks for long however many sessions there are.

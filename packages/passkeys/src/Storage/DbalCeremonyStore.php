@@ -59,6 +59,6 @@ final readonly class DbalCeremonyStore implements CeremonyStore
 
     public function purge(\DateTimeImmutable $now): int
     {
-        return (int) $this->database->connection->executeStatement(\sprintf('DELETE FROM %s WHERE expires_at <= ?', $this->database->table(self::TABLE)), [$now], [Types::DATETIMETZ_IMMUTABLE]);
+        return $this->database->deleteInBatches(self::TABLE, 'expires_at <= ?', [$now], [Types::DATETIMETZ_IMMUTABLE]);
     }
 }
