@@ -39,6 +39,7 @@ final class PasskeyStoreTest extends DatabaseTestCase
         self::assertNull($store->find(new Realm('globex'), $long->webauthnId));
         self::assertEqualsCanonicalizing([$long, $short], $store->of(new Realm('acme'), $principal));
         self::assertSame(['usb', 'nfc'], new Passkey($long->credentialId, $long->realm, $long->principalId, $long->webauthnId, $long->publicKey, $long->userHandle, 0, ['a' => 'usb', 'b' => 'nfc'], $long->aaguid, false, false, false, 'none')->transports, 'Transports are a list.');
+        self::assertSame(['hybrid', 'usb'], new Passkey($long->credentialId, $long->realm, $long->principalId, $long->webauthnId, $long->publicKey, $long->userHandle, 0, ['hybrid', 1, ['usb'], null, 'USB', 'carrier-pigeon', 'usb', 'hybrid', str_repeat('x', 10_000)], $long->aaguid, false, false, false, 'none')->transports, 'Only what WebAuthn defines, in the browser\'s order, once.');
 
         $database = $this->stack($implementation)->database;
 
@@ -94,7 +95,7 @@ final class PasskeyStoreTest extends DatabaseTestCase
         $stack->passkeys->add($passkey);
         $table = $stack->database->table('passkey');
 
-        $tamperings = ["transports = '{\"a\": 1}'", "transports = '\"usb\"'", "transports = '[5]'", "public_key = '!!!'"];
+        $tamperings = ["transports = '{\"a\": 1}'", "transports = '\"usb\"'", "public_key = '!!!'"];
 
         if ('sqlite' === $platform) {
             // PostgreSQL keeps a boolean a boolean; SQLite keeps whatever it's given.

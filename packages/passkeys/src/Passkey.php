@@ -19,17 +19,21 @@ use YorvoID\Core\Realm;
  */
 final readonly class Passkey
 {
+    /** The transports WebAuthn defines (AuthenticatorTransport): the only ones kept */
+    public const array TRANSPORTS = ['usb', 'nfc', 'ble', 'smart-card', 'hybrid', 'internal'];
+
     /** @var list<string> */
     public array $transports;
 
     /**
-     * @param string        $webauthnId                  The authenticator's ID for it, raw bytes
-     * @param string        $publicKey                   COSE-encoded, raw bytes
-     * @param string        $userHandle                  The principal's WebAuthn user handle: random, raw bytes, no personal data
-     * @param array<string> $transports                  How the browser can reach the authenticator, e.g. ["internal", "hybrid"]
-     * @param bool          $backupEligible              Whether it can sync to other devices
-     * @param bool          $backedUp                    Whether it has
-     * @param bool          $userVerificationInitialized Whether the authenticator has verified its user with it at least once
+     * @param string       $webauthnId                  The authenticator's ID for it, raw bytes
+     * @param string       $publicKey                   COSE-encoded, raw bytes
+     * @param string       $userHandle                  The principal's WebAuthn user handle: random, raw bytes, no personal data
+     * @param array<mixed> $transports                  How the browser can reach the authenticator, e.g. ["internal", "hybrid"], as
+     *                                                  it said: what isn't one of TRANSPORTS, and repeats, are left out
+     * @param bool         $backupEligible              Whether it can sync to other devices
+     * @param bool         $backedUp                    Whether it has
+     * @param bool         $userVerificationInitialized Whether the authenticator has verified its user with it at least once
      */
     public function __construct(
         public CredentialId $credentialId,
@@ -46,7 +50,16 @@ final readonly class Passkey
         public bool $userVerificationInitialized,
         public string $attestationType,
     ) {
-        $this->transports = array_values($transports);
+        // The browser's word, echoed into later options: anything else there would break them.
+        $known = [];
+
+        foreach ($transports as $transport) {
+            if (\in_array($transport, self::TRANSPORTS, true) && !\in_array($transport, $known, true)) {
+                $known[] = $transport;
+            }
+        }
+
+        $this->transports = $known;
     }
 
     /**
