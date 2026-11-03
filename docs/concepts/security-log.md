@@ -34,8 +34,8 @@ An entry is written in the same transaction as the change it describes, so the l
 
 ## What the chain proves, and what it doesn't
 
-Verification detects any change to entries that left the rest of the chain in place, and entries removed from the end (the realm's head records the last one).
+Verification detects any change to entries that left the rest of the chain in place, and entries removed from the end while the realm's head, which records the last one, still names them.
 
-Someone who can write to the database can, however, rewrite the whole chain from the point they changed. Signed checkpoints kept outside the database close that gap; they arrive in a later release. Until then, the chain protects against accidental and partial tampering, not against an attacker with full write access to the database.
+Someone who can write to the database can, however, change the head too: cut entries off the end, or rewrite the whole chain from the point they changed, and verification still passes. Checkpoints kept outside the database close that gap; they arrive by 1.0. Until then, the chain protects against accidental and partial tampering, not against an attacker with write access to the database: give the application's database user no UPDATE or DELETE on the log's tables if you can.
 
 Hashes name their algorithm (`sha256` today). Verification refuses any algorithm YorvoID doesn't accept, so an entry can't be "re-hashed" with a weaker one.

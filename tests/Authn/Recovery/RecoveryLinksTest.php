@@ -21,6 +21,7 @@ use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\OperationCatalogue;
@@ -110,6 +111,15 @@ final class RecoveryLinksTest extends DatabaseTestCase
         $this->expectException(UnknownPrincipal::class);
 
         $links->issue(new IssueRecoveryLink(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next())), new Origin(OriginKind::Console));
+    }
+
+    public function testALinkWorksADayAtMost(): void
+    {
+        self::assertTrue(new IssueRecoveryLink(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), Duration::hours(24))->lifetime?->equals(Duration::hours(24)));
+
+        $this->expectExceptionObject(new IntegratorError('A recovery link for 25h works too long.', 'Give it at most 24 hours: it takes the account over for whoever has it. 15 minutes is usual.', 'concepts/recovery-links.md'));
+
+        new IssueRecoveryLink(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), Duration::hours(25));
     }
 
     public function testIssuingIsAnOperation(): void

@@ -432,13 +432,19 @@ requirements:
         status: partly
         tests:
             - 'YorvoID\Tests\Passkeys\PasskeyPolicyTest::testRefusalsDontTellAGuesserWhichPasskeysExist'
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testRecoveringAnswersCountsAndRecordsTheSameForEveryAccount'
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testRecoveringRunsAsManyStatementsForEveryAccount'
+            - 'YorvoID\Tests\Symfony\SecurityTest::testTheRecoveryCodeFormAnswersTheSameForEveryAccount'
         docs:
             - concepts/passkeys.md
-        note: 'Refused passkey sign-ins give one message whatever the reason; equal response times are not yet assessed.'
+            - concepts/recovery-codes.md
+        note: 'Refused passkey sign-ins give one message whatever the reason; recovery with a code answers, throttles and records the same, with the same database work, for an account with codes, one without and one that doesn''t exist. Response times are not measured.'
     V6.4.1:
         level: 1
         status: covered
         tests:
+            - 'YorvoID\Tests\Authn\Recovery\RecoveryLinksTest::testALinkWorksADayAtMost'
+            - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testACodeWorksAWeekAtMost'
             - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testTheFirstToEnterTheCodeClaimsTheRealm'
             - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testRefusesWrongExpiredReplacedAndForeignCodes'
             - 'YorvoID\Tests\Authn\Setup\SetupCodesTest::testCodesAreUniformlyRandom'
@@ -446,7 +452,7 @@ requirements:
         docs:
             - concepts/setup-codes.md
             - concepts/invitations.md
-        note: 'Setup codes (130 bits) and invitation links (256 bits) are random, expire, work once, and are never passwords: the person then adds their own credential.'
+        note: 'Setup codes are random, used once, and work at most 7 days (24 hours by default); recovery links at most 24 hours (15 minutes by default).'
     V6.4.2:
         level: 1
         status: open
@@ -477,13 +483,13 @@ requirements:
         note: 'One-time tokens, setup codes and recovery codes work once, also under concurrent use; TOTP arrives in M4.'
     V6.5.2:
         level: 2
-        status: covered
+        status: partly
         tests:
             - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testStoresOnlyTheCodesHashes'
             - 'YorvoID\Tests\Authn\Recovery\RecoveryCodesTest::testGeneratesTenCodesThatEachWorkOnce'
         docs:
             - concepts/recovery-codes.md
-        note: 'Recovery codes have 120 random bits, above the 112 at which a standard hash is allowed: only their SHA-256 hashes are stored.'
+        note: 'Recovery codes have 120 random bits, above the 112 at which a standard hash is allowed: only their SHA-256 hashes are stored. The flows that show a new set keep it in the PHP session until the person confirms they saved it.'
     V6.5.3:
         level: 2
         status: partly
@@ -616,7 +622,7 @@ requirements:
         docs:
             - concepts/sessions.md
             - concepts/step-up.md
-        note: 'Signing in starts a new session with a new token, and a step-up replaces the session''s token; ending the previous session on sign-in is wired by the framework bridges (M1).'
+        note: 'Signing in starts a new session with a new token, and a step-up replaces the session''s token; a sign-in doesn''t yet end the session the browser had before.'
     V7.3.1:
         level: 2
         status: covered
@@ -639,8 +645,11 @@ requirements:
         tests:
             - 'YorvoID\Tests\Authn\Session\SessionsTest::testEndingASessionTakesEffectAtOnce'
             - 'YorvoID\Tests\Conformance\SessionStoreTest::testEndsASessionOnceAndThenNeverRenewsItsToken'
+            - 'YorvoID\Tests\Symfony\SecurityTest::testSigningOutInTheApplicationsOwnCodeSignsOutForGood'
+            - 'YorvoID\Tests\Symfony\SecurityTest::testEndingTheYorvoIDSessionSignsOutAtTheNextRequest'
         docs:
             - concepts/sessions.md
+            - concepts/symfony.md
     V7.4.2:
         level: 1
         status: covered
@@ -693,7 +702,7 @@ requirements:
         docs:
             - concepts/sessions.md
             - concepts/step-up.md
-        note: 'Listing and ending one''s sessions, and step-up, are in place; requiring a step-up before ending sessions is wired in the flows (M1).'
+        note: 'Listing and ending one''s sessions, and step-up, are in place; Sessions::end() and endAll() don''t check who asks: the caller checks ownership or the ability and asks for a step-up first (concepts/sessions.md), until the authorization of 0.2.0 checks the ability.'
     V7.5.3:
         level: 3
         status: covered
@@ -1238,12 +1247,13 @@ requirements:
         level: 2
         status: covered
         tests:
+            - 'YorvoID\Tests\Conformance\SecurityLogStoreTest::testKeepsNulsAndLongDetails'
             - 'YorvoID\Tests\Core\Event\OriginTest::testRefusesInvalidCorrelationIds'
             - 'YorvoID\Tests\Core\Log\LogEntryTest::testRecordsTextThatIsntValidUtf8'
             - 'YorvoID\Tests\Conformance\SecurityLogStoreTest::testKeepsTextThatWasntValidUtf8'
         docs:
             - concepts/security-log.md
-        note: 'The security log is structured (columns and JSON), never formatted text; correlation IDs are restricted to safe characters; invalid UTF-8 is replaced, so attacker-controlled text can always be recorded and never breaks the log.'
+        note: 'The security log is structured (columns and JSON), never formatted text; correlation IDs are restricted to safe characters; invalid UTF-8 and NUL are replaced and an origin''s detail is cut to its column, so attacker-controlled text can always be recorded and never breaks the log, on every database.'
     V16.4.2:
         level: 2
         status: partly
@@ -1252,7 +1262,7 @@ requirements:
             - 'YorvoID\Tests\Core\Log\SecurityLogTest::testDetectsAMissingHead'
         docs:
             - concepts/security-log.md
-        note: 'Changes are detected by the hash chain; preventing a full rewrite needs signed checkpoints kept outside the database (milestone M2), and database permissions are the application''s.'
+        note: 'Changes are detected by the hash chain; preventing a full rewrite, or a cut-off end, by someone who can write the database needs checkpoints kept outside it (by 1.0), and database permissions are the application''s.'
     V16.4.3:
         level: 2
         status: open

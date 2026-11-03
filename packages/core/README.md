@@ -1,6 +1,6 @@
 # yorvoid/core
 
-YorvoID's core: principals, realms, decisions and evidence, the security log, keys and storage. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
+YorvoID's core: principals, realms, the security log, keys and storage. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
 
 ```bash
 composer require yorvoid/core
