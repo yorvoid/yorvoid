@@ -37,6 +37,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
      * @param bool                 $authenticators Whether the firewall has YorvoID's authenticators
      * @param bool                 $debugging      Whether it runs in debug mode, as in development
      * @param bool                 $session        Whether it has a PHP session
+     * @param bool                 $mailer         Whether it has Symfony Mailer
      */
     public function __construct(
         private readonly string $directory,
@@ -47,6 +48,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         private readonly bool $customize = false,
         bool $debugging = true,
         private readonly bool $session = true,
+        private readonly bool $mailer = true,
     ) {
         parent::__construct('test', $debugging);
     }
@@ -95,7 +97,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                 'http_method_override' => false,
                 'handle_all_throwables' => true,
                 'php_errors' => ['log' => true],
-                'mailer' => ['dsn' => 'null://null'],
+                'mailer' => $this->mailer ? ['dsn' => 'null://null'] : ['enabled' => false],
                 'translator' => ['enabled' => $this->translations, 'default_path' => $this->directory.'/translations'],
                 'session' => $this->session ? ['storage_factory_id' => 'session.storage.factory.mock_file'] : false,
                 'router' => ['resource' => __DIR__.'/routes.php', 'type' => 'php', 'utf8' => true],

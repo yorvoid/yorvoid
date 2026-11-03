@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony\DependencyInjection;
 
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\Mailer\MailerInterface;
 use YorvoID\Mail\Mailer;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Mail\SymfonyMailer;
@@ -30,6 +32,8 @@ final class YorvoIDPass implements CompilerPassInterface
         // An application that sends YorvoID's emails its own way: its mailer, not Symfony's, is checked by its owner.
         if ($container->has(Mailer::class) && SymfonyMailer::class !== $container->findDefinition(Mailer::class)->getClass()) {
             $container->getDefinition(MailerCheck::class)->setArgument('$own', true);
+        } elseif ($container->has(Mailer::class) && !$container->has(MailerInterface::class)) {
+            throw new InvalidConfigurationException('yorvoid.notifications: security notifications are on, and there\'s no Symfony Mailer to send them with. Install it (composer require symfony/mailer) and set framework.mailer.dsn; or give your own YorvoID\Mail\Mailer service; or turn them off with notifications.enabled: false.');
         }
     }
 }

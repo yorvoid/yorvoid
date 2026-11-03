@@ -121,7 +121,7 @@ So each package directory carries what its repository needs on its own: a README
 
 A release whose measured time is above 15 minutes doesn't go out until the quickstart is shorter or clearer. Before YorvoID is on Packagist, run `QUICKSTART_PACKAGIST=1 php tools/quickstart/follow.php` once it is, to check the published packages install as the page says.
 
-**Releasing:** push a version tag (`v0.1.0`) on a commit of main that passed CI. The Split workflow copies the PHP packages to their repositories, which Packagist installs from; the npm workflow publishes the browser client as `@yorvoid/browser` with the tag's version, through npm's trusted publishing (no token), and a pre-release such as `v0.1.0-rc.1` under `next`.
+**Releasing:** move the [changelog](CHANGELOG.md)'s "Unreleased" under the new version, with the date, in a pull request. Then push a signed version tag (`git tag -s v0.2.0`) on a commit of main that passed CI. The Split workflow copies the PHP packages to their repositories, which Packagist installs from; the npm workflow publishes the browser client as `@yorvoid/browser` with the tag's version, through npm's trusted publishing (no token), and a pre-release such as `v0.1.0-rc.1` under `next`.
 
 ## License
 

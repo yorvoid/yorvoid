@@ -71,7 +71,6 @@ deptrac:
       - Core
       - Authn
       - Flows
-      - IntentVerifier
       - Mail
       - Passkeys
       - Throttle

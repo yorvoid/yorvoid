@@ -166,7 +166,7 @@ test('signs operations at the signing origin, with passkeys of its own', async (
   await expect(page.getByTestId('signed')).toHaveText('Ran acme.site.remove: site="jane"');
 });
 
-test('pages fit a 320 px phone', async ({ page }) => {
+test('pages fit a 320 px phone', { tag: '@any-browser' }, async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
 
   for (const flow of ['yorvoid.sign_in', 'yorvoid.setup', 'yorvoid.recover_with_code']) {

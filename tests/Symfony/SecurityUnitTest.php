@@ -63,6 +63,25 @@ final class SecurityUnitTest extends TestCase
         $current->hold(Secret::fromString('token'));
     }
 
+    public function testADeviceIsWhatTheBrowserSaysOfItselfAsMuchAsFits(): void
+    {
+        $request = static function (?string $agent): Request {
+            $request = Request::create('/');
+            $request->headers->remove('User-Agent');
+
+            if (null !== $agent) {
+                $request->headers->set('User-Agent', $agent);
+            }
+
+            return $request;
+        };
+
+        self::assertSame('Firefox on Linux', Json::device($request('Firefox on Linux')));
+        self::assertSame(str_repeat('é', 255), Json::device($request(str_repeat('é', 300))), 'Cut at 255 characters, not bytes.');
+        self::assertNull(Json::device($request('')));
+        self::assertNull(Json::device($request(null)));
+    }
+
     public function testSymfonysDumperShowsSecretsRedacted(): void
     {
         $this->service(Sessions::class);

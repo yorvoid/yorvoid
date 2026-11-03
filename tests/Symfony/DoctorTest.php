@@ -145,6 +145,13 @@ final class DoctorTest extends TestCase
             }
         }
 
+        try {
+            new TestKernel($this->directory.'/mailer', mailer: false)->boot();
+            self::fail('Notifications started without a mailer.');
+        } catch (InvalidConfigurationException $exception) {
+            self::assertStringStartsWith('yorvoid.notifications: security notifications are on, and there\'s no Symfony Mailer to send them with.', $exception->getMessage());
+        }
+
         new TestKernel($this->directory.'/fine', ['flows' => ['script' => 'https://example.com/forms.js']])->boot();
         new TestKernel($this->directory.'/port', ['passkeys' => ['origins' => ['https://example.com', 'https://app.example.com:8443']] + $passkeys, 'flows' => ['script' => 'https://app.example.com:8443/forms.js']])->boot();
         $this->addToAssertionCount(2);
@@ -174,7 +181,9 @@ final class DoctorTest extends TestCase
         self::assertStringContainsString('Problem: The application\'s clock is a MockClock outside development', $display);
         self::assertStringContainsString('Problem: Notifications go to a transport that drops them', $display);
         self::assertStringContainsString('Warning: The session cookie is "Secure" only when the request looks like HTTPS', $display);
-        self::assertStringContainsString('2 problems, 2 warnings.', $display);
+        // This repository has YorvoID's test helpers installed, as a development checkout does.
+        self::assertStringContainsString('Problem: yorvoid/testing is installed outside development', $display);
+        self::assertStringContainsString('4 problems, 2 warnings.', $display);
     }
 
     public function testWarnsWhenSuspectedCopiesSignIn(): void

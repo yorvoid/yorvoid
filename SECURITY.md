@@ -29,7 +29,7 @@ Please give us a reasonable chance to fix the issue before you disclose it publi
 
 ## Supported versions
 
-YorvoID is in early development and hasn't had a release yet. Until 1.0, security fixes go only into the latest code on the `main` branch.
+Until 1.0, the latest 0.x release receives security fixes, as a patch release (e.g. 0.1.1 after 0.1.0), and so does `main`. Earlier 0.x releases don't: upgrade to the latest.
 
 After 1.0, the latest minor version receives security fixes, and the previous minor receives them for six months after its successor is released.
 

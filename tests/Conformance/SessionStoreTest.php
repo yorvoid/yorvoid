@@ -238,6 +238,8 @@ final class SessionStoreTest extends DatabaseTestCase
         foreach (self::platforms() as $name => [$platform]) {
             yield $name.', not a list' => [$platform, '"passkey"'];
             yield $name.', a factor that isn\'t an object' => [$platform, '[5]'];
+            yield $name.', a method that isn\'t text' => [$platform, '[{"method": 1, "at": "2026-10-27T18:40:00+00:00", "multi_factor": true, "phishing_resistant": true, "operation": null}]'];
+            yield $name.', a time that isn\'t text' => [$platform, '[{"method": "passkey", "at": 1793731200, "multi_factor": true, "phishing_resistant": true, "operation": null}]'];
             yield $name.', no method' => [$platform, '[{"at": "2026-10-27T18:40:00+00:00", "multi_factor": true, "phishing_resistant": true}]'];
             yield $name.', no time' => [$platform, '[{"method": "passkey", "multi_factor": true, "phishing_resistant": true}]'];
             yield $name.', no strength' => [$platform, '[{"method": "passkey", "at": "2026-10-27T18:40:00+00:00", "phishing_resistant": true}]'];

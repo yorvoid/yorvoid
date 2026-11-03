@@ -27,6 +27,7 @@
     "require": {
         "php": ">=8.5",
         "ext-mbstring": "*",
+        "ext-sodium": "*",
         "doctrine/dbal": "^4.3",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
@@ -42,6 +43,5 @@
         "branch-alias": {
             "dev-main": "0.1.x-dev"
         }
-    },
-    "minimum-stability": "stable"
+    }
 }

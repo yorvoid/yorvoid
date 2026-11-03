@@ -17,9 +17,13 @@ Everything marked `@api` in the code: classes, interfaces, methods, constants, a
 - Security fixes. When the only way to close a vulnerability is a breaking change, it ships in a patch release, and the advisory explains what to do.
 - Database tables. Use YorvoID's services, not its tables: migrations change them as needed, always without downtime.
 
+## Versions
+
+All of YorvoID's packages, Composer and npm, are released together with the same version: `yorvoid/core` 0.2.0 goes with `yorvoid/passkeys` 0.2.0 and `@yorvoid/browser` 0.2.0. Require the same version of each. Every release is listed in the [changelog](https://github.com/yorvoid/yorvoid/blob/main/CHANGELOG.md).
+
 ## Before 1.0
 
-Until 1.0, minor releases (0.x) may break covered code. Each such change is listed in the release notes with what to do.
+Until 1.0, minor releases (0.x) may break covered code. Each such change is listed in the changelog with what to do. Security fixes come as patch releases of the latest 0.x ([security policy](https://github.com/yorvoid/yorvoid/blob/main/SECURITY.md)).
 
 ## Long-term support
 

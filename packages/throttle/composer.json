@@ -25,6 +25,7 @@
     },
     "require": {
         "php": ">=8.5",
+        "ext-filter": "*",
         "doctrine/dbal": "^4.3",
         "psr/clock": "^1.0",
         "symfony/clock": "^8.1",
@@ -39,6 +40,5 @@
         "branch-alias": {
             "dev-main": "0.1.x-dev"
         }
-    },
-    "minimum-stability": "stable"
+    }
 }

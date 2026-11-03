@@ -1,8 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Chromium only: it's the browser whose virtual authenticator Playwright can drive. One test at a
- * time, against one database the tests reset.
+ * Chromium for every test: it's the browser whose virtual authenticator Playwright can drive. Firefox
+ * for the tests that need no authenticator, tagged @any-browser: the pages, their forms and scripts. One
+ * test at a time, against one database the tests reset.
  */
 export default defineConfig({
   testDir: 'tests',
@@ -12,8 +13,11 @@ export default defineConfig({
   reporter: [['list']],
   outputDir: '../var/e2e/results',
   use: {
-    ...devices['Desktop Chrome'],
     baseURL: 'http://localhost:8000',
     trace: 'retain-on-failure',
   },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, grep: /@any-browser/ },
+  ],
 });

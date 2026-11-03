@@ -20,6 +20,7 @@ use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
 use YorvoID\Symfony\Doctor\ProxiesCheck;
+use YorvoID\Symfony\Doctor\TestHelpersCheck;
 use YorvoID\Symfony\Migrations;
 use YorvoID\Symfony\Presets;
 use YorvoID\Tests\Support\DatabaseTestCase;
@@ -108,6 +109,17 @@ final class DoctorChecksTest extends DatabaseTestCase
         foreach ([null, '', '10.0.0.0/8,192.0.2.0/24', 'REMOTE_ADDR', ['10.0.0.0/8', 'private_ranges'], '0.0.0.0/1', [5, null]] as $trusted) {
             self::assertSame([], $check($trusted), (string) json_encode($trusted));
         }
+    }
+
+    public function testTestHelpersAreAProblemOutsideDevelopment(): void
+    {
+        self::assertSame([], iterator_to_array(new TestHelpersCheck(true)->findings(), false));
+        $findings = iterator_to_array(new TestHelpersCheck(false)->findings(), false);
+
+        // This repository has both installed.
+        self::assertSame(['yorvoid/testing is installed outside development', 'yorvoid/virtual-authenticator is installed outside development'], array_map(static fn (Finding $finding): string => (string) strstr($finding->what, ':', true), $findings));
+        self::assertTrue($findings[0]->problem && $findings[1]->problem);
+        self::assertSame('Install it with composer require --dev yorvoid/testing, and deploy with composer install --no-dev.', $findings[0]->fix);
     }
 
     public function testNotificationsNeedAnAddressAndATransportThatDelivers(): void

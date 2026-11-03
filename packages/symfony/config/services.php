@@ -87,6 +87,7 @@ use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
 use YorvoID\Symfony\Doctor\ProxiesCheck;
 use YorvoID\Symfony\Doctor\TemplatesCheck;
+use YorvoID\Symfony\Doctor\TestHelpersCheck;
 use YorvoID\Symfony\Factories;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Flow\SessionFlowStore;
@@ -244,6 +245,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(ProxiesCheck::class)->args([service('parameter_bag')])->tag('yorvoid.doctor_check', ['name' => 'Proxies']);
     $services->set(MailerCheck::class)->args([param('yorvoid.notifications.enabled'), param('yorvoid.notifications.from'), null, param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Mailer']);
     $services->set(TemplatesCheck::class)->tag('yorvoid.doctor_check', ['name' => 'Flow pages']);
+    $services->set(TestHelpersCheck::class)->args([param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Test helpers']);
     $services->set(KeysRotateCommand::class)->arg('$file', param('yorvoid.keys.file'))->tag('console.command');
     $services->set(DoctorCommand::class)->args([tagged_locator('yorvoid.doctor_check', 'name')])->tag('console.command');
 

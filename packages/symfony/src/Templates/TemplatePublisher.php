@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony\Templates;
 
-use SebastianBergmann\Diff\Differ;
-use SebastianBergmann\Diff\Output\StrictUnifiedDiffOutputBuilder;
 use YorvoID\Core\Exception\IntegratorError;
 
 /**
@@ -93,7 +91,7 @@ final readonly class TemplatePublisher
      */
     public function changes(string $template): string
     {
-        return new Differ(new StrictUnifiedDiffOutputBuilder(['fromFile' => 'published', 'toFile' => 'YorvoID\'s now']))->diff($this->read($this->base($template)) ?? '', $this->read($this->sourceFile($template)) ?? '');
+        return UnifiedDiff::of($this->read($this->base($template)) ?? '', $this->read($this->sourceFile($template)) ?? '', 'published', 'YorvoID\'s now');
     }
 
     /**

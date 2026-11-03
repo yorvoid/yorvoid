@@ -61,10 +61,12 @@ jobs:
         run: docker compose exec -T php composer phpstan
       - name: Check the architecture's layers
         run: docker compose exec -T php composer deptrac
+      - name: Check that each package requires what it uses
+        run: docker compose exec -T php composer dependencies
       - name: Fuzzing
-        # passkey-responses is skipped here for now; it runs locally. Each night, ten times as long.
+        # passkey-responses is skipped here for now; it runs locally. On main and each night, ten times as long.
         env:
-          RUNS: ${{ github.event_name == 'schedule' && '200000' || '20000' }}
+          RUNS: ${{ github.event_name != 'pull_request' && '200000' || '20000' }}
         run: docker compose exec -T -e FUZZ_SKIP=passkey-responses php composer fuzz -- "$RUNS"
       - name: Check the ASVS mapping against OWASP's list
         run: docker compose exec -T php php assurance/check-asvs.php
@@ -107,7 +109,10 @@ jobs:
       - name: Install dependencies
         run: docker compose exec -T php composer install --no-interaction --no-progress
       - name: Run the tests
-        run: docker compose exec -T php composer test
+        # With PHP's coverage once, on the newest PostgreSQL: the summary is in the job's log.
+        env:
+          COVERAGE: ${{ matrix.postgres == '18' && '--coverage-text --only-summary-for-coverage-text' || '' }}
+        run: docker compose exec -T php composer test -- $COVERAGE
       - name: Show logs on failure
         if: failure()
         run: docker compose logs

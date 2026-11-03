@@ -24,13 +24,17 @@
             "ignore": [
                 // Equivalent: PHP closes the file, and so releases its lock, as soon as an exception
                 // leaves the function, finally or not.
-                "YorvoID\\IntentVerifier\\Storage\\LockedFile::run"
+                "YorvoID\\IntentVerifier\\Storage\\LockedFile::run",
+                // Equivalent: the finally only wipes the expanded private key (see FunctionCallRemoval).
+                "YorvoID\\Core\\Key\\SigningKey::sign"
             ]
         },
         "FunctionCallRemoval": {
             "ignoreSourceCodeByRegex": [
                 // Equivalent: the pause between attempts to take the migrations' lock only saves CPU.
-                ".*usleep\\(100_000\\).*"
+                ".*usleep\\(100_000\\).*",
+                // Equivalent: wiping the expanded private key from memory after signing can't be observed by a test.
+                ".*sodium_memzero\\(\\$secretKey\\);.*"
             ]
         },
         "DecrementInteger": {
