@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Intent;
 
+use Symfony\Component\Translation\TranslatorBagInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\IntentVerifier\Intent;
@@ -58,12 +59,46 @@ final readonly class IntentSummaries
 
         $domain = str_starts_with($intent->action, 'yorvoid.') ? Translations::DOMAIN : $this->domain;
         // The same text as the parameters the page lists, so the sentence and the list can't differ.
-        $summary = $this->translator->trans($intent->action, $parameters, $domain, $locale);
+        $summary = $this->format($intent->action, $parameters, $domain, $locale);
 
         if ($summary === $intent->action) {
             throw new IntegratorError(\sprintf('The operation %s has no summary in the "%s" translations.', $intent->action, $domain), \sprintf('Add the message "%s", saying what it does in words, e.g. "Remove the site {site}".', $intent->action), 'concepts/signed-intents.md#summaries');
         }
 
+        // A brace that isn't in a value is a placeholder that wasn't filled in.
+        if (str_contains(str_replace($parameters, '', $summary), '{')) {
+            throw new IntegratorError(\sprintf('The summary of %s has a placeholder that wasn\'t filled in: "%s".', $intent->action, $summary), 'Write summaries in ICU MessageFormat, in a catalogue whose name says so, e.g. translations/messages+intl-icu.en.yaml.', 'concepts/signed-intents.md#summaries');
+        }
+
         return new IntentSummary($summary, $parameters, $intent->expiresAt);
+    }
+
+    /**
+     * The message in ICU MessageFormat, whichever catalogue it's in: Symfony treats one without "+intl-icu"
+     * in its name as plain text, and would put a parameter's value wherever its name occurs ("Remove the
+     * jane {jane}").
+     *
+     * @param array<string, string> $parameters
+     */
+    private function format(string $id, array $parameters, string $domain, string $locale): string
+    {
+        if (!$this->translator instanceof TranslatorBagInterface) {
+            return $this->translator->trans($id, $parameters, $domain, $locale);
+        }
+
+        // The ID itself when there's no such message: summarize() refuses that.
+        $message = $this->translator->getCatalogue($locale)->get($id, $domain);
+
+        try {
+            $summary = new \MessageFormatter($locale, $message)->format($parameters);
+        } catch (\IntlException) {
+            $summary = false;
+        }
+
+        if (false === $summary) {
+            throw new IntegratorError(\sprintf('The summary of %s isn\'t a message in ICU MessageFormat: "%s".', $id, $message), 'Write it like "Remove the site {site}", with each parameter\'s name in braces.', 'concepts/signed-intents.md#summaries');
+        }
+
+        return $summary;
     }
 }
