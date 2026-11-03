@@ -23,7 +23,9 @@ final class PasskeyPolicyTest extends TestCase
         self::assertSame(ClonePolicy::RefuseSignIn, $policy->clonePolicy);
         self::assertEquals(Duration::minutes(5), $policy->timeout);
         self::assertSame(300000, $policy->timeoutMilliseconds);
-        self::assertSame(1000, new PasskeyPolicy('localhost', ['http://localhost:8000'], timeout: Duration::seconds(1))->timeoutMilliseconds, 'Plain HTTP only on localhost, for development.');
+        self::assertSame(30000, new PasskeyPolicy('localhost', ['http://localhost:8000'], timeout: Duration::seconds(30))->timeoutMilliseconds, 'Plain HTTP only on localhost, for development.');
+        self::assertSame(600000, new PasskeyPolicy('example.com', ['https://example.com'], timeout: Duration::minutes(10))->timeoutMilliseconds);
+        self::assertSame('1password.com', new PasskeyPolicy('1password.com', ['https://1password.com'])->relyingPartyId, 'A domain that begins with a number isn\'t an address.');
     }
 
     /**
@@ -36,6 +38,8 @@ final class PasskeyPolicyTest extends TestCase
         yield 'an ID with a port' => ['example.com:443', ['https://example.com'], 'isn\'t a domain'];
         yield 'an empty ID' => ['', ['https://example.com'], 'isn\'t a domain'];
         yield 'an ID with a trailing newline' => ["example.com\n", ['https://example.com'], 'isn\'t a domain'];
+        yield 'an IPv4 address as the ID' => ['127.0.0.1', ['https://127.0.0.1'], 'isn\'t a domain'];
+        yield 'a number as the ID' => ['2130706433', ['https://2130706433'], 'isn\'t a domain'];
         yield 'no origins' => ['example.com', [], 'No origins'];
         yield 'plain HTTP' => ['example.com', ['http://example.com'], 'can\'t use passkeys'];
         yield 'another domain' => ['example.com', ['https://example.org'], 'can\'t use passkeys'];
@@ -57,6 +61,18 @@ final class PasskeyPolicyTest extends TestCase
         $this->expectExceptionMessage($message);
 
         new PasskeyPolicy($id, $origins);
+    }
+
+    public function testCeremoniesTakeFromThirtySecondsToTenMinutes(): void
+    {
+        foreach ([Duration::seconds(29), Duration::seconds(601), Duration::days(365)] as $timeout) {
+            try {
+                new PasskeyPolicy('example.com', ['https://example.com'], timeout: $timeout);
+                self::fail(\sprintf('A ceremony may take %d seconds.', $timeout->seconds));
+            } catch (IntegratorError $error) {
+                self::assertStringContainsString('can\'t take', $error->getMessage());
+            }
+        }
     }
 
     public function testRefusalsDontTellAGuesserWhichPasskeysExist(): void

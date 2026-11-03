@@ -57,7 +57,10 @@ final class CanonicalJsonTest extends TestCase
         yield 'too large an integer' => [CanonicalJson::MAX_INTEGER + 1, 'The integer 9007199254740992 is beyond what JSON parsers read exactly; pass it as a string.'];
         yield 'too small an integer' => [-CanonicalJson::MAX_INTEGER - 1, 'The integer -9007199254740992 is beyond what JSON parsers read exactly; pass it as a string.'];
         yield 'not UTF-8' => ["\xc3\x28", 'A string isn\'t UTF-8.'];
-        yield 'a name not UTF-8' => [["\xc3\x28" => 1], 'A string isn\'t UTF-8.'];
+        yield 'a name not UTF-8' => [["\xc3\x28" => 1], 'A member\'s name isn\'t UTF-8.'];
+        // One that would sort as "site?", and overwrite it, if names were sorted before they're checked.
+        yield 'a name not UTF-8 beside its look-alike' => [["site\xff" => 'all-sites', 'site?' => 'jane'], 'A member\'s name isn\'t UTF-8.'];
+        yield 'its look-alike first' => [['site?' => 'jane', "site\xff" => 'all-sites'], 'A member\'s name isn\'t UTF-8.'];
         yield 'an object of a class' => [new \ArrayObject(), 'A ArrayObject can\'t be part of an intent'];
     }
 

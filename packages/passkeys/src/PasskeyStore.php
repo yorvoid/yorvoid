@@ -28,9 +28,14 @@ interface PasskeyStore
     public function of(Realm $realm, PrincipalId $principalId): array;
 
     /**
-     * Records what the authenticator reported at a sign-in: its counter and backup state.
+     * Records what the authenticator reported at a sign-in: its counter, whether it's backed up, and
+     * whether user verification is set up; backup eligibility stays the registration's. Only over a
+     * lower counter, or when the counter is 0 (synced passkeys keep none), in one step: of two sign-ins
+     * with the same counter at the same time, one is recorded.
+     *
+     * @return bool Whether it was recorded
      */
-    public function update(Passkey $passkey): void;
+    public function update(Passkey $passkey): bool;
 
     public function remove(Realm $realm, CredentialId $credentialId): void;
 }

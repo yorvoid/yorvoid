@@ -179,7 +179,7 @@ final class SigningPagesTest extends TestCase
         self::assertSame(404, $this->pages->handle('GET', '/intents/not/a/nonce')->status);
         $empty = $this->pages->handle('POST', '/keys/add', ['label' => ' ']);
         self::assertSame(400, $empty->status);
-        self::assertSame('A key\'s label has 1 to 64 characters.', self::document($empty)->querySelector('[data-message]')?->textContent);
+        self::assertSame('A key\'s label has 1 to 64 characters, all of them visible.', self::document($empty)->querySelector('[data-message]')?->textContent);
         self::assertNull(self::document($empty)->querySelector('main a'), 'A mistake in the form offered the keys.');
         $unknown = $this->pages->handle('POST', '/keys/registrations/unknown', ['response' => '{}']);
         self::assertSame(422, $unknown->status);
@@ -279,6 +279,7 @@ final class SigningPagesTest extends TestCase
             'invalid_registration' => 'This request has expired, or was used already. Start again.',
             'unknown_key_change' => 'The signature didn\'t work. Start again.',
             'invalid_bootstrap_secret' => 'That bootstrap secret doesn\'t work: it\'s wrong, used, or expired.',
+            'too_many_waiting' => 'Too many requests wait to be signed. Try again in a few minutes.',
         ], $words);
     }
 

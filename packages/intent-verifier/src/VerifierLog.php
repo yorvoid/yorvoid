@@ -17,4 +17,12 @@ interface VerifierLog
      * @param array<string, mixed> $details No secrets: actions, nonces, key IDs, reasons
      */
     public function record(string $event, array $details, \DateTimeImmutable $at): void;
+
+    /**
+     * Whether an entry recorded at or after $since used the nonce: any entry with it but its "prepared"
+     * one. The verifier asks before it takes an intent, so a state restored from an older copy can't have
+     * an intent signed twice: the log goes on where the state went back. Entries before $since needn't
+     * be read.
+     */
+    public function usedNonce(string $nonce, \DateTimeImmutable $since): bool;
 }

@@ -7,7 +7,8 @@ namespace YorvoID\VirtualAuthenticator;
 /**
  * A software authenticator for tests: it answers WebAuthn options as a browser with a real authenticator
  * would (ES256 keys from OpenSSL or EdDSA from libsodium, CBOR, "none" attestation), and can be told to
- * misbehave: skip user verification, report a counter, answer for another origin or challenge. It works
+ * misbehave: skip user verification, report a counter, answer for another origin or challenge, say other
+ * things in the client data. It works
  * with any WebAuthn server, not only YorvoID.
  *
  * For end-to-end tests in real browsers, use the browser's own virtual authenticator (CDP).
@@ -33,9 +34,11 @@ final class VirtualAuthenticator
     /**
      * Creates a passkey for navigator.credentials.create()'s options, and answers.
      *
+     * @param array<string, mixed> $clientData What to say in the client data besides, or instead of, what a browser would, e.g. ["crossOrigin" => true]
+     *
      * @return string The PublicKeyCredential, as JSON
      */
-    public function register(string $options, bool $userVerified = true, ?string $origin = null, ?string $credentialId = null): string
+    public function register(string $options, bool $userVerified = true, ?string $origin = null, ?string $credentialId = null, array $clientData = []): string
     {
         $options = self::json($options);
         $rp = $options['rp'];
@@ -60,7 +63,7 @@ final class VirtualAuthenticator
 
         $this->credentials[] = ['id' => $id, 'key' => $key, 'publicKey' => $publicKey, 'userHandle' => self::decode($user['id']), 'counter' => 0];
         $authData = hash('sha256', $rp['id'], true).\chr(0x41 | ($userVerified ? 0x04 : 0) | ($this->synced ? 0x18 : 0)).pack('N', 0).str_repeat("\0", 16).pack('n', \strlen($id)).$id.$publicKey;
-        $clientData = json_encode(['type' => 'webauthn.create', 'challenge' => $options['challenge'], 'origin' => $origin ?? $this->origin, 'crossOrigin' => false], \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES);
+        $clientData = json_encode([...['type' => 'webauthn.create', 'challenge' => $options['challenge'], 'origin' => $origin ?? $this->origin, 'crossOrigin' => false], ...$clientData], \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES);
 
         return self::credential($id, [
             'clientDataJSON' => self::encode($clientData),
@@ -72,12 +75,13 @@ final class VirtualAuthenticator
     /**
      * Signs in with one of its passkeys for navigator.credentials.get()'s options, and answers.
      *
-     * @param int|null    $counter    What to report as the signature counter; one more than last time if not given
-     * @param string|null $userHandle Whose passkey to claim it is, raw bytes; the one it was made for if not given
+     * @param int|null             $counter    What to report as the signature counter; one more than last time if not given
+     * @param string|null          $userHandle Whose passkey to claim it is, raw bytes; the one it was made for if not given
+     * @param array<string, mixed> $clientData What to say in the client data besides, or instead of, what a browser would, e.g. ["type" => "webauthn.create"]
      *
      * @return string The PublicKeyCredential, as JSON
      */
-    public function signIn(string $options, int $credential = 0, bool $userVerified = true, ?int $counter = null, ?string $origin = null, ?string $challenge = null, ?string $rpId = null, ?string $userHandle = null): string
+    public function signIn(string $options, int $credential = 0, bool $userVerified = true, ?int $counter = null, ?string $origin = null, ?string $challenge = null, ?string $rpId = null, ?string $userHandle = null, array $clientData = []): string
     {
         $options = self::json($options);
         \assert(\is_string($options['rpId']) && \is_string($options['challenge']));
@@ -86,7 +90,7 @@ final class VirtualAuthenticator
         $this->credentials[$credential]['counter'] = $counter;
 
         $authData = hash('sha256', $rpId ?? $options['rpId'], true).\chr(0x01 | ($userVerified ? 0x04 : 0) | ($this->synced ? 0x18 : 0)).pack('N', $counter);
-        $clientData = json_encode(['type' => 'webauthn.get', 'challenge' => $challenge ?? $options['challenge'], 'origin' => $origin ?? $this->origin, 'crossOrigin' => false], \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES);
+        $clientData = json_encode([...['type' => 'webauthn.get', 'challenge' => $challenge ?? $options['challenge'], 'origin' => $origin ?? $this->origin, 'crossOrigin' => false], ...$clientData], \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES);
         $signed = $authData.hash('sha256', $clientData, true);
 
         if (\is_string($passkey['key']) && '' !== $passkey['key']) {

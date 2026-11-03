@@ -17,6 +17,7 @@ use YorvoID\IntentVerifier\OperationPolicy;
 use YorvoID\IntentVerifier\ParameterType;
 use YorvoID\IntentVerifier\PreparedIntent;
 use YorvoID\IntentVerifier\Refusal;
+use YorvoID\IntentVerifier\Storage\FileVerifierLog;
 use YorvoID\IntentVerifier\Storage\FileVerifierStore;
 use YorvoID\IntentVerifier\Storage\InMemoryVerifierLog;
 use YorvoID\IntentVerifier\Storage\InMemoryVerifierStore;
@@ -155,7 +156,8 @@ final class VerifierTest extends TestCase
         $this->refused(Refusal::UnknownIntent, fn () => $verifier->verify($prepared->intent->nonce, $this->owner->signIn($prepared->options)), 'A signature worked twice.');
         $this->refused(Refusal::UnknownIntent, fn () => $verifier->verify('never-prepared', $this->owner->signIn($prepared->options)));
         $entry = $this->log->entries[\count($this->log->entries) - 1];
-        self::assertSame(['refused', ['nonce' => 'never-prepared', 'reason' => 'unknown_intent']], [$entry['event'], $entry['details']]);
+        // Not a nonce the verifier made: recorded by a short hash.
+        self::assertSame(['refused', ['nonce_hash' => substr(hash('sha256', 'never-prepared'), 0, 16), 'reason' => 'unknown_intent']], [$entry['event'], $entry['details']]);
     }
 
     /**
@@ -281,10 +283,16 @@ final class VerifierTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Refusal, array{userVerified?: bool, counter?: int, origin?: string, challenge?: string, rpId?: string}}>
+     * @return iterable<string, array{Refusal, array{userVerified?: bool, counter?: int, origin?: string, challenge?: string, rpId?: string, clientData?: array<string, mixed>}}>
      */
     public static function badSignatures(): iterable
     {
+        yield 'a registration\'s type' => [Refusal::InvalidSignature, ['clientData' => ['type' => 'webauthn.create']]];
+        yield 'a frame on another site' => [Refusal::InvalidSignature, ['clientData' => ['crossOrigin' => true]]];
+        yield 'a frame naming its site' => [Refusal::InvalidSignature, ['clientData' => ['crossOrigin' => true, 'topOrigin' => 'https://evil.example']]];
+        yield 'the origin with the default port' => [Refusal::InvalidSignature, ['origin' => 'https://sign.acme.example:443']];
+        yield 'the origin with a path' => [Refusal::InvalidSignature, ['origin' => 'https://sign.acme.example/sign']];
+        yield 'the origin with userinfo' => [Refusal::InvalidSignature, ['origin' => 'https://ana@sign.acme.example']];
         yield 'another site' => [Refusal::InvalidSignature, ['origin' => 'https://evil.example']];
         yield 'an origin of the site the verifier doesn\'t list' => [Refusal::InvalidSignature, ['origin' => 'https://other.sign.acme.example']];
         yield 'another relying party' => [Refusal::InvalidSignature, ['rpId' => 'evil.example']];
@@ -294,19 +302,117 @@ final class VerifierTest extends TestCase
     }
 
     /**
-     * @param array{userVerified?: bool, counter?: int, origin?: string, challenge?: string, rpId?: string} $tampering
+     * @param array{userVerified?: bool, counter?: int, origin?: string, challenge?: string, rpId?: string, clientData?: array<string, mixed>} $tampering
      */
     #[DataProvider('badSignatures')]
     public function testRefusesSignaturesThatArentTheIntents(Refusal $refusal, array $tampering): void
     {
         $verifier = $this->bootstrapped('memory');
         $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
-        $answer = $this->owner->signIn($prepared->options, 0, $tampering['userVerified'] ?? true, $tampering['counter'] ?? null, $tampering['origin'] ?? null, $tampering['challenge'] ?? null, $tampering['rpId'] ?? null);
+        $answer = $this->owner->signIn($prepared->options, 0, $tampering['userVerified'] ?? true, $tampering['counter'] ?? null, $tampering['origin'] ?? null, $tampering['challenge'] ?? null, $tampering['rpId'] ?? null, clientData: $tampering['clientData'] ?? []);
 
         $this->refused($refusal, static fn () => $verifier->verify($prepared->intent->nonce, $answer));
 
         $entry = $this->log->entries[\count($this->log->entries) - 1];
         self::assertSame(['refused', ['action' => 'acme.site.remove', 'nonce' => $prepared->intent->nonce, 'reason' => $refusal->value]], [$entry['event'], $entry['details']]);
+    }
+
+    public function testRefusesARegistrationOfAnotherKindOrFromAFrame(): void
+    {
+        $verifier = $this->verifier('memory');
+
+        foreach ([['type' => 'webauthn.get'], ['crossOrigin' => true], ['topOrigin' => 'https://evil.example']] as $clientData) {
+            $registration = $verifier->prepareRegistration('Passkey', true);
+            $this->refused(Refusal::InvalidRegistration, fn () => $verifier->finishRegistration($registration->id, $this->owner->register($registration->options, clientData: $clientData)));
+        }
+    }
+
+    #[DataProvider('stores')]
+    public function testANonceItDidntMakeIsRecordedByAShortHash(string $store): void
+    {
+        $verifier = $this->bootstrapped($store);
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $answer = $this->owner->signIn($prepared->options);
+
+        foreach (["\xff\xfe", str_repeat('n', 1 << 20), $prepared->intent->nonce.'x', '', substr($prepared->intent->nonce, 1)] as $nonce) {
+            $this->refused(Refusal::UnknownIntent, static fn () => $verifier->verify($nonce, $answer));
+            $entry = $this->log->entries[\count($this->log->entries) - 1];
+            self::assertSame(['refused', ['nonce_hash' => substr(hash('sha256', $nonce), 0, 16), 'reason' => 'unknown_intent']], [$entry['event'], $entry['details']]);
+        }
+
+        self::assertEquals($prepared->intent, $verifier->verify($prepared->intent->nonce, $answer)->intent, 'A nonce it didn\'t make used up one it did.');
+    }
+
+    public function testAnOriginConfiguredWithAFinalSlashIsTheBrowsersOrigin(): void
+    {
+        $this->verifier('memory');
+        $verifier = new Verifier(new VerifierConfig('acme-verifier:host-1', 'sign.acme.example', ['https://sign.acme.example/'], ['https://acme.example']), self::policy(), $this->store, $this->log, $this->notifier, $this->clock);
+        $secret = $verifier->createBootstrapSecret();
+        [$prepared] = $this->registered($verifier, $this->owner, 'Passkey', true);
+
+        self::assertSame(KeyChange::ADD, $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options))->kind);
+    }
+
+    public function testAtMostSoManyIntentsWait(): void
+    {
+        $verifier = $this->verifier('memory');
+
+        for ($i = 0; $i < Verifier::MAX_WAITING - 1; ++$i) {
+            $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        }
+
+        $verifier->prepareRegistration('Passkey');
+        $this->refused(Refusal::TooManyWaiting, static fn () => $verifier->prepare('acme.site.remove', ['site' => 'jane']));
+        $this->refused(Refusal::TooManyWaiting, static fn () => $verifier->prepareRegistration('Passkey'));
+        self::assertSame(['refused', ['reason' => 'too_many_waiting']], [$this->log->entries[\count($this->log->entries) - 1]['event'], $this->log->entries[\count($this->log->entries) - 1]['details']]);
+
+        // Those that expired make room.
+        $this->clock->sleep(300);
+        $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        self::assertSame(0, $verifier->purge(), 'The expired ones were kept.');
+    }
+
+    public function testParametersAreWhatAPersonCanSee(): void
+    {
+        $verifier = $this->verifier('memory');
+
+        foreach (["jane\u{202E}", "ja\u{200B}ne", "jane\0", "jane\n", "jane\u{2028}", "\u{E000}", "jane\u{FEFF}", "\u{0378}"] as $site) {
+            try {
+                $verifier->prepare('acme.site.remove', ['site' => $site]);
+                self::fail(\sprintf('The parameter %s was taken.', json_encode($site)));
+            } catch (ConfigurationError $exception) {
+                self::assertStringContainsString('The parameters aren\'t those of acme.site.remove', $exception->getMessage());
+            }
+        }
+
+        self::assertSame('Jané ジェーン 🌍', $verifier->prepare('acme.site.remove', ['site' => 'Jané ジェーン 🌍'])->intent->parameters['site']);
+        $this->expectException(ConfigurationError::class);
+        $verifier->prepareRegistration("Ana\u{202E}yeKibuY");
+    }
+
+    /**
+     * A state file restored from a copy made before an intent was signed has the intent waiting again:
+     * the log, which went on, has its nonce used (INTENTS-07).
+     */
+    public function testARestoredStateFileDoesntHaveAnIntentSignedTwice(): void
+    {
+        $this->clock = new MockClock('2026-10-28 18:00:00 UTC');
+        $this->owner = new VirtualAuthenticator('https://sign.acme.example');
+        $this->files[] = $state = \sprintf('%s/yorvoid-verifier-%s.json', sys_get_temp_dir(), bin2hex(random_bytes(6)));
+        $this->files[] = $logged = $state.'.log';
+        $verifier = new Verifier(self::config(86400), self::policy(), new FileVerifierStore($state), new FileVerifierLog($logged), new CollectingNotifier(), $this->clock);
+        $secret = $verifier->createBootstrapSecret();
+        $registration = $verifier->prepareRegistration('Passkey', true);
+        $prepared = $verifier->finishRegistration($registration->id, $this->owner->register($registration->options));
+        $verifier->bootstrap($secret, $prepared->intent->nonce, $this->owner->signIn($prepared->options));
+
+        $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
+        $copy = (string) file_get_contents($state);
+        $answer = $this->owner->signIn($prepared->options);
+        $verifier->verify($prepared->intent->nonce, $answer);
+
+        file_put_contents($state, $copy);
+        $this->refused(Refusal::UnknownIntent, static fn () => $verifier->verify($prepared->intent->nonce, $answer), 'A restored state had an intent signed twice.');
     }
 
     public function testRefusesWhatIsntASignatureByItsKeys(): void
@@ -428,7 +534,7 @@ final class VerifierTest extends TestCase
                 $verifier->prepareRegistration($label);
                 self::fail('A key was given the label "'.$label.'".');
             } catch (ConfigurationError $exception) {
-                self::assertSame('A key\'s label has 1 to 64 characters.', $exception->getMessage());
+                self::assertSame('A key\'s label has 1 to 64 characters, all of them visible.', $exception->getMessage());
             }
         }
     }

@@ -40,4 +40,7 @@ enum Refusal: string
 
     /** The bootstrap secret is wrong, used, or there's none */
     case InvalidBootstrapSecret = 'invalid_bootstrap_secret';
+
+    /** Verifier::MAX_WAITING intents and registrations wait to be signed already */
+    case TooManyWaiting = 'too_many_waiting';
 }

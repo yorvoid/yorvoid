@@ -85,13 +85,12 @@ final readonly class DbalPasskeyStore implements PasskeyStore
         return $passkeys;
     }
 
-    public function update(Passkey $passkey): void
+    public function update(Passkey $passkey): bool
     {
-        $this->database->connection->update(
-            $this->database->table(self::TABLE),
-            ['sign_count' => $passkey->signCount, 'backup_eligible' => $passkey->backupEligible, 'backed_up' => $passkey->backedUp, 'user_verification_initialized' => $passkey->userVerificationInitialized],
-            ['realm' => $passkey->realm->name, 'credential_id' => $passkey->credentialId->uuid->toRfc4122()],
-            ['backup_eligible' => ParameterType::BOOLEAN, 'backed_up' => ParameterType::BOOLEAN, 'user_verification_initialized' => ParameterType::BOOLEAN],
+        return 1 === $this->database->connection->executeStatement(
+            \sprintf('UPDATE %s SET sign_count = ?, backed_up = ?, user_verification_initialized = ? WHERE realm = ? AND credential_id = ? AND (sign_count < ? OR 0 = ?)', $this->database->table(self::TABLE)),
+            [$passkey->signCount, $passkey->backedUp, $passkey->userVerificationInitialized, $passkey->realm->name, $passkey->credentialId->uuid->toRfc4122(), $passkey->signCount, $passkey->signCount],
+            [ParameterType::INTEGER, ParameterType::BOOLEAN, ParameterType::BOOLEAN, ParameterType::STRING, ParameterType::STRING, ParameterType::INTEGER, ParameterType::INTEGER],
         );
     }
 

@@ -55,8 +55,9 @@ $verifier = new Verifier(
 );
 ```
 
-- **The policy lists every operation** the verifier runs, with its parameters and their types (strings, integers, booleans), and whether it needs a signature. An operation that isn't listed isn't run, and one with other parameters isn't prepared (INT-008).
-- **The state file** holds the keys, the changes to them waiting, the prepared intents and registrations, and the bootstrap secret's hash. Each change holds an exclusive lock, so processes take turns, and it survives restarts: a nonce works once, also across them (INT-009). It must be a regular file, not a link, owned by the verifier's user and readable by no one else (`chmod 600`); otherwise the verifier refuses it. So must the log.
+- **The policy lists every operation** the verifier runs, with its parameters and their types (strings, integers, booleans), and whether it needs a signature. An operation that isn't listed isn't run, and one with other parameters isn't prepared (INT-008). A string holds only what a person can see on the signing page: no control or format characters (zero-width, bidirectional), no private-use or unassigned ones, no line breaks. Key labels are held to the same rule.
+- **The state file** holds the keys, the changes to them waiting, the prepared intents and registrations, and the bootstrap secret's hash. Each change holds an exclusive lock, so processes take turns, and it survives restarts: a nonce works once, also across them (INT-009). It must be a regular file, not a link, owned by the verifier's user and readable by no one else (`chmod 600`); otherwise the verifier refuses it. So must the log. At most 1,000 intents and registrations wait at once (`Verifier::MAX_WAITING`): expired ones make room, and another is refused (`Refusal::TooManyWaiting`).
+- **Restoring the state file from a backup** brings back intents that were signed since. Before it takes an intent, the verifier asks the log whether its nonce was used (`VerifierLog::usedNonce()`), so none is signed twice. Restore the state, never the log: the log must go on from where it was. A log of your own implements `usedNonce()` too.
 - **The log** records what was prepared, registered, verified and refused, and every change to the keys, as JSON lines in a hash chain: `isIntact()` tells whether an entry was changed or reordered (INT-010). Appending reads only its last line, and `isIntact()` a line at a time. `rotate($archive, $now)` moves the entries to an archive and starts the file again, linked to the archive's last entry: rotate it, e.g. monthly, and keep the archives. Someone who can write the file can still rewrite it whole; keep a copy elsewhere if that matters. The console keeps its side in YorvoID's security log.
 
 ## The signing pages
@@ -118,7 +119,8 @@ return new RedirectResponse(SigningPages::url($config, $prepared));
 
 - **The intent** is the operation in canonical form (RFC 8785): action, parameters, audience, nonce, issued-at, expires-at (INT-001). The challenge is its domain-separated SHA-256 hash (INT-002), so one signature means one operation (T-INT-5).
 - **The verifier keeps the intent** it prepared, under its nonce, and the signing page shows it from there: nobody can change the operation after it was prepared.
-- **A nonce works once**, signed or not: a refused attempt uses it up. Unsigned intents expire after 5 minutes (configurable); `purge()` forgets them.
+- **A nonce works once**, signed or not: a refused attempt uses it up. Unsigned intents expire after 5 minutes (configurable); `purge()` forgets them. A nonce the verifier didn't make (not 24 base64url characters) is refused and logged by a short hash of it, whatever its size.
+- **The answer** must be a `webauthn.get` assertion from a signing origin exactly as configured, byte for byte, and not from a frame: what the WebAuthn library leaves unchecked, the verifier checks itself.
 - **User verification is required**, checked before anything else; the signature, origin, relying party and signature counter are checked by web-auth/webauthn-lib, against the verifier's own keys (INT-004).
 - **The algorithm** of the key that signed is recorded (INT-015).
 - A refusal throws `IntentRefused`, with `$refusal` saying why; the signing page says it in words.

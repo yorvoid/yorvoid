@@ -27,7 +27,7 @@ final readonly class PasskeyPolicy
      *                                      and its subdomains, and can't be used anywhere else. Browsers show it
      *                                      when a passkey is created
      * @param list<string>  $origins        Where the pages that use them are, e.g. ["https://example.com"]
-     * @param Duration|null $timeout        How long a ceremony may take; 5 minutes if not given
+     * @param Duration|null $timeout        How long a ceremony may take, from 30 seconds to 10 minutes; 5 minutes if not given
      */
     public function __construct(
         public string $relyingPartyId,
@@ -36,7 +36,8 @@ final readonly class PasskeyPolicy
         public ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn,
         ?Duration $timeout = null,
     ) {
-        if (1 !== preg_match('/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/D', $relyingPartyId)) {
+        // A domain, and not an IP address: its last label isn't a number.
+        if (1 !== preg_match('/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/D', $relyingPartyId) || 1 === preg_match('/(?:^|\.)[0-9]+$/', $relyingPartyId)) {
             throw new IntegratorError(\sprintf('"%s" isn\'t a domain to use as the relying party ID.', $relyingPartyId), 'Use the site\'s domain in lowercase, without a scheme, port or path, e.g. "example.com".', 'concepts/passkeys.md#configuration');
         }
 
@@ -56,8 +57,12 @@ final readonly class PasskeyPolicy
 
         $this->origins = $origins;
         $this->timeout = $timeout ?? Duration::minutes(5);
-        $milliseconds = $this->timeout->seconds * 1000;
-        \assert($milliseconds > 0);
-        $this->timeoutMilliseconds = $milliseconds;
+
+        // WebAuthn recommends 5 to 10 minutes; a ceremony kept longer is a challenge that waits to be used.
+        if ($this->timeout->seconds < 30 || $this->timeout->seconds > 600) {
+            throw new IntegratorError(\sprintf('Passkey ceremonies can\'t take %d seconds.', $this->timeout->seconds), 'Give them from 30 seconds to 10 minutes; 5 minutes, the default, suits most people.', 'concepts/passkeys.md#configuration');
+        }
+
+        $this->timeoutMilliseconds = $this->timeout->seconds * 1000;
     }
 }

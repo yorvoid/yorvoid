@@ -156,6 +156,13 @@ final class DoctorTest extends TestCase
         self::assertStringContainsString('2 problems, 2 warnings.', $display);
     }
 
+    public function testWarnsWhenSuspectedCopiesSignIn(): void
+    {
+        [, $display] = $this->doctor(['passkeys' => ['clone_policy' => 'allow']], migrate: true);
+
+        self::assertStringContainsString('Warning: Passkeys that look copied still sign in (passkeys.clone_policy: allow)', $display);
+    }
+
     public function testNoticesTemplatesThatFellBehindYorvoIDs(): void
     {
         [, $display] = $this->doctor(migrate: true);

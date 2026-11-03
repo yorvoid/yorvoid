@@ -47,7 +47,7 @@ final readonly class VerifierConfig
             $host = self::host($origin);
 
             if (null === $host || !self::isAtOrUnder($host, $relyingPartyId)) {
-                throw new ConfigurationError(\sprintf('The origin "%s" isn\'t an https:// origin at or under %s.', $origin, $relyingPartyId));
+                throw new ConfigurationError(\sprintf('The origin "%s" isn\'t an https:// origin at or under %s, with nothing after the host and port.', $origin, $relyingPartyId));
             }
         }
 
@@ -55,7 +55,7 @@ final readonly class VerifierConfig
             $host = self::host($origin);
 
             if (null === $host) {
-                throw new ConfigurationError(\sprintf('The console origin "%s" isn\'t an https:// origin.', $origin));
+                throw new ConfigurationError(\sprintf('The console origin "%s" isn\'t an https:// origin, with nothing after the host and port.', $origin));
             }
 
             if (self::isAtOrUnder($host, $relyingPartyId)) {
@@ -65,14 +65,17 @@ final readonly class VerifierConfig
     }
 
     /**
-     * The origin's host, if it's an https:// origin, or http:// on localhost while developing.
+     * The origin's host, if it's an https:// origin, or http:// on localhost while developing, written as
+     * browsers write origins: a scheme, a host and maybe a port, nothing else but a final slash, since
+     * answers are compared with it byte for byte.
      */
     private static function host(string $origin): ?string
     {
         $scheme = parse_url($origin, \PHP_URL_SCHEME);
         $host = parse_url($origin, \PHP_URL_HOST);
+        $port = parse_url($origin, \PHP_URL_PORT);
 
-        if (!\is_string($host) || !('https' === $scheme || ('http' === $scheme && self::isAtOrUnder($host, 'localhost')))) {
+        if (!\is_string($host) || !('https' === $scheme || ('http' === $scheme && self::isAtOrUnder($host, 'localhost'))) || !\in_array($origin, [$exact = \sprintf('%s://%s%s', $scheme, $host, \is_int($port) ? ':'.$port : ''), $exact.'/'], true)) {
             return null;
         }
 

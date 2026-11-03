@@ -120,6 +120,23 @@ final class SecurityTest extends TestCase
         self::assertSame([], $this->browser->getResponse()->headers->getCookies());
     }
 
+    public function testOneAddressBeginsSignInsAndFlowsUpToTheLimit(): void
+    {
+        $this->boot(['limits' => ['per_address' => '1/15m']]);
+
+        $this->post('/yorvoid/sign-in/options', []);
+        self::assertSame(200, $this->statusCode());
+        $refused = $this->post('/yorvoid/sign-in/options', []);
+        self::assertSame(429, $this->statusCode());
+        self::assertIsString($refused['error']);
+        self::assertSame('900', $this->browser->getResponse()->headers->get('Retry-After'));
+
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.sign_in');
+        self::assertSame(303, $this->statusCode());
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.sign_in');
+        self::assertSame(429, $this->statusCode());
+    }
+
     public function testSigningOutEndsTheYorvoIDSession(): void
     {
         $this->boot();

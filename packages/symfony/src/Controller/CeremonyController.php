@@ -19,6 +19,7 @@ use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\Json;
+use YorvoID\Throttle\Throttled;
 
 /**
  * The JSON endpoints of passkey ceremonies, for the browser client: options to sign in, to add a
@@ -41,7 +42,15 @@ final readonly class CeremonyController
 
     public function signInOptions(Request $request): JsonResponse
     {
-        return null === Json::body($request) ? self::notJson() : self::ceremony($this->passkeys->beginSignIn($this->realm));
+        if (null === Json::body($request)) {
+            return self::notJson();
+        }
+
+        try {
+            return self::ceremony($this->passkeys->beginSignIn($this->realm, $request->getClientIp()));
+        } catch (Throttled $exception) {
+            return new JsonResponse(['error' => $exception->getMessage()], 429, ['Retry-After' => (string) $exception->seconds]);
+        }
     }
 
     /**

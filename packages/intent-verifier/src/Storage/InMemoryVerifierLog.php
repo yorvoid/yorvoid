@@ -20,4 +20,15 @@ final class InMemoryVerifierLog implements VerifierLog
     {
         $this->entries[] = ['event' => $event, 'details' => $details, 'at' => $at];
     }
+
+    public function usedNonce(string $nonce, \DateTimeImmutable $since): bool
+    {
+        foreach ($this->entries as $entry) {
+            if ($entry['at'] >= $since && 'prepared' !== $entry['event'] && $nonce === ($entry['details']['nonce'] ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

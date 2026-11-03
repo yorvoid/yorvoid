@@ -6,6 +6,7 @@ namespace YorvoID\Symfony\Doctor;
 
 use Doctrine\DBAL\Exception as DbalException;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Passkeys\ClonePolicy;
 use YorvoID\Passkeys\PasskeyPolicy;
 
 /**
@@ -41,6 +42,10 @@ final readonly class ConfigurationCheck implements Check
 
             if ($service instanceof PasskeyPolicy && !$this->debug && 'localhost' === $service->relyingPartyId) {
                 yield Finding::warning('Passkeys are created for "localhost" outside development: they won\'t work on the site\'s real domain.', 'Set passkeys.relying_party_id and passkeys.origins to the site\'s domain, e.g. "example.com" and ["https://example.com"].', 'concepts/passkeys.md#configuration');
+            }
+
+            if ($service instanceof PasskeyPolicy && ClonePolicy::Allow === $service->clonePolicy) {
+                yield Finding::warning('Passkeys that look copied still sign in (passkeys.clone_policy: allow): they\'re only logged.', 'Use "refuse_sign_in", the default, or "disable_passkey", unless the site\'s authenticators are known to report counters wrongly.', 'concepts/passkeys.md#configuration');
             }
         }
     }

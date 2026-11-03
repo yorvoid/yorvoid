@@ -289,6 +289,7 @@ final readonly class SigningPages
             Refusal::InvalidBootstrapSecret => 'That bootstrap secret doesn\'t work: it\'s wrong, used, or expired.',
             Refusal::LastKey => 'That\'s the last key: add another before removing it.',
             Refusal::InvalidKey => 'That passkey is here already.',
+            Refusal::TooManyWaiting => 'Too many requests wait to be signed. Try again in a few minutes.',
             default => 'The signature didn\'t work. Start again.',
         };
     }

@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Clock\MockClock;
 use YorvoID\Authn\Attempt\AttemptLimits;
 use YorvoID\Authn\Attempt\Attempts;
+use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\CredentialStatus;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
@@ -39,9 +40,11 @@ use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Passkeys\Ceremony;
 use YorvoID\Passkeys\ClonePolicy;
+use YorvoID\Passkeys\Passkey;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Passkeys\Refusal;
 use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\UserVerification;
@@ -320,6 +323,137 @@ final class PasskeysTest extends DatabaseTestCase
     }
 
     #[DataProvider('implementations')]
+    public function testRefusesAnswersForAnotherKindOfCeremonyOrFromAFrame(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation);
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $frames = ['a frame on another site' => ['crossOrigin' => true], 'a frame naming its site' => ['crossOrigin' => true, 'topOrigin' => 'https://evil.example'], 'a top origin alone' => ['topOrigin' => 'https://evil.example']];
+
+        foreach ([...$frames, 'a sign-in\'s type' => ['type' => 'webauthn.get']] as $what => $clientData) {
+            $registration = $passkeys->beginRegistration($session);
+            $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options, clientData: $clientData), 'Phone', new Origin(OriginKind::Web)), \sprintf('A registration from %s was accepted.', $what));
+        }
+
+        $registration = $passkeys->beginRegistration($session);
+        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Phone', new Origin(OriginKind::Web));
+        // The refused registrations made passkeys too: the one registered is the last.
+        $registered = \count($authenticator->credentials) - 1;
+
+        foreach ([...$frames, 'a registration\'s type' => ['type' => 'webauthn.create']] as $what => $clientData) {
+            $signIn = $passkeys->beginSignIn(new Realm('acme'));
+            $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: $registered, clientData: $clientData), new Origin(OriginKind::Web)), \sprintf('A sign-in from %s was accepted.', $what));
+        }
+
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: $registered, clientData: ['crossOrigin' => false]), new Origin(OriginKind::Web));
+    }
+
+    #[DataProvider('implementations')]
+    public function testABackupEligibilityThatChangedIsASuspectedCopy(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation);
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $registration = $passkeys->beginRegistration($session);
+        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Key', new Origin(OriginKind::Web));
+        $syncing = new VirtualAuthenticator(synced: true);
+        $syncing->credentials = $authenticator->credentials;
+
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $this->refused(Refusal::SuspectedCopy, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $syncing->signIn($signIn->options, counter: 5), new Origin(OriginKind::Web)));
+        self::assertFalse($passkeys->of(new Realm('acme'), $session->principalId)[0]->backupEligible);
+        self::assertSame(0, $passkeys->of(new Realm('acme'), $session->principalId)[0]->signCount);
+    }
+
+    #[DataProvider('implementations')]
+    public function testOfTwoAnswersWithTheSameCounterAtOnceOneSignsIn(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation);
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $registration = $passkeys->beginRegistration($session);
+        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Key', new Origin(OriginKind::Web));
+        $first = $passkeys->beginSignIn(new Realm('acme'));
+        $second = $passkeys->beginSignIn(new Realm('acme'));
+        $copy = $authenticator->signIn($second->options, counter: 6);
+        $passkeys->finishSignIn(new Realm('acme'), $first->id, $authenticator->signIn($first->options, counter: 6), new Origin(OriginKind::Web));
+
+        // The second read the counter before the first recorded its own: it's the store's update that refuses.
+        $stale = $this->stack->passkeys;
+        $passkeys = $this->passkeys($implementation, store: new class($stale) implements PasskeyStore {
+            public function __construct(private readonly PasskeyStore $store)
+            {
+            }
+
+            public function add(Passkey $passkey): bool
+            {
+                return $this->store->add($passkey);
+            }
+
+            public function find(Realm $realm, string $webauthnId): ?Passkey
+            {
+                $passkey = $this->store->find($realm, $webauthnId);
+
+                return null === $passkey ? null : new Passkey($passkey->credentialId, $passkey->realm, $passkey->principalId, $passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, 0, $passkey->transports, $passkey->aaguid, $passkey->backupEligible, $passkey->backedUp, $passkey->userVerificationInitialized, $passkey->attestationType);
+            }
+
+            public function of(Realm $realm, PrincipalId $principalId): array
+            {
+                return $this->store->of($realm, $principalId);
+            }
+
+            public function update(Passkey $passkey): bool
+            {
+                return $this->store->update($passkey);
+            }
+
+            public function remove(Realm $realm, CredentialId $credentialId): void
+            {
+                $this->store->remove($realm, $credentialId);
+            }
+        });
+
+        $this->refused(Refusal::SuspectedCopy, static fn () => $passkeys->finishSignIn(new Realm('acme'), $second->id, $copy, new Origin(OriginKind::Web)));
+        self::assertSame(6, $stale->find(new Realm('acme'), $authenticator->credentials[0]['id'])?->signCount);
+    }
+
+    #[DataProvider('implementations')]
+    public function testOnePrincipalHasOneUserHandle(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation);
+        $session = $this->session();
+        $phone = new VirtualAuthenticator();
+        $laptop = new VirtualAuthenticator();
+        // Two tabs begin the first registration at once: each gets a new handle.
+        $first = $passkeys->beginRegistration($session);
+        $second = $passkeys->beginRegistration($session);
+        $passkeys->finishRegistration($session, $first->id, $phone->register($first->options), 'Phone', new Origin(OriginKind::Web));
+
+        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishRegistration($session, $second->id, $laptop->register($second->options), 'Laptop', new Origin(OriginKind::Web)));
+        self::assertCount(1, $passkeys->of(new Realm('acme'), $session->principalId));
+        self::assertCount(1, $this->credentials->of(new Realm('acme'), $session->principalId), 'The refused passkey\'s credential was kept.');
+
+        $again = $passkeys->beginRegistration($session);
+        $passkeys->finishRegistration($session, $again->id, $laptop->register($again->options), 'Laptop', new Origin(OriginKind::Web));
+        self::assertCount(1, array_unique(array_map(static fn (Passkey $passkey): string => $passkey->userHandle, $passkeys->of(new Realm('acme'), $session->principalId))));
+    }
+
+    #[DataProvider('implementations')]
+    public function testOneAddressBeginsSignInsUpToTheLimit(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation, limits: new AttemptLimits(perAddress: new Limit(2, Duration::minutes(15))));
+
+        $passkeys->beginSignIn(new Realm('acme'), '203.0.113.7');
+        $passkeys->beginSignIn(new Realm('acme'), '203.0.113.7');
+        $passkeys->beginSignIn(new Realm('acme'), '203.0.113.8');
+
+        $this->expectException(Throttled::class);
+
+        $passkeys->beginSignIn(new Realm('acme'), '203.0.113.7');
+    }
+
+    #[DataProvider('implementations')]
     public function testOnlyRegisteredActivePasskeysOfActivePrincipalsSignIn(string $implementation): void
     {
         $passkeys = $this->passkeys($implementation);
@@ -560,7 +694,8 @@ final class PasskeysTest extends DatabaseTestCase
         $answer = $authenticator->signIn($ceremony->options);
         $this->sessions->end(new EndSession(new Realm('acme'), $session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishStepUp($session, $ceremony->id, $answer, new Origin(OriginKind::Web)), 'An ended session stepped up.');
-        self::assertSame(0, $passkeys->of(new Realm('acme'), $session->principalId)[0]->signCount, 'A refused step-up was recorded as a use.');
+        // The authenticator counted the signature, which is recorded; the passkey wasn't used.
+        self::assertNull($this->credentials->get(new Realm('acme'), $passkeys->of(new Realm('acme'), $session->principalId)[0]->credentialId)?->lastUsedAt, 'A refused step-up was recorded as a use.');
     }
 
     #[DataProvider('implementations')]
@@ -700,10 +835,11 @@ final class PasskeysTest extends DatabaseTestCase
         self::assertStringContainsString('excludeCredentials', $passkeys->beginRegistration($session)->options);
     }
 
-    private function passkeys(string $implementation, UserVerification $userVerification = UserVerification::Required, ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn, AttemptLimits $limits = new AttemptLimits()): Passkeys
+    private function passkeys(string $implementation, UserVerification $userVerification = UserVerification::Required, ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn, AttemptLimits $limits = new AttemptLimits(), ?PasskeyStore $store = null): Passkeys
     {
-        $this->stack = $this->stack($implementation);
-        $this->clock = new MockClock('2026-10-27 18:45:30 UTC');
+        // Another store keeps the stack: the same passkeys, read through it.
+        $this->stack = null === $store ? $this->stack($implementation) : $this->stack;
+        $this->clock ??= new MockClock('2026-10-27 18:45:30 UTC');
         $this->events = new RecordingDispatcher();
         $ids = new UuidV7Generator($this->clock);
         $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
@@ -712,7 +848,7 @@ final class PasskeysTest extends DatabaseTestCase
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock);
         $this->credentials = new Credentials($this->stack->credentials, $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
 
-        return new Passkeys($this->stack->passkeys, $this->stack->ceremonies, $this->credentials, $this->sessions, $this->principals, $log, $this->stack->transactions, new PasskeyPolicy('example.com', ['https://example.com'], $userVerification, $clonePolicy), new Attempts(new Throttle($this->stack->throttle, $this->clock), $limits), $ids, $this->clock);
+        return new Passkeys($store ?? $this->stack->passkeys, $this->stack->ceremonies, $this->credentials, $this->sessions, $this->principals, $log, $this->stack->transactions, new PasskeyPolicy('example.com', ['https://example.com'], $userVerification, $clonePolicy), new Attempts(new Throttle($this->stack->throttle, $this->clock), $limits), $ids, $this->clock);
     }
 
     private function session(?string $email = null, ?string $username = null): Session

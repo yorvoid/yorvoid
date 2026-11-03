@@ -59,8 +59,28 @@
                 ".*\\$count = \\(int\\) \\$this->connection->executeStatement\\(.*"
             ]
         },
+        "MatchArmRemoval": {
+            "ignore": [
+                // Equivalent: without its default arm the match throws, which accepts() takes as a refusal.
+                "YorvoID\\Passkeys\\PublicKeyCheck::accepts"
+            ]
+        },
+        "ReturnRemoval": {
+            "ignore": [
+                // Equivalent: anything else than a map has no algorithm to accept.
+                "YorvoID\\Passkeys\\PublicKeyCheck::accepts"
+            ]
+        },
+        "BitwiseOr": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: escaped slashes in the virtual authenticator's client data decode to the same origin.
+                ".*\\$clientData = json_encode\\(\\[\\.\\.\\.\\['type' => 'webauthn\\..*"
+            ]
+        },
         "CastString": {
             "ignoreSourceCodeByRegex": [
+                // Equivalent: header values are strings either way.
+                ".*'Retry-After' => \\(string\\) \\$exception->seconds.*",
                 // Equivalent: fread() fails only on a closed file, which the log never reads from.
                 ".*\\$tail = \\(string\\) fread\\(.*"
             ]
