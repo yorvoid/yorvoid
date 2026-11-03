@@ -179,7 +179,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $restore = $this->summaries->summarize(self::intent('acme.site.restore', ['site' => 'jane', 'full' => true, 'days' => 30]), 'en');
         self::assertSame('Restore the site jane (all of it)', $restore->text);
         self::assertSame(['site' => 'jane', 'full' => 'true', 'days' => '30'], $restore->parameters);
-        self::assertSame(['full' => 'false'], $this->summaries->summarize(self::intent('acme.site.restore', ['full' => false]), 'en')->parameters);
+        self::assertSame(['site' => 'jane', 'full' => 'false'], $this->summaries->summarize(self::intent('acme.site.restore', ['site' => 'jane', 'full' => false]), 'en')->parameters);
         self::assertSame('Einem Passkey das Signieren von Vorgängen entziehen', $this->summaries->summarize(self::intent(OperationPolicy::REMOVE_KEY, ['credential_id' => 'x']), 'de')->text);
 
         $longest = str_repeat('é', IntentSummaries::DISPLAY_LIMIT);

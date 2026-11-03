@@ -4336,7 +4336,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "337fc236e850beef351023762347651bba757ea4"
+                "reference": "dd0279b702e41bb7345714c0f08a594b91f832f0"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -4367,7 +4367,7 @@
                     "email": "poposki.darko@gmail.com"
                 }
             ],
-            "description": "YorvoID's core: principals, realms, decisions and evidence, the security log, keys and storage.",
+            "description": "YorvoID's core: principals, realms, the security log, keys and storage.",
             "homepage": "https://github.com/yorvoid/yorvoid",
             "keywords": [
                 "agents",
@@ -4448,9 +4448,10 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "dfa10e688b1ca8609fc14f088ad2e1ccde3a6df3"
+                "reference": "1c049af064dbc14db3644dcea79293c29172e28b"
             },
             "require": {
+                "ext-dom": "*",
                 "ext-mbstring": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",

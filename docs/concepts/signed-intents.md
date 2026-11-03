@@ -103,6 +103,7 @@ $pages = new SigningPages($verifier, $run, $returnTo, $summary, twig: new Enviro
 - `layout.html.twig` is every page's frame, with the `lang`, `title` and `body` blocks; extend `@yorvoid_signing_package/layout.html.twig` to change only some.
 - `intent.html.twig`, `keys.html.twig`, `naming.html.twig`, `registration.html.twig` and `message.html.twig` are the pages. `message.html.twig` gets the refusal, when there was one, to put it in other words.
 - Keep the ceremony forms' `data-yorvoid-*` attributes, their `response` field and the script: the browser client needs them. Keep auto-escaping on: the pages show what the console asked for.
+- `intent.html.twig` must show the summary, and every parameter's name and value, as text a person reads. The verifier checks each page before showing it: if a value became markup (`|raw`) or something hides it (`hidden`, `aria-hidden`, an inline `display: none`), it shows "That didn't work" instead of asking for a signature. It can't see your stylesheets: don't hide them there either.
 
 ## Signing an operation
 
@@ -160,6 +161,8 @@ $signing->ran($session, $verified->intent, $verified->key->id(), $origin);   // 
 ### Summaries
 
 `IntentSummaries` gives an operation's sentence from your translations: the message whose ID is the operation's name, with its parameters, e.g. `'acme.site.remove' => 'Remove the site {site}'`. Pass it to `SigningPages` as `summary`, if the privileged side has a translator; the page shows every parameter in full either way. An operation with a parameter longer than 200 characters isn't summarised (`IntentSummaries::DISPLAY_LIMIT`): pass an ID instead of a document.
+
+Summaries are ICU MessageFormat, whichever catalogue they're in: with Symfony's translator, `messages.en.yaml` works as well as `messages+intl-icu.en.yaml`, though Symfony itself reads only the second as ICU. A summary with a placeholder left unfilled, e.g. a parameter the operation didn't get, isn't shown: `IntegratorError`.
 
 ## What signing doesn't stop
 

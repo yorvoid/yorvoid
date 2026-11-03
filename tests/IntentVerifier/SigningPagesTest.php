@@ -7,6 +7,8 @@ namespace YorvoID\Tests\IntentVerifier;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
 use Twig\Environment;
+use Twig\Loader\ArrayLoader;
+use Twig\Loader\ChainLoader;
 use Twig\Loader\FilesystemLoader;
 use YorvoID\IntentVerifier\CollectingNotifier;
 use YorvoID\IntentVerifier\Intent;
@@ -310,6 +312,65 @@ final class SigningPagesTest extends TestCase
         self::assertSame('de', self::document($page)->documentElement?->getAttribute('lang'));
         self::assertSame('Seite nicht gefunden', self::document($page)->querySelector('[data-message]')?->textContent);
         self::assertSame('Signing keys', self::document($pages->handle('GET', '/keys'))->querySelector('h1')?->textContent, 'A page the host left alone isn\'t the package\'s.');
+    }
+
+    public function testAPageThatHidesWhatIsSignedIsntShown(): void
+    {
+        $prepared = $this->verifier->prepare('acme.site.remove', ['site' => '<img src=x onerror=alert(1)>jane']);
+        $path = '/intents/'.$prepared->intent->nonce;
+
+        // YorvoID's page shows the markup as text; an empty value has nothing to show.
+        self::assertStringContainsString('Remove the site <img src=x onerror=alert(1)>jane', self::text($this->pages->handle('GET', $path)));
+        self::assertSame(200, $this->pages->handle('GET', '/intents/'.$this->verifier->prepare('acme.site.remove', ['site' => ''])->intent->nonce)->status);
+
+        $overrides = [
+            'the summary as markup' => '<p>{{ summary|raw }}</p>{% for name, value in parameters %}<p>{{ name }} {{ value }}</p>{% endfor %}',
+            'a parameter as markup' => '<p>{{ summary }}</p>{% for name, value in parameters %}<p>{{ name }} {{ value|raw }}</p>{% endfor %}',
+            'the parameters hidden' => '<p>{{ summary }}</p><div hidden>{% for name, value in parameters %}{{ name }} {{ value }}{% endfor %}</div>',
+            'the parameters out of sight' => '<p>{{ summary }}</p><div style="display: none">{% for name, value in parameters %}{{ name }} {{ value }}{% endfor %}</div>',
+            'the parameters for screen readers only' => '<p>{{ summary }}</p><div aria-hidden="true">{% for name, value in parameters %}{{ name }} {{ value }}{% endfor %}</div>',
+            'no parameters' => '<p>{{ summary }}</p>',
+            'no summary' => '{% for name, value in parameters %}<p>{{ name }} {{ value }}</p>{% endfor %}',
+        ];
+
+        foreach ($overrides as $what => $body) {
+            $package = new FilesystemLoader();
+            $package->addPath(SigningPages::TEMPLATES, 'yorvoid_signing');
+            $loader = new ChainLoader([new ArrayLoader(['@yorvoid_signing/intent.html.twig' => '<!DOCTYPE html><html><body>'.$body.'<form data-yorvoid-ceremony="get"></form></body></html>']), $package]);
+            $pages = new SigningPages($this->verifier, static fn (VerifiedIntent $verified): null => null, 'https://acme.example/signed', static fn (Intent $intent): string => \sprintf('Remove the site %s', \is_string($intent->parameters['site']) ? $intent->parameters['site'] : ''), new Environment($loader, ['autoescape' => 'html']));
+
+            $page = $pages->handle('GET', $path);
+            self::assertSame(400, $page->status, $what);
+            self::assertStringContainsString('The signing page doesn\'t show "', self::text($page), $what);
+            self::assertNull(self::document($page)->querySelector('[data-yorvoid-ceremony]'), \sprintf('A page with %s asked for a signature.', $what));
+        }
+    }
+
+    public function testEveryPartOfWhatIsSignedIsShownOnItsOwn(): void
+    {
+        $verifier = new Verifier(self::config(), new OperationPolicy([new Operation('acme.site.move', ['site' => ParameterType::String, 'to' => ParameterType::String])]), new InMemoryVerifierStore(), new InMemoryVerifierLog(), new CollectingNotifier(), $this->clock);
+        $path = '/intents/'.$verifier->prepare('acme.site.move', ['site' => 'jane', 'to' => 'eu-west'])->intent->nonce;
+        $row = '<p>{{ name }}: {{ value }}</p>';
+        $pages = static function (string $body) use ($verifier): SigningPages {
+            $package = new FilesystemLoader();
+            $package->addPath(SigningPages::TEMPLATES, 'yorvoid_signing');
+            $loader = new ChainLoader([new ArrayLoader(['@yorvoid_signing/intent.html.twig' => '<!DOCTYPE html><html><body>'.$body.'<form data-yorvoid-ceremony="get"></form></body></html>']), $package]);
+
+            // The summary mentions the site, not where it goes.
+            return new SigningPages($verifier, static fn (VerifiedIntent $verified): null => null, 'https://acme.example/signed', static fn (Intent $intent): string => \sprintf('Move the site %s', \is_string($intent->parameters['site']) ? $intent->parameters['site'] : ''), new Environment($loader, ['autoescape' => 'html']));
+        };
+
+        self::assertSame(200, $pages('<p>{{ summary }}</p>{% for name, value in parameters %}'.$row.'{% endfor %}')->handle('GET', $path)->status);
+
+        foreach ([
+            'no summary, the parameters twice' => '{% for name, value in parameters %}'.$row.$row.'{% endfor %}',
+            'the values without their names' => '<p>{{ summary }}</p>{% for name, value in parameters %}<p>{{ value }}</p>{% endfor %}',
+            'the first parameter only' => '<p>{{ summary }}</p>{% for name, value in parameters %}{% if loop.first %}'.$row.'{% endif %}{% endfor %}',
+            'the last value without its name' => '<p>{{ summary }}</p>{% for name, value in parameters %}<p>{% if loop.first %}{{ name }}: {% endif %}{{ value }}</p>{% endfor %}',
+            'the last name without its value' => '<p>{{ summary }}</p>{% for name, value in parameters %}<p>{{ name }}{% if loop.first %}: {{ value }}{% endif %}</p>{% endfor %}',
+        ] as $what => $body) {
+            self::assertSame(400, $pages($body)->handle('GET', $path)->status, $what);
+        }
     }
 
     private static function document(SigningResponse $page): \Dom\HTMLDocument

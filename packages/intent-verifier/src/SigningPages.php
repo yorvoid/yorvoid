@@ -105,13 +105,53 @@ final readonly class SigningPages
             return $this->message(404, 'This request has expired', 'Nothing waits to be signed here: it was signed, refused, or it expired. Ask again from where you started.');
         }
 
-        return $this->page(200, 'intent', [
+        $parameters = array_map(static fn (mixed $value): string => \is_string($value) ? $value : json_encode($value, \JSON_THROW_ON_ERROR), $prepared->intent->parameters);
+        $summary = $this->summarize($prepared->intent);
+        $page = $this->page(200, 'intent', [
             'intent' => $prepared->intent,
-            'parameters' => array_map(static fn (mixed $value): string => \is_string($value) ? $value : json_encode($value, \JSON_THROW_ON_ERROR), $prepared->intent->parameters),
-            'summary' => $this->summarize($prepared->intent),
+            'parameters' => $parameters,
+            'summary' => $summary,
             'options' => $prepared->options,
             'bootstrap' => $prepared->bootstrap,
         ]);
+
+        // The page is the person's only view of what they sign: a template that hides any of it, or lets
+        // a value's text become markup, doesn't get to ask for a signature.
+        $visible = self::visibleText($page->body);
+        $sentence = self::spaced($summary ?? '');
+        // Each parameter's name and value on its own too, not only where the summary says it.
+        $missing = array_filter(
+            [...(null === $summary ? [] : [$summary]), ...array_keys($parameters), ...$parameters],
+            static fn (string $text): bool => '' !== $text && substr_count($visible, self::spaced($text)) < ($text === $summary ? 1 : substr_count($sentence, self::spaced($text)) + 1),
+        );
+
+        if ([] !== $missing) {
+            throw new ConfigurationError(\sprintf('The signing page doesn\'t show "%s" as text a person can read: show the summary, and every parameter\'s name and value, as escaped text ({{ value }}, never |raw) that nothing hides.', implode('", "', $missing)));
+        }
+
+        return $page;
+    }
+
+    /**
+     * The text of the elements a browser displays, read as text: markup a value let in isn't text.
+     */
+    private static function visibleText(string $html): string
+    {
+        $document = \Dom\HTMLDocument::createFromString($html, \LIBXML_NOERROR);
+        $hidden = 'ancestor-or-self::*[self::script or self::style or self::template or self::noscript or self::head or @hidden or @inert or @aria-hidden="true" or contains(translate(@style, " ", ""), "display:none") or contains(translate(@style, " ", ""), "visibility:hidden")]';
+        $texts = [];
+
+        foreach (new \Dom\XPath($document)->query(\sprintf('//text()[not(%s)]', $hidden)) as $node) {
+            \assert($node instanceof \Dom\Text);
+            $texts[] = $node->data;
+        }
+
+        return self::spaced(implode(' ', $texts));
+    }
+
+    private static function spaced(string $text): string
+    {
+        return (string) preg_replace('/\s+/u', ' ', $text);
     }
 
     private function sign(string $nonce, string $response, string $secret): SigningResponse
