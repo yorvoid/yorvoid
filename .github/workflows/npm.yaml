@@ -1,0 +1,82 @@
+---
+name: npm
+
+# Publishes the browser client (packages/browser) to npm as @yorvoid/browser, at each version tag, with
+# the tag's version: all packages are released together. Only a tag whose commit is on main and passed
+# CI. npm trusts this workflow (trusted publishing, OpenID Connect): there is no token to keep, and
+# every version carries provenance that links it to this repository and run.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  checks: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish the browser client
+    if: github.repository == 'yorvoid/yorvoid'
+    # npm's trusted publisher names this environment; only version tags can use it.
+    environment: npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the tag's commit is on main and passed CI
+        env:
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit=$(git rev-parse HEAD)
+
+          if ! git merge-base --is-ancestor "$commit" origin/main; then
+            echo "::error::The tag's commit $commit isn't on main."
+            exit 1
+          fi
+
+          passed=$(gh api "repos/$REPOSITORY/commits/$commit/check-runs?check_name=CI" --jq '[.check_runs[] | select(.conclusion == "success")] | length')
+
+          if [ "$passed" -eq 0 ]; then
+            echo "::error::CI hasn't passed for the tag's commit $commit."
+            exit 1
+          fi
+      - name: Build the toolchain's image
+        run: docker compose --profile node build node
+      - name: Install dependencies and build
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose run --rm node sh -c 'npm ci && npm run build'
+      # The tag's version, e.g. v0.1.0 → 0.1.0. A pre-release (0.1.0-rc.1) goes to "next", not "latest".
+      - name: Publish
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          GID=$(id -g)
+          export UID GID
+          version=${TAG#v}
+          channel=latest
+
+          case "$version" in
+            *-*) channel=next ;;
+          esac
+
+          # npm finds the workflow's identity, for trusted publishing and provenance, in these.
+          passed=$(env | grep -oE '^(GITHUB|RUNNER|ACTIONS)_[A-Z0-9_]+' | sed 's/^/-e /' | tr '\n' ' ')
+
+          # shellcheck disable=SC2086
+          docker compose run --rm -e CI=true $passed node sh -c "npm version '$version' --no-git-tag-version && npm publish --access public --provenance --tag '$channel'"
