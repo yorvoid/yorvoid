@@ -183,6 +183,11 @@ YorvoID keeps identity: the principal, its email, status, passkeys and sessions.
 The firewall's user is a `PrincipalUser`, with `ROLE_USER`, unless you give your own. Implement `PrincipalUsers` and give its service ID as `users`:
 
 ```php
+use App\Repository\UserRepository;
+use Symfony\Component\Security\Core\User\UserInterface;
+use YorvoID\Core\Principal\Principal;
+use YorvoID\Symfony\Security\PrincipalUsers;
+
 final readonly class AppUsers implements PrincipalUsers
 {
     public function __construct(private UserRepository $users) {}
@@ -271,6 +276,8 @@ It fails while anything needs your attention, so it can run in CI.
 **Check your templates** with `yorvoid:templates:lint` (UX-014). It renders every page, with your templates, in every state, and checks what each step needs: the fields and their names, `autocomplete` tokens like `username webauthn` and `one-time-code`, a label for every field, problems in an alert and on their fields, forms that post to their step, the passkey ceremony's form, field and script, and copy that mustn't go, like every parameter of an operation being signed. In a test:
 
 ```php
+use YorvoID\Symfony\Templates\TemplateLint;
+
 self::assertSame([], static::getContainer()->get(TemplateLint::class)->lint());
 ```
 

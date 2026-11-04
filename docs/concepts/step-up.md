@@ -4,6 +4,7 @@ Some operations need more than a signed-in session: removing a passkey, replacin
 
 ```php
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
+use YorvoID\Core\Duration;
 
 $stepUp->require($session, new AuthenticationRequirement(Duration::minutes(5), phishingResistant: true, operation: 'acme.site.remove'));
 ```
@@ -33,6 +34,8 @@ The [credential registry](credentials.md) asks for a proof within 5 minutes befo
 When a requirement isn't met, `StepUpRequired` carries it as the **remedy**: hand it to the step-up, then retry the operation.
 
 ```php
+use YorvoID\Authn\StepUp\StepUpRequired;
+
 try {
     $sites->remove($site, $session);
 } catch (StepUpRequired $refusal) {
@@ -52,6 +55,9 @@ The proof is added to the session's [authentication context](sessions.md), and t
 Someone who recovers an account that isn't theirs (with stolen recovery codes, or a recovery link from a helpdesk they deceived) shouldn't be able to lock the owner out before the owner notices. With a cool-down configured, a recovery holds the operations that ask for it for that long:
 
 ```php
+use YorvoID\Authn\StepUp\StepUp;
+use YorvoID\Core\Duration;
+
 $stepUp = new StepUp($sessions, $coolDownStore, $log, coolDown: Duration::hours(24));
 ```
 

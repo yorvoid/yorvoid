@@ -4,6 +4,8 @@ When someone loses access (their passkeys are gone, or the only owner is locked 
 
 ```php
 use YorvoID\Authn\Recovery\IssueRecoveryLink;
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
 
 $link = $recoveryLinks->issue(new IssueRecoveryLink($realm, $principalId), new Origin(OriginKind::Console, 'owner:recover'));
 
@@ -17,6 +19,8 @@ $output->writeln('https://example.com/recover/'.$link->secret->reveal());
 ## Using a link
 
 ```php
+use YorvoID\Core\Secret;
+
 $started = $recoveryLinks->redeem($realm, Secret::fromString($fromTheLink), $origin, device: 'Firefox on Linux', address: $request->getClientIp());
 ```
 

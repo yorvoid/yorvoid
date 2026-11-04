@@ -60,6 +60,8 @@ Notifications need a [mailer](../concepts/mail.md) and YorvoID's [translations](
 The bridge's `yorvoid:purge` calls each of these; schedule them yourself:
 
 ```php
+use YorvoID\Core\Duration;
+
 $sessions->purge(Duration::days(30));
 $sessions->purgeDevices(Duration::days(400));
 $oneTimeTokens->purge();

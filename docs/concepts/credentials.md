@@ -13,6 +13,9 @@ foreach ($credentials->of($realm, $principalId) as $credential) {
 People change their own credentials, from their session:
 
 ```php
+use YorvoID\Authn\Credential\RemoveCredential;
+use YorvoID\Authn\Credential\RenameCredential;
+
 $credentials->rename(new RenameCredential($realm, $credentialId, 'Work laptop'), $session, $origin);
 $credentials->remove(new RemoveCredential($realm, $credentialId, endOtherSessions: true), $session, $origin);
 ```

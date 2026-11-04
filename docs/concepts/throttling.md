@@ -3,6 +3,8 @@
 Throttling limits how often something may be tried: at most so many attempts per period, per key. Every server shares the counts through YorvoID's database, so no cache server is needed, and each attempt is counted in one atomic step, so concurrent requests can't slip past a limit. It's the `yorvoid/throttle` package, which `yorvoid/authn` uses for its forms; you can use it for your own.
 
 ```php
+use Symfony\Component\HttpFoundation\Response;
+use YorvoID\Core\Duration;
 use YorvoID\Throttle\AddressKey;
 use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Throttle;
