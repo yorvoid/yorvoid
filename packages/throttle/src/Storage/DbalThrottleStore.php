@@ -35,19 +35,18 @@ final readonly class DbalThrottleStore implements ThrottleStore
         return false === $row ? null : Row::int($row, 'clear_at');
     }
 
-    public function replace(string $key, ?int $expected, int $clearAt): bool
+    public function advance(string $key, int $now, int $interval, int $latest): ?int
     {
         $this->refuseInsideATransaction();
-        $table = $this->database->table(self::TABLE);
+        // One statement: the row is created, or moved on only while it allows another attempt (PERF-05).
+        $sql = \sprintf(
+            'INSERT INTO %s AS stored (key_hash, clear_at) SELECT ?, CAST(? AS BIGINT) WHERE CAST(? AS BIGINT) <= CAST(? AS BIGINT) ON CONFLICT (key_hash) DO UPDATE SET clear_at = %2$s(stored.clear_at, CAST(? AS BIGINT)) + CAST(? AS BIGINT) WHERE %2$s(stored.clear_at, CAST(? AS BIGINT)) <= CAST(? AS BIGINT) RETURNING clear_at',
+            $this->database->table(self::TABLE),
+            SqlPlatform::PostgreSQL === $this->database->platform ? 'GREATEST' : 'MAX',
+        );
+        $clearAt = $this->database->connection->fetchOne($sql, [$key, $now + $interval, $now, $latest, $now, $interval, $now, $latest]);
 
-        if (null === $expected) {
-            return 1 === $this->database->connection->executeStatement(match ($this->database->platform) {
-                SqlPlatform::PostgreSQL => \sprintf('INSERT INTO %s (key_hash, clear_at) VALUES (?, ?) ON CONFLICT (key_hash) DO NOTHING', $table),
-                SqlPlatform::SQLite => \sprintf('INSERT OR IGNORE INTO %s (key_hash, clear_at) VALUES (?, ?)', $table),
-            }, [$key, $clearAt]);
-        }
-
-        return 1 === $this->database->connection->executeStatement(\sprintf('UPDATE %s SET clear_at = ? WHERE key_hash = ? AND clear_at = ?', $table), [$clearAt, $key, $expected]);
+        return false === $clearAt ? null : Row::int(['clear_at' => $clearAt], 'clear_at');
     }
 
     public function remove(string $key): void

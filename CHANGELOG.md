@@ -14,6 +14,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `NotificationSettings` and email actions accept `https://` addresses only (`http://` for `localhost`), without a user before the host.
 - A setup code works only while the realm has no active principal.
 - `CeremonyStore::take()` takes the session asking: a store of your own returns a ceremony only to the session that began it, and one begun outside a session only without one.
+- `ThrottleStore::advance()` replaces `replace()`: a store of your own counts an attempt, or refuses it, in one atomic step, so attempts at the same moment don't refuse each other.
 
 ### Security
 

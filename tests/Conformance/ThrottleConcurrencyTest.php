@@ -18,6 +18,19 @@ final class ThrottleConcurrencyTest extends DatabaseTestCase
 
     public function testConcurrentAttemptsDontSlipPastTheLimit(): void
     {
+        self::assertSame([0, 0, 0, 3, 3, 3], $this->attempts(3), 'Expected three attempts to be counted.');
+    }
+
+    public function testConcurrentAttemptsUnderTheLimitAreAllCounted(): void
+    {
+        self::assertSame([0, 0, 0, 0, 0, 0], $this->attempts(100), 'An attempt under the limit was refused because others came at once (PERF-05).');
+    }
+
+    /**
+     * @return list<int> Each process's exit code, sorted: 0 counted, 3 refused
+     */
+    private function attempts(int $limit): array
+    {
         $database = $this->stack('postgresql')->database;
         \assert($database instanceof Database && null !== $database->location->schema);
         $start = \sprintf('%s/yorvoid-start-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
@@ -25,7 +38,7 @@ final class ThrottleConcurrencyTest extends DatabaseTestCase
 
         for ($i = 0; $i < self::PROCESSES; ++$i) {
             $process = proc_open(
-                [\PHP_BINARY, __DIR__.'/../Support/hit-throttle.php', (string) getenv('YORVOID_TEST_POSTGRES_URL'), $database->location->schema, $start],
+                [\PHP_BINARY, __DIR__.'/../Support/hit-throttle.php', (string) getenv('YORVOID_TEST_POSTGRES_URL'), $database->location->schema, $start, (string) $limit],
                 [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
                 $pipes,
             );
@@ -52,6 +65,8 @@ final class ThrottleConcurrencyTest extends DatabaseTestCase
 
         $exitCodes = array_column($results, 0);
         sort($exitCodes);
-        self::assertSame([0, 0, 0, 3, 3, 3], $exitCodes, 'Expected three attempts to be counted: '.implode(' | ', array_column($results, 1)));
+        self::assertSame([], array_diff($exitCodes, [0, 3]), implode(' | ', array_column($results, 1)));
+
+        return $exitCodes;
     }
 }

@@ -16,32 +16,37 @@ final class ThrottleStoreTest extends DatabaseTestCase
     private const int NOW = 1_793_210_400_000;
 
     #[DataProvider('implementations')]
-    public function testReplacesOnlyWhatItExpects(string $implementation): void
+    public function testAdvancesWhileTheKeyAllowsAnotherAttempt(string $implementation): void
     {
         $store = $this->stack($implementation)->throttle;
         self::assertNull($store->clearAt('a'));
 
-        self::assertTrue($store->replace('a', null, self::NOW));
-        self::assertFalse($store->replace('a', null, self::NOW + 5), 'A key was created twice.');
-        self::assertFalse($store->replace('a', self::NOW + 1, self::NOW + 5), 'A key changed although it wasn\'t what was expected.');
-        self::assertSame(self::NOW, $store->clearAt('a'));
-        self::assertTrue($store->replace('a', self::NOW, self::NOW + 5));
-        self::assertSame(self::NOW + 5, $store->clearAt('a'));
-        self::assertFalse($store->replace('b', self::NOW + 5, self::NOW + 9), 'A key that doesn\'t exist was changed.');
-        self::assertNull($store->clearAt('b'));
+        // An attempt adds 10 ms; one is allowed while the key clears at most 20 ms from now.
+        self::assertSame(self::NOW + 10, $store->advance('a', self::NOW, 10, self::NOW + 20));
+        self::assertSame(self::NOW + 20, $store->advance('a', self::NOW, 10, self::NOW + 20));
+        self::assertSame(self::NOW + 30, $store->advance('a', self::NOW, 10, self::NOW + 20));
+        self::assertNull($store->advance('a', self::NOW, 10, self::NOW + 20), 'An attempt over the limit was counted.');
+        self::assertSame(self::NOW + 30, $store->clearAt('a'), 'A refused attempt changed the key.');
+
+        // Later, from the key's clear time or from now, whichever is later.
+        self::assertSame(self::NOW + 40, $store->advance('a', self::NOW + 15, 10, self::NOW + 35));
+        self::assertSame(self::NOW + 110, $store->advance('a', self::NOW + 100, 10, self::NOW + 120));
+        self::assertNull($store->clearAt('b'), 'Another key changed.');
 
         $store->remove('a');
         self::assertNull($store->clearAt('a'));
-        self::assertTrue($store->replace('a', null, self::NOW + 7));
+        self::assertSame(self::NOW + 7, $store->advance('a', self::NOW, 7, self::NOW));
+        self::assertNull($store->advance('c', self::NOW, 7, self::NOW - 1), 'A new key was counted beyond its limit.');
+        self::assertNull($store->clearAt('c'));
     }
 
     #[DataProvider('implementations')]
     public function testPurgesKeysClearAtOrBeforeTheMoment(string $implementation): void
     {
         $store = $this->stack($implementation)->throttle;
-        $store->replace('before', null, self::NOW - 1);
-        $store->replace('at', null, self::NOW);
-        $store->replace('after', null, self::NOW + 1);
+        $store->advance('before', self::NOW - 2, 1, self::NOW);
+        $store->advance('at', self::NOW - 1, 1, self::NOW);
+        $store->advance('after', self::NOW, 1, self::NOW);
 
         self::assertSame(2, $store->purge(self::NOW));
         self::assertSame([null, null, self::NOW + 1], [$store->clearAt('before'), $store->clearAt('at'), $store->clearAt('after')]);
