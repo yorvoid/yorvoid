@@ -22,6 +22,7 @@ use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\OperationCancelled;
+use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\UnknownPrincipal;
@@ -130,6 +131,15 @@ final readonly class Sessions
      */
     public function validate(Realm $realm, #[\SensitiveParameter] Secret $token): ?Session
     {
+        return $this->check($realm, $token)?->session;
+    }
+
+    /**
+     * As validate(), with the principal the check loaded: a framework bridge that needs the principal
+     * too, in the same request, doesn't load it again.
+     */
+    public function check(Realm $realm, #[\SensitiveParameter] Secret $token): ?ValidSession
+    {
         $session = $this->store->findByTokenHash(self::hash($token));
         $now = $this->clock->now();
 
@@ -137,19 +147,21 @@ final readonly class Sessions
             return null;
         }
 
-        if (!$this->principalStillHolds($session)) {
+        $principal = $this->principalStillHolding($session);
+
+        if (null === $principal) {
             return null;
         }
 
         if ($now->getTimestamp() - $session->lastSeenAt->getTimestamp() < self::TOUCH_INTERVAL) {
-            return $session;
+            return new ValidSession($session, $principal);
         }
 
         $lastSeenAt = Time::stored($now);
         $idleExpiresAt = $this->policy->idle->after($lastSeenAt);
         $this->store->touch($realm, $session->id, $lastSeenAt, $idleExpiresAt);
 
-        return new Session($session->id, $session->realm, $session->principalId, $session->principalStatusVersion, $session->authentication, $session->startedAt, $lastSeenAt, $session->expiresAt, $idleExpiresAt, $session->device, $session->address);
+        return new ValidSession(new Session($session->id, $session->realm, $session->principalId, $session->principalStatusVersion, $session->authentication, $session->startedAt, $lastSeenAt, $session->expiresAt, $idleExpiresAt, $session->device, $session->address), $principal);
     }
 
     /**
@@ -380,9 +392,17 @@ final readonly class Sessions
 
     private function principalStillHolds(Session $session): bool
     {
+        return null !== $this->principalStillHolding($session);
+    }
+
+    /**
+     * The session's principal, if it's active and as it was when the session began.
+     */
+    private function principalStillHolding(Session $session): ?Principal
+    {
         $principal = $this->principals->get($session->realm, $session->principalId);
 
-        return null !== $principal && $principal->isActive() && $principal->statusVersion === $session->principalStatusVersion;
+        return null !== $principal && $principal->isActive() && $principal->statusVersion === $session->principalStatusVersion ? $principal : null;
     }
 
     private static function newToken(): Secret

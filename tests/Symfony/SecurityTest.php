@@ -51,6 +51,7 @@ use YorvoID\Symfony\Security\PrincipalUser;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
+use YorvoID\Tests\Support\StatementLog;
 use YorvoID\Tests\Symfony\App\TestKernel;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
@@ -490,6 +491,21 @@ final class SecurityTest extends TestCase
         $me = $this->get('/me');
         self::assertSame([(string) $ana->id, InMemoryUser::class, ['ROLE_OWN']], [$me['user'], $me['class'], $me['roles']], 'The application\'s own user wasn\'t kept after signing in.');
         self::assertSame((string) $ana->id, $this->get('/me')['user']);
+    }
+
+    public function testARequestLoadsItsPrincipalOnce(): void
+    {
+        $this->boot();
+        $ana = $this->principal();
+        $this->signIn($ana);
+        $statements = $this->container->get(StatementLog::class);
+        \assert($statements instanceof StatementLog);
+        $statements->take();
+
+        $me = $this->get('/me');
+        self::assertSame((string) $ana->id, $me['user']);
+        $principals = array_filter($statements->take(), static fn (string $sql): bool => 1 === preg_match('/^SELECT .* FROM "?yorvoid_principal"? /i', $sql));
+        self::assertCount(1, $principals, 'The session\'s check and the firewall\'s user each loaded the principal (PERF-07): '.implode(' | ', $principals));
     }
 
     public function testTheProviderAndCheckerKnowPrincipals(): void

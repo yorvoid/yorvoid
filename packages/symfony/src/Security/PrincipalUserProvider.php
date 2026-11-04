@@ -29,12 +29,15 @@ final readonly class PrincipalUserProvider implements UserProviderInterface
         private Principals $principals,
         private Realm $realm,
         private PrincipalUsers $users,
+        private ?CurrentSession $current = null,
     ) {
     }
 
     public function loadUserByIdentifier(string $identifier): UserInterface
     {
-        $principal = Uuid::isValid($identifier) ? $this->principals->get($this->realm, PrincipalId::fromString($identifier)) : null;
+        // The request's session already loaded its principal, in the same request (PERF-07).
+        $held = $this->current?->principal();
+        $principal = null !== $held && (string) $held->id === $identifier ? $held : (Uuid::isValid($identifier) ? $this->principals->get($this->realm, PrincipalId::fromString($identifier)) : null);
 
         if (null === $principal || !$principal->isActive()) {
             throw new UserNotFoundException();
