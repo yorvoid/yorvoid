@@ -29,8 +29,10 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
+use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Migration\LockProfile;
@@ -212,6 +214,26 @@ final class BundleTest extends TestCase
         $purge = new CommandTester($application->find('yorvoid:purge'));
         self::assertSame(0, $purge->execute([]));
         self::assertStringContainsString('0 sessions, 0 devices, 0 one-time tokens, 0 passkey ceremonies, 0 throttling keys, 0 cool-downs.', (string) preg_replace('/\s+/', ' ', $purge->getDisplay()));
+
+        // An address 0.1 stored in its lowercase form, and one that is now the same as another.
+        $database = $this->database($container);
+        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'Ána@Пример.рф'), new Origin(OriginKind::Console));
+        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: "Jose\u{301}@example.com"), new Origin(OriginKind::Console));
+        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
+        $table = $database->table(DbalIdentifierStore::TABLE);
+        $database->connection->update($table, ['normalized' => 'ána@пример.рф'], ['normalized' => 'Ána@xn--e1afmkfd.xn--p1ai']);
+        $normalize = new CommandTester($application->find('yorvoid:identifiers:normalize'));
+
+        self::assertSame(0, $normalize->execute(['--dry-run' => true]));
+        self::assertStringContainsString('Would change in the realm default: ána@пример.рф → Ána@xn--e1afmkfd.xn--p1ai', $normalize->getDisplay());
+        self::assertSame(0, $normalize->execute([]));
+        self::assertStringContainsString('1 email address(es) changed.', $normalize->getDisplay());
+        self::assertNotNull($principals->findByIdentifier(Realm::default(), IdentifierKind::Email, 'Ána@ПРИМЕР.рф'));
+
+        $database->connection->update($table, ['normalized' => "jose\u{301}@example.com", 'value' => 'José@example.com'], ['normalized' => "jos\u{E9}@example.com"]);
+        $database->connection->update($table, ['normalized' => "jos\u{E9}@example.com", 'value' => "jos\u{E9}@example.com"], ['normalized' => 'bob@example.com']);
+        self::assertSame(1, $normalize->execute([]));
+        self::assertStringContainsString('is now the same as another one', (string) preg_replace('/\s+/', ' ', $normalize->getDisplay()));
     }
 
     public function testSendsNotificationsThroughSymfonyMailerAfterTheCommit(): void

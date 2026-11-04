@@ -14,6 +14,18 @@ php bin/console yorvoid:doctor [options]
 |---|---|---|
 | `--strict` | Fail on warnings too, e.g. in a deployment pipeline |  |
 
+## `yorvoid:identifiers:normalize`
+
+Compare stored identifiers by this version's rules, after an upgrade that changed them.
+
+```bash
+php bin/console yorvoid:identifiers:normalize [options]
+```
+
+| Argument or option | | Default |
+|---|---|---|
+| `--dry-run` | Only list what would change |  |
+
 ## `yorvoid:keys:rotate`
 
 Take the next step in rotating YorvoID's signing keys.

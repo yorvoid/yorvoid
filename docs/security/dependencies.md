@@ -20,7 +20,8 @@ Every dependency is code that runs with YorvoID's privileges, so YorvoID has few
 | `psr/clock`, `psr/event-dispatcher` | Standard interfaces for time and events |
 | `symfony/clock` | The default clock |
 | `symfony/uid` | UUIDv7 identifiers |
-| `ext-mbstring` | Comparing email addresses in lowercase, in any script |
+| `ext-intl` | Comparing email addresses: one Unicode form (NFC), and domains in their ASCII form (IDNA) |
+| `ext-mbstring` | Text in any script |
 | `ext-sodium` | Ed25519 signing keys |
 
 ## Current runtime dependencies of `yorvoid/authn`

@@ -47,6 +47,7 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
 use YorvoID\Core\Principal\Storage\DbalPrincipalStore;
+use YorvoID\Core\Principal\Storage\IdentifierRenormalization;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
@@ -66,6 +67,7 @@ use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
 use YorvoID\Symfony\Command\DoctorCommand;
+use YorvoID\Symfony\Command\IdentifiersNormalizeCommand;
 use YorvoID\Symfony\Command\KeysRotateCommand;
 use YorvoID\Symfony\Command\MigrateCommand;
 use YorvoID\Symfony\Command\PurgeCommand;
@@ -137,6 +139,7 @@ return static function (ContainerConfigurator $container): void {
     // The middleware's instance on that connection, set by YorvoIDBundle.
     $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null]);
     $services->alias(Transactions::class, DbalTransactions::class)->public();
+    $services->set(IdentifierRenormalization::class);
 
     foreach ([
         PrincipalStore::class => DbalPrincipalStore::class,
@@ -254,7 +257,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(DoctorCommand::class)->args([tagged_locator('yorvoid.doctor_check', 'name')])->tag('console.command');
 
     // Console commands.
-    foreach ([MigrateCommand::class, PurgeCommand::class, SetupCodeCommand::class, RecoveryLinkCommand::class, TemplatesPublishCommand::class, TemplatesDiffCommand::class, TemplatesLintCommand::class] as $command) {
+    foreach ([MigrateCommand::class, PurgeCommand::class, SetupCodeCommand::class, RecoveryLinkCommand::class, IdentifiersNormalizeCommand::class, TemplatesPublishCommand::class, TemplatesDiffCommand::class, TemplatesLintCommand::class] as $command) {
         $services->set($command)->tag('console.command');
     }
 

@@ -21,7 +21,12 @@ final class IdentifierKindTest extends TestCase
         yield 'one-character domain' => ['ana@x', 'ana@x'];
         yield 'any case' => ['Ana.Kovac@Example.COM', 'ana.kovac@example.com'];
         yield 'plus' => ['ana+yorvoid@example.com', 'ana+yorvoid@example.com'];
-        yield 'beyond ASCII' => ['Ána@Пример.рф', 'ána@пример.рф'];
+        yield 'beyond ASCII: the local part as given, the domain in its ASCII form' => ['Ána@Пример.рф', 'Ána@xn--e1afmkfd.xn--p1ai'];
+        yield 'one Unicode form (NFC)' => ["Jose\u{301}@example.com", "jos\u{E9}@example.com"];
+        yield 'precomposed already' => ["Jos\u{E9}@example.com", "jos\u{E9}@example.com"];
+        yield 'case beyond A–Z is kept' => ["\u{C1}na@example.com", "\u{C1}na@example.com"];
+        yield 'the Kelvin sign is the letter K, canonically' => ["\u{212A}im@example.com", 'kim@example.com'];
+        yield 'an ASCII domain as entered, in lowercase' => ['ana@EXAMPLE.xn--p1ai', 'ana@example.xn--p1ai'];
         yield 'one-label domain' => ['root@localhost', 'root@localhost'];
         yield 'longest local part' => [str_repeat('a', 64).'@example.com', str_repeat('a', 64).'@example.com'];
         yield 'longest address' => [str_repeat('a', 64).'@'.str_repeat('b', 185).'.com', str_repeat('a', 64).'@'.str_repeat('b', 185).'.com'];
@@ -52,7 +57,9 @@ final class IdentifierKindTest extends TestCase
         yield 'invalid UTF-8' => ["an\xC3@example.com"];
         yield 'local part too long' => [str_repeat('a', 65).'@example.com'];
         yield 'address too long' => [str_repeat('a', 64).'@'.str_repeat('b', 186).'.com'];
-        yield 'longer in lowercase' => [str_repeat('a', 64).'@'.str_repeat('b', 174).str_repeat('İ', 5).'.com'];
+        yield 'longer in its ASCII form' => [str_repeat('a', 64).'@'.str_repeat('b', 60).'.'.str_repeat('ü', 50).'.'.str_repeat('b', 60).'.com'];
+        yield 'not a domain IDNA allows' => ["ana@\u{301}\u{E9}xample.com"];
+        yield 'a label mixing directions (bidi rule)' => ["ana@\u{E9}xample\u{5D0}.com"];
         yield 'domain starts with a dot' => ['ana@.example.com'];
         yield 'domain ends with a dot' => ['ana@example.com.'];
         yield 'two dots in the domain' => ['ana@example..com'];
