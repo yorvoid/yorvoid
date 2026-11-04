@@ -8,7 +8,7 @@ namespace YorvoID\Core\Storage;
  * Reads typed values from a database row. Drivers return numbers as integers or strings; anything
  * else means the row isn't what YorvoID wrote, and is refused rather than misread.
  *
- * @internal
+ * @api
  */
 final class Row
 {
