@@ -401,20 +401,20 @@ final class FlowPagesTest extends TestCase
         $this->boot();
         $ids = [];
 
-        for ($i = 0; $i <= SessionFlowStore::LIMIT; ++$i) {
+        // The first, then as many again as a page on another site can start with links.
+        for ($i = 0; $i < SessionFlowStore::LIMIT + 3; ++$i) {
             $ids[] = self::id($this->json('POST', '/yorvoid/flows/yorvoid.sign_in', []));
         }
 
-        $this->browser->request('GET', '/yorvoid/flows/yorvoid.sign_in/'.$ids[0]);
-        self::assertSame(404, $this->statusCode(), 'The oldest is forgotten.');
+        $kept = [...\array_slice($ids, 0, SessionFlowStore::LIMIT - 1), $ids[\count($ids) - 1]];
 
-        foreach (\array_slice($ids, 1) as $id) {
+        foreach ($ids as $id) {
             $this->browser->request('GET', '/yorvoid/flows/yorvoid.sign_in/'.$id);
-            self::assertSame(200, $this->statusCode());
+            self::assertSame(\in_array($id, $kept, true) ? 200 : 404, $this->statusCode(), $id);
         }
 
-        $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.$ids[1].'/passkey', ['response' => []]);
-        $this->browser->request('GET', '/yorvoid/flows/yorvoid.sign_in/'.$ids[1]);
+        $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.$ids[0].'/passkey', ['response' => []]);
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.sign_in/'.$ids[0]);
         self::assertSame(200, $this->statusCode(), 'A refused answer keeps the flow.');
     }
 

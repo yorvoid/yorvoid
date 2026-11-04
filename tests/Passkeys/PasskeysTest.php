@@ -272,7 +272,9 @@ final class PasskeysTest extends DatabaseTestCase
         $response = $authenticator->register($registration->options);
 
         $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishRegistration($other, $registration->id, $response, 'Phone', new Origin(OriginKind::Web)));
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishRegistration($session, $registration->id, $response, 'Phone', new Origin(OriginKind::Web)), 'Another session\'s attempt used the ceremony up.');
+        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), $registration->id, $response, new Origin(OriginKind::Web)));
+        $passkeys->finishRegistration($session, $registration->id, $response, 'Phone', new Origin(OriginKind::Web));
+        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishRegistration($session, $registration->id, $response, 'Phone', new Origin(OriginKind::Web)), 'A ceremony worked twice.');
 
         $registration = $passkeys->beginRegistration($session);
         $response = $authenticator->register($registration->options);

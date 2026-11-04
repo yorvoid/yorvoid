@@ -143,9 +143,12 @@ final class PasskeyStoreTest extends DatabaseTestCase
         $store->add($registration);
         $store->add($signIn);
 
-        self::assertNull($store->take(new Realm('globex'), $registration->id));
-        self::assertEquals($registration, $store->take(new Realm('acme'), $registration->id));
-        self::assertNull($store->take(new Realm('acme'), $registration->id), 'A ceremony was taken twice.');
+        self::assertNull($store->take(new Realm('globex'), $registration->id, $registration->sessionId));
+        self::assertNull($store->take(new Realm('acme'), $registration->id), 'A session\'s ceremony was taken without it.');
+        self::assertNull($store->take(new Realm('acme'), $registration->id, new SessionId(new UuidV7())), 'Another session took the ceremony.');
+        self::assertNull($store->take(new Realm('acme'), $signIn->id, new SessionId(new UuidV7())), 'A session took a ceremony begun outside one.');
+        self::assertEquals($registration, $store->take(new Realm('acme'), $registration->id, $registration->sessionId), 'Someone else\'s attempt used the ceremony up.');
+        self::assertNull($store->take(new Realm('acme'), $registration->id, $registration->sessionId), 'A ceremony was taken twice.');
         self::assertEquals($signIn, $store->take(new Realm('acme'), $signIn->id));
     }
 

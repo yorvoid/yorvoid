@@ -40,10 +40,15 @@ final readonly class DbalCeremonyStore implements CeremonyStore
         ], ['expires_at' => Types::DATETIMETZ_IMMUTABLE]);
     }
 
-    public function take(Realm $realm, Uuid $id): ?Ceremony
+    public function take(Realm $realm, Uuid $id, ?SessionId $session = null): ?Ceremony
     {
         $table = $this->database->table(self::TABLE);
         $row = $this->database->connection->fetchAssociative(\sprintf('SELECT kind, options, session_id, operation, expires_at FROM %s WHERE realm = ? AND id = ?', $table), [$realm->name, $id->toRfc4122()]);
+
+        // Someone else's ceremony stays, for the session that began it.
+        if (false !== $row && Row::nullableString($row, 'session_id') !== $session?->uuid->toRfc4122()) {
+            return null;
+        }
 
         // Deleting it is what makes it this request's: another one taking it at once deletes nothing.
         if (false === $row || 1 !== $this->database->connection->delete($table, ['id' => $id->toRfc4122()])) {
