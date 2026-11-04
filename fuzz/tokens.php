@@ -35,60 +35,41 @@ require __DIR__.'/bootstrap.php';
 //
 // Every refused claim is recorded in the security log, in memory here: the stores start afresh every
 // few thousand inputs, or a long run would fill the memory with refusals.
-final class tokens
-{
-    private const int INPUTS = 5_000;
+$fresh = static function (): array {
+    $transactions = new InMemoryTransactions();
+    $log = new SecurityLog(new InMemorySecurityLogStore(), $transactions);
+    $principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifierStore(), $log, $transactions);
+    $tokens = new OneTimeTokens(new InMemoryOneTimeTokenStore(), $principals, $log, $transactions);
+    $setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())));
+    $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
+    $tokens->issue(new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), new Origin(OriginKind::System));
+    // A realm of its own: a realm with an active principal gets no setup code.
+    $unclaimed = new Realm('unclaimed');
+    $setup->create(new CreateSetupCode($unclaimed, Duration::days(1)), new Origin(OriginKind::System));
 
-    private static ?self $current = null;
-    private static int $used = 0;
+    return [$tokens, $setup, $unclaimed];
+};
+$fixture = $fresh();
+$used = 0;
 
-    public readonly Realm $unclaimed;
-
-    private function __construct(public readonly OneTimeTokens $tokens, public readonly SetupCodes $setup)
-    {
-        $this->unclaimed = new Realm('unclaimed');
-    }
-
-    public static function get(): self
-    {
-        if (null === self::$current || ++self::$used > self::INPUTS) {
-            self::$current = self::create();
-            self::$used = 1;
-        }
-
-        return self::$current;
-    }
-
-    private static function create(): self
-    {
-        $transactions = new InMemoryTransactions();
-        $log = new SecurityLog(new InMemorySecurityLogStore(), $transactions);
-        $principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifierStore(), $log, $transactions);
-        $tokens = new OneTimeTokens(new InMemoryOneTimeTokenStore(), $principals, $log, $transactions);
-        $setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())));
-        $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
-        $tokens->issue(new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), new Origin(OriginKind::System));
-        $fixture = new self($tokens, $setup);
-        // A realm of its own: a realm with an active principal gets no setup code.
-        $setup->create(new CreateSetupCode($fixture->unclaimed, Duration::days(1)), new Origin(OriginKind::System));
-
-        return $fixture;
-    }
-}
-
-$config->setTarget(onlyRefusals(static function (string $input): void {
+$config->setTarget(onlyRefusals(static function (string $input) use ($fresh, &$fixture, &$used): void {
     if ('' === $input) {
         return;
     }
 
-    $fixture = Fixture::get();
+    if (++$used > 5_000) {
+        $fixture = $fresh();
+        $used = 1;
+    }
 
-    if (null !== $fixture->tokens->peek(Realm::default(), 'fuzz.test', Secret::fromString($input))) {
+    [$tokens, $setup, $unclaimed] = $fixture;
+
+    if (null !== $tokens->peek(Realm::default(), 'fuzz.test', Secret::fromString($input))) {
         throw new LogicException('A made-up token worked.');
     }
 
     try {
-        $fixture->setup->claim($fixture->unclaimed, Secret::fromString($input), new CreatePrincipal($fixture->unclaimed, PrincipalKind::Human), new Origin(OriginKind::Web));
+        $setup->claim($unclaimed, Secret::fromString($input), new CreatePrincipal($unclaimed, PrincipalKind::Human), new Origin(OriginKind::Web));
     } catch (InvalidSetupCode) {
         return;
     }
