@@ -38,6 +38,8 @@ An entry is written in the same transaction as the change it describes, so the l
 
 Verification detects any change to entries that left the rest of the chain in place, and entries removed from the end while the realm's head, which records the last one, still names them.
 
-Someone who can write to the database can, however, change the head too: cut entries off the end, or rewrite the whole chain from the point they changed, and verification still passes. Checkpoints kept outside the database close that gap; they arrive by 1.0. Until then, the chain protects against accidental and partial tampering, not against an attacker with write access to the database: give the application's database user no UPDATE or DELETE on the log's tables if you can.
+Someone who can write to the database can, however, change the head too: cut entries off the end, or rewrite the whole chain from the point they changed, and verification still passes. Checkpoints kept outside the database close that gap; they arrive by 1.0. Until then, the chain protects against accidental and partial tampering, not against an attacker with write access to the database: take those privileges from the application's database user if you can.
+
+Recording needs only `INSERT` and `SELECT` on `yorvoid_security_log`, and `INSERT`, `SELECT` and `UPDATE` on `yorvoid_security_log_head`. On PostgreSQL, run migrations as a user that owns YorvoID's tables, and grant the application's user only those; `yorvoid:doctor` warns while it can update, delete or truncate the log, or delete or truncate its head. SQLite has no privileges: whoever can write its file can change anything.
 
 Hashes name their algorithm (`sha256` today). Verification refuses any algorithm YorvoID doesn't accept, so an entry can't be "re-hashed" with a weaker one.

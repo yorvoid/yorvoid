@@ -311,6 +311,7 @@ It answers only in debug mode, wherever it's imported.
 | Configuration | Builds what YorvoID builds only when it's first used: the passkey policy (the relying party ID and the origins), the session policy, the limits, the database. Passkeys for `localhost` outside development are a warning. |
 | Keys | With `keys.file` set: the file exists, only its owner can read it, and it holds a valid key ring. |
 | Database and migrations | YorvoID reaches its database, every migration of this version ran, and the database has none from a later version. |
+| Security log privileges | On PostgreSQL, the application's database user can't update, delete or truncate the security log, or delete or truncate its head: otherwise it could rewrite the log unnoticed. See [what the chain proves](security-log.md#what-the-chain-proves-and-what-it-doesnt). |
 | Clock | The application's clock agrees with the database's within 5 seconds; a `MockClock` outside development is a problem. |
 | Assurance level | The configuration reaches the level its `sessions.preset` targets ([assurance levels](../security/assurance-levels.md)): passkeys require user verification, sessions last no longer than the level allows, and no AAL3 with synced passkeys. |
 | Preset | Your settings are no weaker than your [preset's](#presets): session preset, device recognition, step-up window and cool-down, limits. |

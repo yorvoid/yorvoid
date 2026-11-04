@@ -17,6 +17,7 @@ use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
 use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\Finding;
+use YorvoID\Symfony\Doctor\LogGrantsCheck;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
@@ -67,6 +68,49 @@ final class DoctorChecksTest extends DatabaseTestCase
         self::assertCount(1, $findings);
         self::assertFalse($findings[0]->problem);
         self::assertStringStartsWith('The database has migrations this version of YorvoID doesn\'t know: ', $findings[0]->what);
+    }
+
+    public function testWarnsWhileTheApplicationCanRewriteTheSecurityLog(): void
+    {
+        $sqlite = $this->database('sqlite');
+        new Migrator($sqlite, Migrations::all())->migrate();
+        self::assertSame([], $this->whats(new LogGrantsCheck(static fn (): Database => $sqlite)), 'SQLite has no privileges to check');
+        self::assertSame([], $this->whats(new LogGrantsCheck(static fn (): Database => throw new Unreachable('no route to host'))));
+
+        $database = $this->database('postgresql');
+        new Migrator($database, Migrations::all())->migrate();
+        $log = $database->table('security_log');
+        $head = $database->table('security_log_head');
+
+        // The user that ran the migrations owns the tables, and can do anything to them.
+        $findings = iterator_to_array(new LogGrantsCheck(static fn (): Database => $database)->findings(), false);
+        self::assertCount(1, $findings);
+        self::assertFalse($findings[0]->problem);
+        self::assertSame(\sprintf('The application\'s database user can rewrite the security log, and verification wouldn\'t notice: UPDATE on %1$s, DELETE on %1$s, TRUNCATE on %1$s, DELETE on %2$s, TRUNCATE on %2$s.', $log, $head), $findings[0]->what);
+
+        // An application user with only what recording needs.
+        $connection = $database->connection;
+        $role = 'yorvoid_app_'.bin2hex(random_bytes(4));
+        $connection->executeStatement(\sprintf('CREATE ROLE %s', $role));
+
+        try {
+            $connection->executeStatement(\sprintf('GRANT USAGE ON SCHEMA %s TO %s', $connection->quoteSingleIdentifier((string) $database->location->schema), $role));
+            $connection->executeStatement(\sprintf('GRANT SELECT, INSERT ON %s TO %s', $log, $role));
+            $connection->executeStatement(\sprintf('GRANT SELECT, INSERT, UPDATE ON %s TO %s', $head, $role));
+            $connection->executeStatement(\sprintf('SET ROLE %s', $role));
+
+            self::assertSame([], $this->whats(new LogGrantsCheck(static fn (): Database => $database)));
+
+            $connection->executeStatement('RESET ROLE');
+            $connection->executeStatement(\sprintf('GRANT DELETE ON %s TO %s', $log, $role));
+            $connection->executeStatement(\sprintf('SET ROLE %s', $role));
+
+            self::assertSame([\sprintf('The application\'s database user can rewrite the security log, and verification wouldn\'t notice: DELETE on %s.', $log)], $this->whats(new LogGrantsCheck(static fn (): Database => $database)));
+        } finally {
+            $connection->executeStatement('RESET ROLE');
+            $connection->executeStatement(\sprintf('DROP OWNED BY %s', $role));
+            $connection->executeStatement(\sprintf('DROP ROLE %s', $role));
+        }
     }
 
     public function testTheSessionNeedsSafeCookies(): void
