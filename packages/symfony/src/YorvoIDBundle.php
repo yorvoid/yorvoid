@@ -69,6 +69,9 @@ final class YorvoIDBundle extends AbstractBundle
         $children->scalarNode('users')->defaultNull()->info('The service ID of your PrincipalUsers, to sign in your own users; PrincipalUser if not given');
         $children->arrayNode('keys')->addDefaultsIfNotSet()->children()
             ->scalarNode('file')->defaultNull()->info('The signing keys\' file, only its owner may read, e.g. "/run/secrets/yorvoid-keys.json"; yorvoid:keys:rotate creates it')->end();
+        $children->arrayNode('log')->addDefaultsIfNotSet()->children()
+            ->scalarNode('checkpoint_file')->defaultNull()->info('Where yorvoid:log:checkpoint appends signed checkpoints of the security log, out of the database user\'s reach, e.g. on another disk or host; needs keys.file')->end()
+            ->booleanNode('checkpoint_logger')->defaultFalse()->info('Whether checkpoints also go to the application\'s logger, for a pipeline that ships logs elsewhere')->end();
         $children->arrayNode('cookies')->addDefaultsIfNotSet()->children()
             ->scalarNode('device')->defaultValue('__Host-yorvoid_device')->info('The cookie that recognises devices')->end();
         $children->arrayNode('storage')->addDefaultsIfNotSet()->children()

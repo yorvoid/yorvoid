@@ -8,7 +8,11 @@ use Doctrine\DBAL\Exception as DbalException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
+use Symfony\Component\Filesystem\Filesystem;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Log\Checkpoint\Checkpoint;
+use YorvoID\Core\Log\Checkpoint\FileCheckpoints;
+use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Migration\Migrator;
 use YorvoID\Symfony\Doctor\Check;
@@ -17,6 +21,7 @@ use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
 use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\Finding;
+use YorvoID\Symfony\Doctor\LogCheckpointsCheck;
 use YorvoID\Symfony\Doctor\LogGrantsCheck;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
@@ -110,6 +115,31 @@ final class DoctorChecksTest extends DatabaseTestCase
             $connection->executeStatement('RESET ROLE');
             $connection->executeStatement(\sprintf('DROP OWNED BY %s', $role));
             $connection->executeStatement(\sprintf('DROP ROLE %s', $role));
+        }
+    }
+
+    public function testWarnsWithoutRecentCheckpointsOutsideDevelopment(): void
+    {
+        $file = \sprintf('%s/yorvoid-checkpoints-%s.jsonl', sys_get_temp_dir(), bin2hex(random_bytes(6)));
+        $clock = new MockClock('2026-11-04 18:00:00 UTC');
+        $check = static fn (?string $keys, ?string $at, bool $logger = false, bool $debug = false): array => array_map(static fn (Finding $finding): string => $finding->what, iterator_to_array(new LogCheckpointsCheck($keys, $at, $logger, Realm::default(), $clock, $debug)->findings(), false));
+
+        try {
+            self::assertSame([], $check(null, null, debug: true), 'Development has no checkpoints, and needs none.');
+            self::assertStringStartsWith('The security log has no checkpoints', $check(null, $file)[0] ?? '');
+            self::assertStringStartsWith('The security log has no checkpoints', $check('/keys.json', null)[0] ?? '');
+            self::assertSame([], $check('/keys.json', null, logger: true), 'Checkpoints that go to the logger can\'t be read back here.');
+            self::assertSame(['The newest checkpoint of the realm "default" is missing.'], $check('/keys.json', $file));
+
+            $write = static function (string $at) use ($file): void {
+                new FileCheckpoints($file)->write(new Checkpoint(Realm::default(), 1, 'hash', new \DateTimeImmutable($at), 'key', 'signature'));
+            };
+            $write('2026-11-03 17:59:59 UTC');
+            self::assertSame(['The newest checkpoint of the realm "default" is from 2026-11-03T17:59:59+00:00.'], $check('/keys.json', $file));
+            $write('2026-11-03 18:00:00 UTC');
+            self::assertSame([], $check('/keys.json', $file), 'A day old is recent enough.');
+        } finally {
+            new Filesystem()->remove($file);
         }
     }
 

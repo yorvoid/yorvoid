@@ -69,6 +69,8 @@ use YorvoID\Passkeys\Storage\DbalPasskeyStore;
 use YorvoID\Symfony\Command\DoctorCommand;
 use YorvoID\Symfony\Command\IdentifiersNormalizeCommand;
 use YorvoID\Symfony\Command\KeysRotateCommand;
+use YorvoID\Symfony\Command\LogCheckpointCommand;
+use YorvoID\Symfony\Command\LogVerifyCommand;
 use YorvoID\Symfony\Command\MigrateCommand;
 use YorvoID\Symfony\Command\PurgeCommand;
 use YorvoID\Symfony\Command\RecoveryLinkCommand;
@@ -85,6 +87,7 @@ use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
 use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\KeysCheck;
+use YorvoID\Symfony\Doctor\LogCheckpointsCheck;
 use YorvoID\Symfony\Doctor\LogGrantsCheck;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
@@ -244,6 +247,7 @@ return static function (ContainerConfigurator $container): void {
     ])->tag('yorvoid.doctor_check', ['name' => 'Configuration']);
     $services->set(KeysCheck::class)->args([param('yorvoid.keys.file')])->tag('yorvoid.doctor_check', ['name' => 'Keys']);
     $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
+    $services->set(LogCheckpointsCheck::class)->args([param('yorvoid.keys.file'), param('yorvoid.log.checkpoint_file'), param('yorvoid.log.checkpoint_logger'), service(Realm::class), service(ClockInterface::class), param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Security log checkpoints']);
     $services->set(LogGrantsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Security log privileges']);
     $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);
     $services->set(AssuranceCheck::class)->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle'), param('yorvoid.passkeys.user_verification')])->tag('yorvoid.doctor_check', ['name' => 'Assurance level']);
@@ -255,6 +259,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(TestHelpersCheck::class)->args([param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Test helpers']);
     $services->set(EnvironmentCheck::class)->args([param('kernel.environment'), param('kernel.debug'), param('kernel.secret')])->tag('yorvoid.doctor_check', ['name' => 'Environment']);
     $services->set(KeysRotateCommand::class)->arg('$file', param('yorvoid.keys.file'))->tag('console.command');
+    $services->set(LogCheckpointCommand::class)->arg('$keys', param('yorvoid.keys.file'))->arg('$file', param('yorvoid.log.checkpoint_file'))->arg('$toLogger', param('yorvoid.log.checkpoint_logger'))->arg('$logger', service('logger')->nullOnInvalid())->tag('console.command');
+    $services->set(LogVerifyCommand::class)->arg('$keys', param('yorvoid.keys.file'))->arg('$file', param('yorvoid.log.checkpoint_file'))->tag('console.command');
     $services->set(DoctorCommand::class)->args([tagged_locator('yorvoid.doctor_check', 'name')])->tag('console.command');
 
     // Console commands.

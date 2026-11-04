@@ -26,6 +26,9 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Key\KeyRing;
+use YorvoID\Core\Key\SigningKey;
+use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -234,6 +237,56 @@ final class BundleTest extends TestCase
         $database->connection->update($table, ['normalized' => "jos\u{E9}@example.com", 'value' => "jos\u{E9}@example.com"], ['normalized' => 'bob@example.com']);
         self::assertSame(1, $normalize->execute([]));
         self::assertStringContainsString('is now the same as another one', (string) preg_replace('/\s+/', ' ', $normalize->getDisplay()));
+    }
+
+    public function testChecksTheSecurityLogAgainstItsCheckpoints(): void
+    {
+        $keys = $this->directory.'/keys.json';
+        $file = $this->directory.'/checkpoints.jsonl';
+        new Filesystem()->mkdir($this->directory, 0o700);
+        new KeyRing([SigningKey::generate('2026-11-04')])->toFile($keys);
+        $container = $this->boot(['keys' => ['file' => $keys], 'log' => ['checkpoint_file' => $file]]);
+        $this->migrate();
+        $application = new Application($this->kernel ?? throw new \LogicException());
+        $checkpoint = new CommandTester($application->find('yorvoid:log:checkpoint'));
+        $verify = new CommandTester($application->find('yorvoid:log:verify'));
+
+        self::assertSame(0, $checkpoint->execute([]));
+        self::assertStringContainsString('The realm "default" has no entries yet: nothing to checkpoint.', $checkpoint->getDisplay());
+
+        $principals = $container->get(Principals::class);
+        \assert($principals instanceof Principals);
+        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Console));
+        self::assertSame(0, $checkpoint->execute([]));
+        self::assertMatchesRegularExpression('/Checkpointed entry 1 of the realm "default", signed with the key "[^"]+"\./', $checkpoint->getDisplay());
+        self::assertSame(0, $verify->execute([]));
+        self::assertStringContainsString('1 entries of the realm "default" are intact, and match their checkpoints.', (string) preg_replace('/\s+/', ' ', $verify->getDisplay()));
+
+        // Cut off, with the head moved back: only the checkpoint knows.
+        $database = $this->database($container);
+        $database->connection->executeStatement(\sprintf('DELETE FROM %s', $database->table(DbalSecurityLogStore::TABLE)));
+        $database->connection->executeStatement(\sprintf('DELETE FROM %s', $database->table(DbalSecurityLogStore::HEAD_TABLE)));
+        self::assertSame(1, $verify->execute([]));
+        self::assertStringContainsString('isn\'t in the log: entries at the end were removed.', (string) preg_replace('/\s+/', ' ', $verify->getDisplay()));
+    }
+
+    public function testWithoutCheckpointsVerificationSaysWhatItCantSee(): void
+    {
+        $this->boot();
+        $this->migrate();
+        $application = new Application($this->kernel ?? throw new \LogicException());
+        $verify = new CommandTester($application->find('yorvoid:log:verify'));
+
+        self::assertSame(0, $verify->execute([]));
+        self::assertStringContainsString('Without checkpoints, someone who can write the database could have cut', $verify->getDisplay());
+        self::assertStringContainsString('yorvoid.log.checkpoint_file', $verify->getDisplay());
+
+        try {
+            new CommandTester($application->find('yorvoid:log:checkpoint'))->execute([]);
+            self::fail('A checkpoint was taken without keys or a place to keep it.');
+        } catch (IntegratorError $error) {
+            self::assertSame('Checkpoints of the security log aren\'t configured.', $error->problem);
+        }
     }
 
     public function testSendsNotificationsThroughSymfonyMailerAfterTheCommit(): void

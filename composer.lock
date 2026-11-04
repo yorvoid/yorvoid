@@ -5149,7 +5149,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "3dbd5d1eda6813ab85647bb0dffd610a11e3ab46"
+                "reference": "7e6f7811909f6bfe7f7078454f5f40351a1892b7"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5159,6 +5159,7 @@
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
+                "psr/log": "^3.0",
                 "symfony/clock": "^7.4 || ^8.1",
                 "symfony/uid": "^7.4 || ^8.1"
             },
@@ -5570,7 +5571,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "b5bfec7e2538be794bddcb0095888d27c67e01b0"
+                "reference": "2df8f51c260a016296c5f0afdf4d9063bb93b5d5"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5581,6 +5582,7 @@
                 "ext-mbstring": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
+                "psr/log": "^3.0",
                 "symfony/config": "^7.4 || ^8.1",
                 "symfony/console": "^7.4 || ^8.1",
                 "symfony/dependency-injection": "^7.4 || ^8.1",

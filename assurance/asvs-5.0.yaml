@@ -1258,17 +1258,24 @@ requirements:
         note: 'The security log is structured (columns and JSON), never formatted text; correlation IDs are restricted to safe characters; invalid UTF-8 and NUL are replaced and an origin''s detail is cut to its column, so attacker-controlled text can always be recorded and never breaks the log, on every database.'
     V16.4.2:
         level: 2
-        status: partly
+        status: covered
         tests:
             - 'YorvoID\Tests\Core\Log\SecurityLogTest::testDetectsTampering'
             - 'YorvoID\Tests\Core\Log\SecurityLogTest::testDetectsAMissingHead'
             - 'YorvoID\Tests\Symfony\DoctorChecksTest::testWarnsWhileTheApplicationCanRewriteTheSecurityLog'
+            - 'YorvoID\Tests\Core\Log\Checkpoint\CheckpointsTest::testFindsEntriesCutOffTheEnd'
+            - 'YorvoID\Tests\Core\Log\Checkpoint\CheckpointsTest::testFindsAHistoryRewrittenWithItsChain'
         docs:
             - concepts/security-log.md
-        note: 'Changes are detected by the hash chain; preventing a full rewrite, or a cut-off end, by someone who can write the database needs checkpoints kept outside it (by 1.0). Database permissions are the application''s; yorvoid:doctor warns on PostgreSQL while its user can update, delete or truncate the log.'
+        note: 'Changes are detected by the hash chain; a full rewrite, or a cut-off end, by someone who can write the database is detected against signed checkpoints kept outside it, up to the last one. Database permissions are the application''s; yorvoid:doctor warns on PostgreSQL while its user can update, delete or truncate the log.'
     V16.4.3:
         level: 2
-        status: open
+        status: partly
+        tests:
+            - 'YorvoID\Tests\Core\Log\Checkpoint\CheckpointsTest::testCheckpointsGoToEverySinkAndRoundTrip'
+        docs:
+            - concepts/security-log.md
+        note: 'Signed checkpoints go to a file on another system or to the application''s logger, and each entry is dispatched after commit (SecurityLogEntryRecorded) for a SIEM; shipping the entries themselves is the application''s.'
     V16.5.1:
         level: 2
         status: open
