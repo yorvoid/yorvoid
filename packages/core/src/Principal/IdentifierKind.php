@@ -67,7 +67,10 @@ enum IdentifierKind: string
         $domain = false === $at ? false : substr($nfc, $at + 1);
 
         if (false !== $domain && 1 === preg_match('/[^\x00-\x7F]/', $domain)) {
+            // The result checked too: some characters map to a space or other ASCII that a hostname
+            // can't have (¯ to a space and a combining macron), and not every ICU version refuses them.
             $domain = idn_to_ascii($domain, \IDNA_NONTRANSITIONAL_TO_ASCII | \IDNA_CHECK_BIDI, \INTL_IDNA_VARIANT_UTS46);
+            $domain = \is_string($domain) && 1 === preg_match('/^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\z/', $domain) ? $domain : false;
         }
 
         if (false === $at || false === $domain) {

@@ -32,21 +32,37 @@ require __DIR__.'/bootstrap.php';
 
 // What arrives in a link or is typed as a setup code: anything at all. It never works (a guess that
 // does would be a 2^-128 event), and nothing breaks on the way to saying so.
-$transactions = new InMemoryTransactions();
-$log = new SecurityLog(new InMemorySecurityLogStore(), $transactions);
-$principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifierStore(), $log, $transactions);
-$tokens = new OneTimeTokens(new InMemoryOneTimeTokenStore(), $principals, $log, $transactions);
-$setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())));
-$principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
-$tokens->issue(new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), new Origin(OriginKind::System));
-// A realm of its own: a realm with an active principal gets no setup code.
-$unclaimed = new Realm('unclaimed');
-$setup->create(new CreateSetupCode($unclaimed, Duration::days(1)), new Origin(OriginKind::System));
+//
+// Every refused claim is recorded in the security log, in memory here: the stores start afresh every
+// few thousand inputs, or a long run would fill the memory with refusals.
+$fresh = static function (): array {
+    $transactions = new InMemoryTransactions();
+    $log = new SecurityLog(new InMemorySecurityLogStore(), $transactions);
+    $principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifierStore(), $log, $transactions);
+    $tokens = new OneTimeTokens(new InMemoryOneTimeTokenStore(), $principals, $log, $transactions);
+    $setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())));
+    $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
+    $tokens->issue(new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), new Origin(OriginKind::System));
+    // A realm of its own: a realm with an active principal gets no setup code.
+    $unclaimed = new Realm('unclaimed');
+    $setup->create(new CreateSetupCode($unclaimed, Duration::days(1)), new Origin(OriginKind::System));
 
-$config->setTarget(onlyRefusals(static function (string $input) use ($tokens, $setup, $unclaimed): void {
+    return [$tokens, $setup, $unclaimed];
+};
+$fixture = $fresh();
+$used = 0;
+
+$config->setTarget(onlyRefusals(static function (string $input) use ($fresh, &$fixture, &$used): void {
     if ('' === $input) {
         return;
     }
+
+    if (++$used > 5_000) {
+        $fixture = $fresh();
+        $used = 1;
+    }
+
+    [$tokens, $setup, $unclaimed] = $fixture;
 
     if (null !== $tokens->peek(Realm::default(), 'fuzz.test', Secret::fromString($input))) {
         throw new LogicException('A made-up token worked.');
