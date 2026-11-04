@@ -29,6 +29,7 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Id\UuidV7Generator;
+use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Principal\CreatePrincipal;
@@ -259,6 +260,25 @@ final class PasskeysTest extends DatabaseTestCase
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
         self::assertTrue($passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options), new Origin(OriginKind::Web))->session->authentication->factors[0]->multiFactor);
         self::assertTrue($passkeys->of(new Realm('acme'), $session->principalId)[0]->userVerificationInitialized, 'The first verified use was recorded.');
+    }
+
+    #[DataProvider('implementations')]
+    public function testFailedSignInsAreRecordedToo(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation);
+        $stranger = new VirtualAuthenticator();
+        $stranger->register((string) json_encode(['rp' => ['id' => 'example.com', 'name' => ''], 'user' => ['id' => 'dXNlcg', 'name' => 'x', 'displayName' => 'x'], 'challenge' => 'Y2hhbGxlbmdl', 'pubKeyCredParams' => [['type' => 'public-key', 'alg' => -7]]]));
+        $before = \count(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false));
+
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $this->refused(Refusal::UnknownPasskey, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $stranger->signIn($signIn->options), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), 'not-a-ceremony', '{}', new Origin(OriginKind::Web)));
+
+        $recorded = \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), $before);
+        self::assertSame([
+            ['yorvoid.passkey.sign_in', Outcome::Failed, null, ['reason' => 'unknown_passkey']],
+            ['yorvoid.passkey.sign_in', Outcome::Failed, null, ['reason' => 'ceremony_expired']],
+        ], array_map(static fn (LogEntry $entry): array => [$entry->action, $entry->outcome, $entry->subjectId, $entry->details], $recorded));
     }
 
     #[DataProvider('implementations')]
@@ -685,7 +705,9 @@ final class PasskeysTest extends DatabaseTestCase
         $entries = \count(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false));
         $ceremony = $passkeys->beginStepUp($session, $requirement);
         $this->refused(Refusal::UnknownPasskey, static fn () => $passkeys->finishStepUp($session, $ceremony->id, $stranger->signIn($ceremony->options), new Origin(OriginKind::Web)), 'Someone else\'s passkey stepped the session up.');
-        self::assertCount($entries, iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), 'Someone else\'s passkey was recorded as theirs.');
+        $recorded = \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), $entries);
+        self::assertCount(1, $recorded, 'The refusal wasn\'t recorded, or more was.');
+        self::assertSame(['yorvoid.passkey.step_up', Outcome::Failed, null, null, ['reason' => 'unknown_passkey']], [$recorded[0]->action, $recorded[0]->outcome, $recorded[0]->actor, $recorded[0]->subjectId, $recorded[0]->details], 'Someone else\'s passkey was recorded as theirs.');
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
         $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishStepUp($session, $signIn->id, $authenticator->signIn($signIn->options), new Origin(OriginKind::Web)));

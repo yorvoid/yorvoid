@@ -24,7 +24,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - The intent verifier checks answers, nonces and parameters itself, and caps waiting intents.
 - The intent verifier reads the browser's answers by hand into one fixed shape: Symfony Serializer's reflection-driven denormalizers no longer see what the console relays.
 - Signing in again ends the session the browser held; two step-ups at once both keep their proof.
-- Failed setup codes and tokens, and limits reached, are recorded in the security log.
+- Failed setup codes and tokens, limits reached, and passkey sign-ins and step-ups refused before the passkey is known (an expired ceremony, an unknown passkey), are recorded in the security log.
 - The key file is replaced only by a complete, synced copy; Symfony's dumper shows secrets redacted.
 - `yorvoid:doctor` warns on PostgreSQL while the application's database user can update, delete or truncate the security log.
 - Signed checkpoints of the security log, kept outside the database (`Checkpoints`, `FileCheckpoints`, `LoggerCheckpoints`; in Symfony `yorvoid.log.checkpoint_file`, `yorvoid:log:checkpoint` and `yorvoid:log:verify`): verification finds entries cut off the end, and a history rewritten with its chain recomputed, up to the last checkpoint.

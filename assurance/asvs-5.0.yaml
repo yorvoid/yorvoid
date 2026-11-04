@@ -1235,7 +1235,14 @@ requirements:
         note: 'The security log never holds secrets, session tokens, email addresses, IP addresses or devices; a policy per data protection level is still to be documented.'
     V16.3.1:
         level: 2
-        status: open
+        status: covered
+        tests:
+            - 'YorvoID\Tests\Authn\Session\SessionsTest::testStartsASessionAndValidatesItsToken'
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testFailedSignInsAreRecordedToo'
+            - 'YorvoID\Tests\Passkeys\PasskeysTest::testAStepUpIsTheSessionsAndItsPrincipals'
+        docs:
+            - concepts/security-log.md
+        note: 'Every sign-in and step-up is recorded with its methods (yorvoid.session.start, yorvoid.session.step_up); refused ones with their reason, whether or not the passkey, code or token was known (yorvoid.passkey.sign_in, yorvoid.recovery_code.use, yorvoid.setup.claim, yorvoid.token.consume). Attempts over a limit are recorded once a window.'
     V16.3.2:
         level: 2
         status: open
