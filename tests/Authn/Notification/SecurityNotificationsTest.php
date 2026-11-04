@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Authn\Notification;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
+use Psr\Log\NullLogger;
 use Symfony\Component\Clock\MockClock;
 use YorvoID\Authn\Credential\AddCredential;
 use YorvoID\Authn\Credential\CredentialId;
@@ -51,6 +55,7 @@ use YorvoID\Mail\Block\Footnote;
 use YorvoID\Mail\Block\Paragraph;
 use YorvoID\Mail\Email;
 use YorvoID\Mail\InMemoryMailer;
+use YorvoID\Mail\Mailer;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
@@ -109,6 +114,34 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $footnote = $email->body[4];
         \assert($footnote instanceof Footnote);
         self::assertStringContainsString('security of your Acme account', $footnote->text);
+    }
+
+    #[DataProvider('implementations')]
+    public function testAMailOutageIsLoggedAndFailsNothing(string $implementation): void
+    {
+        $logger = new class extends AbstractLogger {
+            /** @var list<array{mixed, string, array<mixed>}> */
+            public array $logged = [];
+
+            public function log($level, \Stringable|string $message, array $context = []): void
+            {
+                $this->logged[] = [$level, (string) $message, $context];
+            }
+        };
+        $this->notifications($implementation, new class implements Mailer {
+            public function send(Email $email): void
+            {
+                throw new \RuntimeException('The mail server is down.');
+            }
+        }, $logger);
+        $ana = $this->principal('ana@example.com');
+        $this->signIn($ana);
+
+        $started = $this->signIn($ana, 'Firefox on Linux');
+
+        self::assertNotNull($this->sessions->validate(new Realm('acme'), $started->token), 'The sign-in failed with the email.');
+        self::assertCount(1, $logger->logged);
+        self::assertSame([LogLevel::ERROR, 'new_device', 'acme', (string) $ana->id, 'The mail server is down.'], [$logger->logged[0][0], $logger->logged[0][2]['notice'], $logger->logged[0][2]['realm'], $logger->logged[0][2]['principal'], $logger->logged[0][2]['message']]);
     }
 
     #[DataProvider('implementations')]
@@ -322,7 +355,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         self::assertEquals(Duration::days(1), new NotificationSettings('Acme', 'https://acme.example/{token}', notMeLifetime: Duration::days(1))->notMeLifetime);
         self::assertSame('en', $settings->localeOf(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next())));
 
-        foreach (['https://acme.example/not-me', 'javascript:{token}', '/not-me?token={token}'] as $url) {
+        foreach (['https://acme.example/not-me', 'javascript:{token}', '/not-me?token={token}', 'http://acme.example/not-me?token={token}', 'https://{token}.acme.example/not-me', 'https://evil.example@acme.example/{token}', 'http:{token}', "https://acme.example/\0/{token}"] as $url) {
             try {
                 new NotificationSettings('Acme', $url);
                 self::fail(\sprintf('"%s" was accepted.', $url));
@@ -332,7 +365,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         }
     }
 
-    private function notifications(string $implementation): void
+    private function notifications(string $implementation, ?Mailer $mailer = null, LoggerInterface $logger = new NullLogger()): void
     {
         $this->stack = $this->stack($implementation);
         $this->clock = new MockClock('2026-10-28 18:45:30 UTC');
@@ -345,7 +378,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock);
         $this->mailer = new InMemoryMailer();
         $settings = new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}&credential={credential}', fn (Realm $realm, PrincipalId $principal): string => $this->locales[(string) $principal] ?? 'en');
-        $notifications = new SecurityNotifications($this->principals, $tokens, $this->mailer, new Translator([Translations::DIRECTORY]), $settings, $this->clock);
+        $notifications = new SecurityNotifications($this->principals, $tokens, $mailer ?? $this->mailer, new Translator([Translations::DIRECTORY]), $settings, $this->clock, $logger);
         $this->notMe = new NotMe($tokens, $this->sessions, $this->credentials, $log, $this->stack->transactions, $this->events);
 
         foreach (SecurityNotifications::events() as $event => $method) {

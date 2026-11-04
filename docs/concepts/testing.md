@@ -15,7 +15,8 @@ A `Scenario` makes what your tests need through YorvoID's own services, as peopl
 ```php
 use YorvoID\Testing\Scenario;
 
-$scenario = Scenario::of(static::getContainer());   // in a KernelTestCase or WebTestCase
+$client = static::createClient();                     // in a WebTestCase, first: it boots the kernel
+$scenario = Scenario::of(static::getContainer());     // in a KernelTestCase, alone
 
 $ana = $scenario->principal('ana@example.com');      // a person with a verified email; a new address if left out
 $started = $scenario->session($ana);                  // a session, as signing in with a passkey starts it
@@ -37,15 +38,14 @@ services:
         public: true
 ```
 
-Then `$scenario->clock()->modify('+2 hours')` moves it for YorvoID and your application alike: sessions go idle, tokens expire, cool-downs end. With any other clock, `clock()` says how to set one up.
+Then `$scenario->clock()->modify('+2 hours')` moves it for YorvoID and your application alike: sessions go idle, tokens expire, cool-downs end. With any other clock, `clock()` says how to set one up. In a `WebTestCase`, call `$client->disableReboot()` first: the test client otherwise boots a new kernel before each request, with a new clock, and the move is lost.
 
 ## Signing in in functional tests
 
 ```php
 use YorvoID\Testing\Symfony\BrowserSignIn;
 
-$client = static::createClient();
-BrowserSignIn::as($client, $ana);
+BrowserSignIn::as($client, $ana);                     // the client from above
 $client->request('GET', '/account');                  // signed in as Ana
 ```
 

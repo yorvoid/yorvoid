@@ -91,6 +91,11 @@ final readonly class Credentials
             throw new IntegratorError('The session is in another realm than the credential.', 'Add credentials in the realm of the signed-in session.', 'concepts/credentials.md#changing-how-someone-signs-in');
         }
 
+        // Kinds no package checks yet: one added would count as a way to sign in, and let the last passkey go.
+        if (!$command->kind->isBuilt()) {
+            throw new IntegratorError(\sprintf('YorvoID can\'t check %s credentials yet.', $command->kind->value), 'Add passkeys and recovery codes; passwords and authenticator apps come with their packages.', 'concepts/credentials.md');
+        }
+
         return $this->transactions->run(function () use ($command, $session, $origin): Credential {
             $this->requireStepUp($session, 'yorvoid.credential.add');
             $credential = new Credential(new CredentialId($this->ids->next()), $command->realm, $session->principalId, $command->kind, self::label($command->label, $command->kind), Time::stored($this->clock->now()));

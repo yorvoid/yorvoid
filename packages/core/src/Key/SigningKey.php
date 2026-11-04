@@ -63,8 +63,6 @@ final readonly class SigningKey
 
     /**
      * @return string The 64-byte signature
-     *
-     * @infection-ignore-all Wiping the expanded private key from memory afterwards can't be observed by a test.
      */
     public function sign(string $message): string
     {

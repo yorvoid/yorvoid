@@ -237,6 +237,35 @@ final class TransactionsTest extends DatabaseTestCase
     }
 
     #[DataProvider('platforms')]
+    public function testAfterYorvoIDsOwnUnitsTheApplicationsCommitStillRunsTheCallbacks(string $platform): void
+    {
+        $stack = $this->stack($platform);
+        $database = $stack->database;
+        \assert($database instanceof Database);
+        /** @var \ArrayObject<int, string> $ran */
+        $ran = new \ArrayObject();
+
+        // YorvoID's own units first, one that commits and one that fails: neither leaves commits waiting.
+        $stack->transactions->run(static fn (): null => null);
+
+        try {
+            $stack->transactions->run(static fn (): never => throw new \RuntimeException('Failed.'));
+        } catch (\RuntimeException) {
+        }
+
+        // Then the application's own transaction, around a unit that queues a notification's event.
+        $database->connection->beginTransaction();
+        $stack->transactions->run(static function () use ($stack, $ran): void {
+            $stack->transactions->afterCommit(static function () use ($ran): void {
+                $ran->append('new device');
+            });
+        });
+        $database->connection->commit();
+
+        self::assertSame(['new device'], $ran->getArrayCopy(), 'After the application\'s commit, security notifications stopped.');
+    }
+
+    #[DataProvider('platforms')]
     public function testRefusesToQueueCallbacksWithoutTheMiddleware(string $platform): void
     {
         $connection = $this->connect($platform);

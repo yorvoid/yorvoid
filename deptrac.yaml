@@ -71,7 +71,6 @@ deptrac:
       - Core
       - Authn
       - Flows
-      - IntentVerifier
       - Mail
       - Passkeys
       - Throttle
@@ -88,5 +87,6 @@ deptrac:
       - Authn
       - Passkeys
       - Symfony
+      - Throttle
       - VirtualAuthenticator
     VirtualAuthenticator: ~

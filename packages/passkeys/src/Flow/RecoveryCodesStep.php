@@ -6,6 +6,7 @@ namespace YorvoID\Passkeys\Flow;
 
 use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryCodes;
+use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Core\Secret;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
@@ -28,8 +29,12 @@ final readonly class RecoveryCodesStep implements Step
 
     private const string CODES = self::NAME.'.codes';
 
+    /**
+     * @param StepUp|null $stepUp For the cool-down after a recovery; without it, there's none to wait out
+     */
     public function __construct(
         private RecoveryCodes $codes,
+        private ?StepUp $stepUp = null,
     ) {
     }
 
@@ -38,9 +43,15 @@ final readonly class RecoveryCodesStep implements Step
         return self::NAME;
     }
 
+    /**
+     * Not while the cool-down after a recovery lasts: new codes would replace the owner's, which is what
+     * it holds (ATN-029). The person generates them once it ends.
+     */
     public function applies(FlowState $state, FlowContext $context): bool
     {
-        return null !== $context->session && 0 === $this->codes->remaining($context->session->realm, $context->session->principalId);
+        return null !== $context->session
+            && 0 === $this->codes->remaining($context->session->realm, $context->session->principalId)
+            && null === $this->stepUp?->coolDownEndsAt($context->session->realm, $context->session->principalId);
     }
 
     /**

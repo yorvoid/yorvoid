@@ -26,15 +26,26 @@
     },
     "require": {
         "php": ">=8.5",
+        "ext-dom": "*",
+        "ext-filter": "*",
+        "ext-libxml": "*",
+        "ext-mbstring": "*",
         "doctrine/dbal": "^4.3",
+        "doctrine/doctrine-bundle": "^3.3",
+        "psr/clock": "^1.0",
         "symfony/config": "^8.1",
         "symfony/console": "^8.1",
         "symfony/dependency-injection": "^8.1",
+        "symfony/framework-bundle": "^8.1",
         "symfony/http-foundation": "^8.1",
         "symfony/http-kernel": "^8.1",
-        "sebastian/diff": "^7.0 || ^8.0 || ^9.0",
         "symfony/routing": "^8.1",
         "symfony/security-bundle": "^8.1",
+        "symfony/security-core": "^8.1",
+        "symfony/security-http": "^8.1",
+        "symfony/service-contracts": "^3.6",
+        "symfony/translation-contracts": "^3.6",
+        "symfony/uid": "^8.1",
         "yorvoid/authn": "^0.1",
         "yorvoid/core": "^0.1",
         "yorvoid/flows": "^0.1",
@@ -44,10 +55,10 @@
         "yorvoid/translation": "^0.1"
     },
     "suggest": {
-        "doctrine/doctrine-bundle": "Adds YorvoID's transaction middleware to the DBAL connection for you",
         "symfony/mailer": "Sends YorvoID's emails through Symfony Mailer",
         "symfony/translation": "Translates YorvoID's messages with Symfony's translator",
-        "symfony/twig-bundle": "Renders the flows' reference pages"
+        "symfony/twig-bundle": "Renders the flows' reference pages",
+        "symfony/var-dumper": "dump() and the profiler then show YorvoID's secrets redacted"
     },
     "autoload": {
         "psr-4": {
@@ -58,6 +69,5 @@
         "branch-alias": {
             "dev-main": "0.1.x-dev"
         }
-    },
-    "minimum-stability": "stable"
+    }
 }

@@ -12,6 +12,7 @@ use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\EndSession;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionEndReason;
+use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
@@ -26,6 +27,7 @@ use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
+use YorvoID\Core\Principal\SuspendPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Stack;
@@ -86,6 +88,29 @@ final class StepUpTest extends DatabaseTestCase
         $this->expectException(StepUpRequired::class);
 
         $stepUp->require($expired, new AuthenticationRequirement(Duration::days(1)));
+    }
+
+    #[DataProvider('implementations')]
+    public function testASessionValidateWouldRefuseNeverMeetsARequirement(string $implementation): void
+    {
+        $stepUp = $this->stepUp($implementation);
+        $suspended = $this->session();
+        // Without the listener that ends a suspended principal's sessions, as the bare package is.
+        $this->principals->suspend(new SuspendPrincipal(new Realm('acme'), $suspended->principalId), new Origin(OriginKind::Console));
+
+        try {
+            $stepUp->require($suspended, new AuthenticationRequirement(Duration::minutes(5)));
+            self::fail('A suspended principal\'s session met a requirement.');
+        } catch (StepUpRequired) {
+        }
+
+        $session = $this->session();
+        $this->clock->sleep(1800);
+        $tightened = new StepUp(new Sessions($this->stack->sessions, $this->principals, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, new SessionPolicy(Duration::minutes(20), Duration::minutes(20)), clock: $this->clock), $this->stack->coolDowns, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->clock);
+        $stepUp->require($session, new AuthenticationRequirement(Duration::hours(1)));
+        $this->expectException(StepUpRequired::class);
+
+        $tightened->require($session, new AuthenticationRequirement(Duration::hours(1)));
     }
 
     #[DataProvider('implementations')]

@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\Attempt;
 
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Log\Outcome;
+use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Throttle\AddressKey;
+use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;
 
@@ -19,9 +24,13 @@ use YorvoID\Throttle\Throttled;
  */
 final readonly class Attempts
 {
+    /**
+     * @param SecurityLog|null $log Where a limit reached is recorded, once per key and window; not recorded without it
+     */
     public function __construct(
         private Throttle $throttle,
         private AttemptLimits $limits = new AttemptLimits(),
+        private ?SecurityLog $log = null,
     ) {
     }
 
@@ -59,7 +68,13 @@ final readonly class Attempts
 
         // All or none: an attempt a later limit refuses doesn't use up the earlier ones.
         foreach ($keys as $key => $limit) {
-            $this->throttle->check($key, $limit);
+            try {
+                $this->throttle->check($key, $limit);
+            } catch (Throttled $throttled) {
+                $this->recordOnce($form, $realm, $key, $limit);
+
+                throw $throttled;
+            }
         }
 
         foreach ($keys as $key => $limit) {
@@ -76,6 +91,25 @@ final readonly class Attempts
         if (null !== $address) {
             $this->throttle->reset(self::account($form, $realm, $account).'@'.self::address($form, $address));
         }
+    }
+
+    /**
+     * Records that a limit refused an attempt, the first time in its window: a flood of refused attempts
+     * writes one entry, not one each. The key is hashed: it holds what was typed, and the address.
+     */
+    private function recordOnce(string $form, Realm $realm, string $key, Limit $limit): void
+    {
+        $marker = \sprintf('recorded:%s', $key);
+        $once = new Limit(1, $limit->per);
+
+        try {
+            $this->throttle->check($marker, $once);
+        } catch (Throttled) {
+            return;
+        }
+
+        $this->throttle->hit($marker, $once);
+        $this->log?->record($realm, 'yorvoid.attempt.throttled', Outcome::Denied, new Origin(OriginKind::System, 'throttle'), details: ['form' => $form, 'key' => hash('sha256', $key)]);
     }
 
     private static function account(string $form, Realm $realm, PrincipalId|string $account): string

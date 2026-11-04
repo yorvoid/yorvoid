@@ -6,14 +6,18 @@ namespace YorvoID\Tests\Symfony;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockFileSessionStorage;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\User\InMemoryUser;
+use Symfony\Component\VarDumper\Cloner\VarCloner;
+use Symfony\Component\VarDumper\Dumper\CliDumper;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -23,6 +27,7 @@ use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\SignInRefused;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\Json;
+use YorvoID\Symfony\Security\SignInEntryPoint;
 use YorvoID\Tests\Symfony\App\TestKernel;
 
 /**
@@ -56,6 +61,51 @@ final class SecurityUnitTest extends TestCase
         $this->expectExceptionObject(new \LogicException('There is no request to hold a session in.'));
 
         $current->hold(Secret::fromString('token'));
+    }
+
+    public function testADeviceIsWhatTheBrowserSaysOfItselfAsMuchAsFits(): void
+    {
+        $request = static function (?string $agent): Request {
+            $request = Request::create('/');
+            $request->headers->remove('User-Agent');
+
+            if (null !== $agent) {
+                $request->headers->set('User-Agent', $agent);
+            }
+
+            return $request;
+        };
+
+        self::assertSame('Firefox on Linux', Json::device($request('Firefox on Linux')));
+        self::assertSame(str_repeat('é', 255), Json::device($request(str_repeat('é', 300))), 'Cut at 255 characters, not bytes.');
+        self::assertNull(Json::device($request('')));
+        self::assertNull(Json::device($request(null)));
+    }
+
+    public function testSymfonysDumperShowsSecretsRedacted(): void
+    {
+        $this->service(Sessions::class);
+        $dumped = new CliDumper()->dump(new VarCloner()->cloneVar(['token' => Secret::fromString('the-raw-token')]), true);
+
+        self::assertIsString($dumped);
+        self::assertStringNotContainsString('the-raw-token', $dumped);
+        self::assertMatchesRegularExpression('/^ +value: "\[redacted\]"$/m', $dumped, 'Shown as the dumper shows what an object computes, not as a property.');
+    }
+
+    public function testTheEntryPointSendsPagesToSignInAndJsonA401(): void
+    {
+        $this->service(Sessions::class);
+        \assert(null !== $this->kernel);
+        $router = $this->kernel->getContainer()->get('router');
+        \assert($router instanceof UrlGeneratorInterface);
+        $entryPoint = new SignInEntryPoint($router);
+
+        $page = $entryPoint->start(Request::create('/account'));
+        self::assertInstanceOf(RedirectResponse::class, $page);
+        self::assertSame('/yorvoid/flows/yorvoid.sign_in', $page->getTargetUrl());
+        $json = $entryPoint->start(Request::create('/account', server: ['HTTP_ACCEPT' => 'application/json']));
+        self::assertSame([401, '{"error":"Sign in first."}'], [$json->getStatusCode(), $json->getContent()]);
+        self::assertSame(401, $entryPoint->start(Request::create('/api', 'POST', server: ['CONTENT_TYPE' => 'application/json']))->getStatusCode());
     }
 
     public function testHoldingASessionReplacesThePhpSession(): void

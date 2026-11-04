@@ -36,6 +36,7 @@ final class KeysRotateCommand extends Command
     protected function configure(): void
     {
         $this->addOption('remove', null, InputOption::VALUE_REQUIRED, 'Remove this verify-only key, once nothing it signed still needs checking');
+        $this->addOption('public', null, InputOption::VALUE_NONE, 'Print the public key set to deploy where signatures are checked, and change nothing');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -46,6 +47,18 @@ final class KeysRotateCommand extends Command
             $io->error('YorvoID has no key file to rotate: set yorvoid.keys.file, e.g. to "/run/secrets/yorvoid-keys.json".');
 
             return Command::FAILURE;
+        }
+
+        if (true === $input->getOption('public')) {
+            try {
+                $output->writeln(KeyRing::fromFile($this->file)->toJwks()->reveal());
+            } catch (IntegratorError $error) {
+                $io->error([$error->problem, 'How to fix it: '.$error->fix]);
+
+                return Command::FAILURE;
+            }
+
+            return Command::SUCCESS;
         }
 
         try {
@@ -98,7 +111,7 @@ final class KeysRotateCommand extends Command
 
         $new = SigningKey::generate($this->newId(array_map(static fn (SigningKey $key): string => $key->id, $keys)), KeyStatus::VerifyOnly);
 
-        return [$ring->with($new), \sprintf('Added %s, verify-only. Deploy the key file everywhere signatures are checked, then run yorvoid:keys:rotate again to make it active.', $new->id)];
+        return [$ring->with($new), \sprintf('Added %s, verify-only. Deploy the public key set (yorvoid:keys:rotate --public, never the key file) everywhere signatures are checked, then run yorvoid:keys:rotate again to make it active.', $new->id)];
     }
 
     /**

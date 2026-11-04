@@ -21,10 +21,12 @@ $progress = $flows->submit($id, 'passkey', new Input($fields), $context); // the
 - **Only the current step takes answers.** An answer for any other is refused with `yorvoid.flow.out_of_date`, so no step can be skipped by sending another's.
 - **A step that doesn't apply is passed over**, for good: e.g. generating recovery codes when the account still has some.
 - **A refused answer** shows the step again with its problems, prepared afresh (a new passkey ceremony, for instance). Too many attempts are refused with `yorvoid.flow.too_many_attempts` and the seconds to wait.
-- **A step can end the flow**, e.g. an invitation that doesn't work any more.
+- **A step can end the flow**, e.g. an invitation that doesn't work any more, or a step-up for someone with no passkey to confirm with.
+- **A step can send the flow back** to earlier steps, e.g. adding a passkey after the step-up's proof lapsed at the authenticator: the step-up comes again, with `yorvoid.flow.confirm_again`. A proof that lapses where the flow has no step-up ends it with that message; an operation held after a [recovery](step-up.md#the-cool-down-after-a-recovery) ends it with `yorvoid.flow.held_after_recovery`.
 - **A flow takes at most 30 minutes** by default, and is forgotten when it completes, fails or expires.
 - **Signing in happens in the step that does it, but the person gets the session once every required step is done.** Until then the flow holds it, and its steps run in it; then the `Progress` carries it for the application to hold. So leaving setup before adding a passkey, or an inserted terms step that's required, leaves nobody signed in. Steps that aren't required don't hold it back. A step-up's new token comes the same way.
 - **When a flow completes**, `FlowCompleted` carries its state: keep what your own steps collected.
+- **A flow belongs to the browser that started it.** Whoever has a flow's ID resumes it and reads its state, freshly generated recovery codes included. The Symfony bridge keeps flows in the PHP session; a `FlowStore` of your own must bind each flow to the browser's session too.
 
 The context says who is signed in, and what steps that sign people in record: the origin, the device's description, the client's address, the device cookie, and the language to prepare things in. The Symfony bridge builds it for each request.
 
@@ -42,7 +44,7 @@ YorvoID's passkey-first journeys come from `PasskeyFlows` in `yorvoid/passkeys` 
 | `yorvoid.recover_with_code` | `recovery_code` (email and code), `passkey_registration` (or later), `recovery_codes` | |
 | `yorvoid.recover_with_link` | `recovery_link` (confirm), `passkey_registration` (or later), `recovery_codes` | `recovery_link.token`: the link's token |
 | `yorvoid.add_passkey` | `step_up`, `passkey_registration` | |
-| `yorvoid.step_up` | `step_up` | `step_up.operation`, and `step_up.multi_factor` if it needs two factors |
+| `yorvoid.step_up` | `step_up` | `step_up.operation`, `step_up.multi_factor` if it needs two factors, and `step_up.within` (seconds) if it needs a fresher proof than the window |
 | `yorvoid.verify_email` | `verify_email` (confirm; signs nobody in). Only with [`EmailVerification`](notifications.md#verifying-the-email-address) | `verify_email.token`: the link's token |
 
 - **`passkey_registration`** keeps the new credential's ID as `passkey_registration.credential`. After a recovery, the person may add one later, on a borrowed device for instance.
@@ -61,8 +63,9 @@ Each change gives a new `Flow`; the original stays as it was:
 ```php
 $setup = $flows->flow('yorvoid.setup')
     ->withStepAfter('passkey_registration', new AcceptTermsStep(), required: true)
-    ->withStepReplaced(new MyRecoveryCodesStep())  // same name as the step it replaces
-    ->withoutStep('optional_step');                // only steps the flow doesn't require
+    ->withStepReplaced(new MyRecoveryCodesStep());  // same name as the step it replaces
+
+$withoutCodes = $flows->flow('yorvoid.setup')->withoutStep('recovery_codes');  // only steps the flow doesn't require
 ```
 
 - Flows are named in lowercase segments separated by dots: YorvoID's start with `yorvoid.`, give yours your own prefix.
@@ -78,11 +81,12 @@ A step implements `Step`:
 |---|---|
 | `name()` | Unique in its flow; forms and the browser client send it back |
 | `applies($state, $context)` | Whether it's needed; asked once, when the flow reaches it |
-| `enter($state, $context)` | Prepares it, as it becomes current and after a refused answer; gives the state with what the other methods need |
+| `enter($state, $context)` | Prepares it, as it becomes current and after a refused answer; gives the state with what the other methods need, or throws `StepFailed` with a problem when the flow can't go on |
 | `view($state)` | A typed view model for templates and the browser client: data, never copy |
-| `submit($state, $context, $input)` | Checks the answer: `StepResult::done()`, `refused()`, `throttled()` or `failed()` |
+| `submit($state, $context, $input)` | Checks the answer: `StepResult::done()`, `refused()`, `throttled()`, `failed()`, or `reopen()` to go back to earlier steps |
 
 - **Keep what the step needs in the flow's state**, never in properties: one instance serves every flow, and a flow may continue in another request or on another server.
+- **Under a prefix of your own,** e.g. the step's name: `acme_terms.accepted`. All steps of a flow share its state, and YorvoID's keep theirs under their names (`passkey_registration.credential`, `step_up.operation`, `intent.summary`): a key of another step's changes what it shows. `flows.` and `yorvoid.` are reserved: a step that keeps data there is an integrator's error.
 - **The state holds plain data:** strings, numbers, booleans, null, and lists and maps of them. Keep an object's ID, and load it again; anything else is an integrator's error.
 - **Problems are messages to translate** (domain `yorvoid`), with parameters, the field they're about, and a reason for logs.
 - `Input` reads what was sent, from a form or the browser client: `string()`, `isChecked()`, `json()` (a passkey ceremony's answer, sent as an object or a JSON string), and `action()`, which is `Input::SKIP` when the person passes over a step that offers it.

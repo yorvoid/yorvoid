@@ -25,7 +25,28 @@ final class Json
 
         $body = json_decode($request->getContent());
 
-        return $body instanceof \stdClass ? get_object_vars($body) : null;
+        return $body instanceof \stdClass && self::isFinite($body) ? get_object_vars($body) : null;
+    }
+
+    /**
+     * Whether every number in decoded JSON is finite: 1e999 decodes to INF, which can't be encoded again
+     * for the WebAuthn library, and is no answer a browser gives.
+     */
+    public static function isFinite(mixed $decoded): bool
+    {
+        if (\is_float($decoded)) {
+            return is_finite($decoded);
+        }
+
+        if (\is_array($decoded) || $decoded instanceof \stdClass) {
+            foreach (\is_array($decoded) ? $decoded : get_object_vars($decoded) as $value) {
+                if (!self::isFinite($value)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**

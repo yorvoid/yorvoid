@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Symfony;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Clock\MockClock;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Filesystem\Filesystem;
@@ -114,19 +115,46 @@ final class DoctorTest extends TestCase
         self::assertStringContainsString('0 problems, 1 warning.', $display);
     }
 
-    public function testReportsWhatYorvoIDRefusesWhenItBuildsItsServices(): void
+    public function testWhatYorvoIDWouldRefuseStopsTheApplicationFromStarting(): void
     {
-        [$status, $display] = $this->doctor([
-            'passkeys' => ['relying_party_id' => 'Example.com', 'origins' => ['https://example.com']],
-            'sessions' => ['idle' => 'a while'],
-        ], migrate: true);
+        $passkeys = ['relying_party_id' => 'example.com', 'origins' => ['https://example.com']];
+        $cases = [
+            'yorvoid.passkeys: "Example.com" isn\'t a domain to use as the relying party ID. Use the site\'s domain in lowercase' => ['passkeys' => ['relying_party_id' => 'Example.com'] + $passkeys],
+            'yorvoid.sessions: "a while"' => ['sessions' => ['idle' => 'a while']],
+            'yorvoid.realm: ' => ['realm' => 'Bad Realm'],
+            'yorvoid.realm must be text.' => ['realm' => null],
+            'yorvoid.storage: The table prefix "Bad-" is invalid.' => ['storage' => ['prefix' => 'Bad-']],
+            'yorvoid.step_up: ' => ['step_up' => ['window' => 'soon']],
+            'yorvoid.cookies.device: "bad name;" isn\'t a cookie name.' => ['cookies' => ['device' => 'bad name;']],
+            'yorvoid.flows.script: "https://cdn.evil.example/forms.js" isn\'t the browser client on this site.' => ['flows' => ['script' => 'https://cdn.evil.example/forms.js']],
+            'yorvoid.flows.script: "javascript:alert(1)"' => ['flows' => ['script' => 'javascript:alert(1)']],
+            'yorvoid.flows.script: "http://example.com/forms.js"' => ['flows' => ['script' => 'http://example.com/forms.js']],
+            'yorvoid.flows.script: "https://ana@example.com/forms.js"' => ['flows' => ['script' => 'https://ana@example.com/forms.js']],
+            'yorvoid.flows.script: "https://app.example.com/forms.js"' => ['passkeys' => ['origins' => ['https://example.com', 'https://app.example.com:8443']] + $passkeys, 'flows' => ['script' => 'https://app.example.com/forms.js']],
+            'yorvoid.flows.script: "https://example.com:8443/forms.js"' => ['flows' => ['script' => 'https://example.com:8443/forms.js']],
+            'yorvoid.notifications: "http://example.com/not-me?token={token}"' => ['notifications' => ['application_name' => 'Acme', 'not_me_url' => 'http://example.com/not-me?token={token}', 'from' => 'security@example.com']],
+            'yorvoid.notifications.from: "security" isn\'t an email address.' => ['notifications' => ['application_name' => 'Acme', 'not_me_url' => 'https://example.com/not-me?token={token}', 'from' => 'security']],
+        ];
 
-        self::assertSame(Command::FAILURE, $status);
-        self::assertStringContainsString('✘ Configuration', $display);
-        self::assertStringContainsString('Problem: "Example.com" isn\'t a domain to use as the relying party ID.', $display);
-        self::assertStringContainsString('How to fix it: Use the site\'s domain in lowercase', $display);
-        self::assertStringContainsString('Problem: "a while"', $display);
-        self::assertStringContainsString('2 problems, 0 warnings.', $display);
+        foreach (array_keys($cases) as $i => $message) {
+            try {
+                new TestKernel(\sprintf('%s/%d', $this->directory, $i), $cases[$message])->boot();
+                self::fail('The application started: '.$message);
+            } catch (InvalidConfigurationException $exception) {
+                self::assertStringStartsWith($message, $exception->getMessage());
+            }
+        }
+
+        try {
+            new TestKernel($this->directory.'/mailer', mailer: false)->boot();
+            self::fail('Notifications started without a mailer.');
+        } catch (InvalidConfigurationException $exception) {
+            self::assertStringStartsWith('yorvoid.notifications: security notifications are on, and there\'s no Symfony Mailer to send them with.', $exception->getMessage());
+        }
+
+        new TestKernel($this->directory.'/fine', ['flows' => ['script' => 'https://example.com/forms.js']])->boot();
+        new TestKernel($this->directory.'/port', ['passkeys' => ['origins' => ['https://example.com', 'https://app.example.com:8443']] + $passkeys, 'flows' => ['script' => 'https://app.example.com:8443/forms.js']])->boot();
+        $this->addToAssertionCount(2);
     }
 
     public function testNoticesAClockThatDisagreesWithTheDatabase(): void
@@ -153,7 +181,9 @@ final class DoctorTest extends TestCase
         self::assertStringContainsString('Problem: The application\'s clock is a MockClock outside development', $display);
         self::assertStringContainsString('Problem: Notifications go to a transport that drops them', $display);
         self::assertStringContainsString('Warning: The session cookie is "Secure" only when the request looks like HTTPS', $display);
-        self::assertStringContainsString('2 problems, 2 warnings.', $display);
+        // This repository has YorvoID's test helpers installed, as a development checkout does.
+        self::assertStringContainsString('Problem: yorvoid/testing is installed outside development', $display);
+        self::assertStringContainsString('4 problems, 2 warnings.', $display);
     }
 
     public function testWarnsWhenSuspectedCopiesSignIn(): void

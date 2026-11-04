@@ -16,6 +16,9 @@
 {% if bootstrap %}
 <p><label for="secret">Bootstrap secret</label><br><input id="secret" name="secret" type="password" autocomplete="off" required></p>
 {% endif %}
+{% if not bootstrap and keys is not empty %}
+<p data-signing-keys>Only these passkeys can sign: {{ keys|join(', ') }}. If your browser doesn't offer one, use the device that has it.</p>
+{% endif %}
 <input type="hidden" name="response">
 <button>Sign with your passkey</button>
 <p data-yorvoid-error role="alert" hidden></p>

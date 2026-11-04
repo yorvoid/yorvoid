@@ -1,4 +1,4 @@
-{# Confirming it's the person, with a passkey. View: StepUpView. #}
+{# Confirming it's the person, with a passkey. View: StepUpView; operation: what it's for, in words, if known. #}
 {% extends '@YorvoID/flow/layout.html.twig' %}
 {% import '@YorvoID/flow/fields.html.twig' as fields %}
 
@@ -9,6 +9,9 @@
         <p>{{ 'yorvoid.ui.signed_out'|yorvoid_trans }}</p>
     {% else %}
         <p>{{ 'yorvoid.ui.step_up.intro'|yorvoid_trans }}</p>
+        {% if operation is not null %}
+            <p>{{ 'yorvoid.ui.step_up.operation'|yorvoid_trans({operation: operation}) }}</p>
+        {% endif %}
         <form method="post" action="{{ action }}" {{ fields.ceremony('get', view.options, client_messages) }}>
             {{ fields.ceremony_fields() }}
             <p><button type="submit">{{ 'yorvoid.ui.step_up.submit'|yorvoid_trans }}</button></p>

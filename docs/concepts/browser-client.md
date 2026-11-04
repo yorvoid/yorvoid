@@ -74,11 +74,14 @@ Browsers without the signal API are left alone, and a signal that fails changes 
 Applications that render YorvoID's [flows](flows.md) themselves, in a single-page app for instance, drive them with JSON:
 
 ```ts
+import type { JsonObject } from '@yorvoid/browser';
+
 let progress = await yorvoid.startFlow('yorvoid.sign_in');
 
 while (progress.status === 'in_progress') {
   // Show progress.step with progress.view and progress.problems, then send the answer:
-  const response = await yorvoid.authenticate(progress.view!.options as object);
+  const options = (progress.view as { options: string | JsonObject }).options;
+  const response = await yorvoid.authenticate(options);
   progress = await yorvoid.submitStep(progress.flow, progress.id!, progress.step!, { response });
 }
 

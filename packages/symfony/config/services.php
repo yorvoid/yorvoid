@@ -81,12 +81,14 @@ use YorvoID\Symfony\Doctor\AssuranceCheck;
 use YorvoID\Symfony\Doctor\ClockCheck;
 use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
+use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\KeysCheck;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
 use YorvoID\Symfony\Doctor\ProxiesCheck;
 use YorvoID\Symfony\Doctor\TemplatesCheck;
+use YorvoID\Symfony\Doctor\TestHelpersCheck;
 use YorvoID\Symfony\Factories;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Flow\SessionFlowStore;
@@ -101,6 +103,7 @@ use YorvoID\Symfony\Security\EndSessionOnSignOut;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
+use YorvoID\Symfony\Security\SignInEntryPoint;
 use YorvoID\Symfony\Security\ValidateSessionListener;
 use YorvoID\Symfony\Templates\FlowPages;
 use YorvoID\Symfony\Templates\TemplateLint;
@@ -214,6 +217,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(Flows::class)->arg('$flows', inline_service()->factory([Factories::class, 'flows'])->args([service(PasskeyFlows::class), tagged_iterator('yorvoid.flow_customizer')]))->public();
     $services->set(FlowContexts::class)->arg('$deviceCookie', param('yorvoid.cookies.device'))->public();
     $services->set(SessionAuthenticator::class)->public();
+    $services->set(SignInEntryPoint::class);
     $services->set(FlowPages::class)
         ->arg('$translator', service('yorvoid.translator.used'))
         ->arg('$twig', service('twig')->nullOnInvalid())
@@ -242,6 +246,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(ProxiesCheck::class)->args([service('parameter_bag')])->tag('yorvoid.doctor_check', ['name' => 'Proxies']);
     $services->set(MailerCheck::class)->args([param('yorvoid.notifications.enabled'), param('yorvoid.notifications.from'), null, param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Mailer']);
     $services->set(TemplatesCheck::class)->tag('yorvoid.doctor_check', ['name' => 'Flow pages']);
+    $services->set(TestHelpersCheck::class)->args([param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Test helpers']);
+    $services->set(EnvironmentCheck::class)->args([param('kernel.environment'), param('kernel.debug'), param('kernel.secret')])->tag('yorvoid.doctor_check', ['name' => 'Environment']);
     $services->set(KeysRotateCommand::class)->arg('$file', param('yorvoid.keys.file'))->tag('console.command');
     $services->set(DoctorCommand::class)->args([tagged_locator('yorvoid.doctor_check', 'name')])->tag('console.command');
 

@@ -10,7 +10,7 @@ $link = $recoveryLinks->issue(new IssueRecoveryLink($realm, $principalId), new O
 $output->writeln('https://example.com/recover/'.$link->secret->reveal());
 ```
 
-- Issue them only from where the operator is already trusted, such as the server's command line, never from a web page. The operation needs the ability `yorvoid.principals.recover`.
+- Issue them only from where the operator is already trusted, such as the server's command line, never from a web page. The operation names the ability `yorvoid.principals.recover`; nothing checks it before YorvoID's authorization (0.2.0), so check yourself who may issue links.
 - A link works for 15 minutes by default, once, and only for an active principal.
 - It isn't sent by email: the operator hands it over.
 

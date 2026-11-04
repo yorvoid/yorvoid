@@ -6,6 +6,7 @@ namespace YorvoID\Core\Principal\Storage;
 
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
+use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryStore;
@@ -37,6 +38,17 @@ final class InMemoryPrincipalStore implements PrincipalStore, InMemoryStore
         $principal = $this->principals[(string) $id] ?? null;
 
         return null !== $principal && $principal->realm->equals($realm) ? $principal : null;
+    }
+
+    public function hasActive(Realm $realm): bool
+    {
+        foreach ($this->principals as $principal) {
+            if ($principal->realm->equals($realm) && PrincipalStatus::Active === $principal->status) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function changeStatus(Principal $before, Principal $after): bool

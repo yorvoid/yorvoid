@@ -28,11 +28,11 @@ Keys are kept as a JSON Web Key Set (RFC 7517; Ed25519 keys as in RFC 8037), wit
 - Keep the set in an environment variable or a secrets file, never in the database next to what it signs.
 - A file must be readable only by its owner (`chmod 600`). YorvoID refuses a key file others can read, as SSH does.
 - Private parts are `Secret`s: they don't appear in dumps, logs or stack traces.
-- A verifier that only checks signatures gets the set without private parts (`toJwks()` leaves them out unless asked).
+- A verifier that only checks signatures gets the set without private parts: `toJwks()` leaves them out unless asked, and marks every key verify-only, so the set loads where nothing signs. `yorvoid:keys:rotate --public` prints it. Never deploy the key file there: it holds every private part.
 
 ## Rotating keys
 
-1. Add the new key as `verify-only`, and deploy it everywhere signatures are checked.
+1. Add the new key as `verify-only`, and deploy the public set (`yorvoid:keys:rotate --public`) everywhere signatures are checked.
 2. Make the new key `active` and the old one `verify-only`.
 3. Remove the old key once nothing it signed still needs checking.
 

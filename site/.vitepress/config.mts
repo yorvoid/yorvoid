@@ -64,6 +64,7 @@ export default defineConfig({
           { text: 'Move to PostgreSQL', link: '/how-to/postgresql' },
           { text: 'Turn on notifications', link: '/how-to/notifications' },
           { text: 'Rotate the signing keys', link: '/how-to/rotate-keys' },
+          { text: 'Sign operations with a Symfony console', link: '/how-to/signed-operations' },
           { text: 'Change the sign-in pages', link: '/how-to/sign-in-pages' },
           { text: 'Integrate without a bridge', link: '/how-to/without-a-bridge' },
         ],

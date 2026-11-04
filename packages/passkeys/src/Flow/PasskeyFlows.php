@@ -79,15 +79,15 @@ final readonly class PasskeyFlows
     {
         $passkey = new PasskeyRegistrationStep($this->passkeys);
         $later = new PasskeyRegistrationStep($this->passkeys, skippable: true);
-        $codes = new RecoveryCodesStep($this->recoveryCodes);
+        $codes = new RecoveryCodesStep($this->recoveryCodes, $this->stepUp);
 
         return [
             new Flow(self::SIGN_IN, [new PasskeySignInStep($this->passkeys)], [PasskeySignInStep::NAME]),
             new Flow(self::SETUP, [new SetupCodeStep($this->setupCodes, $this->sessions, $this->clock, $this->emailVerification), $passkey, $codes], [SetupCodeStep::NAME, PasskeyRegistrationStep::NAME]),
             new Flow(self::INVITATION, [new InvitationStep($this->invitations, $this->principals, $this->sessions, $this->clock), $passkey, $codes], [InvitationStep::NAME, PasskeyRegistrationStep::NAME]),
             new Flow(self::RECOVER_WITH_CODE, [new RecoveryCodeStep($this->recoveryCodes), $later, $codes], [RecoveryCodeStep::NAME]),
-            new Flow(self::RECOVER_WITH_LINK, [new RecoveryLinkStep($this->recoveryLinks), $later, $codes], [RecoveryLinkStep::NAME]),
-            new Flow(self::ADD_PASSKEY, [new StepUpStep($this->passkeys, $this->stepUp, $this->window, 'yorvoid.credential.add'), $passkey], [PasskeyRegistrationStep::NAME]),
+            new Flow(self::RECOVER_WITH_LINK, [new RecoveryLinkStep($this->recoveryLinks, $this->principals), $later, $codes], [RecoveryLinkStep::NAME]),
+            new Flow(self::ADD_PASSKEY, [new StepUpStep($this->passkeys, $this->stepUp, $this->window, 'yorvoid.credential.add'), $passkey], [StepUpStep::NAME, PasskeyRegistrationStep::NAME]),
             new Flow(self::STEP_UP, [new StepUpStep($this->passkeys, $this->stepUp, $this->window)], [StepUpStep::NAME]),
             ...(null === $this->emailVerification ? [] : [new Flow(self::VERIFY_EMAIL, [new EmailVerificationStep($this->emailVerification)], [EmailVerificationStep::NAME])]),
         ];

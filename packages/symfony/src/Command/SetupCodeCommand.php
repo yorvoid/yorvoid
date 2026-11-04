@@ -51,7 +51,9 @@ final class SetupCodeCommand extends Command
             return Command::FAILURE;
         }
 
+        // The code alone on standard output, for scripts; what it is, for people, beside it.
         $io->writeln($code->reveal());
+        $io->getErrorStyle()->note(\sprintf('That\'s the setup code for the realm "%s": it\'s a secret. Give it only to whoever claims the realm; it works once, for %s. Only its hash is stored: if it\'s lost, create another.', Options::string($input->getArgument('realm')), Options::string($input->getOption('lifetime'))));
 
         return Command::SUCCESS;
     }

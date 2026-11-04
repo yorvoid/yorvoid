@@ -39,9 +39,11 @@ $tokens = new OneTimeTokens(new InMemoryOneTimeTokenStore(), $principals, $log, 
 $setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())));
 $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
 $tokens->issue(new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), new Origin(OriginKind::System));
-$setup->create(new CreateSetupCode(Realm::default(), Duration::days(1)), new Origin(OriginKind::System));
+// A realm of its own: a realm with an active principal gets no setup code.
+$unclaimed = new Realm('unclaimed');
+$setup->create(new CreateSetupCode($unclaimed, Duration::days(1)), new Origin(OriginKind::System));
 
-$config->setTarget(onlyRefusals(static function (string $input) use ($tokens, $setup): void {
+$config->setTarget(onlyRefusals(static function (string $input) use ($tokens, $setup, $unclaimed): void {
     if ('' === $input) {
         return;
     }
@@ -51,7 +53,7 @@ $config->setTarget(onlyRefusals(static function (string $input) use ($tokens, $s
     }
 
     try {
-        $setup->claim(Realm::default(), Secret::fromString($input), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
+        $setup->claim($unclaimed, Secret::fromString($input), new CreatePrincipal($unclaimed, PrincipalKind::Human), new Origin(OriginKind::Web));
     } catch (InvalidSetupCode) {
         return;
     }

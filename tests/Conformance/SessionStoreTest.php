@@ -81,7 +81,7 @@ final class SessionStoreTest extends DatabaseTestCase
         self::assertSame([], $store->current(new Realm('globex'), $session->principalId, new \DateTimeImmutable('2026-10-27 18:41:00 UTC')));
         self::assertFalse($store->end(new Realm('globex'), $session->id, new \DateTimeImmutable(), SessionEndReason::SignedOut));
         self::assertFalse($store->replaceTokenHash(new Realm('globex'), $session->id, self::hash('b')));
-        self::assertFalse($store->stepUp(new Realm('globex'), $session->id, self::steppedUp($session), self::hash('b')));
+        self::assertNull($store->stepUp(new Realm('globex'), $session->id, self::factor('yorvoid.credential.remove'), self::hash('b')));
         $store->touch(new Realm('globex'), $session->id, new \DateTimeImmutable('2026-10-27 18:50:00 UTC'), new \DateTimeImmutable('2026-10-27 19:50:00 UTC'));
         self::assertEquals($session, $store->findByTokenHash(self::hash('a')));
     }
@@ -121,7 +121,7 @@ final class SessionStoreTest extends DatabaseTestCase
         self::assertTrue($store->end(new Realm('acme'), $session->id, new \DateTimeImmutable('2026-10-27 19:00:00 UTC'), SessionEndReason::SignedOut));
         self::assertFalse($store->end(new Realm('acme'), $session->id, new \DateTimeImmutable('2026-10-27 19:30:00 UTC'), SessionEndReason::EndedByAdministrator), 'An ended session ended again.');
         self::assertFalse($store->replaceTokenHash(new Realm('acme'), $session->id, self::hash('c')), 'An ended session got a new token.');
-        self::assertFalse($store->stepUp(new Realm('acme'), $session->id, self::steppedUp($session), self::hash('c')), 'An ended session stepped up.');
+        self::assertNull($store->stepUp(new Realm('acme'), $session->id, self::factor('yorvoid.credential.remove'), self::hash('c')), 'An ended session stepped up.');
 
         $ended = $store->get(new Realm('acme'), $session->id);
         self::assertEquals(new \DateTimeImmutable('2026-10-27 19:00:00 UTC'), $ended?->endedAt);
@@ -171,14 +171,18 @@ final class SessionStoreTest extends DatabaseTestCase
         $other = self::session(new Realm('acme'), $session->principalId);
         $store->add($session, self::hash('a'));
         $store->add($other, self::hash('other'));
-        $authentication = self::steppedUp($session);
+        $authentication = $session->authentication->with(self::factor('yorvoid.credential.remove'));
 
-        self::assertTrue($store->stepUp(new Realm('acme'), $session->id, $authentication, self::hash('b')));
+        self::assertEquals($authentication, $store->stepUp(new Realm('acme'), $session->id, self::factor('yorvoid.credential.remove'), self::hash('b')));
         self::assertNull($store->findByTokenHash(self::hash('a')), 'The old token still finds the session.');
         $steppedUp = $store->findByTokenHash(self::hash('b'));
         self::assertEquals($authentication, $steppedUp?->authentication);
         self::assertEquals(new Session($session->id, $session->realm, $session->principalId, $session->principalStatusVersion, $authentication, $session->startedAt, $session->lastSeenAt, $session->expiresAt, $session->idleExpiresAt), $steppedUp);
         self::assertEquals($other, $store->findByTokenHash(self::hash('other')), 'Another session changed.');
+
+        $both = $store->stepUp(new Realm('acme'), $session->id, self::factor('acme.site.remove'), self::hash('c'));
+        self::assertEquals($authentication->with(self::factor('acme.site.remove')), $both, 'A step-up lost the proof of the one before.');
+        self::assertEquals($both, $store->findByTokenHash(self::hash('c'))?->authentication);
     }
 
     #[DataProvider('implementations')]
@@ -234,6 +238,8 @@ final class SessionStoreTest extends DatabaseTestCase
         foreach (self::platforms() as $name => [$platform]) {
             yield $name.', not a list' => [$platform, '"passkey"'];
             yield $name.', a factor that isn\'t an object' => [$platform, '[5]'];
+            yield $name.', a method that isn\'t text' => [$platform, '[{"method": 1, "at": "2026-10-27T18:40:00+00:00", "multi_factor": true, "phishing_resistant": true, "operation": null}]'];
+            yield $name.', a time that isn\'t text' => [$platform, '[{"method": "passkey", "at": 1793731200, "multi_factor": true, "phishing_resistant": true, "operation": null}]'];
             yield $name.', no method' => [$platform, '[{"at": "2026-10-27T18:40:00+00:00", "multi_factor": true, "phishing_resistant": true}]'];
             yield $name.', no time' => [$platform, '[{"method": "passkey", "multi_factor": true, "phishing_resistant": true}]'];
             yield $name.', no strength' => [$platform, '[{"method": "passkey", "at": "2026-10-27T18:40:00+00:00", "phishing_resistant": true}]'];
@@ -265,9 +271,9 @@ final class SessionStoreTest extends DatabaseTestCase
         return new Session(new SessionId(new UuidV7()), $realm, $principal, 1, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $started)), $started, new \DateTimeImmutable($lastSeen.' UTC'), new \DateTimeImmutable($expires.' UTC'), new \DateTimeImmutable($idleExpires.' UTC'));
     }
 
-    private static function steppedUp(Session $session): AuthenticationContext
+    private static function factor(string $operation): AuthenticationFactor
     {
-        return $session->authentication->with(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable('2026-10-27 18:50:00 UTC'), true, true, 'yorvoid.credential.remove'));
+        return new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable('2026-10-27 18:50:00 UTC'), true, true, $operation);
     }
 
     private static function hash(string $token): string

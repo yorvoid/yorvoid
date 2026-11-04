@@ -25,6 +25,7 @@ php bin/console yorvoid:keys:rotate [options]
 | Argument or option | | Default |
 |---|---|---|
 | `--remove` | Remove this verify-only key, once nothing it signed still needs checking |  |
+| `--public` | Print the public key set to deploy where signatures are checked, and change nothing |  |
 
 ## `yorvoid:migrate`
 

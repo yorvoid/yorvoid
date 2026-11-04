@@ -126,6 +126,9 @@ final readonly class OneTimeTokens
             $working = $this->working($realm, $purpose, $token);
 
             if (null === $working || !$this->store->delete($realm, $working->token->selector)) {
+                // Nothing of the token: it could be a typo of a real one.
+                $this->log->record($realm, 'yorvoid.token.consume', Outcome::Failed, $origin, details: ['purpose' => $purpose]);
+
                 return null;
             }
 

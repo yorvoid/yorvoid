@@ -239,7 +239,7 @@ final readonly class Passkeys
      */
     public function beginStepUp(Session $session, AuthenticationRequirement $requirement): BegunCeremony
     {
-        $passkeys = array_filter($this->store->of($session->realm, $session->principalId), fn (Passkey $passkey): bool => true === $this->credentials->get($passkey->realm, $passkey->credentialId)?->isActive());
+        $passkeys = $this->usable($this->store->of($session->realm, $session->principalId));
 
         if ([] === $passkeys) {
             throw new PasskeyRefused(Refusal::NoPasskey);
@@ -272,7 +272,7 @@ final readonly class Passkeys
 
         return $this->transactions->run(function () use ($session, $ceremony, $passkey, $credential, $userVerified, $counter, $origin): Secret {
             $this->recordUse($passkey, $credential, $counter, $origin);
-            $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true, $ceremony->operation);
+            $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true, $ceremony->operation ?? AuthenticationFactor::NO_OPERATION);
 
             // The session ended, or its principal was suspended, while the person was at their authenticator.
             return $this->sessions->stepUp($session->realm, $session->id, $factor, $origin) ?? throw new PasskeyRefused(Refusal::CeremonyExpired);
@@ -295,7 +295,8 @@ final readonly class Passkeys
      */
     public function signals(Session $session): ?PasskeySignals
     {
-        $passkeys = $this->store->of($session->realm, $session->principalId);
+        // Only the passkeys that sign in: a browser told that a removed one is accepted keeps offering it.
+        $passkeys = array_values($this->usable($this->store->of($session->realm, $session->principalId)));
 
         if ([] === $passkeys) {
             return null;
@@ -307,6 +308,19 @@ final readonly class Passkeys
             array_map(static fn (Passkey $passkey): string => self::base64Url($passkey->webauthnId), $passkeys),
             $this->userName($session->realm, $session->principalId),
         );
+    }
+
+    /**
+     * The passkeys whose sign-in method is active: one removed or disabled keeps its row until
+     * RemovePasskeyWithCredential removes it, or for good without that listener.
+     *
+     * @param list<Passkey> $passkeys
+     *
+     * @return array<int, Passkey>
+     */
+    private function usable(array $passkeys): array
+    {
+        return array_filter($passkeys, fn (Passkey $passkey): bool => true === $this->credentials->get($passkey->realm, $passkey->credentialId)?->isActive());
     }
 
     /**

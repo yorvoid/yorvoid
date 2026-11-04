@@ -72,6 +72,8 @@ final class OneTimeTokenConcurrencyTest extends DatabaseTestCase
         self::assertSame([0, 3, 3, 3], $exitCodes, 'Expected one request to get the token: '.implode(' | ', array_column($results, 1)));
 
         $consumed = array_filter(iterator_to_array($stack->log->entries(new Realm('acme'), 1), false), static fn ($entry): bool => 'yorvoid.token.consume' === $entry->action);
-        self::assertCount(1, $consumed);
+        $outcomes = array_count_values(array_map(static fn ($entry): string => $entry->outcome->value, $consumed));
+        ksort($outcomes);
+        self::assertSame(['failed' => 3, 'success' => 1], $outcomes, 'One used it; the others are recorded as failed.');
     }
 }

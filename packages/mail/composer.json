@@ -24,6 +24,7 @@
     },
     "require": {
         "php": ">=8.5",
+        "ext-filter": "*",
         "ext-mbstring": "*",
         "twig/twig": "^3.30",
         "yorvoid/core": "^0.1"
@@ -37,6 +38,5 @@
         "branch-alias": {
             "dev-main": "0.1.x-dev"
         }
-    },
-    "minimum-stability": "stable"
+    }
 }

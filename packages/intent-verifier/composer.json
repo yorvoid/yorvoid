@@ -26,13 +26,18 @@
     "require": {
         "php": ">=8.5",
         "ext-dom": "*",
+        "ext-libxml": "*",
         "ext-mbstring": "*",
         "psr/clock": "^1.0",
         "spomky-labs/cbor-php": "^3.4",
         "symfony/serializer": "^8.1",
         "symfony/uid": "^8.1",
         "twig/twig": "^3.30",
+        "web-auth/cose-lib": "^4.8",
         "web-auth/webauthn-lib": "^5.3.9"
+    },
+    "suggest": {
+        "ext-posix": "Checks that the verifier's files belong to its own user"
     },
     "autoload": {
         "psr-4": {
@@ -43,6 +48,5 @@
         "branch-alias": {
             "dev-main": "0.1.x-dev"
         }
-    },
-    "minimum-stability": "stable"
+    }
 }

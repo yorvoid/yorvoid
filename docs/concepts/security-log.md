@@ -26,6 +26,8 @@ Each entry has:
 | details | Facts that help reconstruct what happened |
 | algorithm, previous hash, hash | The chain |
 
+Failed attempts are recorded too, with outcome `failed` and nothing typed in the details: a setup code that didn't work (`yorvoid.setup.claim`), a token or link that didn't (`yorvoid.token.consume`, with its purpose), a recovery code (`yorvoid.recovery_code.use`). A limit that refuses attempts is recorded once per window, not once per attempt (`yorvoid.attempt.throttled`, `denied`, with the form and a hash of what was counted).
+
 Details hold facts, never secrets, tokens, passwords or copies of personal data: point to records instead of copying them. They're strings, integers, booleans, null, and lists or maps of those, up to 16 KB. Numbers with decimals are written as strings, because their text form isn't stable enough to hash.
 
 ## How entries are written

@@ -14,8 +14,17 @@ use YorvoID\Flows\StepView;
  */
 final readonly class RecoveryLinkView implements StepView
 {
+    /**
+     * @param string|null $account The account the link is for, as the person knows it, e.g. their email
+     *                             address; null if the link doesn't work any more
+     */
+    public function __construct(
+        public ?string $account = null,
+    ) {
+    }
+
     public function jsonSerialize(): array
     {
-        return [];
+        return ['account' => $this->account];
     }
 }

@@ -74,6 +74,10 @@ final class AuthenticationRequirementTest extends TestCase
         self::assertTrue($removing->isMetBy($steppedUp, self::at('18:01:00')));
         self::assertFalse($adding->isMetBy($steppedUp, self::at('18:01:00')), 'A step-up counted for another operation.');
         self::assertFalse($anything->isMetBy($steppedUp, self::at('18:01:00')), 'A step-up counted for no operation in particular.');
+
+        $forNone = new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, self::at('18:00:00'), operation: AuthenticationFactor::NO_OPERATION));
+        self::assertTrue($anything->isMetBy($forNone, self::at('18:01:00')));
+        self::assertFalse($removing->isMetBy($forNone, self::at('18:01:00')), 'A step-up for no operation counted for every operation.');
     }
 
     public function testAcceptsTheLongestOperationName(): void

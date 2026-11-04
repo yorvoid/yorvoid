@@ -65,6 +65,11 @@ $slow = new readonly class(new DbalPrincipalStore($database)) implements Princip
         return $this->store->get($realm, $id);
     }
 
+    public function hasActive(Realm $realm): bool
+    {
+        return $this->store->hasActive($realm);
+    }
+
     public function changeStatus(Principal $before, Principal $after): bool
     {
         return $this->store->changeStatus($before, $after);

@@ -39,6 +39,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\Flows;
+use YorvoID\Flows\FlowState;
 use YorvoID\Flows\FlowStatus;
 use YorvoID\Flows\Input;
 use YorvoID\Flows\Problem;
@@ -49,6 +50,7 @@ use YorvoID\Mail\InMemoryMailer;
 use YorvoID\Mail\Mailer;
 use YorvoID\Passkeys\Flow\InvitationStep;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
+use YorvoID\Passkeys\Flow\RecoveryCodesStep;
 use YorvoID\Passkeys\Flow\RecoveryLinkStep;
 use YorvoID\Passkeys\Flow\View\InvitationView;
 use YorvoID\Passkeys\Flow\View\PasskeyRegistrationView;
@@ -265,7 +267,14 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         [$ana] = $this->account();
         $link = $this->recoveryLinks->issue(new IssueRecoveryLink($this->realm, $ana->id), new Origin(OriginKind::Console));
         $flow = $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $link->secret->reveal()]);
-        self::assertSame([], $flow->view?->jsonSerialize());
+        self::assertSame(['account' => 'ana@example.com'], $flow->view?->jsonSerialize(), 'The page names whose account the link opens (login CSRF).');
+        self::assertSame(['account' => null], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => 'wrong'])->view?->jsonSerialize());
+        $both = $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bo@example.com', username: 'bo'), new Origin(OriginKind::Console));
+        $bos = $this->recoveryLinks->issue(new IssueRecoveryLink($this->realm, $both->id), new Origin(OriginKind::Console));
+        self::assertSame(['account' => 'bo@example.com'], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $bos->secret->reveal()])->view?->jsonSerialize(), 'The email address first.');
+        $named = $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, username: 'cy'), new Origin(OriginKind::Console));
+        $cys = $this->recoveryLinks->issue(new IssueRecoveryLink($this->realm, $named->id), new Origin(OriginKind::Console));
+        self::assertSame(['account' => 'cy'], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $cys->secret->reveal()])->view?->jsonSerialize());
 
         $recovered = $this->submit($flow, 'recovery_link', []);
         self::assertSame([AuthenticationMethod::RecoveryLink, 'passkey_registration'], [$recovered->signedIn?->session->authentication->factors[0]->method, $recovered->step]);
@@ -315,6 +324,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertNotNull($renewed);
         $registration = $stepped->view;
         self::assertInstanceOf(PasskeyRegistrationView::class, $registration);
+
         self::assertSame(FlowStatus::Completed, $this->submit($flow, 'passkey_registration', ['response' => json_decode(new VirtualAuthenticator()->register((string) $registration->options), true)], $context->withSession($renewed))->status);
 
         $fresh = $this->flows->start(PasskeyFlows::ADD_PASSKEY, $this->realm, $context->withSession($renewed));
@@ -333,6 +343,13 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertSame('required', ((array) json_decode($this->options($flow), true))['userVerification']);
         self::assertNotNull($this->submit($flow, 'step_up', ['response' => json_decode($authenticator->signIn($this->options($flow)), true)], $context)->renewedToken);
 
+        $this->clock->sleep(120);
+        self::assertSame(FlowStatus::Completed, $this->flows->start(PasskeyFlows::STEP_UP, $this->realm, $context, ['step_up.operation' => 'acme.site.remove', 'step_up.within' => 600])->status, 'No longer than the window.');
+        self::assertSame('step_up', $this->flows->start(PasskeyFlows::STEP_UP, $this->realm, $context, ['step_up.operation' => 'acme.site.remove', 'step_up.within' => 60])->step, 'A route that asks for a fresher proof gets one (no redirect loop).');
+        foreach ([0, -60, '60', null] as $ignored) {
+            self::assertSame(FlowStatus::Completed, $this->flows->start(PasskeyFlows::STEP_UP, $this->realm, $context, ['step_up.operation' => 'acme.site.remove', 'step_up.within' => $ignored])->status, 'Only a number of seconds counts: '.var_export($ignored, true));
+        }
+
         $signedOut = $this->flows->start(PasskeyFlows::STEP_UP, $this->realm, $this->context, ['step_up.operation' => 'acme.site.remove']);
         self::assertSame('step_up', $signedOut->step, 'Without a session there\'s no proof: the step stays.');
         self::assertEquals(new StepUpView(null, 'acme.site.remove'), $signedOut->view);
@@ -340,6 +357,58 @@ final class PasskeyFlowsTest extends DatabaseTestCase
 
         $registering = $this->flows->start(PasskeyFlows::ADD_PASSKEY, $this->realm, $this->context);
         self::assertEquals(new Problem('yorvoid.flow.signed_out'), $this->submit($registering, 'step_up', [])->failure);
+    }
+
+    public function testAProofThatLapsesAtTheAuthenticatorAsksForAnotherStepUp(): void
+    {
+        [$ana, $authenticator] = $this->account();
+        $session = $this->session($ana);
+        $this->clock->sleep(240);
+        $context = $this->context->withSession($session);
+        $flow = $this->flows->start(PasskeyFlows::ADD_PASSKEY, $this->realm, $context);
+        self::assertSame('passkey_registration', $flow->step, 'Four minutes is recent enough.');
+
+        // Two minutes at the authenticator: the ceremony still works, the proof lapsed.
+        $this->clock->sleep(120);
+        $lapsed = $this->submit($flow, 'passkey_registration', ['response' => json_decode(new VirtualAuthenticator()->register($this->options($flow)), true)], $context);
+
+        self::assertEquals([FlowStatus::InProgress, 'step_up', [new Problem('yorvoid.flow.confirm_again')]], [$lapsed->status, $lapsed->step, $lapsed->problems]);
+        self::assertCount(1, $this->passkeys->of($this->realm, $ana->id), 'A passkey was added without a recent proof.');
+        $again = $this->submit($flow, 'step_up', ['response' => json_decode($authenticator->signIn($this->options($lapsed)), true)], $context);
+        self::assertNotNull($again->renewedToken);
+        $renewed = $this->sessions->validate($this->realm, $again->renewedToken);
+        self::assertNotNull($renewed);
+        self::assertSame('passkey_registration', $again->step);
+        self::assertSame(FlowStatus::Completed, $this->submit($flow, 'passkey_registration', ['response' => json_decode(new VirtualAuthenticator()->register($this->options($again)), true)], $context->withSession($renewed))->status);
+        self::assertCount(2, $this->passkeys->of($this->realm, $ana->id));
+    }
+
+    public function testAStepUpWithoutAPasskeyEndsTheFlow(): void
+    {
+        $bob = $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
+        $context = $this->context->withSession($this->session($bob));
+
+        $flow = $this->flows->start(PasskeyFlows::STEP_UP, $this->realm, $context, ['step_up.operation' => 'acme.site.remove', 'step_up.multi_factor' => true]);
+
+        self::assertSame(FlowStatus::Failed, $flow->status);
+        self::assertStringStartsWith('yorvoid.passkey.', (string) $flow->failure?->message);
+    }
+
+    public function testNoNewRecoveryCodesWhileTheCoolDownAfterARecoveryLasts(): void
+    {
+        $stepUp = new StepUp($this->sessions, $this->stack->coolDowns, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->clock, Duration::hours(24));
+        $bob = $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
+        $context = $this->context->withSession($this->session($bob));
+        $state = new FlowState('id', PasskeyFlows::RECOVER_WITH_CODE, $this->realm, $this->clock->now()->modify('+30 minutes'));
+        $step = new RecoveryCodesStep($this->recoveryCodes, $stepUp);
+        self::assertTrue($step->applies($state, $context));
+
+        $stepUp->startCoolDown($this->realm, $bob->id, new Origin(OriginKind::Web));
+
+        self::assertFalse($step->applies($state, $context), 'New codes would replace the owner\'s during the cool-down.');
+        self::assertTrue(new RecoveryCodesStep($this->recoveryCodes)->applies($state, $context), 'Without StepUp there\'s no cool-down to wait out.');
+        $this->clock->sleep(86400);
+        self::assertTrue($step->applies($state, $context));
     }
 
     public function testClaimingDoesntNeedTheEmailToGo(): void
@@ -379,7 +448,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
             'yorvoid.invitation' => ['invitation', 'passkey_registration'],
             'yorvoid.recover_with_code' => ['recovery_code'],
             'yorvoid.recover_with_link' => ['recovery_link'],
-            'yorvoid.add_passkey' => ['passkey_registration'],
+            'yorvoid.add_passkey' => ['step_up', 'passkey_registration'],
             'yorvoid.step_up' => ['step_up'],
             'yorvoid.verify_email' => ['verify_email'],
         ], $required);

@@ -615,14 +615,16 @@ requirements:
         note: '256 bits from random_bytes(); unique by a database constraint; stored only as SHA-256 hashes.'
     V7.2.4:
         level: 1
-        status: partly
+        status: covered
         tests:
             - 'YorvoID\Tests\Authn\Session\SessionsTest::testRefreshingReplacesTheToken'
             - 'YorvoID\Tests\Authn\Session\SessionsTest::testSteppingUpAddsTheProofAndReplacesTheToken'
+            - 'YorvoID\Tests\Symfony\SecurityTest::testSigningInAgainEndsTheSessionTheBrowserHeld'
         docs:
             - concepts/sessions.md
             - concepts/step-up.md
-        note: 'Signing in starts a new session with a new token, and a step-up replaces the session''s token; a sign-in doesn''t yet end the session the browser had before.'
+            - how-to/without-a-bridge.md
+        note: 'Signing in starts a new session with a new token, and a step-up replaces the session''s token. The Symfony bridge ends the session the browser held before a new sign-in; without a bridge, the host does.'
     V7.3.1:
         level: 2
         status: covered

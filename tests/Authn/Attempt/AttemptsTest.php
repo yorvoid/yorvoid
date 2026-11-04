@@ -10,8 +10,11 @@ use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Attempt\AttemptLimits;
 use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Core\Duration;
+use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Storage\InMemoryThrottleStore;
 use YorvoID\Throttle\Throttle;
@@ -45,6 +48,36 @@ final class AttemptsTest extends TestCase
         $this->attempts->count('setup_code', new Realm('acme'), $ana, '192.0.2.1');
         $this->attempts->count('recovery_code', new Realm('globex'), $ana, '192.0.2.9');
         $this->attempts->count('passkey_sign_in', new Realm('acme'), null, '192.0.2.2');
+    }
+
+    public function testALimitReachedIsRecordedOncePerWindow(): void
+    {
+        $store = new InMemorySecurityLogStore();
+        $clock = new MockClock('2026-10-28 18:00:00 UTC');
+        $attempts = new Attempts(new Throttle(new InMemoryThrottleStore(), $clock), new AttemptLimits(perAddress: new Limit(1, Duration::hours(1))), new SecurityLog($store, new InMemoryTransactions(), clock: $clock));
+        $attempts->count('setup_code', new Realm('acme'), null, '192.0.2.1');
+
+        for ($i = 0; $i < 3; ++$i) {
+            $this->throttled(static fn () => $attempts->count('setup_code', new Realm('acme'), null, '192.0.2.1'), 'The limit let one through.');
+        }
+
+        $entries = iterator_to_array($store->entries(new Realm('acme'), 1), false);
+        self::assertCount(1, $entries, 'A flood of refusals wrote an entry each.');
+        self::assertSame(['yorvoid.attempt.throttled', 'denied', 'setup_code'], [$entries[0]->action, $entries[0]->outcome->value, $entries[0]->details['form']]);
+        self::assertIsString($entries[0]->details['key']);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/D', $entries[0]->details['key'], 'The key is hashed: it holds the address.');
+
+        // Another address's limit is its own, and recorded on its own.
+        $attempts->count('setup_code', new Realm('acme'), null, '192.0.2.2');
+        $this->throttled(static fn () => $attempts->count('setup_code', new Realm('acme'), null, '192.0.2.2'), 'The limit let one through.');
+        self::assertSame(2, iterator_count($store->entries(new Realm('acme'), 1)));
+
+        $clock->sleep(3600);
+        $this->throttled(static function () use ($attempts): void {
+            $attempts->count('setup_code', new Realm('acme'), null, '192.0.2.1');
+            $attempts->count('setup_code', new Realm('acme'), null, '192.0.2.1');
+        }, 'The limit let two through.');
+        self::assertSame(3, iterator_count($store->entries(new Realm('acme'), 1)), 'The next window\'s first refusal is recorded too.');
     }
 
     public function testCountsWhatIsKnown(): void

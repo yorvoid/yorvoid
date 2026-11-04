@@ -46,10 +46,11 @@ final readonly class StepUp
      */
     public function require(Session $session, AuthenticationRequirement $requirement): void
     {
-        $current = $this->sessions->get($session->realm, $session->id);
+        // As on every request: the current policy's limits, and the principal active and unchanged (SES-03).
+        $current = $this->sessions->active($session->realm, $session->id);
         $now = $this->clock->now();
 
-        if (null === $current || !$current->isCurrentAt($now)) {
+        if (null === $current) {
             throw new StepUpRequired($requirement);
         }
 

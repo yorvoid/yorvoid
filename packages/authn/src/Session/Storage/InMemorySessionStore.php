@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Authn\Session\Storage;
 
 use YorvoID\Authn\Session\AuthenticationContext;
+use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\SessionId;
@@ -81,17 +82,18 @@ final class InMemorySessionStore implements SessionStore, InMemoryStore
         return true;
     }
 
-    public function stepUp(Realm $realm, SessionId $id, AuthenticationContext $authentication, string $tokenHash): bool
+    public function stepUp(Realm $realm, SessionId $id, AuthenticationFactor $factor, string $tokenHash): ?AuthenticationContext
     {
         $session = $this->get($realm, $id);
 
         if (null === $session || $session->isEnded()) {
-            return false;
+            return null;
         }
 
+        $authentication = $session->authentication->with($factor);
         $this->sessions[(string) $id] = [new Session($session->id, $session->realm, $session->principalId, $session->principalStatusVersion, $authentication, $session->startedAt, $session->lastSeenAt, $session->expiresAt, $session->idleExpiresAt, $session->device, $session->address), $tokenHash];
 
-        return true;
+        return $authentication;
     }
 
     public function touch(Realm $realm, SessionId $id, \DateTimeImmutable $lastSeenAt, \DateTimeImmutable $idleExpiresAt): void

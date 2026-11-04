@@ -2,7 +2,23 @@ version: 2
 # Minor and patch updates come together, one pull request per ecosystem and directory each week, so
 # that each runs CI once; major updates come one by one, as they may need changes.
 updates:
+  # Images are pinned by digest: Dependabot proposes the next tag and digest together.
   - package-ecosystem: docker
+    directories:
+      - /
+      - /packages/browser
+      - /spec
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+    cooldown:
+      default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker-compose
     directory: /
     schedule:
       interval: weekly

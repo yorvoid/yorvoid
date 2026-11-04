@@ -106,7 +106,18 @@ final class KeyRingTest extends TestCase
         $json = new KeyRing([self::rfcKey(self::SEED_1, self::PUBLIC_1)])->toJwks()->reveal();
         $set = json_decode($json, true, 8, \JSON_THROW_ON_ERROR);
 
-        self::assertSame(['keys' => [['kid' => 'rfc', 'kty' => 'OKP', 'crv' => 'Ed25519', 'alg' => 'EdDSA', 'use' => 'sig', 'status' => 'active', 'x' => '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo']]], $set);
+        self::assertSame(['keys' => [['kid' => 'rfc', 'kty' => 'OKP', 'crv' => 'Ed25519', 'alg' => 'EdDSA', 'use' => 'sig', 'status' => 'verify-only', 'x' => '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo']]], $set);
+    }
+
+    public function testThePublicKeySetLoadsAndOnlyVerifies(): void
+    {
+        $ring = new KeyRing([self::rfcKey(self::SEED_1, self::PUBLIC_1), SigningKey::generate('2026-10', KeyStatus::VerifyOnly)]);
+        $public = KeyRing::fromJwks($ring->toJwks());
+
+        self::assertTrue($public->verify('rfc', '', (string) hex2bin(self::SIGNATURE_1)));
+        self::assertSame([null, null], array_map(static fn (SigningKey $key): ?Secret => $key->seed, $public->keys()));
+        self::assertSame('This key set is public: it only verifies.', $this->error(static fn () => $public->signer())->problem);
+        self::assertSame('The key ring has 0 active keys ().', $this->error(static fn () => new KeyRing([SigningKey::generate('2026-10', KeyStatus::VerifyOnly)]))->problem, 'A ring with private parts has a key that signs.');
     }
 
     public function testAcceptsTheStandardsOwnLists(): void
@@ -289,6 +300,17 @@ final class KeyRingTest extends TestCase
 
         $error = $this->error(static fn () => $ring->toFile('/nonexistent/keys.json'));
         self::assertSame('The key file "/nonexistent/keys.json" can\'t be written.', $error->problem);
+
+        // Replacing fails (here: a folder in the way): nothing is left behind.
+        mkdir($directory.'/keys.json/in-the-way', recursive: true);
+
+        try {
+            $failed = $this->error(static fn () => $ring->toFile($directory.'/keys.json'));
+            self::assertSame(\sprintf('The key file "%s/keys.json" couldn\'t be written; it\'s as it was.', $directory), $failed->problem);
+            self::assertSame(['keys.json'], array_values(array_diff((array) scandir($directory), ['.', '..'])), 'The temporary file was left behind.');
+        } finally {
+            new Filesystem()->remove($directory);
+        }
     }
 
     public function testReportsAMissingFile(): void
@@ -297,6 +319,13 @@ final class KeyRingTest extends TestCase
         $this->expectExceptionMessage('can\'t be read');
 
         KeyRing::fromFile('/nonexistent/yorvoid-keys.json');
+    }
+
+    public function testAKeySetThatIsntJsonDoesntCarryItIntoTheError(): void
+    {
+        $error = $this->error(static fn () => KeyRing::fromJwks(Secret::fromString('{"keys":[{"d":"nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A",}]}')));
+
+        self::assertNull($error->getPrevious(), 'The JSON error\'s trace holds the private parts.');
     }
 
     public function testPrivatePartsStaySecret(): void

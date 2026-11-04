@@ -74,7 +74,7 @@ final class KeyRotationTest extends TestCase
         // Sessions end after an hour idle: the rotation happens within it.
         $clock->modify('+10 minutes');
         [, $display] = $this->command('yorvoid:keys:rotate');
-        self::assertStringContainsString('Added 2026-10-29.2, verify-only. Deploy the key file everywhere signatures are checked, then run yorvoid:keys:rotate again to make it active.', $display);
+        self::assertStringContainsString('Added 2026-10-29.2, verify-only. Deploy the public key set (yorvoid:keys:rotate --public, never the key file) everywhere signatures are checked, then run yorvoid:keys:rotate again to make it active.', $display);
         $this->assertStillWorking($container, $signature, $session);
 
         [, $display] = $this->command('yorvoid:keys:rotate');

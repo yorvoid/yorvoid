@@ -72,6 +72,14 @@ final readonly class DbalPrincipalStore implements PrincipalStore
         );
     }
 
+    public function hasActive(Realm $realm): bool
+    {
+        return false !== $this->database->connection->fetchOne(
+            \sprintf('SELECT 1 FROM %s WHERE realm = ? AND status = ? LIMIT 1', $this->database->table(self::TABLE)),
+            [$realm->name, PrincipalStatus::Active->value],
+        );
+    }
+
     public function changeStatus(Principal $before, Principal $after): bool
     {
         return 1 === $this->database->connection->update(

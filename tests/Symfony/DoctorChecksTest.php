@@ -15,11 +15,13 @@ use YorvoID\Symfony\Doctor\Check;
 use YorvoID\Symfony\Doctor\ClockCheck;
 use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
+use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\Finding;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
 use YorvoID\Symfony\Doctor\ProxiesCheck;
+use YorvoID\Symfony\Doctor\TestHelpersCheck;
 use YorvoID\Symfony\Migrations;
 use YorvoID\Symfony\Presets;
 use YorvoID\Tests\Support\DatabaseTestCase;
@@ -110,6 +112,27 @@ final class DoctorChecksTest extends DatabaseTestCase
         }
     }
 
+    public function testProductionRunsWithoutDebugAndWithASecret(): void
+    {
+        self::assertSame([], iterator_to_array(new EnvironmentCheck('dev', true, '')->findings(), false), 'Development is development.');
+        self::assertSame([], iterator_to_array(new EnvironmentCheck('prod', false, 'a-long-random-secret')->findings(), false));
+        $findings = iterator_to_array(new EnvironmentCheck('prod', true, ' ')->findings(), false);
+
+        self::assertSame(['Production runs with debug on: error pages show source code and stack traces to anyone.', 'Production has no APP_SECRET: what Symfony signs with it, e.g. links and CSRF tokens, can be made by anyone.'], array_map(static fn (Finding $finding): string => $finding->what, $findings));
+        self::assertTrue($findings[0]->problem && $findings[1]->problem);
+    }
+
+    public function testTestHelpersAreAProblemOutsideDevelopment(): void
+    {
+        self::assertSame([], iterator_to_array(new TestHelpersCheck(true)->findings(), false));
+        $findings = iterator_to_array(new TestHelpersCheck(false)->findings(), false);
+
+        // This repository has both installed.
+        self::assertSame(['yorvoid/testing is installed outside development', 'yorvoid/virtual-authenticator is installed outside development'], array_map(static fn (Finding $finding): string => (string) strstr($finding->what, ':', true), $findings));
+        self::assertTrue($findings[0]->problem && $findings[1]->problem);
+        self::assertSame('Install it with composer require --dev yorvoid/testing, and deploy with composer install --no-dev.', $findings[0]->fix);
+    }
+
     public function testNotificationsNeedAnAddressAndATransportThatDelivers(): void
     {
         // Off: fine while developing, a warning in production.
@@ -130,6 +153,10 @@ final class DoctorChecksTest extends DatabaseTestCase
         self::assertCount(1, iterator_to_array(new MailerCheck(true, 'security@example.com', ['main' => 'smtp://null'], false)->findings(), false));
         self::assertSame([], iterator_to_array(new MailerCheck(true, 'security@example.com', ['main' => 'smtp://null'], true)->findings(), false));
         self::assertSame([], iterator_to_array(new MailerCheck(true, 'security@example.com', ['main' => 'smtp://mail.example.com', 'other' => 'null://null'], false)->findings(), false));
+
+        // The application's own mailer, maybe without Symfony Mailer: its transports aren't YorvoID's to check.
+        self::assertSame([], iterator_to_array(new MailerCheck(true, 'security@example.com', null, false, own: true)->findings(), false));
+        self::assertCount(1, iterator_to_array(new MailerCheck(true, 'security', null, false, own: true)->findings(), false), 'The address is checked all the same.');
     }
 
     public function testWarnsOfSettingsWeakerThanThePresetsOnly(): void

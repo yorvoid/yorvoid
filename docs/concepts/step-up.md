@@ -22,7 +22,7 @@ An `AuthenticationRequirement` says what the operation needs:
 | `operation` | `null` | The operation's name, e.g. `acme.site.remove`, as in its `#[Operation]`. |
 | `heldAfterRecovery` | `false` | Whether it waits out the [cool-down after a recovery](#the-cool-down-after-a-recovery). |
 
-A proof from **signing in** counts for any operation. A proof from a **step-up** counts only for the operation it was for: confirming one removal doesn't open a window for every other sensitive operation ("sudo mode", limited to what it was granted for).
+A proof from **signing in** counts for any operation. A proof from a **step-up** counts only for the operation it was for: confirming one removal doesn't open a window for every other sensitive operation ("sudo mode", limited to what it was granted for). A step-up for no operation counts only for requirements that name none.
 
 `require()` reads the session as it is now, so a step-up in another request counts at once. An ended or expired session never meets a requirement.
 
@@ -60,4 +60,5 @@ $stepUp = new StepUp($sessions, $coolDownStore, $log, coolDown: Duration::hours(
 - Removing a credential and replacing recovery codes wait it out. Adding one doesn't: someone who lost their passkeys recovers to add a new one.
 - The owner can't remove a passkey an attacker added during the cool-down either. The "This wasn't me" link in the [notification](notifications.md) disables it at once, and ends the attacker's sessions.
 - A held operation throws `HeldAfterRecovery` with the moment it's possible again. Stepping up doesn't help; tell the person when.
+- The recovery flows' recovery-codes step is passed over while it lasts: the person generates new codes once it ends.
 - `coolDownEndsAt()` tells whether a principal is cooling down, e.g. to show it on their security page. Purge ended cool-downs daily with `$stepUp->purge()`.

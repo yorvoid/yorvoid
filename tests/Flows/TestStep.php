@@ -25,11 +25,13 @@ final class TestStep implements Step
     /**
      * @param (\Closure(FlowState, FlowContext, Input): StepResult)|null $submit
      * @param (\Closure(FlowState, FlowContext): bool)|null              $applies
+     * @param (\Closure(int): void)|null                                 $enter   Told how often it was prepared; may throw
      */
     public function __construct(
         private readonly string $name,
         private readonly ?\Closure $submit = null,
         private readonly ?\Closure $applies = null,
+        private readonly ?\Closure $enter = null,
     ) {
     }
 
@@ -46,6 +48,10 @@ final class TestStep implements Step
     public function enter(FlowState $state, FlowContext $context): FlowState
     {
         $this->entered[] = $context;
+
+        if (null !== $this->enter) {
+            ($this->enter)(\count($this->entered));
+        }
 
         return $state->with([$this->name.'.entered' => \count($this->entered)]);
     }

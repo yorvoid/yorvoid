@@ -15,12 +15,14 @@ use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Address;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Translation\Translator;
+use Symfony\Component\VarDumper\Cloner\AbstractCloner;
 use Twig\Extension\AbstractExtension;
 use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Notification\SecurityNotifications;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Translations as AuthnTranslations;
+use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Flows\Translations as FlowsTranslations;
@@ -28,6 +30,7 @@ use YorvoID\Mail\Mailer;
 use YorvoID\Passkeys\Intent\SignedOperationNotification;
 use YorvoID\Passkeys\Translations as PasskeysTranslations;
 use YorvoID\Symfony\Controller\FlowController;
+use YorvoID\Symfony\Debug\SecretCaster;
 use YorvoID\Symfony\Flow\FlowCustomizer;
 use YorvoID\Symfony\Mail\SymfonyMailer;
 use YorvoID\Symfony\Security\PrincipalUsers;
@@ -134,6 +137,8 @@ final class YorvoIDBundle extends AbstractBundle
             $container->parameters()->set('yorvoid.'.$name, $value);
         }
 
+        BootCheck::check($settings, static fn (mixed $value): bool => \is_string($value) && $builder->resolveEnvPlaceholders($value, '%%env(%s)%%') !== $value);
+
         $container->import(\dirname(__DIR__).'/config/services.php');
         $connection = $settings['connection'];
         \assert(\is_string($connection));
@@ -195,6 +200,17 @@ final class YorvoIDBundle extends AbstractBundle
             ->setArgument('$translator', new Reference('yorvoid.translator.used'))
             ->setArgument('$link', (new Definition(\Closure::class))->setFactory([Factories::class, 'emailVerificationLink'])->setArguments([new Reference(UrlGeneratorInterface::class)]))
             ->addTag('kernel.event_listener', ['method' => 'identifierChanged']);
+    }
+
+    /**
+     * Symfony's dumper (dump(), the profiler, the debug toolbar) reads an object's properties, not its
+     * __debugInfo(): it shows a Secret redacted only with this caster (PLT-053).
+     */
+    public function boot(): void
+    {
+        if (class_exists(AbstractCloner::class)) {
+            AbstractCloner::$defaultCasters[Secret::class] = [SecretCaster::class, 'cast'];
+        }
     }
 
     public function build(ContainerBuilder $container): void

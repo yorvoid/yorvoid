@@ -10,6 +10,8 @@ use Symfony\Component\Clock\NativeClock;
 use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
+use YorvoID\Authn\StepUp\HeldAfterRecovery;
+use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Realm;
@@ -36,6 +38,10 @@ final class Flows
     private const string DEVICE_COOKIE = 'flows.signed_in.device_cookie';
 
     private const string NEW_DEVICE = 'flows.signed_in.new_device';
+
+    private const string CONFIRM_AGAIN = 'yorvoid.flow.confirm_again';
+
+    private const string HELD = 'yorvoid.flow.held_after_recovery';
 
     /** @var array<string, Flow> */
     private array $flows = [];
@@ -132,21 +138,35 @@ final class Flows
             $result = $current->submit($state, $context, $input);
         } catch (Throttled $exception) {
             $result = StepResult::throttled(new Problem('yorvoid.flow.too_many_attempts', ['minutes' => (int) ceil($exception->seconds / 60)]), $exception->seconds);
+        } catch (StepUpRequired) {
+            $result = StepResult::refused(new Problem(self::CONFIRM_AGAIN));
+        } catch (HeldAfterRecovery) {
+            $result = StepResult::failed(new Problem(self::HELD));
         }
 
         if (null !== $result->failure) {
-            $this->store->delete($state->id);
+            return $this->fail($state, $result->failure);
+        }
 
-            return new Progress(FlowStatus::Failed, $state, failure: $result->failure);
+        if ([] !== $result->reopen) {
+            $progress = $this->advance($state->reopening($result->reopen), $context);
+
+            return new Progress($progress->status, $progress->state, $progress->step, $progress->view, $result->problems, $progress->retryAfter, $progress->signedIn, $progress->renewedToken, $progress->failure);
         }
 
         if (!$result->done) {
-            $state = $current->enter($state, $context);
+            try {
+                $state = $this->enter($current, $state, $context);
+            } catch (StepFailed $failed) {
+                return $this->fail($state, $failed->problem);
+            }
+
             $this->store->save($state);
 
             return new Progress(FlowStatus::InProgress, $state, $current->name(), $current->view($state), $result->problems, $result->retryAfter);
         }
 
+        self::refuseReservedKeys($current, [...array_keys($result->data), ...$result->forget]);
         $state = $state->with($result->data)->without($result->forget)->passing($current->name());
 
         if (null !== $result->signedIn) {
@@ -203,7 +223,13 @@ final class Flows
             }
 
             [$state, $signedIn] = [] === array_diff($flow->required, $state->passed) ? $this->release($state, $context) : [$state, null];
-            $state = $step->enter($state->at($step->name()), $context);
+
+            try {
+                $state = $this->enter($step, $state->at($step->name()), $context);
+            } catch (StepFailed $failed) {
+                return $this->fail($state, $failed->problem);
+            }
+
             $this->store->save($state);
 
             return new Progress(FlowStatus::InProgress, $state, $step->name(), $step->view($state), signedIn: $signedIn, renewedToken: $renewedToken);
@@ -229,6 +255,47 @@ final class Flows
         $signedIn = null === $token || null === $context->session ? null : new StartedSession($context->session, Secret::fromString($token), null === $deviceCookie ? null : Secret::fromString($deviceCookie), true === $state->get(self::NEW_DEVICE));
 
         return [$state->without([self::TOKEN, self::DEVICE_COOKIE, self::NEW_DEVICE]), $signedIn];
+    }
+
+    /**
+     * A step that can't be prepared fails the flow, with a problem rather than an error: a step-up's proof
+     * that lapsed, or an operation held after a recovery, included.
+     *
+     * @throws StepFailed
+     */
+    private function enter(Step $step, FlowState $state, FlowContext $context): FlowState
+    {
+        try {
+            return $step->enter($state, $context);
+        } catch (StepUpRequired) {
+            throw new StepFailed(new Problem(self::CONFIRM_AGAIN));
+        } catch (HeldAfterRecovery) {
+            throw new StepFailed(new Problem(self::HELD));
+        }
+    }
+
+    /**
+     * A step keeps its data under a prefix of its own: "flows." is where Flows keeps a session it holds
+     * back, and "yorvoid." is YorvoID's for later.
+     *
+     * @param list<array-key> $keys
+     *
+     * @throws IntegratorError
+     */
+    private static function refuseReservedKeys(Step $step, array $keys): void
+    {
+        foreach ($keys as $key) {
+            if (str_starts_with((string) $key, 'flows.') || str_starts_with((string) $key, 'yorvoid.')) {
+                throw new IntegratorError(\sprintf('The step "%s" keeps "%s" in the flow\'s state: "flows." and "yorvoid." are reserved.', $step->name(), $key), 'Keep a step\'s data under a prefix of your own, e.g. its name: "acme_terms.accepted".', 'concepts/flows.md#writing-a-step');
+            }
+        }
+    }
+
+    private function fail(FlowState $state, Problem $failure): Progress
+    {
+        $this->store->delete($state->id);
+
+        return new Progress(FlowStatus::Failed, $state, failure: $failure);
     }
 
     private function load(string $id): ?FlowState

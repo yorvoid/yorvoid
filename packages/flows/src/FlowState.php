@@ -122,6 +122,16 @@ final readonly class FlowState
     }
 
     /**
+     * Not done any more: the steps come again, in the flow's order.
+     *
+     * @param list<string> $steps
+     */
+    public function reopening(array $steps): self
+    {
+        return new self($this->id, $this->flow, $this->realm, $this->expiresAt, array_values(array_diff($this->passed, $steps)), null, $this->data);
+    }
+
+    /**
      * @internal
      */
     public function passing(string $step): self

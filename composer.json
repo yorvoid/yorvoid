@@ -54,6 +54,7 @@
         "phpstan/phpstan-phpunit": "^2.1",
         "phpstan/phpstan-strict-rules": "^2.1",
         "phpunit/phpunit": "^13.4",
+        "shipmonk/composer-dependency-analyser": "^1.8",
         "spaze/phpstan-disallowed-calls": "^4.15",
         "symfony/browser-kit": "^8.1",
         "symfony/css-selector": "^8.1",
@@ -83,6 +84,7 @@
         "cs-fix": "php-cs-fixer fix",
         "phpstan": "phpstan analyse --memory-limit=1G",
         "deptrac": "deptrac analyse --no-progress",
+        "dependencies": "sh tools/dependencies/check.sh",
         "test": "phpunit",
         "infection": [
             "Composer\\Config::disableProcessTimeout",
@@ -96,6 +98,7 @@
             "@cs",
             "@phpstan",
             "@deptrac",
+            "@dependencies",
             "@test"
         ],
         "fuzz": [
@@ -108,6 +111,7 @@
         "cs-fix": "Fixes the coding style",
         "phpstan": "Static analysis at the maximum level",
         "deptrac": "Checks the dependency rules between packages",
+        "dependencies": "Checks that each package requires what it uses, and uses what it requires",
         "test": "Runs the tests",
         "infection": "Mutation testing",
         "docs-reference": "Writes the reference pages from the code: the configuration and the console commands",

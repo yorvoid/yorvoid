@@ -82,12 +82,13 @@ security:
                 - YorvoID\Symfony\Security\Authenticator\RecoveryCodeAuthenticator
                 - YorvoID\Symfony\Security\Authenticator\RecoveryLinkAuthenticator
                 - YorvoID\Symfony\Security\Authenticator\SessionAuthenticator
+            entry_point: YorvoID\Symfony\Security\SignInEntryPoint
             logout:
                 path: /sign-out
                 enable_csrf: true
 ```
 
-Signing out at `/sign-out` ends the YorvoID session too, not only the PHP session. It takes a form's POST with a CSRF token, so another site, or a browser fetching links ahead, can't sign anyone out. YorvoID's pages and endpoints go under `/yorvoid`:
+Someone who isn't signed in and opens a page that needs it, e.g. one with `#[IsGranted('ROLE_USER')]`, goes to YorvoID's sign-in page (the `entry_point`); a request for JSON gets 401. Signing out at `/sign-out` ends the YorvoID session too, not only the PHP session. It takes a form's POST with a CSRF token, so another site, or a browser fetching links ahead, can't sign anyone out. YorvoID's pages and endpoints go under `/yorvoid`:
 
 <!-- quickstart: write config/routes/yorvoid.yaml -->
 ```yaml
@@ -155,6 +156,8 @@ A fresh installation has no accounts, and no default password: whoever has the s
 php bin/console yorvoid:setup-code
 ```
 
+It prints the code, e.g. `7KQ2M-W9XHE-…`, and a note saying what it is: a secret, for whoever claims the installation, working once.
+
 Start the application. Use `localhost`, not `127.0.0.1`: passkeys belong to domain names, not addresses.
 
 <!-- quickstart: serve -->
@@ -182,4 +185,4 @@ Follow "Sign out", then "Sign in". The sign-in page offers your passkey in the e
 - **Your kind of application:** pick a [preset](../concepts/symfony.md#presets).
 - **Your users:** [sign in your own user objects](../concepts/symfony.md#your-own-users).
 - **Tests:** [sign in to functional tests](../concepts/testing.md) through YorvoID.
-- **Production:** HTTPS, your domain as the relying party ID, PostgreSQL, `cookie_secure: true`, your proxy in `trusted_proxies` if one terminates HTTPS ([behind a proxy](../concepts/symfony.md#behind-a-proxy)), and `yorvoid:doctor --strict` in your deployment.
+- **Production:** `APP_ENV=prod` (the skeleton's `.env` says `dev`, whose error pages show your code to anyone), a long random `APP_SECRET`, `composer dump-env prod`; HTTPS, your domain as the relying party ID, PostgreSQL, `cookie_secure: true`, your proxy in `trusted_proxies` if one terminates HTTPS ([behind a proxy](../concepts/symfony.md#behind-a-proxy)), and `yorvoid:doctor --strict` in your deployment: it checks these.
