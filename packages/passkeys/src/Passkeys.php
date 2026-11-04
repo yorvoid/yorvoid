@@ -39,6 +39,7 @@ use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\InactivePrincipal;
 use YorvoID\Authn\Session\Session;
+use YorvoID\Authn\Session\SessionId;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
@@ -340,9 +341,9 @@ final readonly class Passkeys
         return new BegunCeremony((string) $ceremony->id, $json);
     }
 
-    private function take(Realm $realm, string $id, CeremonyKind $kind): Ceremony
+    private function take(Realm $realm, string $id, CeremonyKind $kind, ?SessionId $session = null): Ceremony
     {
-        $ceremony = Uuid::isValid($id) ? $this->transactions->run(fn (): ?Ceremony => $this->ceremonyStore->take($realm, Uuid::fromString($id))) : null;
+        $ceremony = Uuid::isValid($id) ? $this->transactions->run(fn (): ?Ceremony => $this->ceremonyStore->take($realm, Uuid::fromString($id), $session)) : null;
 
         if (null === $ceremony || $kind !== $ceremony->kind || $this->clock->now() >= $ceremony->expiresAt) {
             throw new PasskeyRefused(Refusal::CeremonyExpired);
@@ -356,7 +357,7 @@ final readonly class Passkeys
      */
     private function takeForSession(Session $session, string $id, CeremonyKind $kind): Ceremony
     {
-        $ceremony = $this->take($session->realm, $id, $kind);
+        $ceremony = $this->take($session->realm, $id, $kind, $session->id);
 
         if (null === $ceremony->sessionId || !$ceremony->sessionId->equals($session->id)) {
             throw new PasskeyRefused(Refusal::CeremonyExpired);

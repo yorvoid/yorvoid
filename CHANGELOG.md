@@ -13,6 +13,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - The bundle refuses at boot a configuration it would refuse later: a wrong realm, table prefix, duration, limit, origin, cookie name, script or notification address.
 - `NotificationSettings` and email actions accept `https://` addresses only (`http://` for `localhost`), without a user before the host.
 - A setup code works only while the realm has no active principal.
+- `CeremonyStore::take()` takes the session asking: a store of your own returns a ceremony only to the session that began it, and one begun outside a session only without one.
 
 ### Security
 
@@ -22,6 +23,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - Failed setup codes and tokens, and limits reached, are recorded in the security log.
 - The key file is replaced only by a complete, synced copy; Symfony's dumper shows secrets redacted.
 - `yorvoid:doctor` warns on PostgreSQL while the application's database user can update, delete or truncate the security log.
+- Another session, or a sign-in, can't use up a session's passkey ceremony; links from other sites can't push the flow in progress out of the browser's session.
 
 ### Added
 
