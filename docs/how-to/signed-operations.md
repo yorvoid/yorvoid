@@ -25,6 +25,7 @@ One front controller serves both the signing origin and the internal endpoint. R
 declare(strict_types=1);
 
 use Acme\Sites;
+use YorvoID\IntentVerifier\ConfigurationError;
 use YorvoID\IntentVerifier\IntentRefused;
 use YorvoID\IntentVerifier\Operation;
 use YorvoID\IntentVerifier\OperationPolicy;
@@ -70,6 +71,11 @@ if ('127.0.0.1:8081' === $_SERVER['HTTP_HOST']) {
 
         try {
             $prepared = $verifier->prepare($asked['action'], $asked['parameters']);
+        } catch (ConfigurationError) {   // not in the policy, or not its parameters: whatever the console says
+            http_response_code(422);
+            echo json_encode(['refusal' => 'not_listed']);
+
+            return;
         } catch (IntentRefused $refused) {
             http_response_code(422);
             echo json_encode(['refusal' => $refused->refusal->value]);
