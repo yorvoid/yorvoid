@@ -21,6 +21,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - Signing in again ends the session the browser held; two step-ups at once both keep their proof.
 - Failed setup codes and tokens, and limits reached, are recorded in the security log.
 - The key file is replaced only by a complete, synced copy; Symfony's dumper shows secrets redacted.
+- `yorvoid:doctor` warns on PostgreSQL while the application's database user can update, delete or truncate the security log.
 
 ### Added
 

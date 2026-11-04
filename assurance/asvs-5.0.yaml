@@ -1262,9 +1262,10 @@ requirements:
         tests:
             - 'YorvoID\Tests\Core\Log\SecurityLogTest::testDetectsTampering'
             - 'YorvoID\Tests\Core\Log\SecurityLogTest::testDetectsAMissingHead'
+            - 'YorvoID\Tests\Symfony\DoctorChecksTest::testWarnsWhileTheApplicationCanRewriteTheSecurityLog'
         docs:
             - concepts/security-log.md
-        note: 'Changes are detected by the hash chain; preventing a full rewrite, or a cut-off end, by someone who can write the database needs checkpoints kept outside it (by 1.0), and database permissions are the application''s.'
+        note: 'Changes are detected by the hash chain; preventing a full rewrite, or a cut-off end, by someone who can write the database needs checkpoints kept outside it (by 1.0). Database permissions are the application''s; yorvoid:doctor warns on PostgreSQL while its user can update, delete or truncate the log.'
     V16.4.3:
         level: 2
         status: open
