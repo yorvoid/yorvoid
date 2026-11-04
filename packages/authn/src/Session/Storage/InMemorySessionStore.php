@@ -25,26 +25,25 @@ final class InMemorySessionStore implements SessionStore, InMemoryStore
     /** @var array<string, array{Session, string}> By ID: the session and its token's hash */
     private array $sessions = [];
 
+    /** @var array<string, string>|null Each session's ID by its token's hash, so finding one isn't a scan (PERF-09); null until needed */
+    private ?array $byTokenHash = null;
+
     public function add(Session $session, string $tokenHash): void
     {
-        foreach ($this->sessions as $id => [, $hash]) {
-            if ($id === (string) $session->id || $hash === $tokenHash) {
-                throw new StorageException(\sprintf('A session with the ID %s or the same token exists.', $session->id));
-            }
+        if (isset($this->sessions[(string) $session->id]) || isset($this->hashes()[$tokenHash])) {
+            throw new StorageException(\sprintf('A session with the ID %s or the same token exists.', $session->id));
         }
 
         $this->sessions[(string) $session->id] = [$session, $tokenHash];
+
+        if (null !== $this->byTokenHash) {
+            $this->byTokenHash[$tokenHash] = (string) $session->id;
+        }
     }
 
     public function findByTokenHash(string $tokenHash): ?Session
     {
-        foreach ($this->sessions as [$session, $hash]) {
-            if ($hash === $tokenHash) {
-                return $session;
-            }
-        }
-
-        return null;
+        return $this->sessions[$this->hashes()[$tokenHash] ?? ''][0] ?? null;
     }
 
     public function get(Realm $realm, SessionId $id): ?Session
@@ -77,7 +76,7 @@ final class InMemorySessionStore implements SessionStore, InMemoryStore
             return false;
         }
 
-        $this->sessions[(string) $id] = [$session, $tokenHash];
+        $this->rehash((string) $id, $session, $tokenHash);
 
         return true;
     }
@@ -91,7 +90,7 @@ final class InMemorySessionStore implements SessionStore, InMemoryStore
         }
 
         $authentication = $session->authentication->with($factor);
-        $this->sessions[(string) $id] = [new Session($session->id, $session->realm, $session->principalId, $session->principalStatusVersion, $authentication, $session->startedAt, $session->lastSeenAt, $session->expiresAt, $session->idleExpiresAt, $session->device, $session->address), $tokenHash];
+        $this->rehash((string) $id, new Session($session->id, $session->realm, $session->principalId, $session->principalStatusVersion, $authentication, $session->startedAt, $session->lastSeenAt, $session->expiresAt, $session->idleExpiresAt, $session->device, $session->address), $tokenHash);
 
         return $authentication;
     }
@@ -136,6 +135,7 @@ final class InMemorySessionStore implements SessionStore, InMemoryStore
     {
         $count = \count($this->sessions);
         $this->sessions = array_filter($this->sessions, static fn (array $entry): bool => !((null !== $entry[0]->endedAt && $entry[0]->endedAt < $before) || $entry[0]->expiresAt < $before));
+        $this->byTokenHash = null;
 
         return $count - \count($this->sessions);
     }
@@ -148,6 +148,26 @@ final class InMemorySessionStore implements SessionStore, InMemoryStore
     public function restore(mixed $snapshot): void
     {
         $this->sessions = $snapshot;
+        $this->byTokenHash = null;
+    }
+
+    private function rehash(string $id, Session $session, string $tokenHash): void
+    {
+        $previous = $this->sessions[$id][1];
+        $this->sessions[$id] = [$session, $tokenHash];
+
+        if (null !== $this->byTokenHash) {
+            unset($this->byTokenHash[$previous]);
+            $this->byTokenHash[$tokenHash] = $id;
+        }
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function hashes(): array
+    {
+        return $this->byTokenHash ??= array_combine(array_column($this->sessions, 1), array_keys($this->sessions));
     }
 
     private function replace(Session $old, Session $new): void
