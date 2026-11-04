@@ -4,7 +4,7 @@ name: Split
 # Copies each package (see .github/split.json) to its own read-only repository, which Packagist
 # installs it from: main to their main, and each version tag to every repository (all packages are
 # released together, with the same version). Only what passed CI: main after CI passed for its newest
-# commit, a tag when its commit is on main and passed CI.
+# commit, a tag when it's signed and its commit is on main and passed CI.
 on:
   workflow_run:
     workflows:
@@ -45,7 +45,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       # main: only the commit CI just passed, if it's still main's newest; a newer one gets its own run.
-      # A tag: only a commit on main that passed CI.
+      # A tag: only a signed tag (.github/release-signers) of a commit on main that passed CI.
       - name: Check CI passed for the commit
         id: passed
         env:
@@ -74,6 +74,10 @@ jobs:
 
             if [ "$passed" -eq 0 ]; then
               echo "::error::CI hasn't passed for the tag's commit $commit."
+              exit 1
+            fi
+
+            if ! .github/verify-tag.sh "$GITHUB_REF_NAME"; then
               exit 1
             fi
 
