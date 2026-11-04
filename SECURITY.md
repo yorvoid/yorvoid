@@ -38,3 +38,13 @@ After 1.0, the latest minor version receives security fixes, and the previous mi
 This policy covers the code in this repository: every `yorvoid/*` Composer package (their own repositories, such as `yorvoid/core`, are read-only copies of `packages/`), the `@yorvoid/browser` npm package, and the Docker setup used to develop them.
 
 Vulnerabilities in YorvoID's dependencies (e.g. Doctrine DBAL, Symfony components, `web-auth/webauthn-lib`) should be reported to those projects. If you're not sure where an issue belongs, report it here and we'll help route it.
+
+## Verifying a release
+
+Each version tag is signed with a key listed in [`.github/release-signers`](.github/release-signers), and the packages are released only from a signed tag. To check one:
+
+```sh
+git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=.github/release-signers tag -v v0.2.0
+```
+
+The browser client on npm carries provenance that links each version to the workflow run that published it (`npm audit signatures`).

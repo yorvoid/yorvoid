@@ -2,7 +2,7 @@
 name: npm
 
 # Publishes the browser client (packages/browser) to npm as @yorvoid/browser, at each version tag, with
-# the tag's version: all packages are released together. Only a tag whose commit is on main and passed
+# the tag's version: all packages are released together. Only a signed tag whose commit is on main and passed
 # CI. npm trusts this workflow (trusted publishing, OpenID Connect): there is no token to keep, and
 # every version carries provenance that links it to this repository and run.
 on:
@@ -36,6 +36,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Check the tag is signed
+        run: .github/verify-tag.sh "$GITHUB_REF_NAME"
       - name: Check the tag's commit is on main and passed CI
         env:
           REPOSITORY: ${{ github.repository }}

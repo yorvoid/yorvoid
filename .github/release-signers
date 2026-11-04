@@ -1,0 +1,3 @@
+# Who may sign YorvoID's release tags: git's allowed-signers format (ssh-keygen(1), ALLOWED SIGNERS).
+# The Split and npm workflows release only a tag signed by one of these keys, as main lists them.
+poposki.darko@gmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC5W50dlwamJ3W/cZLLR1ireeA4ExZmI+VbVhkIPfTH+
