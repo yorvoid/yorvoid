@@ -17,8 +17,10 @@ services:
       postgres:
         condition: service_healthy
 
+  # One image per supported version, pinned by digest in docker/postgres/<version>/Dockerfile.
   postgres:
-    image: postgres:${POSTGRES_VERSION:-18}-alpine
+    image: ${IMAGES_PREFIX:-}yorvoid-postgres-${POSTGRES_VERSION:-18}
+    build: docker/postgres/${POSTGRES_VERSION:-18}
     environment:
       POSTGRES_DB: yorvoid
       POSTGRES_USER: yorvoid
