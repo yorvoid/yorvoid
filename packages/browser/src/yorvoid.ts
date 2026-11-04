@@ -100,14 +100,11 @@ export class YorvoID {
   #pending: AbortController | undefined;
 
   constructor(options: YorvoIDOptions = {}) {
-    let endpoint = options.endpoint ?? '/yorvoid';
+    const endpoint = options.endpoint ?? '/yorvoid';
 
-    // Not a regular expression: /\/+$/ takes quadratic time on many slashes followed by anything else.
-    while (endpoint.endsWith('/')) {
-      endpoint = endpoint.slice(0, -1);
-    }
-
-    this.#endpoint = endpoint;
+    // Without its trailing slashes. Not a regular expression: /\/+$/ takes quadratic time on many
+    // slashes followed by anything else. Not a loop either: a loop's mistake hangs rather than fails.
+    this.#endpoint = endpoint.slice(0, endpoint.split('').findLastIndex((character) => character !== '/') + 1);
     this.#messages = options.messages ?? {};
     this.#signals = options.signals ?? true;
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);

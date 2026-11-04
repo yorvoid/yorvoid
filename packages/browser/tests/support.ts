@@ -97,6 +97,16 @@ export interface Call {
   };
 }
 
+/**
+ * YorvoID always gives the browser a signal to stop a ceremony with: without one, a test waiting for
+ * the stop would wait for ever, rather than fail.
+ */
+function stoppable(options: CredentialRequestOptions | CredentialCreationOptions): void {
+  if (!(options.signal instanceof AbortSignal)) {
+    throw new TypeError('The ceremony can\'t be stopped: no AbortSignal.');
+  }
+}
+
 export class FakeCredentials {
   readonly calls: Call[] = [];
   answer: () => Promise<Credential | null>;
@@ -107,12 +117,14 @@ export class FakeCredentials {
 
   readonly get = async (options: CredentialRequestOptions = {}): Promise<Credential | null> => {
     this.calls.push({ kind: 'get', options: options as Call['options'] });
+    stoppable(options);
 
     return this.answer();
   };
 
   readonly create = async (options: CredentialCreationOptions = {}): Promise<Credential | null> => {
     this.calls.push({ kind: 'create', options: options as Call['options'] });
+    stoppable(options);
 
     return this.answer();
   };
