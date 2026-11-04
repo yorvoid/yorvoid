@@ -59,6 +59,8 @@ final class IdentifierKindTest extends TestCase
         yield 'address too long' => [str_repeat('a', 64).'@'.str_repeat('b', 186).'.com'];
         yield 'longer in its ASCII form' => [str_repeat('a', 64).'@'.str_repeat('b', 60).'.'.str_repeat('ü', 50).'.'.str_repeat('b', 60).'.com'];
         yield 'not a domain IDNA allows' => ["ana@\u{301}\u{E9}xample.com"];
+        yield 'a domain IDNA maps to a space' => ["n@\u{AF}"];
+        yield 'a domain IDNA maps to other ASCII a hostname can\'t have' => ["ana@\u{FF3F}\u{E9}xample.com"];
         yield 'a label mixing directions (bidi rule)' => ["ana@\u{E9}xample\u{5D0}.com"];
         yield 'domain starts with a dot' => ['ana@.example.com'];
         yield 'domain ends with a dot' => ['ana@example.com.'];
