@@ -36,26 +36,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check the tag is signed
-        run: .github/verify-tag.sh "$GITHUB_REF_NAME"
-      - name: Check the tag's commit is on main and passed CI
+      - name: Check the tag is signed, on main, and passed CI
         env:
           REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
-        run: |
-          commit=$(git rev-parse HEAD)
-
-          if ! git merge-base --is-ancestor "$commit" origin/main; then
-            echo "::error::The tag's commit $commit isn't on main."
-            exit 1
-          fi
-
-          passed=$(gh api "repos/$REPOSITORY/commits/$commit/check-runs?check_name=CI" --jq '[.check_runs[] | select(.conclusion == "success")] | length')
-
-          if [ "$passed" -eq 0 ]; then
-            echo "::error::CI hasn't passed for the tag's commit $commit."
-            exit 1
-          fi
+        run: .github/release-check.sh "$GITHUB_REF_NAME"
       - name: Build the toolchain's image
         run: docker compose --profile node build node
       - name: Install dependencies and build

@@ -107,7 +107,7 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 | Threat | Mitigation | Status |
 |---|---|---|
 | A known-vulnerable dependency | `composer audit` in CI; minimum versions | In place |
-| A compromised release | Signed tags, released only from main after CI; npm provenance; SBOMs | Partly: tags are signed and checked before release, the browser client has provenance; SBOMs are planned |
+| A compromised release | Signed tags, released only from main after CI; SBOMs and build provenance for every package; npm provenance | In place; Composer installs from the split repositories, which get the same tag of the same tested commit |
 | A compromised dependency | Few dependencies, reviewed, pinned in the lock file; formal-model tools pinned by checksum | Partly |
 
 ## Not covered
