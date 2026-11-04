@@ -321,7 +321,24 @@ final readonly class Passkeys
      */
     private function usable(array $passkeys): array
     {
-        return array_filter($passkeys, fn (Passkey $passkey): bool => true === $this->credentials->get($passkey->realm, $passkey->credentialId)?->isActive());
+        // Each principal's credentials in one query, not one per passkey (PERF-08).
+        $active = [];
+
+        foreach ($passkeys as $passkey) {
+            $principal = $passkey->realm->name.'/'.$passkey->principalId;
+
+            if (!isset($active[$principal])) {
+                $active[$principal] = [];
+
+                foreach ($this->credentials->of($passkey->realm, $passkey->principalId) as $credential) {
+                    if ($credential->isActive()) {
+                        $active[$principal][(string) $credential->id] = true;
+                    }
+                }
+            }
+        }
+
+        return array_filter($passkeys, static fn (Passkey $passkey): bool => isset($active[$passkey->realm->name.'/'.$passkey->principalId][(string) $passkey->credentialId]));
     }
 
     /**
