@@ -1,0 +1,49 @@
+{
+    "name": "yorvoid/notifications",
+    "type": "library",
+    "description": "YorvoID's security notifications: emails about sign-ins, new devices and changed sign-in methods, \"This wasn't me\", and email address verification.",
+    "keywords": [
+        "iam",
+        "authentication",
+        "notifications",
+        "email",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/yorvoid/yorvoid/issues",
+        "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/notifications",
+        "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+        "security": "https://github.com/yorvoid/yorvoid/security/policy"
+    },
+    "require": {
+        "php": ">=8.5",
+        "ext-intl": "*",
+        "psr/clock": "^1.0",
+        "psr/event-dispatcher": "^1.0",
+        "psr/log": "^3.0",
+        "symfony/clock": "^7.4 || ^8.1",
+        "symfony/translation-contracts": "^3.6",
+        "symfony/uid": "^7.4 || ^8.1",
+        "yorvoid/authn": "^0.1",
+        "yorvoid/core": "^0.1",
+        "yorvoid/mail": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Notifications\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    }
+}

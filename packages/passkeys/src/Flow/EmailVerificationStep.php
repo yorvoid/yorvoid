@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
-use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Core\Secret;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
@@ -13,6 +12,7 @@ use YorvoID\Flows\Problem;
 use YorvoID\Flows\Step;
 use YorvoID\Flows\StepResult;
 use YorvoID\Flows\StepView;
+use YorvoID\Notifications\EmailVerification;
 use YorvoID\Passkeys\Flow\View\EmailVerificationView;
 
 /**

@@ -183,7 +183,8 @@ final class DoctorTest extends TestCase
         self::assertStringContainsString('Warning: The session cookie is "Secure" only when the request looks like HTTPS', $display);
         // This repository has YorvoID's test helpers installed, as a development checkout does.
         self::assertStringContainsString('Problem: yorvoid/testing is installed outside development', $display);
-        self::assertStringContainsString('4 problems, 2 warnings.', $display);
+        self::assertStringContainsString('Warning: The security log has no checkpoints', $display);
+        self::assertStringContainsString('4 problems, 3 warnings.', $display);
     }
 
     public function testWarnsWhenSuspectedCopiesSignIn(): void

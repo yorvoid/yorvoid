@@ -187,7 +187,7 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\Refusal;
-use YorvoID\Passkeys\Intent\IntentSigning;
+use YorvoID\IntentSigning\IntentSigning;
 use YorvoID\Symfony\Security\CurrentSession;
 
 final class SitesController

@@ -14,6 +14,18 @@ php bin/console yorvoid:doctor [options]
 |---|---|---|
 | `--strict` | Fail on warnings too, e.g. in a deployment pipeline |  |
 
+## `yorvoid:identifiers:normalize`
+
+Compare stored identifiers by this version's rules, after an upgrade that changed them.
+
+```bash
+php bin/console yorvoid:identifiers:normalize [options]
+```
+
+| Argument or option | | Default |
+|---|---|---|
+| `--dry-run` | Only list what would change |  |
+
 ## `yorvoid:keys:rotate`
 
 Take the next step in rotating YorvoID's signing keys.
@@ -26,6 +38,30 @@ php bin/console yorvoid:keys:rotate [options]
 |---|---|---|
 | `--remove` | Remove this verify-only key, once nothing it signed still needs checking |  |
 | `--public` | Print the public key set to deploy where signatures are checked, and change nothing |  |
+
+## `yorvoid:log:checkpoint`
+
+Sign where the security log stands, and keep it outside the database.
+
+```bash
+php bin/console yorvoid:log:checkpoint [options]
+```
+
+| Argument or option | | Default |
+|---|---|---|
+| `--realm` | The realm | `default` |
+
+## `yorvoid:log:verify`
+
+Verify the security log's chain, and against its checkpoints.
+
+```bash
+php bin/console yorvoid:log:verify [options]
+```
+
+| Argument or option | | Default |
+|---|---|---|
+| `--realm` | The realm | `default` |
 
 ## `yorvoid:migrate`
 

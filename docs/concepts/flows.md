@@ -76,6 +76,36 @@ $withoutCodes = $flows->flow('yorvoid.setup')->withoutStep('recovery_codes');  /
 - A flow lists the steps it can't do without, because it isn't safe without them: claiming the setup code, for instance. Removing one is an integrator's error; replacing it with one of your own is up to you.
 - A step you insert with `required: true` joins that list: it can't be removed, and someone who signs in during the flow is signed in only once it's done. Without it, a step after signing in is a page people can leave.
 
+## Your own flows
+
+In Symfony, a service implementing `FlowSource` adds flows of the application's own next to YorvoID's, and says which of them a request may start at `/yorvoid/flows/<flow>`, with what:
+
+```php
+use App\Flow\ChoosePlanStep;
+use YorvoID\Flows\Flow;
+use YorvoID\Passkeys\Flow\PasskeyRegistrationStep;
+use YorvoID\Symfony\Flow\FlowSource;
+
+final readonly class SignUpFlows implements FlowSource
+{
+    public function __construct(private ChoosePlanStep $plan, private PasskeyRegistrationStep $passkey) {}
+
+    public function flows(): iterable
+    {
+        yield new Flow('acme.signup', [$this->plan, $this->passkey], required: ['passkey_registration']);
+    }
+
+    public function entrances(): array
+    {
+        return ['acme.signup' => ['plan' => 'acme.plan']];  // ?plan=… goes to the state's "acme.plan"
+    }
+}
+```
+
+- Name your flows and the state keys requests fill with your own prefix: names starting with `yorvoid.`, and keys starting with `yorvoid.` or `flows.`, are refused at boot.
+- A flow that `entrances()` doesn't list starts only from your code (`Flows::start()`), and a request gives a flow only the fields listed for it.
+- Customizers see your flows too, and your steps' pages are templates like any step's ([writing a step](#writing-a-step)).
+
 ## Writing a step
 
 A step implements `Step`:

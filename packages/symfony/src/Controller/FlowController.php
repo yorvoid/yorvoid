@@ -50,8 +50,8 @@ final readonly class FlowController
     /** What every answer's Content-Security-Policy allows, whatever else the application's adds */
     public const string CONTENT_SECURITY_POLICY = "form-action 'self'; frame-ancestors 'self'; base-uri 'none'; object-src 'none'";
 
-    /** The flows a request may start, and the inputs it may give them */
-    private const array ENTRANCES = [
+    /** YorvoID's flows a request may start, and the inputs it may give them; FlowSource adds the application's */
+    public const array ENTRANCES = [
         PasskeyFlows::SIGN_IN => [],
         PasskeyFlows::SETUP => [],
         PasskeyFlows::RECOVER_WITH_CODE => [],
@@ -63,7 +63,8 @@ final readonly class FlowController
     ];
 
     /**
-     * @param array<string, string> $completed Where to go when a flow completes, by flow; "default" for the others
+     * @param array<string, string>                $completed Where to go when a flow completes, by flow; "default" for the others
+     * @param array<string, array<string, string>> $entrances The flows a request may start, and the inputs it may give them
      */
     public function __construct(
         private Flows $flows,
@@ -75,12 +76,13 @@ final readonly class FlowController
         private UrlGeneratorInterface $urls,
         private array $completed,
         private string $deviceCookie,
+        private array $entrances = self::ENTRANCES,
     ) {
     }
 
     public function start(Request $request, string $flow): Response
     {
-        $entrance = self::ENTRANCES[$flow] ?? throw new NotFoundHttpException(\sprintf('The flow "%s" doesn\'t start from a request.', $flow));
+        $entrance = $this->entrances[$flow] ?? throw new NotFoundHttpException(\sprintf('The flow "%s" doesn\'t start from a request.', $flow));
         $given = $request->isMethod('POST') ? $this->json($request) : $request->query->all();
         $data = [];
 
@@ -218,7 +220,7 @@ final readonly class FlowController
 
     private function startUrl(string $flow): ?string
     {
-        return \array_key_exists($flow, self::ENTRANCES) ? $this->urls->generate('yorvoid_flow_start', ['flow' => $flow]) : null;
+        return \array_key_exists($flow, $this->entrances) ? $this->urls->generate('yorvoid_flow_start', ['flow' => $flow]) : null;
     }
 
     private function wantsJson(Request $request): bool

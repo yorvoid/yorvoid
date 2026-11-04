@@ -47,4 +47,11 @@ Each version tag is signed with a key listed in [`.github/release-signers`](.git
 git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=.github/release-signers tag -v v0.2.0
 ```
 
-The browser client on npm carries provenance that links each version to the workflow run that published it (`npm audit signatures`).
+Each [GitHub release](https://github.com/yorvoid/yorvoid/releases) has every package's source as released and its CycloneDX SBOM: the packages it needs, at the versions CI tested it with. Both carry build provenance, signed through Sigstore, that links them to the tag and the workflow run that made them:
+
+```sh
+gh attestation verify yorvoid-core-0.2.0.tar.gz --repo yorvoid/yorvoid
+gh attestation verify yorvoid-core-0.2.0.cdx.json --repo yorvoid/yorvoid
+```
+
+The browser client on npm carries provenance too (`npm audit signatures`).

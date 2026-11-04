@@ -56,6 +56,20 @@ violated "tokens: naive consumption uses a token twice (Quint, simulation)" "\[v
 # the model's: regenerate them with "node tokens/traces.mjs > tokens/traces.json" after changing it.
 holds "tokens: the executions the PHP tests replay are the model's" sh -c 'node tokens/traces.mjs | cmp -s - tokens/traces.json'
 
+# The intent verifier's keys, in Quint: never without keys, nothing added before its delay. The variant
+# that counts only the current keys, not those already leaving, must lose them all.
+holds "verifier keys: typecheck (Quint)" quint typecheck verifier/key_registry.qnt
+holds "verifier keys: safe (Quint, Apalache)" quint verify --main=counted --invariant=SAFETY --max-steps=10 verifier/key_registry.qnt
+violated "verifier keys: counting only current keys loses them all (Quint, Apalache)" "\[violation\]" quint verify --main=uncounted --invariant=NEVER_WITHOUT_KEYS --max-steps=10 verifier/key_registry.qnt
+holds "verifier keys: safe (Quint, simulation)" quint run --main=counted --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 verifier/key_registry.qnt
+
+# Claiming a realm with its setup code, in Quint: one owner, whoever comes at the same moment. Marking
+# it claimed without a compare-and-swap must give it two.
+holds "setup claim: typecheck (Quint)" quint typecheck setup/setup_claim.qnt
+holds "setup claim: one owner (Quint, Apalache)" quint verify --main=atomic --invariant=SAFETY --max-steps=10 setup/setup_claim.qnt
+violated "setup claim: without a compare-and-swap, two owners (Quint, Apalache)" "\[violation\]" quint verify --main=naive --invariant=ONE_OWNER --max-steps=10 setup/setup_claim.qnt
+holds "setup claim: one owner (Quint, simulation)" quint run --main=atomic --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 setup/setup_claim.qnt
+
 # Apalache writes its working files next to the models; they aren't needed afterwards.
 rm -rf "$out" _apalache-out
 rmdir tmp 2>/dev/null

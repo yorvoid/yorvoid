@@ -26,7 +26,7 @@ final class Translator implements TranslatorInterface
     private array $catalogues = [];
 
     /**
-     * @param list<string> $directories Where the catalogues are, e.g. AuthnTranslations::DIRECTORY
+     * @param list<string> $directories Where the catalogues are, e.g. NotificationsTranslations::DIRECTORY
      * @param string       $locale      The locale when none is asked for
      * @param string       $fallback    The locale of messages missing in the one asked for
      */

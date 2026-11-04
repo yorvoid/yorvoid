@@ -21,7 +21,6 @@ use Webauthn\CeremonyStep\CeremonyStepManagerFactory;
 use Webauthn\CollectedClientData;
 use Webauthn\CredentialRecord;
 use Webauthn\Denormalizer\WebauthnSerializerFactory;
-use Webauthn\PublicKeyCredential;
 use Webauthn\PublicKeyCredentialCreationOptions;
 use Webauthn\PublicKeyCredentialDescriptor;
 use Webauthn\PublicKeyCredentialParameters;
@@ -52,7 +51,10 @@ use Webauthn\TrustPath\EmptyTrustPath;
  * a channel the console doesn't control (INT-012).
  *
  * It trusts nothing the console says: it needs no framework, no database, and none of YorvoID's other
- * packages (INT-007).
+ * packages (INT-007). What the console relays from the browser is read by hand into a fixed shape
+ * (Answer) before the WebAuthn library's byte-level checks see it; the library's serializer handles
+ * only the verifier's own options. Its trusted base is that library and what it requires
+ * (docs/security/dependencies.md).
  *
  * @api
  */
@@ -599,12 +601,12 @@ final readonly class Verifier
     private function check(VerifierState $state, PendingIntent $pending, array $keys, string $assertion): VerifiedIntent
     {
         try {
-            $credential = $this->parse($assertion);
+            $credential = Answer::assertion($assertion);
         } catch (\Throwable $exception) {
             $this->refuse($pending->intent, Refusal::InvalidSignature, $exception);
         }
 
-        $response = $credential instanceof PublicKeyCredential ? $credential->response : null;
+        $response = $credential->response;
 
         if (!$response instanceof AuthenticatorAssertionResponse || !$this->isOwnClientData($response->clientDataJSON, 'webauthn.get')) {
             $this->refuse($pending->intent, Refusal::InvalidSignature);
@@ -674,7 +676,7 @@ final readonly class Verifier
     private function registered(PendingRegistration $pending, string $attestation): Key
     {
         try {
-            $credential = $this->parse($attestation);
+            $credential = Answer::attestation($attestation, new AttestationStatementSupportManager());
             // The library writes the relying party's name as its ID, and warns when it reads one back.
             $stored = json_decode($pending->options, true, flags: \JSON_THROW_ON_ERROR);
             \assert(\is_array($stored) && \is_array($stored['rp']));
@@ -684,7 +686,7 @@ final readonly class Verifier
             throw new IntentRefused(Refusal::InvalidRegistration, $exception);
         }
 
-        $response = $credential instanceof PublicKeyCredential ? $credential->response : null;
+        $response = $credential->response;
 
         if (!$response instanceof AuthenticatorAttestationResponse || !$this->isOwnClientData($response->clientDataJSON, 'webauthn.create')) {
             throw new IntentRefused(Refusal::InvalidRegistration);
@@ -735,15 +737,6 @@ final readonly class Verifier
         $coming = array_map(static fn (KeyChange $change): string => $change->key->id(), $state->keyChanges);
 
         return null === $key || isset($state->keys[$key->id()]) || \in_array($key->id(), $coming, true) ? $this->refuse($intent, Refusal::InvalidKey) : $key;
-    }
-
-    /**
-     * The browser's answer as the library reads it, which isn't always a PublicKeyCredential: "{}" is an
-     * array.
-     */
-    private function parse(string $assertion): mixed
-    {
-        return $this->serializer->deserialize($assertion, PublicKeyCredential::class, 'json');
     }
 
     private static function credentialRecord(Key $key): CredentialRecord

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Symfony\App;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
+use Doctrine\DBAL\Logging\Middleware as LoggingMiddleware;
 use Psr\Log\NullLogger;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
@@ -15,6 +16,7 @@ use Symfony\Component\Config\Loader\LoaderInterface;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
+use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Kernel;
 use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\RecoveryCodeAuthenticator;
@@ -23,6 +25,7 @@ use YorvoID\Symfony\Security\Authenticator\SessionAuthenticator;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\YorvoIDBundle;
+use YorvoID\Tests\Support\StatementLog;
 
 /**
  * A Symfony application with YorvoID, as one would set it up: on a SQLite file of its own.
@@ -91,6 +94,9 @@ final class TestKernel extends Kernel implements CompilerPassInterface
     {
         $loader->load(function (ContainerBuilder $container): void {
             $container->register('logger', NullLogger::class);
+            // Every statement the application's connection runs, for tests that count them.
+            $container->register(StatementLog::class)->setPublic(true);
+            $container->register('test.statement_log_middleware', LoggingMiddleware::class)->setArguments([new Reference(StatementLog::class)])->addTag('doctrine.middleware');
             $container->loadFromExtension('framework', [
                 'test' => true,
                 'secret' => 'test',
@@ -101,6 +107,8 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                 'translator' => ['enabled' => $this->translations, 'default_path' => $this->directory.'/translations'],
                 'session' => $this->session ? ['storage_factory_id' => 'session.storage.factory.mock_file'] : false,
                 'router' => ['resource' => __DIR__.'/routes.php', 'type' => 'php', 'utf8' => true],
+                // Symfony 8's default, which 7.4 asks to be set.
+                'property_info' => ['with_constructor_extractor' => true],
             ]);
             $container->loadFromExtension('doctrine', ['dbal' => ['default_connection' => 'default', 'connections' => [
                 'default' => ['url' => 'sqlite:///'.$this->directory.'/yorvoid.sqlite'],

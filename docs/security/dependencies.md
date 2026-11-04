@@ -20,19 +20,37 @@ Every dependency is code that runs with YorvoID's privileges, so YorvoID has few
 | `psr/clock`, `psr/event-dispatcher` | Standard interfaces for time and events |
 | `symfony/clock` | The default clock |
 | `symfony/uid` | UUIDv7 identifiers |
-| `ext-mbstring` | Comparing email addresses in lowercase, in any script |
+| `ext-intl` | Comparing email addresses: one Unicode form (NFC), and domains in their ASCII form (IDNA) |
+| `ext-mbstring` | Text in any script |
 | `ext-sodium` | Ed25519 signing keys |
 
 ## Current runtime dependencies of `yorvoid/authn`
 
 | Package | Why |
 |---|---|
-| `yorvoid/core` | Principals, the security log, storage |
-| `yorvoid/mail`, `yorvoid/throttle` | Security notifications; limits on attempts |
+| `yorvoid/core`, `yorvoid/throttle` | Principals, the security log, storage; limits on attempts |
 | `doctrine/dbal`, `psr/clock`, `psr/event-dispatcher`, `symfony/clock`, `symfony/uid` | As for core |
+| `ext-mbstring`, `ext-filter` | Device names within their column in any script; checking addresses |
+
+## Current runtime dependencies of `yorvoid/notifications`
+
+| Package | Why |
+|---|---|
+| `yorvoid/authn`, `yorvoid/core` | What the notifications are about; "This wasn't me" ends sessions with a one-time token |
+| `yorvoid/mail` | Writing and sending the emails |
+| `psr/clock`, `psr/event-dispatcher`, `symfony/clock`, `symfony/uid` | As for core |
 | `psr/log` | Logging an email that couldn't be sent, rather than failing what it's about |
-| `symfony/translation-contracts` | The notifications' words in each person's language |
-| `ext-mbstring`, `ext-intl`, `ext-filter` | Device names within their column in any script; dates in each language; checking addresses |
+| `symfony/translation-contracts`, `ext-intl` | The notifications' words and dates in each person's language |
+
+## Current runtime dependencies of `yorvoid/intent-signing`
+
+| Package | Why |
+|---|---|
+| `yorvoid/authn`, `yorvoid/core`, `yorvoid/throttle` | Sessions, the security log, limits on asking |
+| `yorvoid/intent-verifier` | The intents themselves and their refusals: the same classes on both sides |
+| `psr/clock`, `psr/event-dispatcher`, `symfony/clock` | As for core |
+| `symfony/translation-contracts`, `ext-intl`, `ext-mbstring` | Summaries in each language, within their length |
+| `yorvoid/notifications`, `symfony/translation` (suggested) | Telling the person an operation they signed ran; refusing a summary that has no message |
 
 ## Current runtime dependencies of `yorvoid/flows`
 
@@ -51,13 +69,13 @@ Every dependency is code that runs with YorvoID's privileges, so YorvoID has few
 | `web-auth/webauthn-lib` 5.3.9 or later | WebAuthn's checks: the established PHP implementation, MIT-licensed, maintained since 2018. Below 5.3.1, user verification could be downgraded (GHSA-h4fw-6r7f-w494) |
 | `web-auth/cose-lib`, `spomky-labs/cbor-php` | Which COSE algorithms are accepted, and the public keys' checks: declared, so YorvoID's constraint pins them, not only webauthn-lib's |
 | `symfony/serializer`, `symfony/uid` | WebAuthn's options as JSON; ceremony IDs |
-| `yorvoid/intent-verifier` | Signed intents' pages and their canonical form |
-| `ext-openssl`, `ext-filter`, `ext-intl`, `ext-mbstring` | Checking public keys; integers in COSE keys; intent summaries in each language |
+| `ext-openssl`, `ext-filter` | Checking public keys; integers in COSE keys |
+| `yorvoid/notifications` (suggested) | The link that confirms the owner's email address in the setup flow, and the `yorvoid.verify_email` flow |
 | webauthn-lib's own: `spomky-labs/pki-framework`, `paragonie/constant_time_encoding`, `brick/math` | Certificates and arithmetic for WebAuthn |
 
 ## Current runtime dependencies of `yorvoid/intent-verifier`
 
-The verifier runs on its own server, so it doesn't use YorvoID's other packages.
+The verifier runs on its own server, so it doesn't use YorvoID's other packages. What the console relays from the browser, which the verifier doesn't trust, is read by hand into one fixed shape, every binary field strict base64url, before the WebAuthn library's byte-level checks see it: Symfony Serializer, which webauthn-lib requires, handles only the verifier's own options. Its trusted base is webauthn-lib and the packages below.
 
 | Package | Why |
 |---|---|

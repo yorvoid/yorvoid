@@ -7,7 +7,7 @@ namespace YorvoID\Core;
 /**
  * Text that YorvoID records as given by someone else, e.g. what a person typed into a failed sign-in.
  *
- * @internal
+ * @api
  */
 final class Text
 {

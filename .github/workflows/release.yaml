@@ -1,0 +1,93 @@
+---
+name: Release
+
+# A GitHub release for each version tag: every package's source as released, its CycloneDX SBOM (the
+# packages it needs, at the versions CI tested), and build provenance for both, signed through
+# Sigstore so anyone can check them (gh attestation verify). Only a signed tag of a commit on main
+# that passed CI, as for Split and npm.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release
+    if: github.repository == 'yorvoid/yorvoid'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      checks: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the tag is signed, on main, and passed CI
+        env:
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: .github/release-check.sh "$GITHUB_REF_NAME"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the development image
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        with:
+          pull: true
+          load: true
+          source: .
+          files: compose.yaml
+          targets: php
+          set: |
+            php.cache-from=type=gha,scope=dev-refs/heads/main
+      # Each package's directory at the tag, and its SBOM, e.g. yorvoid-core-0.2.0.tar.gz and
+      # yorvoid-core-0.2.0.cdx.json.
+      - name: Package the release
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=${TAG#v}
+          mkdir dist
+
+          for directory in packages/*/; do
+            name=$(basename "$directory")
+            git archive --format=tar.gz --prefix="yorvoid-$name-$version/" -o "dist/yorvoid-$name-$version.tar.gz" "$TAG:packages/$name"
+            docker run --rm -v "$PWD:/app" -w /app "${IMAGES_PREFIX:-}yorvoid-php-dev" php tools/sbom/sbom.php "packages/$name" "$version" >"dist/yorvoid-$name-$version.cdx.json"
+          done
+
+          ls -l dist
+      - name: Attest the archives and SBOMs
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+      # The changelog's section for the version; a pre-release (v0.2.0-rc.1) is marked as one.
+      - name: Publish the release
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${TAG#v}
+          awk -v version="$version" '
+            /^## / { if (found) exit; found = index($0, "## " version) == 1; next }
+            found
+          ' CHANGELOG.md >notes.md
+
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md has no section for $version: move Unreleased under it before tagging."
+            exit 1
+          fi
+
+          options=(--verify-tag --title "YorvoID $version" --notes-file notes.md)
+
+          if [[ "$version" == *-* ]]; then
+            options+=(--prerelease)
+          fi
+
+          gh release create "$TAG" dist/* "${options[@]}"

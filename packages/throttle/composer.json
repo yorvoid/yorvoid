@@ -28,7 +28,7 @@
         "ext-filter": "*",
         "doctrine/dbal": "^4.3",
         "psr/clock": "^1.0",
-        "symfony/clock": "^8.1",
+        "symfony/clock": "^7.4 || ^8.1",
         "yorvoid/core": "^0.1"
     },
     "autoload": {

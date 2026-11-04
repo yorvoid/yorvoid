@@ -3,7 +3,7 @@
 Every message YorvoID shows people is translatable (PLT-050): ICU MessageFormat, with stable message IDs, in English and German. Each package ships its catalogues; `yorvoid/translation` translates them, and an application with Symfony's translator can use that instead.
 
 ```php
-use YorvoID\Authn\Translations;
+use YorvoID\Notifications\Translations;
 use YorvoID\Translation\Translator;
 
 $translator = new Translator([Translations::DIRECTORY], locale: 'de');

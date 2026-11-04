@@ -217,7 +217,7 @@ final readonly class Passkeys
     public function finishSignIn(Realm $realm, string $ceremonyId, string $response, Origin $origin, ?string $device = null, ?string $address = null, #[\SensitiveParameter] ?Secret $deviceCookie = null): StartedSession
     {
         $this->attempts->count('passkey_sign_in', $realm, null, $address);
-        $ceremony = $this->take($realm, $ceremonyId, CeremonyKind::SignIn);
+        $ceremony = $this->recorded($realm, 'yorvoid.passkey.sign_in', $origin, fn (): Ceremony => $this->take($realm, $ceremonyId, CeremonyKind::SignIn));
         [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.sign_in');
 
         return $this->transactions->run(function () use ($passkey, $credential, $userVerified, $counter, $origin, $device, $address, $deviceCookie): StartedSession {
@@ -268,7 +268,7 @@ final readonly class Passkeys
      */
     public function finishStepUp(Session $session, string $ceremonyId, string $response, Origin $origin): Secret
     {
-        $ceremony = $this->takeForSession($session, $ceremonyId, CeremonyKind::StepUp);
+        $ceremony = $this->recorded($session->realm, 'yorvoid.passkey.step_up', $origin, fn (): Ceremony => $this->takeForSession($session, $ceremonyId, CeremonyKind::StepUp));
         [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.step_up', $session->principalId);
 
         return $this->transactions->run(function () use ($session, $ceremony, $passkey, $credential, $userVerified, $counter, $origin): Secret {
@@ -321,7 +321,24 @@ final readonly class Passkeys
      */
     private function usable(array $passkeys): array
     {
-        return array_filter($passkeys, fn (Passkey $passkey): bool => true === $this->credentials->get($passkey->realm, $passkey->credentialId)?->isActive());
+        // Each principal's credentials in one query, not one per passkey (PERF-08).
+        $active = [];
+
+        foreach ($passkeys as $passkey) {
+            $principal = $passkey->realm->name.'/'.$passkey->principalId;
+
+            if (!isset($active[$principal])) {
+                $active[$principal] = [];
+
+                foreach ($this->credentials->of($passkey->realm, $passkey->principalId) as $credential) {
+                    if ($credential->isActive()) {
+                        $active[$principal][(string) $credential->id] = true;
+                    }
+                }
+            }
+        }
+
+        return array_filter($passkeys, static fn (Passkey $passkey): bool => isset($active[$passkey->realm->name.'/'.$passkey->principalId][(string) $passkey->credentialId]));
     }
 
     /**
@@ -378,21 +395,25 @@ final readonly class Passkeys
     private function verify(Ceremony $ceremony, string $response, Origin $origin, string $action, ?PrincipalId $principalId = null): array
     {
         $options = $this->serializer->deserialize($ceremony->options, PublicKeyCredentialRequestOptions::class, 'json');
-        $answer = $this->credential($response);
-        $assertion = $answer->response;
+        [$passkey, $credential, $assertion] = $this->recorded($ceremony->realm, $action, $origin, function () use ($ceremony, $response, $principalId): array {
+            $answer = $this->credential($response);
+            $assertion = $answer->response;
 
-        if (!$assertion instanceof AuthenticatorAssertionResponse) {
-            throw new PasskeyRefused(Refusal::InvalidResponse);
-        }
+            if (!$assertion instanceof AuthenticatorAssertionResponse) {
+                throw new PasskeyRefused(Refusal::InvalidResponse);
+            }
 
-        self::requireClientData($assertion->clientDataJSON, 'webauthn.get');
-        $passkey = $this->store->find($ceremony->realm, $answer->rawId);
-        $credential = null === $passkey ? null : $this->credentials->get($ceremony->realm, $passkey->credentialId);
+            self::requireClientData($assertion->clientDataJSON, 'webauthn.get');
+            $passkey = $this->store->find($ceremony->realm, $answer->rawId);
+            $credential = null === $passkey ? null : $this->credentials->get($ceremony->realm, $passkey->credentialId);
 
-        // Someone else's passkey is as unknown here as one that doesn't exist.
-        if (null === $passkey || null === $credential || (null !== $principalId && !$passkey->principalId->equals($principalId))) {
-            throw new PasskeyRefused(Refusal::UnknownPasskey);
-        }
+            // Someone else's passkey is as unknown here as one that doesn't exist.
+            if (null === $passkey || null === $credential || (null !== $principalId && !$passkey->principalId->equals($principalId))) {
+                throw new PasskeyRefused(Refusal::UnknownPasskey);
+            }
+
+            return [$passkey, $credential, $assertion];
+        });
 
         if (!$credential->isActive()) {
             $this->refuse($passkey, $action, Refusal::PasskeyDisabled, $origin);
@@ -407,15 +428,21 @@ final readonly class Passkeys
 
         $counter = new CounterSuspicion();
 
+        // The library isn't told the passkey's backup eligibility: some versions refuse another value as an
+        // invalid answer, where YorvoID treats it as a suspected copy, below.
+        $checked = $passkey->record();
+        $checked->backupEligible = null;
+
         // No user handle given: the answer must name the passkey's own.
         try {
-            $record = AuthenticatorAssertionResponseValidator::create($this->steps($counter)->requestCeremony())->check($passkey->record(), $assertion, $options, $this->policy->relyingPartyId, null);
+            $record = AuthenticatorAssertionResponseValidator::create($this->steps($counter)->requestCeremony())->check($checked, $assertion, $options, $this->policy->relyingPartyId, null);
         } catch (\Throwable $exception) {
             $this->refuse($passkey, $action, Refusal::InvalidResponse, $origin, $exception);
         }
 
-        // Backup eligibility is fixed when a passkey is created: another value is another authenticator.
-        if ($passkey->backupEligible !== (true === $record->backupEligible)) {
+        // Backup eligibility is fixed when a passkey is created: another value, in a verified answer, is
+        // another authenticator.
+        if ($passkey->backupEligible !== $assertion->authenticatorData->isBackupEligible()) {
             $counter->suspected = true;
         }
 
@@ -501,6 +528,28 @@ final readonly class Passkeys
     {
         if (!$verified && UserVerification::Required === $this->policy->userVerification) {
             throw new PasskeyRefused(Refusal::UserNotVerified);
+        }
+    }
+
+    /**
+     * Runs what reads an answer before its passkey is known, and records a refusal (V16.3.1): an
+     * expired ceremony, an answer that isn't one, a passkey nobody has. Ceremonies are limited per
+     * address, so these can't flood the log.
+     *
+     * @template T
+     *
+     * @param \Closure(): T $read
+     *
+     * @return T
+     */
+    private function recorded(Realm $realm, string $action, Origin $origin, \Closure $read): mixed
+    {
+        try {
+            return $read();
+        } catch (PasskeyRefused $refused) {
+            $this->log->record($realm, $action, Outcome::Failed, $origin, details: ['reason' => $refused->refusal->value]);
+
+            throw $refused;
         }
     }
 

@@ -22,15 +22,15 @@ final class InMemoryThrottleStore implements ThrottleStore
         return $this->keys[$key] ?? null;
     }
 
-    public function replace(string $key, ?int $expected, int $clearAt): bool
+    public function advance(string $key, int $now, int $interval, int $latest): ?int
     {
-        if (($this->keys[$key] ?? null) !== $expected) {
-            return false;
+        $from = max($this->keys[$key] ?? $now, $now);
+
+        if ($from > $latest) {
+            return null;
         }
 
-        $this->keys[$key] = $clearAt;
-
-        return true;
+        return $this->keys[$key] = $from + $interval;
     }
 
     public function remove(string $key): void

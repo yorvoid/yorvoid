@@ -22,9 +22,9 @@ use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
+use YorvoID\IntentSigning\IntentSigning;
 use YorvoID\IntentVerifier\SigningPages;
 use YorvoID\IntentVerifier\Verifier;
-use YorvoID\Passkeys\Intent\IntentSigning;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Security\CurrentSession;
 

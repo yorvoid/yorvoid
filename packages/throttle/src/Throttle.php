@@ -23,8 +23,8 @@ use Symfony\Component\Clock\NativeClock;
  */
 final readonly class Throttle
 {
-    /** How often to retry an attempt that lost a race for its key, before treating the key as busy */
-    private const int RETRIES = 10;
+    /** How often to count an attempt again when its key cleared between refusing it and saying until when */
+    private const int RETRIES = 3;
 
     public function __construct(
         private ThrottleStore $store,
@@ -45,16 +45,17 @@ final readonly class Throttle
 
         for ($i = 0; $i < self::RETRIES; ++$i) {
             $now = $this->now();
-            $stored = $this->store->clearAt($hash);
-            $clearAt = max($stored ?? $now, $now);
-            $this->refuseUntil($clearAt, $limit, $now);
 
-            if ($this->store->replace($hash, $stored, $clearAt + $limit->interval())) {
+            // Counted, or refused, in one step: concurrent attempts can't refuse each other (PERF-05).
+            if (null !== $this->store->advance($hash, $now, $limit->interval(), $now + $limit->per->seconds * 1000 - $limit->interval())) {
                 return;
             }
+
+            // Refused: say until when. If the key cleared in the meantime, count the attempt again.
+            $this->refuseUntil(max($this->store->clearAt($hash) ?? $now, $now), $limit, $now);
         }
 
-        // Others keep changing the key at this very moment: an attack, most likely.
+        // The key keeps refusing and clearing at this very moment: an attack, most likely.
         $this->refuseUntil($this->now() + $limit->per->seconds * 1000, $limit, $this->now());
     }
 

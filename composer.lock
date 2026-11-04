@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b762894db6cef59c8906caf0e392996f",
+    "content-hash": "87ce6a4a4f2957566540da53c45ffa73",
     "packages": [
         {
             "name": "brick/math",
@@ -5091,22 +5091,18 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "b7323fe42b10eaa363d4e01921c26a260e71fe50"
+                "reference": "12d1be3add846c795aa8efac1aef67ffbe1037d0"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "ext-filter": "*",
-                "ext-intl": "*",
                 "ext-mbstring": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
-                "psr/log": "^3.0",
-                "symfony/clock": "^8.1",
-                "symfony/translation-contracts": "^3.6",
-                "symfony/uid": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
+                "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/core": "^0.1",
-                "yorvoid/mail": "^0.1",
                 "yorvoid/throttle": "^0.1"
             },
             "type": "library",
@@ -5153,17 +5149,19 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "b8459c1dd56f4009c13bd64476dad2e57e75d989"
+                "reference": "7e6f7811909f6bfe7f7078454f5f40351a1892b7"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
+                "ext-intl": "*",
                 "ext-mbstring": "*",
                 "ext-sodium": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
-                "symfony/clock": "^8.1",
-                "symfony/uid": "^8.1"
+                "psr/log": "^3.0",
+                "symfony/clock": "^7.4 || ^8.1",
+                "symfony/uid": "^7.4 || ^8.1"
             },
             "type": "library",
             "extra": {
@@ -5211,13 +5209,13 @@
             "dist": {
                 "type": "path",
                 "url": "packages/flows",
-                "reference": "33cb005c15e83ea298c56e04245bc05adad35927"
+                "reference": "9300271ef14c9e2230e283839ad660957441dea2"
             },
             "require": {
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
-                "symfony/clock": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.1",
                 "yorvoid/core": "^0.1",
                 "yorvoid/throttle": "^0.1"
@@ -5261,12 +5259,76 @@
             }
         },
         {
+            "name": "yorvoid/intent-signing",
+            "version": "0.1.x-dev",
+            "dist": {
+                "type": "path",
+                "url": "packages/intent-signing",
+                "reference": "9ea244234787a9e9e589fa5bd2dfa603d7f9c878"
+            },
+            "require": {
+                "ext-intl": "*",
+                "ext-mbstring": "*",
+                "php": ">=8.5",
+                "psr/clock": "^1.0",
+                "psr/event-dispatcher": "^1.0",
+                "symfony/clock": "^7.4 || ^8.1",
+                "symfony/translation-contracts": "^3.6",
+                "yorvoid/authn": "^0.1",
+                "yorvoid/core": "^0.1",
+                "yorvoid/intent-verifier": "^0.1",
+                "yorvoid/throttle": "^0.1"
+            },
+            "suggest": {
+                "symfony/translation": "Refuses an intent's summary that has no message in the catalogue",
+                "yorvoid/notifications": "Tells the person by email when an operation they signed ran"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-main": "0.1.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "YorvoID\\IntentSigning\\": "src/"
+                }
+            },
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Darko Poposki",
+                    "email": "poposki.darko@gmail.com"
+                }
+            ],
+            "description": "YorvoID's side of signed intents in the application: asking for an operation's signature, limits on asking, the security log, and summaries of what is signed.",
+            "homepage": "https://github.com/yorvoid/yorvoid",
+            "keywords": [
+                "iam",
+                "passkeys",
+                "security",
+                "signed-intents",
+                "webauthn"
+            ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/intent-signing",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
             "name": "yorvoid/intent-verifier",
             "version": "0.1.x-dev",
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "b4285c0846bcd30a61d6d5bf1bd8389675a9f1d1"
+                "reference": "47939b6733fb567962c262b405564d694f3ac50c"
             },
             "require": {
                 "ext-dom": "*",
@@ -5275,8 +5337,8 @@
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "spomky-labs/cbor-php": "^3.4",
-                "symfony/serializer": "^8.1",
-                "symfony/uid": "^8.1",
+                "symfony/serializer": "^7.4 || ^8.1",
+                "symfony/uid": "^7.4 || ^8.1",
                 "twig/twig": "^3.30",
                 "web-auth/cose-lib": "^4.8",
                 "web-auth/webauthn-lib": "^5.3.9"
@@ -5329,7 +5391,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/mail",
-                "reference": "411a6e18b50940c186377d6dbd7f5831498d58f3"
+                "reference": "5e17797d39e6a3964f3fb5652653358a27ce061b"
             },
             "require": {
                 "ext-filter": "*",
@@ -5377,37 +5439,91 @@
             }
         },
         {
+            "name": "yorvoid/notifications",
+            "version": "0.1.x-dev",
+            "dist": {
+                "type": "path",
+                "url": "packages/notifications",
+                "reference": "95fbc651d06a296421bb6ee2736398c5329cb2aa"
+            },
+            "require": {
+                "ext-intl": "*",
+                "php": ">=8.5",
+                "psr/clock": "^1.0",
+                "psr/event-dispatcher": "^1.0",
+                "psr/log": "^3.0",
+                "symfony/clock": "^7.4 || ^8.1",
+                "symfony/translation-contracts": "^3.6",
+                "symfony/uid": "^7.4 || ^8.1",
+                "yorvoid/authn": "^0.1",
+                "yorvoid/core": "^0.1",
+                "yorvoid/mail": "^0.1"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-main": "0.1.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "YorvoID\\Notifications\\": "src/"
+                }
+            },
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Darko Poposki",
+                    "email": "poposki.darko@gmail.com"
+                }
+            ],
+            "description": "YorvoID's security notifications: emails about sign-ins, new devices and changed sign-in methods, \"This wasn't me\", and email address verification.",
+            "homepage": "https://github.com/yorvoid/yorvoid",
+            "keywords": [
+                "authentication",
+                "email",
+                "iam",
+                "notifications",
+                "security"
+            ],
+            "support": {
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/notifications",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
             "name": "yorvoid/passkeys",
             "version": "0.1.x-dev",
             "dist": {
                 "type": "path",
                 "url": "packages/passkeys",
-                "reference": "ca838986dbc9e0845482f7434726ece275c02666"
+                "reference": "c0eda4e48bdae65c23f3e768f44b01c5a16fd009"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "ext-filter": "*",
-                "ext-intl": "*",
-                "ext-mbstring": "*",
                 "ext-openssl": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
-                "psr/event-dispatcher": "^1.0",
                 "spomky-labs/cbor-php": "^3.4",
-                "symfony/clock": "^8.1",
-                "symfony/serializer": "^8.1",
-                "symfony/translation-contracts": "^3.6",
-                "symfony/uid": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
+                "symfony/serializer": "^7.4 || ^8.1",
+                "symfony/uid": "^7.4 || ^8.1",
                 "web-auth/cose-lib": "^4.8",
                 "web-auth/webauthn-lib": "^5.3.9",
                 "yorvoid/authn": "^0.1",
                 "yorvoid/core": "^0.1",
-                "yorvoid/flows": "^0.1",
-                "yorvoid/intent-verifier": "^0.1",
-                "yorvoid/throttle": "^0.1"
+                "yorvoid/flows": "^0.1"
             },
             "suggest": {
-                "symfony/translation": "Refuses an intent's summary that has no message in the catalogue"
+                "yorvoid/notifications": "Sends the link that confirms the owner's email address in the setup flow, and the verify_email flow"
             },
             "type": "library",
             "extra": {
@@ -5455,7 +5571,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "df610a0992c38c0325ffc169ca219fd93e61471f"
+                "reference": "2df8f51c260a016296c5f0afdf4d9063bb93b5d5"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5466,23 +5582,26 @@
                 "ext-mbstring": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
-                "symfony/config": "^8.1",
-                "symfony/console": "^8.1",
-                "symfony/dependency-injection": "^8.1",
-                "symfony/framework-bundle": "^8.1",
-                "symfony/http-foundation": "^8.1",
-                "symfony/http-kernel": "^8.1",
-                "symfony/routing": "^8.1",
-                "symfony/security-bundle": "^8.1",
-                "symfony/security-core": "^8.1",
-                "symfony/security-http": "^8.1",
+                "psr/log": "^3.0",
+                "symfony/config": "^7.4 || ^8.1",
+                "symfony/console": "^7.4 || ^8.1",
+                "symfony/dependency-injection": "^7.4 || ^8.1",
+                "symfony/framework-bundle": "^7.4 || ^8.1",
+                "symfony/http-foundation": "^7.4 || ^8.1",
+                "symfony/http-kernel": "^7.4 || ^8.1",
+                "symfony/routing": "^7.4 || ^8.1",
+                "symfony/security-bundle": "^7.4 || ^8.1",
+                "symfony/security-core": "^7.4 || ^8.1",
+                "symfony/security-http": "^7.4 || ^8.1",
                 "symfony/service-contracts": "^3.6",
                 "symfony/translation-contracts": "^3.6",
-                "symfony/uid": "^8.1",
+                "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.1",
                 "yorvoid/core": "^0.1",
                 "yorvoid/flows": "^0.1",
+                "yorvoid/intent-signing": "^0.1",
                 "yorvoid/mail": "^0.1",
+                "yorvoid/notifications": "^0.1",
                 "yorvoid/passkeys": "^0.1",
                 "yorvoid/throttle": "^0.1",
                 "yorvoid/translation": "^0.1"
@@ -5539,13 +5658,13 @@
             "dist": {
                 "type": "path",
                 "url": "packages/testing",
-                "reference": "9ffaca8bae1d92febb32b80323f5fbe714c7496d"
+                "reference": "a017509e072f85549e632c50201adeeb67bfac5b"
             },
             "require": {
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "psr/container": "^2.0",
-                "symfony/clock": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.1",
                 "yorvoid/core": "^0.1",
                 "yorvoid/passkeys": "^0.1",
@@ -5601,14 +5720,14 @@
             "dist": {
                 "type": "path",
                 "url": "packages/throttle",
-                "reference": "c9e5866620d6d9b386efa8783fd5ab1c9b517b3d"
+                "reference": "5b54f7c7295b62dc6c00efa853e1b4efe79e2178"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "ext-filter": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
-                "symfony/clock": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
                 "yorvoid/core": "^0.1"
             },
             "type": "library",
@@ -5656,7 +5775,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/translation",
-                "reference": "6fb345d3218db16e6763f71000985824d89ab941"
+                "reference": "adcf496d0dbfd6b79d4185268d628fb2c6eecad0"
             },
             "require": {
                 "ext-intl": "*",
@@ -5708,7 +5827,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/virtual-authenticator",
-                "reference": "d50b9392b9393c69425af083a2225db32b023729"
+                "reference": "9251cdb24e5890055debd0be1a0232060c5567c9"
             },
             "require": {
                 "ext-openssl": "*",
@@ -7814,7 +7933,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-27T14:06:26+00:00"
+            "time": "2026-10-27T14:06:26+00:00",
+            "published-time": "2026-10-27T14:06:42+00:00"
         },
         {
             "name": "phpstan/phpstan-phpunit",

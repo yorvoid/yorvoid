@@ -12,7 +12,7 @@ namespace YorvoID\Core\Principal;
  */
 enum IdentifierKind: string
 {
-    /** An email address; compared in lowercase */
+    /** An email address; compared in Unicode NFC, with A–Z in lowercase and the domain in its ASCII form */
     case Email = 'email';
 
     /**
@@ -57,9 +57,26 @@ enum IdentifierKind: string
             throw new InvalidIdentifier(self::Email, 'An email address looks like name@example.com, with no spaces.');
         }
 
-        $normalized = mb_strtolower($value, 'UTF-8');
+        // One form for text that is the same: precomposed é and e followed by a combining accent are one
+        // address (Unicode NFC). Then the local part in lowercase for A–Z only, as mail servers commonly
+        // treat it; beyond ASCII, case is the mail server's to decide, so Á and á stay two addresses. The
+        // domain as DNS knows it: its ASCII form (IDNA), lowercase. Mail goes to the address as given.
+        $nfc = \Normalizer::normalize($value, \Normalizer::FORM_C);
+        $nfc = \is_string($nfc) ? $nfc : '';
+        $at = strrpos($nfc, '@');
+        $domain = false === $at ? false : substr($nfc, $at + 1);
 
-        // Lowercase can be longer than what was entered, in a few scripts.
+        if (false !== $domain && 1 === preg_match('/[^\x00-\x7F]/', $domain)) {
+            $domain = idn_to_ascii($domain, \IDNA_NONTRANSITIONAL_TO_ASCII | \IDNA_CHECK_BIDI, \INTL_IDNA_VARIANT_UTS46);
+        }
+
+        if (false === $at || false === $domain) {
+            throw new InvalidIdentifier(self::Email, 'An email address looks like name@example.com, with no spaces.');
+        }
+
+        $normalized = strtolower(substr($nfc, 0, $at)).'@'.strtolower($domain);
+
+        // The ASCII form of a domain can be longer than what was entered.
         if (\strlen($normalized) > 254) {
             throw new InvalidIdentifier(self::Email, 'An email address has at most 254 characters.');
         }

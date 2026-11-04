@@ -17,21 +17,23 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Translation\Translator;
 use Symfony\Component\VarDumper\Cloner\AbstractCloner;
 use Twig\Extension\AbstractExtension;
-use YorvoID\Authn\Identifier\EmailVerification;
-use YorvoID\Authn\Notification\NotificationSettings;
-use YorvoID\Authn\Notification\SecurityNotifications;
 use YorvoID\Authn\Session\Sessions;
-use YorvoID\Authn\Translations as AuthnTranslations;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Flows\Translations as FlowsTranslations;
+use YorvoID\IntentSigning\SignedOperationNotification;
+use YorvoID\IntentSigning\Translations as IntentSigningTranslations;
 use YorvoID\Mail\Mailer;
-use YorvoID\Passkeys\Intent\SignedOperationNotification;
+use YorvoID\Notifications\EmailVerification;
+use YorvoID\Notifications\NotificationSettings;
+use YorvoID\Notifications\SecurityNotifications;
+use YorvoID\Notifications\Translations as NotificationsTranslations;
 use YorvoID\Passkeys\Translations as PasskeysTranslations;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Debug\SecretCaster;
 use YorvoID\Symfony\Flow\FlowCustomizer;
+use YorvoID\Symfony\Flow\FlowSource;
 use YorvoID\Symfony\Mail\SymfonyMailer;
 use YorvoID\Symfony\Security\PrincipalUsers;
 use YorvoID\Symfony\Twig\YorvoIDExtension;
@@ -51,7 +53,7 @@ final class YorvoIDBundle extends AbstractBundle
     /**
      * The catalogues of YorvoID's packages, and the bridge's own: its pages' copy.
      */
-    public const array TRANSLATIONS = [AuthnTranslations::DIRECTORY, PasskeysTranslations::DIRECTORY, FlowsTranslations::DIRECTORY, __DIR__.'/../translations'];
+    public const array TRANSLATIONS = [NotificationsTranslations::DIRECTORY, IntentSigningTranslations::DIRECTORY, PasskeysTranslations::DIRECTORY, FlowsTranslations::DIRECTORY, __DIR__.'/../translations'];
 
     public function configure(DefinitionConfigurator $definition): void
     {
@@ -67,6 +69,9 @@ final class YorvoIDBundle extends AbstractBundle
         $children->scalarNode('users')->defaultNull()->info('The service ID of your PrincipalUsers, to sign in your own users; PrincipalUser if not given');
         $children->arrayNode('keys')->addDefaultsIfNotSet()->children()
             ->scalarNode('file')->defaultNull()->info('The signing keys\' file, only its owner may read, e.g. "/run/secrets/yorvoid-keys.json"; yorvoid:keys:rotate creates it')->end();
+        $children->arrayNode('log')->addDefaultsIfNotSet()->children()
+            ->scalarNode('checkpoint_file')->defaultNull()->info('Where yorvoid:log:checkpoint appends signed checkpoints of the security log, out of the database user\'s reach, e.g. on another disk or host; needs keys.file')->end()
+            ->booleanNode('checkpoint_logger')->defaultFalse()->info('Whether checkpoints also go to the application\'s logger, for a pipeline that ships logs elsewhere')->end();
         $children->arrayNode('cookies')->addDefaultsIfNotSet()->children()
             ->scalarNode('device')->defaultValue('__Host-yorvoid_device')->info('The cookie that recognises devices')->end();
         $children->arrayNode('storage')->addDefaultsIfNotSet()->children()
@@ -151,6 +156,7 @@ final class YorvoIDBundle extends AbstractBundle
         \assert(\is_array($completed));
         $builder->getDefinition(FlowController::class)->setArgument('$completed', $completed + ['default' => $settings['flows.completed_path']]);
         $builder->registerForAutoconfiguration(FlowCustomizer::class)->addTag('yorvoid.flow_customizer');
+        $builder->registerForAutoconfiguration(FlowSource::class)->addTag('yorvoid.flow_source');
 
         // The flow pages' translations, when the application renders them with Twig.
         if (class_exists(AbstractExtension::class)) {

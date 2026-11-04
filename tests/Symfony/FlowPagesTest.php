@@ -394,6 +394,13 @@ final class FlowPagesTest extends TestCase
         self::assertSame(['terms', ['version' => 3]], [$terms['step'], $terms['view']]);
         self::assertSame([['message' => 'acme.terms.required', 'field' => 'accepted', 'reason' => null]], $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.self::id($started).'/terms', [])['problems']);
         self::assertSame('completed', $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.self::id($started).'/terms', ['accepted' => true])['status']);
+
+        // A flow of the application's own, which a request may start.
+        $own = $this->json('POST', '/yorvoid/flows/acme.terms', ['version' => '4', 'other' => 'ignored']);
+        self::assertSame('terms', $own['step']);
+        self::assertSame('completed', $this->json('POST', '/yorvoid/flows/acme.terms/'.self::id($own).'/terms', ['accepted' => true])['status']);
+        $this->browser->request('GET', '/yorvoid/flows/acme.hidden');
+        self::assertSame(404, $this->statusCode(), 'A flow the application didn\'t open to requests started from one.');
     }
 
     public function testABrowserKeepsAFewFlowsGoing(): void

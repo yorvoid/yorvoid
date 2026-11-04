@@ -65,21 +65,7 @@ jobs:
 
             echo "ref=refs/heads/main" >> "$GITHUB_OUTPUT"
           else
-            if ! git merge-base --is-ancestor "$commit" origin/main; then
-              echo "::error::The tag's commit $commit isn't on main."
-              exit 1
-            fi
-
-            passed=$(gh api "repos/$REPOSITORY/commits/$commit/check-runs?check_name=CI" --jq '[.check_runs[] | select(.conclusion == "success")] | length')
-
-            if [ "$passed" -eq 0 ]; then
-              echo "::error::CI hasn't passed for the tag's commit $commit."
-              exit 1
-            fi
-
-            if ! .github/verify-tag.sh "$GITHUB_REF_NAME"; then
-              exit 1
-            fi
+            .github/release-check.sh "$GITHUB_REF_NAME"
 
             echo "ref=$GITHUB_REF" >> "$GITHUB_OUTPUT"
           fi

@@ -46,8 +46,8 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 |---|---|---|
 | Database read leak exposes secrets | Secrets stored hashed or encrypted; secrets in memory are `Secret`s that don't appear in dumps, logs or traces | Partly: `Secret` and hashed session tokens in place; storage of credentials arrives with them (M1) |
 | The log can't forget personal data that must be erased | The log holds IDs and kinds, never email addresses, IP addresses or devices; those stay in tables that are erased or purged | In place |
-| Database writer changes the log | Hash chain per realm; verification finds changed, removed, inserted, reordered or re-hashed entries | Partly: someone who can write the database can also change the realm's head, so entries cut off at the end, or a chain recomputed from a change onwards, aren't found; checkpoints kept outside the database close that. Until then, `yorvoid:doctor` warns while the application's database user can update, delete or truncate the log (PostgreSQL) |
-| Database writer rewrites the whole chain, or cuts off its end | Checkpoints kept outside the database | Planned (by 1.0) |
+| Database writer changes the log | Hash chain per realm; verification finds changed, removed, inserted, reordered or re-hashed entries | In place; `yorvoid:doctor` warns while the application's database user can update, delete or truncate the log (PostgreSQL) |
+| Database writer rewrites the whole chain, or cuts off its end | Signed checkpoints kept outside the database; verification against them | In place up to the last checkpoint, when they're configured and taken regularly; `yorvoid:doctor` warns outside development while there are none |
 | Attacker-controlled text breaks the log (and so the operation, or the record of an attack) | Invalid UTF-8 and NUL replaced before hashing and storing, an origin's detail cut to its column; the log is structured, never formatted text | In place, on PostgreSQL, SQLite and in memory |
 | Two processes write the log at once and fork it | Appends serialized per realm; the primary key refuses a second entry with the same number | In place, tested with concurrent processes |
 | Signing key leaks | Key ring with rotation; keys outside the database; key files readable only by their owner | In place; hardware or cloud key stores planned (M7) |
@@ -107,7 +107,7 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 | Threat | Mitigation | Status |
 |---|---|---|
 | A known-vulnerable dependency | `composer audit` in CI; minimum versions | In place |
-| A compromised release | Signed tags, released only from main after CI; npm provenance; SBOMs | Partly: tags are signed and checked before release, the browser client has provenance; SBOMs are planned |
+| A compromised release | Signed tags, released only from main after CI; SBOMs and build provenance for every package; npm provenance | In place; Composer installs from the split repositories, which get the same tag of the same tested commit |
 | A compromised dependency | Few dependencies, reviewed, pinned in the lock file; formal-model tools pinned by checksum | Partly |
 
 ## Not covered

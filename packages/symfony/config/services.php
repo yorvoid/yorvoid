@@ -12,10 +12,8 @@ use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
 use YorvoID\Authn\Credential\ForgetCredentialsOfDeletedPrincipals;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
-use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Identifier\OwnIdentifiers;
 use YorvoID\Authn\Invitation\Invitations;
-use YorvoID\Authn\Notification\NotMe;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryCodeStore;
 use YorvoID\Authn\Recovery\RecoveryLinks;
@@ -47,6 +45,7 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
 use YorvoID\Core\Principal\Storage\DbalPrincipalStore;
+use YorvoID\Core\Principal\Storage\IdentifierRenormalization;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
@@ -55,10 +54,12 @@ use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Flows\Flows;
 use YorvoID\Flows\FlowStore;
+use YorvoID\IntentSigning\IntentSigning;
+use YorvoID\IntentSigning\IntentSummaries;
+use YorvoID\Notifications\EmailVerification;
+use YorvoID\Notifications\NotMe;
 use YorvoID\Passkeys\CeremonyStore;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
-use YorvoID\Passkeys\Intent\IntentSigning;
-use YorvoID\Passkeys\Intent\IntentSummaries;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\PasskeyStore;
@@ -66,7 +67,10 @@ use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
 use YorvoID\Symfony\Command\DoctorCommand;
+use YorvoID\Symfony\Command\IdentifiersNormalizeCommand;
 use YorvoID\Symfony\Command\KeysRotateCommand;
+use YorvoID\Symfony\Command\LogCheckpointCommand;
+use YorvoID\Symfony\Command\LogVerifyCommand;
 use YorvoID\Symfony\Command\MigrateCommand;
 use YorvoID\Symfony\Command\PurgeCommand;
 use YorvoID\Symfony\Command\RecoveryLinkCommand;
@@ -83,6 +87,7 @@ use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
 use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\KeysCheck;
+use YorvoID\Symfony\Doctor\LogCheckpointsCheck;
 use YorvoID\Symfony\Doctor\LogGrantsCheck;
 use YorvoID\Symfony\Doctor\MailerCheck;
 use YorvoID\Symfony\Doctor\MigrationsCheck;
@@ -137,6 +142,7 @@ return static function (ContainerConfigurator $container): void {
     // The middleware's instance on that connection, set by YorvoIDBundle.
     $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null]);
     $services->alias(Transactions::class, DbalTransactions::class)->public();
+    $services->set(IdentifierRenormalization::class);
 
     foreach ([
         PrincipalStore::class => DbalPrincipalStore::class,
@@ -215,7 +221,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(SessionFlowStore::class);
     $services->alias(FlowStore::class, SessionFlowStore::class);
     $services->set(PasskeyFlows::class)->arg('$window', $window)->arg('$emailVerification', service(EmailVerification::class)->nullOnInvalid());
-    $services->set(Flows::class)->arg('$flows', inline_service()->factory([Factories::class, 'flows'])->args([service(PasskeyFlows::class), tagged_iterator('yorvoid.flow_customizer')]))->public();
+    $services->set(Flows::class)->arg('$flows', inline_service()->factory([Factories::class, 'flows'])->args([service(PasskeyFlows::class), tagged_iterator('yorvoid.flow_customizer'), tagged_iterator('yorvoid.flow_source')]))->public();
     $services->set(FlowContexts::class)->arg('$deviceCookie', param('yorvoid.cookies.device'))->public();
     $services->set(SessionAuthenticator::class)->public();
     $services->set(SignInEntryPoint::class);
@@ -225,7 +231,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$script', param('yorvoid.flows.script'));
     $services->set(FlowController::class)->public()->tag('controller.service_arguments')
         ->arg('$completed', [])
-        ->arg('$deviceCookie', param('yorvoid.cookies.device'));
+        ->arg('$deviceCookie', param('yorvoid.cookies.device'))
+        ->arg('$entrances', inline_service('array')->factory([Factories::class, 'entrances'])->args([tagged_iterator('yorvoid.flow_source')]));
 
     // The templates: the gallery, the lint, publishing them and what changed since.
     $services->set(TemplateLint::class)->public();
@@ -240,6 +247,7 @@ return static function (ContainerConfigurator $container): void {
     ])->tag('yorvoid.doctor_check', ['name' => 'Configuration']);
     $services->set(KeysCheck::class)->args([param('yorvoid.keys.file')])->tag('yorvoid.doctor_check', ['name' => 'Keys']);
     $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
+    $services->set(LogCheckpointsCheck::class)->args([param('yorvoid.keys.file'), param('yorvoid.log.checkpoint_file'), param('yorvoid.log.checkpoint_logger'), service(Realm::class), service(ClockInterface::class), param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Security log checkpoints']);
     $services->set(LogGrantsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Security log privileges']);
     $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);
     $services->set(AssuranceCheck::class)->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle'), param('yorvoid.passkeys.user_verification')])->tag('yorvoid.doctor_check', ['name' => 'Assurance level']);
@@ -251,10 +259,12 @@ return static function (ContainerConfigurator $container): void {
     $services->set(TestHelpersCheck::class)->args([param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Test helpers']);
     $services->set(EnvironmentCheck::class)->args([param('kernel.environment'), param('kernel.debug'), param('kernel.secret')])->tag('yorvoid.doctor_check', ['name' => 'Environment']);
     $services->set(KeysRotateCommand::class)->arg('$file', param('yorvoid.keys.file'))->tag('console.command');
+    $services->set(LogCheckpointCommand::class)->arg('$keys', param('yorvoid.keys.file'))->arg('$file', param('yorvoid.log.checkpoint_file'))->arg('$toLogger', param('yorvoid.log.checkpoint_logger'))->arg('$logger', service('logger')->nullOnInvalid())->tag('console.command');
+    $services->set(LogVerifyCommand::class)->arg('$keys', param('yorvoid.keys.file'))->arg('$file', param('yorvoid.log.checkpoint_file'))->tag('console.command');
     $services->set(DoctorCommand::class)->args([tagged_locator('yorvoid.doctor_check', 'name')])->tag('console.command');
 
     // Console commands.
-    foreach ([MigrateCommand::class, PurgeCommand::class, SetupCodeCommand::class, RecoveryLinkCommand::class, TemplatesPublishCommand::class, TemplatesDiffCommand::class, TemplatesLintCommand::class] as $command) {
+    foreach ([MigrateCommand::class, PurgeCommand::class, SetupCodeCommand::class, RecoveryLinkCommand::class, IdentifiersNormalizeCommand::class, TemplatesPublishCommand::class, TemplatesDiffCommand::class, TemplatesLintCommand::class] as $command) {
         $services->set($command)->tag('console.command');
     }
 

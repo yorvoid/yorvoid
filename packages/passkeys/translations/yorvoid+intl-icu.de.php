@@ -6,8 +6,6 @@ declare(strict_types=1);
 // wording through your own translations, never by editing this file.
 
 return [
-    'yorvoid.verifier.add_key' => 'Dem Passkey „{label}“ erlauben, Vorgänge zu signieren',
-    'yorvoid.verifier.remove_key' => 'Einem Passkey das Signieren von Vorgängen entziehen',
     'yorvoid.flow.signed_out' => 'Sie wurden abgemeldet. Melden Sie sich an und versuchen Sie es noch einmal.',
     'yorvoid.flow.setup_code.invalid' => 'Dieser Einrichtungscode hat nicht funktioniert. Prüfen Sie ihn, oder erstellen Sie auf dem Server einen neuen.',
     'yorvoid.flow.email.invalid' => 'Geben Sie eine gültige E-Mail-Adresse ein, zum Beispiel name@example.com.',

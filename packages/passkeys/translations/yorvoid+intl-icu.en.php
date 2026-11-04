@@ -6,8 +6,6 @@ declare(strict_types=1);
 // wording through your own translations, never by editing this file.
 
 return [
-    'yorvoid.verifier.add_key' => 'Allow the passkey "{label}" to sign operations',
-    'yorvoid.verifier.remove_key' => 'Stop a passkey from signing operations',
     'yorvoid.flow.signed_out' => 'You were signed out. Sign in, then try again.',
     'yorvoid.flow.setup_code.invalid' => 'That setup code didn\'t work. Check it, or create a new one on the server.',
     'yorvoid.flow.email.invalid' => 'Enter a valid email address, like name@example.com.',

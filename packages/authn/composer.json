@@ -25,17 +25,13 @@
     "require": {
         "php": ">=8.5",
         "ext-filter": "*",
-        "ext-intl": "*",
         "ext-mbstring": "*",
         "doctrine/dbal": "^4.3",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
-        "psr/log": "^3.0",
-        "symfony/clock": "^8.1",
-        "symfony/translation-contracts": "^3.6",
-        "symfony/uid": "^8.1",
+        "symfony/clock": "^7.4 || ^8.1",
+        "symfony/uid": "^7.4 || ^8.1",
         "yorvoid/core": "^0.1",
-        "yorvoid/mail": "^0.1",
         "yorvoid/throttle": "^0.1"
     },
     "autoload": {

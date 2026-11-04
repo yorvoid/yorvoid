@@ -20,6 +20,13 @@ yorvoid:
 
         # The signing keys' file, only its owner may read, e.g. "/run/secrets/yorvoid-keys.json"; yorvoid:keys:rotate creates it
         file:                 null
+    log:
+
+        # Where yorvoid:log:checkpoint appends signed checkpoints of the security log, out of the database user's reach, e.g. on another disk or host; needs keys.file
+        checkpoint_file:      null
+
+        # Whether checkpoints also go to the application's logger, for a pipeline that ships logs elsewhere
+        checkpoint_logger:    false
     cookies:
 
         # The cookie that recognises devices

@@ -13,8 +13,10 @@ use YorvoID\Authn\Session\EndSession;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
+use YorvoID\Authn\Session\ValidSession;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 
@@ -31,7 +33,7 @@ final class CurrentSession implements ResetInterface
      */
     public const string KEY = 'yorvoid_session';
 
-    /** @var \WeakMap<Request, Session|null> */
+    /** @var \WeakMap<Request, ValidSession|null> */
     private \WeakMap $checked;
 
     public function __construct(
@@ -49,18 +51,16 @@ final class CurrentSession implements ResetInterface
      */
     public function get(): ?Session
     {
-        $request = $this->requests->getCurrentRequest();
+        return $this->valid()?->session;
+    }
 
-        if (null === $request) {
-            return null;
-        }
-
-        if (!$this->checked->offsetExists($request)) {
-            $token = $this->token($request);
-            $this->checked[$request] = null === $token ? null : $this->sessions->validate($this->realm, $token);
-        }
-
-        return $this->checked[$request];
+    /**
+     * The principal of the request's YorvoID session, as the session's check loaded it: the firewall's
+     * user provider needn't load it again (PERF-07).
+     */
+    public function principal(): ?Principal
+    {
+        return $this->valid()?->principal;
     }
 
     /**
@@ -156,6 +156,25 @@ final class CurrentSession implements ResetInterface
         }
 
         $session->migrate(true);
+    }
+
+    /**
+     * The request's session and principal, checked once a request.
+     */
+    private function valid(): ?ValidSession
+    {
+        $request = $this->requests->getCurrentRequest();
+
+        if (null === $request) {
+            return null;
+        }
+
+        if (!$this->checked->offsetExists($request)) {
+            $token = $this->token($request);
+            $this->checked[$request] = null === $token ? null : $this->sessions->check($this->realm, $token);
+        }
+
+        return $this->checked[$request];
     }
 
     private function token(Request $request): ?Secret

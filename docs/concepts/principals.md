@@ -80,7 +80,7 @@ Email addresses and usernames identify people when they sign in or are invited. 
 
 | | Rules | Compared |
 |---|---|---|
-| Email address | `name@domain`, at most 254 characters, no spaces or control characters | In lowercase |
+| Email address | `name@domain`, at most 254 characters, no spaces or control characters | In one Unicode form (NFC), with A–Z in lowercase and the domain in its ASCII form: `José@Example.com` is one address whether é is typed as one character or as e and an accent, while `Ána@` and `ána@` are two |
 | Username | 1 to 64 letters (a–z), digits, dots, underscores or hyphens; starts and ends with a letter or digit | In lowercase |
 
 Usernames are ASCII only, so that no two usernames look alike (a Cyrillic `а` and a Latin `a`). Display names, in any script, belong in your application's profile.

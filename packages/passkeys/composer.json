@@ -27,27 +27,21 @@
     "require": {
         "php": ">=8.5",
         "ext-filter": "*",
-        "ext-intl": "*",
-        "ext-mbstring": "*",
         "ext-openssl": "*",
         "doctrine/dbal": "^4.3",
         "psr/clock": "^1.0",
-        "psr/event-dispatcher": "^1.0",
         "spomky-labs/cbor-php": "^3.4",
-        "symfony/clock": "^8.1",
-        "symfony/serializer": "^8.1",
-        "symfony/translation-contracts": "^3.6",
-        "symfony/uid": "^8.1",
+        "symfony/clock": "^7.4 || ^8.1",
+        "symfony/serializer": "^7.4 || ^8.1",
+        "symfony/uid": "^7.4 || ^8.1",
         "web-auth/cose-lib": "^4.8",
         "web-auth/webauthn-lib": "^5.3.9",
         "yorvoid/authn": "^0.1",
         "yorvoid/core": "^0.1",
-        "yorvoid/flows": "^0.1",
-        "yorvoid/intent-verifier": "^0.1",
-        "yorvoid/throttle": "^0.1"
+        "yorvoid/flows": "^0.1"
     },
     "suggest": {
-        "symfony/translation": "Refuses an intent's summary that has no message in the catalogue"
+        "yorvoid/notifications": "Sends the link that confirms the owner's email address in the setup flow, and the verify_email flow"
     },
     "autoload": {
         "psr-4": {

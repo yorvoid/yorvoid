@@ -53,16 +53,20 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
         }
 
         $head = $this->database->table(self::HEAD_TABLE);
-
-        $connection->executeStatement(match ($this->database->platform) {
-            SqlPlatform::PostgreSQL => \sprintf('INSERT INTO %s (realm, sequence, hash) VALUES (?, 0, NULL) ON CONFLICT (realm) DO NOTHING', $head),
-            SqlPlatform::SQLite => \sprintf('INSERT OR IGNORE INTO %s (realm, sequence, hash) VALUES (?, 0, NULL)', $head),
-        }, [$realm->name]);
-
         // On PostgreSQL, the row stays locked until the transaction ends. SQLite writes one transaction
         // at a time anyway.
-        $current = $connection->fetchAssociative(\sprintf('SELECT sequence, hash FROM %s WHERE realm = ?%s', $head, SqlPlatform::PostgreSQL === $this->database->platform ? ' FOR UPDATE' : ''), [$realm->name]);
-        \assert(\is_array($current));
+        $select = \sprintf('SELECT sequence, hash FROM %s WHERE realm = ?%s', $head, SqlPlatform::PostgreSQL === $this->database->platform ? ' FOR UPDATE' : '');
+        $current = $connection->fetchAssociative($select, [$realm->name]);
+
+        // A realm's first entry: its head, created once; of two at once, the second waits for the first's.
+        if (false === $current) {
+            $connection->executeStatement(match ($this->database->platform) {
+                SqlPlatform::PostgreSQL => \sprintf('INSERT INTO %s (realm, sequence, hash) VALUES (?, 0, NULL) ON CONFLICT (realm) DO NOTHING', $head),
+                SqlPlatform::SQLite => \sprintf('INSERT OR IGNORE INTO %s (realm, sequence, hash) VALUES (?, 0, NULL)', $head),
+            }, [$realm->name]);
+            $current = $connection->fetchAssociative($select, [$realm->name]);
+            \assert(\is_array($current));
+        }
 
         $entry = $build(Row::int($current, 'sequence') + 1, Row::nullableString($current, 'hash'));
 

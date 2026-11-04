@@ -15,8 +15,6 @@ use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Mailer\EventListener\MessageLoggerListener;
 use Symfony\Component\Mime\Email;
 use YorvoID\Authn\Attempt\AttemptLimits;
-use YorvoID\Authn\Identifier\EmailVerification;
-use YorvoID\Authn\Notification\SecurityNotifications;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -28,19 +26,26 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Key\KeyRing;
+use YorvoID\Core\Key\SigningKey;
+use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
 use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
+use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Migration\LockProfile;
 use YorvoID\Core\Storage\Migration\Migration;
 use YorvoID\Core\Storage\Migration\MigrationContext;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\IntentSigning\Event\SignedOperationRan;
 use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\OperationPolicy;
+use YorvoID\Notifications\EmailVerification;
+use YorvoID\Notifications\SecurityNotifications;
 use YorvoID\Passkeys\ClonePolicy;
-use YorvoID\Passkeys\Intent\Event\SignedOperationRan;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\UserVerification;
 use YorvoID\Symfony\Command\MigrateCommand;
@@ -212,6 +217,76 @@ final class BundleTest extends TestCase
         $purge = new CommandTester($application->find('yorvoid:purge'));
         self::assertSame(0, $purge->execute([]));
         self::assertStringContainsString('0 sessions, 0 devices, 0 one-time tokens, 0 passkey ceremonies, 0 throttling keys, 0 cool-downs.', (string) preg_replace('/\s+/', ' ', $purge->getDisplay()));
+
+        // An address 0.1 stored in its lowercase form, and one that is now the same as another.
+        $database = $this->database($container);
+        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'Ána@Пример.рф'), new Origin(OriginKind::Console));
+        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: "Jose\u{301}@example.com"), new Origin(OriginKind::Console));
+        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
+        $table = $database->table(DbalIdentifierStore::TABLE);
+        $database->connection->update($table, ['normalized' => 'ána@пример.рф'], ['normalized' => 'Ána@xn--e1afmkfd.xn--p1ai']);
+        $normalize = new CommandTester($application->find('yorvoid:identifiers:normalize'));
+
+        self::assertSame(0, $normalize->execute(['--dry-run' => true]));
+        self::assertStringContainsString('Would change in the realm default: ána@пример.рф → Ána@xn--e1afmkfd.xn--p1ai', $normalize->getDisplay());
+        self::assertSame(0, $normalize->execute([]));
+        self::assertStringContainsString('1 email address(es) changed.', $normalize->getDisplay());
+        self::assertNotNull($principals->findByIdentifier(Realm::default(), IdentifierKind::Email, 'Ána@ПРИМЕР.рф'));
+
+        $database->connection->update($table, ['normalized' => "jose\u{301}@example.com", 'value' => 'José@example.com'], ['normalized' => "jos\u{E9}@example.com"]);
+        $database->connection->update($table, ['normalized' => "jos\u{E9}@example.com", 'value' => "jos\u{E9}@example.com"], ['normalized' => 'bob@example.com']);
+        self::assertSame(1, $normalize->execute([]));
+        self::assertStringContainsString('is now the same as another one', (string) preg_replace('/\s+/', ' ', $normalize->getDisplay()));
+    }
+
+    public function testChecksTheSecurityLogAgainstItsCheckpoints(): void
+    {
+        $keys = $this->directory.'/keys.json';
+        $file = $this->directory.'/checkpoints.jsonl';
+        new Filesystem()->mkdir($this->directory, 0o700);
+        new KeyRing([SigningKey::generate('2026-11-04')])->toFile($keys);
+        $container = $this->boot(['keys' => ['file' => $keys], 'log' => ['checkpoint_file' => $file]]);
+        $this->migrate();
+        $application = new Application($this->kernel ?? throw new \LogicException());
+        $checkpoint = new CommandTester($application->find('yorvoid:log:checkpoint'));
+        $verify = new CommandTester($application->find('yorvoid:log:verify'));
+
+        self::assertSame(0, $checkpoint->execute([]));
+        self::assertStringContainsString('The realm "default" has no entries yet: nothing to checkpoint.', $checkpoint->getDisplay());
+
+        $principals = $container->get(Principals::class);
+        \assert($principals instanceof Principals);
+        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Console));
+        self::assertSame(0, $checkpoint->execute([]));
+        self::assertMatchesRegularExpression('/Checkpointed entry 1 of the realm "default", signed with the key "[^"]+"\./', $checkpoint->getDisplay());
+        self::assertSame(0, $verify->execute([]));
+        self::assertStringContainsString('1 entries of the realm "default" are intact, and match their checkpoints.', (string) preg_replace('/\s+/', ' ', $verify->getDisplay()));
+
+        // Cut off, with the head moved back: only the checkpoint knows.
+        $database = $this->database($container);
+        $database->connection->executeStatement(\sprintf('DELETE FROM %s', $database->table(DbalSecurityLogStore::TABLE)));
+        $database->connection->executeStatement(\sprintf('DELETE FROM %s', $database->table(DbalSecurityLogStore::HEAD_TABLE)));
+        self::assertSame(1, $verify->execute([]));
+        self::assertStringContainsString('isn\'t in the log: entries at the end were removed.', (string) preg_replace('/\s+/', ' ', $verify->getDisplay()));
+    }
+
+    public function testWithoutCheckpointsVerificationSaysWhatItCantSee(): void
+    {
+        $this->boot();
+        $this->migrate();
+        $application = new Application($this->kernel ?? throw new \LogicException());
+        $verify = new CommandTester($application->find('yorvoid:log:verify'));
+
+        self::assertSame(0, $verify->execute([]));
+        self::assertStringContainsString('Without checkpoints, someone who can write the database could have cut', $verify->getDisplay());
+        self::assertStringContainsString('yorvoid.log.checkpoint_file', $verify->getDisplay());
+
+        try {
+            new CommandTester($application->find('yorvoid:log:checkpoint'))->execute([]);
+            self::fail('A checkpoint was taken without keys or a place to keep it.');
+        } catch (IntegratorError $error) {
+            self::assertSame('Checkpoints of the security log aren\'t configured.', $error->problem);
+        }
     }
 
     public function testSendsNotificationsThroughSymfonyMailerAfterTheCommit(): void

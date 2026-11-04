@@ -40,8 +40,38 @@ An entry is written in the same transaction as the change it describes, so the l
 
 Verification detects any change to entries that left the rest of the chain in place, and entries removed from the end while the realm's head, which records the last one, still names them.
 
-Someone who can write to the database can, however, change the head too: cut entries off the end, or rewrite the whole chain from the point they changed, and verification still passes. Checkpoints kept outside the database close that gap; they arrive by 1.0. Until then, the chain protects against accidental and partial tampering, not against an attacker with write access to the database: take those privileges from the application's database user if you can.
+Someone who can write to the database can, however, change the head too: cut entries off the end, or rewrite the whole chain from the point they changed, and the chain alone still verifies. [Checkpoints](#checkpoints) kept outside the database close that gap, up to the last checkpoint. Take the privileges to rewrite the log from the application's database user too, if you can.
 
 Recording needs only `INSERT` and `SELECT` on `yorvoid_security_log`, and `INSERT`, `SELECT` and `UPDATE` on `yorvoid_security_log_head`. On PostgreSQL, run migrations as a user that owns YorvoID's tables, and grant the application's user only those; `yorvoid:doctor` warns while it can update, delete or truncate the log, or delete or truncate its head. SQLite has no privileges: whoever can write its file can change anything.
 
 Hashes name their algorithm (`sha256` today). Verification refuses any algorithm YorvoID doesn't accept, so an entry can't be "re-hashed" with a weaker one.
+
+## Checkpoints
+
+A **checkpoint** records where a realm's log stood: its last entry's number and hash, and when, signed with the [key ring](keys.md)'s active key. It's kept outside the database, where the application's database user can't change it. Verification against checkpoints finds what the chain alone can't:
+
+- entries cut off from the end, with the head moved back: the checkpointed entry is missing;
+- a history rewritten up to a checkpoint, with every hash recomputed: the checkpointed entry's hash differs.
+
+What's recorded after the last checkpoint has only the chain's protection until the next one, so take them often.
+
+```php
+use YorvoID\Core\Key\KeyRing;
+use YorvoID\Core\Log\Checkpoint\Checkpoints;
+use YorvoID\Core\Log\Checkpoint\FileCheckpoints;
+use YorvoID\Core\Log\Checkpoint\LoggerCheckpoints;
+use YorvoID\Core\Realm;
+
+$file = new FileCheckpoints('/mnt/audit/yorvoid-checkpoints.jsonl');  // another disk or host
+$checkpoints = new Checkpoints($logStore, $log, KeyRing::fromFile('/run/secrets/yorvoid-keys.json'), [$file, new LoggerCheckpoints($logger)]);
+
+$checkpoints->take(Realm::default());  // from cron, every few minutes
+
+$verification = $checkpoints->verify(Realm::default(), $file->read(Realm::default()));
+```
+
+- `FileCheckpoints` appends one JSON line per checkpoint, and reads them back. Put the file on another disk or host, ideally append-only, and keep it with the database's backups.
+- `LoggerCheckpoints` gives each checkpoint to the application's logger (`yorvoid.log.checkpoint`, at notice), for a pipeline that ships logs elsewhere. To verify, read them back from there into a `CheckpointSource`.
+- A checkpoint the ring's keys didn't sign, or a line of the file that isn't one, fails verification. Keep the keys a checkpoint was signed with in the ring, verify-only, as long as you keep the checkpoint.
+
+In Symfony, set `yorvoid.log.checkpoint_file` (or `checkpoint_logger`) next to `yorvoid.keys.file`, and run `yorvoid:log:checkpoint` from cron; `yorvoid:log:verify` checks the chain and the checkpoints. `yorvoid:doctor` warns outside development while there are none, or the newest is more than a day old.

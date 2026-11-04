@@ -18,12 +18,17 @@ interface ThrottleStore
     public function clearAt(string $key): ?int;
 
     /**
-     * Sets when the key will be clear, if it's still $expected (null: if it has no state), as one atomic
-     * step: of several requests changing the same key at once, one succeeds.
+     * Counts an attempt, as one atomic step: moves when the key will be clear to the later of that and
+     * $now, plus $interval, unless the later of the two is after $latest. Of many requests counting the
+     * same key at once, each counts or is refused on what the others left, and none is lost.
      *
-     * @return bool Whether it did
+     * @param int $now      Milliseconds since the epoch
+     * @param int $interval Milliseconds one attempt adds
+     * @param int $latest   The latest clear time at which another attempt is allowed
+     *
+     * @return int|null When the key will be clear now; null if the attempt wasn't allowed, and nothing changed
      */
-    public function replace(string $key, ?int $expected, int $clearAt): bool;
+    public function advance(string $key, int $now, int $interval, int $latest): ?int;
 
     public function remove(string $key): void;
 

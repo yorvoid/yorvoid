@@ -15,10 +15,22 @@ use YorvoID\Flows\StepView;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 
 /**
- * An application asking people to accept its terms after they sign in.
+ * An application asking people to accept its terms after they sign in, and in a flow of its own,
+ * "acme.terms", which a request may start; "acme.hidden" starts only from the application's code.
  */
-final class TermsCustomizer implements Step, StepView, \YorvoID\Symfony\Flow\FlowCustomizer
+final class TermsCustomizer implements Step, StepView, \YorvoID\Symfony\Flow\FlowCustomizer, \YorvoID\Symfony\Flow\FlowSource
 {
+    public function flows(): iterable
+    {
+        yield new Flow('acme.terms', [$this]);
+        yield new Flow('acme.hidden', [$this]);
+    }
+
+    public function entrances(): array
+    {
+        return ['acme.terms' => ['version' => 'acme.version']];
+    }
+
     public function customize(Flow $flow): Flow
     {
         return PasskeyFlows::SIGN_IN === $flow->name ? $flow->withStepAfter('passkey', $this) : $flow;

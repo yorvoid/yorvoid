@@ -156,7 +156,7 @@ final class ThrottleTest extends DatabaseTestCase
         $database->connection->rollBack();
     }
 
-    public function testAKeyOthersKeepChangingIsTreatedAsBusy(): void
+    public function testAKeyThatKeepsRefusingAndClearingIsTreatedAsBusy(): void
     {
         $this->clock = new MockClock('2026-10-28 18:00:00 UTC');
         $losing = new class implements ThrottleStore {
@@ -167,11 +167,11 @@ final class ThrottleTest extends DatabaseTestCase
                 return null;
             }
 
-            public function replace(string $key, ?int $expected, int $clearAt): bool
+            public function advance(string $key, int $now, int $interval, int $latest): ?int
             {
                 ++$this->tries;
 
-                return false;
+                return null;
             }
 
             public function remove(string $key): void
@@ -185,7 +185,7 @@ final class ThrottleTest extends DatabaseTestCase
         };
 
         $this->refused(6, '2026-10-28 18:00:06', static fn () => new Throttle($losing, new MockClock('2026-10-28 18:00:00 UTC'))->hit('a', new Limit(10, Duration::minutes(1))));
-        self::assertSame(10, $losing->tries);
+        self::assertSame(3, $losing->tries);
     }
 
     private function throttle(string $implementation): Throttle

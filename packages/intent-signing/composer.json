@@ -1,0 +1,53 @@
+{
+    "name": "yorvoid/intent-signing",
+    "type": "library",
+    "description": "YorvoID's side of signed intents in the application: asking for an operation's signature, limits on asking, the security log, and summaries of what is signed.",
+    "keywords": [
+        "iam",
+        "passkeys",
+        "webauthn",
+        "signed-intents",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "poposki.darko@gmail.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/yorvoid/yorvoid/issues",
+        "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/intent-signing",
+        "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+        "security": "https://github.com/yorvoid/yorvoid/security/policy"
+    },
+    "require": {
+        "php": ">=8.5",
+        "ext-intl": "*",
+        "ext-mbstring": "*",
+        "psr/clock": "^1.0",
+        "psr/event-dispatcher": "^1.0",
+        "symfony/clock": "^7.4 || ^8.1",
+        "symfony/translation-contracts": "^3.6",
+        "yorvoid/authn": "^0.1",
+        "yorvoid/core": "^0.1",
+        "yorvoid/intent-verifier": "^0.1",
+        "yorvoid/throttle": "^0.1"
+    },
+    "suggest": {
+        "symfony/translation": "Refuses an intent's summary that has no message in the catalogue",
+        "yorvoid/notifications": "Tells the person by email when an operation they signed ran"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\IntentSigning\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    }
+}
