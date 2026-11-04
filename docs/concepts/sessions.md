@@ -13,6 +13,8 @@ use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
 
 $started = $sessions->start(
     new StartSession(
@@ -40,6 +42,8 @@ $request->getSession()->set('yorvoid_session', $started->token->reveal());
 ## Checking a session on each request
 
 ```php
+use YorvoID\Core\Secret;
+
 $session = $sessions->validate($realm, Secret::fromString($request->getSession()->get('yorvoid_session')));
 ```
 
@@ -72,6 +76,10 @@ Document your choice, and why, if it's longer than NIST's (OWASP ASVS 7.1.1).
 ## Ending sessions
 
 ```php
+use YorvoID\Authn\Session\EndSession;
+use YorvoID\Authn\Session\EndSessions;
+use YorvoID\Authn\Session\SessionEndReason;
+
 // Signing out
 $sessions->end(new EndSession($realm, $session->id, SessionEndReason::SignedOut), $origin);
 
@@ -97,6 +105,9 @@ Register `EndSessionsOfInactivePrincipals` as a listener of `PrincipalStatusChan
 With a `KnownDeviceStore` (`new Sessions(..., devices: new DbalKnownDeviceStore($database))`), sessions recognise the devices people sign in from (SES-012) by a cookie, never by fingerprinting:
 
 ```php
+use Symfony\Component\HttpFoundation\Cookie;
+use YorvoID\Authn\Session\StartSession;
+
 $started = $sessions->start(new StartSession($realm, $principalId, $authentication, deviceCookie: $fromTheCookie), $origin);
 // The services that sign in take it as deviceCookie: too, e.g. $passkeys->finishSignIn(...).
 
@@ -113,6 +124,8 @@ $response->headers->setCookie(Cookie::create('__Host-yorvoid_device', $started->
 Ended and expired sessions stay until you purge them, so that "your devices" and investigations can see recent ones. Purge daily, e.g. from a scheduled job:
 
 ```php
+use YorvoID\Core\Duration;
+
 $sessions->purge(Duration::days(30)); // removes sessions that ended or expired over 30 days ago
 ```
 

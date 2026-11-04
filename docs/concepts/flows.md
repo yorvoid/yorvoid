@@ -61,6 +61,9 @@ YorvoID's passkey-first journeys come from `PasskeyFlows` in `yorvoid/passkeys` 
 Each change gives a new `Flow`; the original stays as it was:
 
 ```php
+use App\Flow\AcceptTermsStep;
+use App\Flow\MyRecoveryCodesStep;
+
 $setup = $flows->flow('yorvoid.setup')
     ->withStepAfter('passkey_registration', new AcceptTermsStep(), required: true)
     ->withStepReplaced(new MyRecoveryCodesStep());  // same name as the step it replaces

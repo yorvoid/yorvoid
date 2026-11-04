@@ -4,6 +4,10 @@ A fresh installation has no one who can sign in. Instead of a default account wi
 
 ```php
 use YorvoID\Authn\Setup\CreateSetupCode;
+use YorvoID\Core\Duration;
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Realm;
 
 $code = $setupCodes->create(new CreateSetupCode(Realm::default(), Duration::days(1)), new Origin(OriginKind::Console, 'app:install'));
 
@@ -18,6 +22,13 @@ $output->writeln('Open https://example.com/setup and enter '.$code->reveal()); /
 ## Claiming a realm
 
 ```php
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\PrincipalKind;
+use YorvoID\Core\Realm;
+use YorvoID\Core\Secret;
+
 $transactions->run(function () use ($setupCodes, $code, $yourRoles): void {
     $owner = $setupCodes->claim(
         Realm::default(),

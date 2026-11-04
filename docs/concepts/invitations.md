@@ -18,6 +18,8 @@ $mailer->send('ana@example.com', 'https://example.com/invitation/'.$invitation->
 ## Accepting
 
 ```php
+use YorvoID\Core\Secret;
+
 // The invitation's page
 $principal = $invitations->peek($realm, Secret::fromString($fromTheLink)); // null: show "this link doesn't work"
 

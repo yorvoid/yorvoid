@@ -44,6 +44,7 @@ YorvoID's changes go through `Transactions`: a change, its security log entry an
 To know when your transaction commits, YorvoID needs its middleware on the connection. DBAL applies middlewares when it creates the connection, so add it first:
 
 ```php
+use Doctrine\DBAL\DriverManager;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
 
@@ -64,6 +65,8 @@ Listeners of "-ed" events may write in transactions of their own, e.g. a [notifi
 In tests, or an application that keeps nothing between runs, YorvoID's stores can live in memory. A failed change must then undo what it did in every store, as a database's rollback does: YorvoID relies on it, e.g. the last way to sign in can't be removed. Build them all at once, registered, with `InMemoryStorage` from `yorvoid/testing`:
 
 ```php
+use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Principal\Principals;
 use YorvoID\Testing\InMemoryStorage;
 
 $memory = new InMemoryStorage();

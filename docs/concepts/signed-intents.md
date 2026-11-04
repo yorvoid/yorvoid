@@ -65,6 +65,7 @@ $verifier = new Verifier(
 `SigningPages` serves the signing origin, with no framework: route every request for it to `handle()`, and send back what it answers.
 
 ```php
+use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\SigningPages;
 use YorvoID\IntentVerifier\VerifiedIntent;
 
@@ -92,6 +93,7 @@ The pages are Twig templates in the package's `templates/` directory, every valu
 ```php
 use Twig\Environment;
 use Twig\Loader\FilesystemLoader;
+use YorvoID\IntentVerifier\SigningPages;
 
 $loader = new FilesystemLoader();
 $loader->addPath('/etc/acme-verifier/templates', 'yorvoid_signing');   // e.g. your layout.html.twig
@@ -109,6 +111,9 @@ $pages = new SigningPages($verifier, $run, $returnTo, $summary, twig: new Enviro
 ## Signing an operation
 
 ```php
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use YorvoID\IntentVerifier\SigningPages;
+
 // The console, through your channel to the privileged side:
 $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
 

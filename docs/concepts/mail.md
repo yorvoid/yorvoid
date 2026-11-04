@@ -38,6 +38,7 @@ The HTML is a Twig template, `email.html.twig`, in the package's `templates/` di
 ```php
 use Twig\Environment;
 use Twig\Loader\FilesystemLoader;
+use YorvoID\Mail\Renderer;
 
 $loader = new FilesystemLoader();
 $loader->addPath('/app/templates/mail', 'yorvoid_mail');               // your email.html.twig

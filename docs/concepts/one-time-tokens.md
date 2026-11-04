@@ -8,6 +8,7 @@ A token looks like `3f2a9c…e1.Zk9x…Qw`: a 128-bit **selector** that finds it
 
 ```php
 use YorvoID\Authn\Token\IssueToken;
+use YorvoID\Core\Duration;
 
 $issued = $tokens->issue(
     new IssueToken($realm, $principal->id, 'acme.password_reset', Duration::hours(1), sentTo: 'ana@example.com'),
@@ -31,6 +32,8 @@ Pass the address you send it to as `sentTo`; it must be the principal's current 
 ## Using a token
 
 ```php
+use YorvoID\Core\Secret;
+
 $token = $tokens->consume($realm, 'acme.password_reset', Secret::fromString($fromTheLink), $origin);
 
 if (null === $token) {

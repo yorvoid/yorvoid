@@ -31,6 +31,8 @@ foreach ($codes as $code) {
 Ask for the person's email address (or username) and a code, and pass both as typed:
 
 ```php
+use YorvoID\Core\Principal\IdentifierKind;
+
 $started = $recoveryCodes->recover($realm, IdentifierKind::Email, $typedEmail, $typedCode, $origin, device: 'Firefox on Linux', address: $request->getClientIp());
 ```
 

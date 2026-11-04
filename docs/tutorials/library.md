@@ -43,7 +43,9 @@ final class AcmeWikiBundle extends AbstractBundle
 YorvoID's services are ready to inject. `CurrentSession` gives the request's YorvoID session, or `null`:
 
 ```php
+use Acme\Wiki\WikiPages;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use YorvoID\Symfony\Security\CurrentSession;
 
 final readonly class EditPageController
@@ -67,6 +69,7 @@ The application's firewall, voters and `#[IsGranted]` work too: its user is iden
 Hear when people arrive, and give them what your bundle keeps. YorvoID's events go through Symfony's dispatcher; "-ed" events wait for the commit, so you never act on a change that was rolled back:
 
 ```php
+use Acme\Wiki\WikiProfiles;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use YorvoID\Core\Principal\Event\PrincipalCreated;
 
@@ -89,6 +92,7 @@ final readonly class CreateWikiProfile
 Deleting a wiki, or handing it to someone else, deserves more than a session started this morning. `StepUp` checks the session's proof, and says what's missing:
 
 ```php
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
@@ -115,6 +119,7 @@ try {
 Ask for your wiki's terms when someone signs in for the first time, or anything else your bundle needs from people. A `FlowCustomizer` gets every flow, and changes the ones it's for:
 
 ```php
+use Acme\Wiki\AcceptWikiTermsStep;
 use YorvoID\Flows\Flow;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Symfony\Flow\FlowCustomizer;
@@ -137,6 +142,10 @@ The bundle autoconfigures every `FlowCustomizer`. Give your step a name of its o
 In your bundle's own test application, configure YorvoID as an application would, and use the [test helpers](../concepts/testing.md):
 
 ```php
+use YorvoID\Testing\Scenario;
+use YorvoID\Testing\Symfony\BrowserSignIn;
+
+$client = static::createClient();  // before the scenario: creating the client boots the kernel
 $scenario = Scenario::of(static::getContainer());
 $ana = $scenario->principal();
 BrowserSignIn::as($client, $ana);

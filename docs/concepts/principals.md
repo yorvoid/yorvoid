@@ -36,6 +36,10 @@ Creating a principal is one transaction, joining yours if one is open: the princ
 A person can have an email address and a username, given when they're created or later:
 
 ```php
+use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\PrincipalKind;
+use YorvoID\Core\Realm;
+
 $principal = $principals->create(
     new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', username: 'ana'),
     $origin,
@@ -55,6 +59,10 @@ invited ──→ active ⇄ suspended
 ```
 
 ```php
+use YorvoID\Core\Principal\ActivatePrincipal;
+use YorvoID\Core\Principal\DeletePrincipal;
+use YorvoID\Core\Principal\SuspendPrincipal;
+
 $principals->activate(new ActivatePrincipal($realm, $id), $origin, $actor);  // invited, or suspended
 $principals->suspend(new SuspendPrincipal($realm, $id), $origin, $actor);    // can't sign in or act
 $principals->delete(new DeletePrincipal($realm, $id), $origin, $actor);
@@ -78,6 +86,11 @@ Email addresses and usernames identify people when they sign in or are invited. 
 Usernames are ASCII only, so that no two usernames look alike (a Cyrillic `а` and a Latin `a`). Display names, in any script, belong in your application's profile.
 
 ```php
+use YorvoID\Core\Principal\IdentifierKind;
+use YorvoID\Core\Principal\RemoveIdentifier;
+use YorvoID\Core\Principal\SetIdentifier;
+use YorvoID\Core\Principal\VerifyIdentifier;
+
 $principals->setIdentifier(new SetIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.org'), $origin, $actor);
 $principals->verifyIdentifier(new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.org'), $origin);
 $principals->removeIdentifier(new RemoveIdentifier($realm, $id, IdentifierKind::Email), $origin, $actor);
@@ -89,6 +102,8 @@ When people change **their own** email address or username, use `OwnIdentifiers`
 
 ```php
 use YorvoID\Authn\Identifier\OwnIdentifiers;
+use YorvoID\Core\Principal\IdentifierKind;
+use YorvoID\Core\Principal\SetIdentifier;
 
 $ownIdentifiers->set(new SetIdentifier($realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session, $origin);
 // StepUpRequired: send them through a step-up, then try again.
@@ -107,8 +122,10 @@ A new email address isn't verified, so it gets no security notifications until i
 Some invariants must hold whichever page, command or script makes a change, such as "at least one active owner", or Quire's "the last administrator can't be suspended". Write them as guard rules:
 
 ```php
+use App\Security\Owners;
 use YorvoID\Core\Principal\GuardRule;
 use YorvoID\Core\Principal\PrincipalChange;
+use YorvoID\Core\Principal\Principals;
 
 final readonly class KeepAnOwner implements GuardRule
 {

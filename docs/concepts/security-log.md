@@ -3,6 +3,8 @@
 YorvoID records every security-relevant event of a realm in its security log: sign-ins and failed attempts, changes to principals, credentials and authority, decisions about protected operations. The log is append-only and **hash-chained**: each entry contains the hash of the entry before it, so changing, removing, inserting or reordering an entry breaks the chain, and verification says where.
 
 ```php
+use YorvoID\Core\Realm;
+
 $log->verify(Realm::default());   // Verification: isIntact(), entriesChecked, brokenAt, problem
 ```
 

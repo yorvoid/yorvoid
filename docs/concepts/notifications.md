@@ -20,6 +20,8 @@ Whoever signed in or added a passkey may be the attacker the email warns about, 
 ```php
 use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Notification\SecurityNotifications;
+use YorvoID\Core\Principal\PrincipalId;
+use YorvoID\Core\Realm;
 
 $notifications = new SecurityNotifications($principals, $oneTimeTokens, $mailer, $translator, new NotificationSettings(
     applicationName: 'Acme',
@@ -41,6 +43,8 @@ foreach (SecurityNotifications::events() as $event => $method) {
 Each email's link holds a one-time token, bound to the email address and valid for 7 days. Opening the link only shows your page: mail scanners and link previews open every link in an email, so act only when the person presses a button. The page asks "Wasn't this you?" with a form that posts the token and the credential back, with a CSRF token, and the POST confirms it:
 
 ```php
+use YorvoID\Core\Secret;
+
 // GET: show the question and a form; POST, after checking the CSRF token:
 $principalId = $notMe->confirm($realm, Secret::fromString($request->request->getString('token')), $request->request->get('credential'), $origin);
 ```
@@ -56,6 +60,7 @@ Notifications go only to a verified address, so an address nobody confirmed hear
 
 ```php
 use YorvoID\Authn\Identifier\EmailVerification;
+use YorvoID\Core\Principal\Event\IdentifierChanged;
 
 $verification = new EmailVerification($principals, $oneTimeTokens, $mailer, $translator, $settings, $transactions,
     fn (string $token): string => 'https://example.com/verify-email?token='.rawurlencode($token));
