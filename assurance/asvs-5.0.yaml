@@ -409,7 +409,7 @@ requirements:
         level: 3
         status: partly
         tests:
-            - 'YorvoID\Tests\Authn\Notification\SecurityNotificationsTest::testASignInFromANewDeviceIsAnnounced'
+            - 'YorvoID\Tests\Notifications\SecurityNotificationsTest::testASignInFromANewDeviceIsAnnounced'
             - 'YorvoID\Tests\Authn\Session\SessionsTest::testRecognisesDevicesByTheirCookie'
         docs:
             - concepts/notifications.md
@@ -422,8 +422,8 @@ requirements:
         level: 3
         status: partly
         tests:
-            - 'YorvoID\Tests\Authn\Notification\SecurityNotificationsTest::testEveryChangeToHowSomeoneSignsInIsAnnounced'
-            - 'YorvoID\Tests\Authn\Notification\SecurityNotificationsTest::testNotMeDisablesTheSignInMethodItWasAbout'
+            - 'YorvoID\Tests\Notifications\SecurityNotificationsTest::testEveryChangeToHowSomeoneSignsInIsAnnounced'
+            - 'YorvoID\Tests\Notifications\SecurityNotificationsTest::testNotMeDisablesTheSignInMethodItWasAbout'
         docs:
             - concepts/notifications.md
         note: 'Adding or removing a sign-in method, and using or replacing recovery codes, are emailed; changes of email address or username arrive with their flows (M4).'

@@ -2,15 +2,13 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Authn\Identifier;
+namespace YorvoID\Notifications;
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Contracts\Translation\TranslatorInterface;
-use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
-use YorvoID\Authn\Translations;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Principal\Event\IdentifierChanged;

@@ -2,13 +2,12 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Authn\Notification;
+namespace YorvoID\Notifications;
 
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Uid\Uuid;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Authn\Credential\Credentials;
-use YorvoID\Authn\Notification\Event\NotMeReported;
 use YorvoID\Authn\Session\EndSessions;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
@@ -21,6 +20,7 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Notifications\Event\NotMeReported;
 
 /**
  * "This wasn't me" from a security notification (UX-016): the link works once, signs everyone out of

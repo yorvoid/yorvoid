@@ -15,8 +15,9 @@ $config->ignoreErrorsOnPackage('yorvoid/'.$package, [ErrorType::SHADOW_DEPENDENC
 
 // What's used only when it's installed: each is a "suggest", and the code checks for it first.
 $optional = [
+    'intent-signing' => ['symfony/translation', 'yorvoid/notifications'],
     'intent-verifier' => ['ext-posix'],
-    'passkeys' => ['symfony/translation'],
+    'passkeys' => ['yorvoid/notifications'],
     'symfony' => ['symfony/mailer', 'symfony/mime', 'symfony/translation', 'symfony/var-dumper', 'twig/twig'],
     'testing' => ['symfony/framework-bundle', 'yorvoid/symfony'],
 ];

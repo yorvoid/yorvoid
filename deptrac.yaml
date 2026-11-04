@@ -15,6 +15,14 @@ deptrac:
       collectors:
         - type: classLike
           value: ^YorvoID\\Authn\\.*
+    - name: Notifications
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Notifications\\.*
+    - name: IntentSigning
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\IntentSigning\\.*
     - name: Flows
       collectors:
         - type: classLike
@@ -55,7 +63,16 @@ deptrac:
     Core: ~
     Authn:
       - Core
+      - Throttle
+    Notifications:
+      - Core
+      - Authn
       - Mail
+    IntentSigning:
+      - Core
+      - Authn
+      - IntentVerifier
+      - Notifications
       - Throttle
     Flows:
       - Core
@@ -65,13 +82,16 @@ deptrac:
       - Core
       - Authn
       - Flows
-      - IntentVerifier
+      - Notifications
       - Throttle
     Symfony:
       - Core
       - Authn
       - Flows
+      - IntentSigning
+      - IntentVerifier
       - Mail
+      - Notifications
       - Passkeys
       - Throttle
       - Translation

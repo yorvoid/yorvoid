@@ -2,14 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Tests\Authn\Identifier;
+namespace YorvoID\Tests\Notifications;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Clock\MockClock;
-use YorvoID\Authn\Identifier\EmailVerification;
-use YorvoID\Authn\Notification\NotificationSettings;
 use YorvoID\Authn\Token\OneTimeTokens;
-use YorvoID\Authn\Translations;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Id\UuidV7Generator;
@@ -26,6 +23,9 @@ use YorvoID\Core\Secret;
 use YorvoID\Mail\Block\Action;
 use YorvoID\Mail\Block\Paragraph;
 use YorvoID\Mail\InMemoryMailer;
+use YorvoID\Notifications\EmailVerification;
+use YorvoID\Notifications\NotificationSettings;
+use YorvoID\Notifications\Translations;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Translation\Translator;

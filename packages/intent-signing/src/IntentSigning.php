@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Passkeys\Intent;
+namespace YorvoID\IntentSigning;
 
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -14,9 +14,9 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\IntentSigning\Event\SignedOperationRan;
 use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\Refusal;
-use YorvoID\Passkeys\Intent\Event\SignedOperationRan;
 use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;

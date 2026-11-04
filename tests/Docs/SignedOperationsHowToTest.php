@@ -11,8 +11,8 @@ use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\Process\Process;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
+use YorvoID\IntentSigning\IntentSigning;
 use YorvoID\IntentVerifier\Intent;
-use YorvoID\Passkeys\Intent\IntentSigning;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**

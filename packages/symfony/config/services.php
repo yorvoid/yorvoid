@@ -12,10 +12,8 @@ use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
 use YorvoID\Authn\Credential\ForgetCredentialsOfDeletedPrincipals;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
-use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Identifier\OwnIdentifiers;
 use YorvoID\Authn\Invitation\Invitations;
-use YorvoID\Authn\Notification\NotMe;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryCodeStore;
 use YorvoID\Authn\Recovery\RecoveryLinks;
@@ -56,10 +54,12 @@ use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Flows\Flows;
 use YorvoID\Flows\FlowStore;
+use YorvoID\IntentSigning\IntentSigning;
+use YorvoID\IntentSigning\IntentSummaries;
+use YorvoID\Notifications\EmailVerification;
+use YorvoID\Notifications\NotMe;
 use YorvoID\Passkeys\CeremonyStore;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
-use YorvoID\Passkeys\Intent\IntentSigning;
-use YorvoID\Passkeys\Intent\IntentSummaries;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\PasskeyStore;
@@ -218,7 +218,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(SessionFlowStore::class);
     $services->alias(FlowStore::class, SessionFlowStore::class);
     $services->set(PasskeyFlows::class)->arg('$window', $window)->arg('$emailVerification', service(EmailVerification::class)->nullOnInvalid());
-    $services->set(Flows::class)->arg('$flows', inline_service()->factory([Factories::class, 'flows'])->args([service(PasskeyFlows::class), tagged_iterator('yorvoid.flow_customizer')]))->public();
+    $services->set(Flows::class)->arg('$flows', inline_service()->factory([Factories::class, 'flows'])->args([service(PasskeyFlows::class), tagged_iterator('yorvoid.flow_customizer'), tagged_iterator('yorvoid.flow_source')]))->public();
     $services->set(FlowContexts::class)->arg('$deviceCookie', param('yorvoid.cookies.device'))->public();
     $services->set(SessionAuthenticator::class)->public();
     $services->set(SignInEntryPoint::class);
@@ -228,7 +228,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$script', param('yorvoid.flows.script'));
     $services->set(FlowController::class)->public()->tag('controller.service_arguments')
         ->arg('$completed', [])
-        ->arg('$deviceCookie', param('yorvoid.cookies.device'));
+        ->arg('$deviceCookie', param('yorvoid.cookies.device'))
+        ->arg('$entrances', inline_service('array')->factory([Factories::class, 'entrances'])->args([tagged_iterator('yorvoid.flow_source')]));
 
     // The templates: the gallery, the lint, publishing them and what changed since.
     $services->set(TemplateLint::class)->public();

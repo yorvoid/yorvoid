@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Passkeys\Intent;
+namespace YorvoID\IntentSigning;
 
-use YorvoID\Authn\Notification\SecurityNotifications;
-use YorvoID\Passkeys\Intent\Event\SignedOperationRan;
+use YorvoID\IntentSigning\Event\SignedOperationRan;
+use YorvoID\Notifications\SecurityNotifications;
 
 /**
  * Emails the principal after each operation they signed ran (INT-012), with its summary in their

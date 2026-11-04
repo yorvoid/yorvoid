@@ -2,12 +2,10 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Tests\Passkeys;
+namespace YorvoID\Tests\IntentSigning;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Clock\MockClock;
-use YorvoID\Authn\Notification\NotificationSettings;
-use YorvoID\Authn\Notification\SecurityNotifications;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -15,7 +13,6 @@ use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\Token\OneTimeTokens;
-use YorvoID\Authn\Translations as AuthnTranslations;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -28,6 +25,11 @@ use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
+use YorvoID\IntentSigning\Event\SignedOperationRan;
+use YorvoID\IntentSigning\IntentSigning;
+use YorvoID\IntentSigning\IntentSummaries;
+use YorvoID\IntentSigning\SignedOperationNotification;
+use YorvoID\IntentSigning\Translations;
 use YorvoID\IntentVerifier\CollectingNotifier;
 use YorvoID\IntentVerifier\Intent;
 use YorvoID\IntentVerifier\Key;
@@ -41,11 +43,9 @@ use YorvoID\IntentVerifier\Verifier;
 use YorvoID\IntentVerifier\VerifierConfig;
 use YorvoID\Mail\Block\Facts;
 use YorvoID\Mail\InMemoryMailer;
-use YorvoID\Passkeys\Intent\Event\SignedOperationRan;
-use YorvoID\Passkeys\Intent\IntentSigning;
-use YorvoID\Passkeys\Intent\IntentSummaries;
-use YorvoID\Passkeys\Intent\SignedOperationNotification;
-use YorvoID\Passkeys\Translations;
+use YorvoID\Notifications\NotificationSettings;
+use YorvoID\Notifications\SecurityNotifications;
+use YorvoID\Notifications\Translations as NotificationsTranslations;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
@@ -218,7 +218,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, events: $this->events, ids: $ids, clock: $this->clock);
         $throttle = new Throttle($this->stack->throttle, $this->clock);
-        $translator = new Translator([AuthnTranslations::DIRECTORY, Translations::DIRECTORY, __DIR__.'/catalogues']);
+        $translator = new Translator([NotificationsTranslations::DIRECTORY, Translations::DIRECTORY, __DIR__.'/catalogues']);
         $this->summaries = new IntentSummaries($translator, 'acme');
         $this->mailer = new InMemoryMailer();
         $notifications = new SecurityNotifications($this->principals, new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock), $this->mailer, $translator, new NotificationSettings('Acme', 'https://example.com/not-me?token={token}'), $this->clock);

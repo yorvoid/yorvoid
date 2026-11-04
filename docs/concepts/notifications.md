@@ -1,6 +1,6 @@
 # Notifications
 
-People should hear about every change to how they sign in, and about sign-ins from new devices, so that someone else's change doesn't go unnoticed. YorvoID sends **security notifications** people can act on (UX-016): each says what happened, when and from where, and offers **"This wasn't me"**. They're in the `yorvoid/authn` package.
+People should hear about every change to how they sign in, and about sign-ins from new devices, so that someone else's change doesn't go unnoticed. YorvoID sends **security notifications** people can act on (UX-016): each says what happened, when and from where, and offers **"This wasn't me"**. They're in the `yorvoid/notifications` package, with the link that verifies an email address.
 
 | Event | Email |
 |---|---|
@@ -18,8 +18,8 @@ Whoever signed in or added a passkey may be the attacker the email warns about, 
 ## Configuration
 
 ```php
-use YorvoID\Authn\Notification\NotificationSettings;
-use YorvoID\Authn\Notification\SecurityNotifications;
+use YorvoID\Notifications\NotificationSettings;
+use YorvoID\Notifications\SecurityNotifications;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 
@@ -59,7 +59,7 @@ $principalId = $notMe->confirm($realm, Secret::fromString($request->request->get
 Notifications go only to a verified address, so an address nobody confirmed hears nothing: the owner who claimed the installation, or someone who just changed theirs. `EmailVerification` sends a link to confirm it:
 
 ```php
-use YorvoID\Authn\Identifier\EmailVerification;
+use YorvoID\Notifications\EmailVerification;
 use YorvoID\Core\Principal\Event\IdentifierChanged;
 
 $verification = new EmailVerification($principals, $oneTimeTokens, $mailer, $translator, $settings, $transactions,

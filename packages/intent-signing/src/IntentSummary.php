@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Passkeys\Intent;
+namespace YorvoID\IntentSigning;
 
 /**
  * What the confirming page shows before someone signs an intent (INT-011): the operation in words, and

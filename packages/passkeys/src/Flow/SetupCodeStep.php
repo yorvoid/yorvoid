@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Passkeys\Flow;
 
 use Psr\Clock\ClockInterface;
-use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -24,6 +23,7 @@ use YorvoID\Flows\Problem;
 use YorvoID\Flows\Step;
 use YorvoID\Flows\StepResult;
 use YorvoID\Flows\StepView;
+use YorvoID\Notifications\EmailVerification;
 use YorvoID\Passkeys\Flow\View\SetupCodeView;
 
 /**

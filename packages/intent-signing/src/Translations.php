@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Authn;
+namespace YorvoID\IntentSigning;
 
 /**
- * Where yorvoid/authn's messages are: the "yorvoid" domain, in ICU MessageFormat, in English and
+ * Where yorvoid/intent-signing's messages are: the "yorvoid" domain, in ICU MessageFormat, in English and
  * German (PLT-050). Give the directory to yorvoid/translation's Translator, or to Symfony's.
  *
  * @api

@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Tests\Passkeys\Intent;
+namespace YorvoID\Tests\IntentSigning;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Translation\Loader\ArrayLoader;
 use Symfony\Component\Translation\Translator;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\IntentSigning\IntentSummaries;
 use YorvoID\IntentVerifier\Intent;
-use YorvoID\Passkeys\Intent\IntentSummaries;
 
 /**
  * Summaries in ICU MessageFormat, whichever catalogue Symfony found them in (ONBOARD-02).

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Authn\Notification\Event;
+namespace YorvoID\Notifications\Event;
 
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Core\Event\Origin;

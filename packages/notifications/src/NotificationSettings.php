@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Authn\Notification;
+namespace YorvoID\Notifications;
 
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;

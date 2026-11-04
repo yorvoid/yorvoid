@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Tests\Authn\Notification;
+namespace YorvoID\Tests\Notifications;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Log\AbstractLogger;
@@ -16,10 +16,6 @@ use YorvoID\Authn\Credential\CredentialKind;
 use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\CredentialStatus;
 use YorvoID\Authn\Credential\RemoveCredential;
-use YorvoID\Authn\Notification\Event\NotMeReported;
-use YorvoID\Authn\Notification\NotificationSettings;
-use YorvoID\Authn\Notification\NotMe;
-use YorvoID\Authn\Notification\SecurityNotifications;
 use YorvoID\Authn\Recovery\Event\RecoveryCodesGenerated;
 use YorvoID\Authn\Recovery\Event\RecoveryCodeUsed;
 use YorvoID\Authn\Recovery\Event\RecoveryLinkUsed;
@@ -32,7 +28,6 @@ use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
-use YorvoID\Authn\Translations;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -56,6 +51,11 @@ use YorvoID\Mail\Block\Paragraph;
 use YorvoID\Mail\Email;
 use YorvoID\Mail\InMemoryMailer;
 use YorvoID\Mail\Mailer;
+use YorvoID\Notifications\Event\NotMeReported;
+use YorvoID\Notifications\NotificationSettings;
+use YorvoID\Notifications\NotMe;
+use YorvoID\Notifications\SecurityNotifications;
+use YorvoID\Notifications\Translations;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;

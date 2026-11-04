@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Passkeys\Intent\Event;
+namespace YorvoID\IntentSigning\Event;
 
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Principal\PrincipalId;

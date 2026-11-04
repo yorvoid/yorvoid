@@ -6,7 +6,6 @@ namespace YorvoID\Passkeys\Flow;
 
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
-use YorvoID\Authn\Identifier\EmailVerification;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryLinks;
@@ -16,6 +15,7 @@ use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Flows\Flow;
+use YorvoID\Notifications\EmailVerification;
 use YorvoID\Passkeys\Passkeys;
 
 /**

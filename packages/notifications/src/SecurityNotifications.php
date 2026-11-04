@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Authn\Notification;
+namespace YorvoID\Notifications;
 
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
@@ -20,7 +20,6 @@ use YorvoID\Authn\Session\Event\NewDeviceSignedIn;
 use YorvoID\Authn\Session\UserAgent;
 use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
-use YorvoID\Authn\Translations;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Principal\Event\IdentifierChanged;

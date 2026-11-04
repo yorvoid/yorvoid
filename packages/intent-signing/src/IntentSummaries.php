@@ -2,13 +2,12 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Passkeys\Intent;
+namespace YorvoID\IntentSigning;
 
 use Symfony\Component\Translation\TranslatorBagInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\IntentVerifier\Intent;
-use YorvoID\Passkeys\Translations;
 
 /**
  * Summaries of intents for the confirming page (INT-011), from translations: the message whose ID is the

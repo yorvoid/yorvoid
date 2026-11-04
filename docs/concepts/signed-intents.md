@@ -148,10 +148,10 @@ The verifier's `VerifierNotifier` hears of every operation verified and every ch
 
 ## The console's side
 
-The console is where the person is signed in. `IntentSigning`, in the `yorvoid/passkeys` package, records each request and what became of it in YorvoID's security log (INT-010):
+The console is where the person is signed in. `IntentSigning`, in the `yorvoid/intent-signing` package, records each request and what became of it in YorvoID's security log (INT-010):
 
 ```php
-use YorvoID\Passkeys\Intent\IntentSigning;
+use YorvoID\IntentSigning\IntentSigning;
 
 $signing = new IntentSigning($securityLog, $transactions, $throttle);
 
