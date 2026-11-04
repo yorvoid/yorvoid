@@ -21,6 +21,15 @@ Everything marked `@api` in the code: classes, interfaces, methods, constants, a
 
 All of YorvoID's packages, Composer and npm, are released together with the same version: `yorvoid/core` 0.2.0 goes with `yorvoid/passkeys` 0.2.0 and `@yorvoid/browser` 0.2.0. Require the same version of each. Every release is listed in the [changelog](https://github.com/yorvoid/yorvoid/blob/main/CHANGELOG.md).
 
+## Supported platforms
+
+- **PHP** 8.5 or later.
+- **Symfony** 7.4 (LTS) and 8.1 or later, for the components YorvoID uses and for the Symfony bridge. CI runs every test on both.
+- **Laravel** 12 and **Drupal** 11 install YorvoID's framework-free packages next to their own Symfony 7.4 components; CI checks that they resolve. There is no bridge for them yet: [integrate without one](how-to/without-a-bridge.md).
+- **PostgreSQL** 16, 17 and 18; **SQLite** for development and tests ([storage](concepts/storage.md)).
+
+Dropping a version of any of these is a breaking change.
+
 ## Before 1.0
 
 Until 1.0, minor releases (0.x) may break covered code. Each such change is listed in the changelog with what to do. Security fixes come as patch releases of the latest 0.x ([security policy](https://github.com/yorvoid/yorvoid/blob/main/SECURITY.md)).

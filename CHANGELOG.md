@@ -30,6 +30,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `SignInEntryPoint` for the firewall; `yorvoid:keys:rotate --public`; `StepResult::reopen()` and `StepFailed` for flow steps.
 - The recovery-link page names the account; the step-up page says what it confirms, and takes `within`; the signing page names the passkeys that can sign.
 - Each release is a GitHub release with every package's source, its CycloneDX SBOM, and build provenance; only a signed tag is released.
+- Symfony 7.4 LTS is supported next to 8.1, so YorvoID installs in Laravel 12 and Drupal 11 applications.
 
 ### Fixed
 

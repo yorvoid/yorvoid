@@ -56,15 +56,15 @@
         "phpunit/phpunit": "^13.4",
         "shipmonk/composer-dependency-analyser": "^1.8",
         "spaze/phpstan-disallowed-calls": "^4.15",
-        "symfony/browser-kit": "^8.1",
-        "symfony/css-selector": "^8.1",
-        "symfony/framework-bundle": "^8.1",
-        "symfony/http-client": "^8.1",
-        "symfony/mailer": "^8.1",
-        "symfony/security-bundle": "^8.1",
-        "symfony/translation": "^8.1",
-        "symfony/twig-bundle": "^8.1",
-        "symfony/yaml": "^8.1"
+        "symfony/browser-kit": "^7.4 || ^8.1",
+        "symfony/css-selector": "^7.4 || ^8.1",
+        "symfony/framework-bundle": "^7.4 || ^8.1",
+        "symfony/http-client": "^7.4 || ^8.1",
+        "symfony/mailer": "^7.4 || ^8.1",
+        "symfony/security-bundle": "^7.4 || ^8.1",
+        "symfony/translation": "^7.4 || ^8.1",
+        "symfony/twig-bundle": "^7.4 || ^8.1",
+        "symfony/yaml": "^7.4 || ^8.1"
     },
     "autoload-dev": {
         "psr-4": {

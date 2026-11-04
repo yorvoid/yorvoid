@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b762894db6cef59c8906caf0e392996f",
+    "content-hash": "6a2d275632992197030bd49d910a60be",
     "packages": [
         {
             "name": "brick/math",
@@ -5091,7 +5091,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "b7323fe42b10eaa363d4e01921c26a260e71fe50"
+                "reference": "43d7174949221c2fdabf2fb58d51d1565fed9611"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5102,9 +5102,9 @@
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
                 "psr/log": "^3.0",
-                "symfony/clock": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
                 "symfony/translation-contracts": "^3.6",
-                "symfony/uid": "^8.1",
+                "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/core": "^0.1",
                 "yorvoid/mail": "^0.1",
                 "yorvoid/throttle": "^0.1"
@@ -5153,7 +5153,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "b8459c1dd56f4009c13bd64476dad2e57e75d989"
+                "reference": "1fc9db6d6c91d3c6f86590dec32ddb2d1a46f84b"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5162,8 +5162,8 @@
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
-                "symfony/clock": "^8.1",
-                "symfony/uid": "^8.1"
+                "symfony/clock": "^7.4 || ^8.1",
+                "symfony/uid": "^7.4 || ^8.1"
             },
             "type": "library",
             "extra": {
@@ -5211,13 +5211,13 @@
             "dist": {
                 "type": "path",
                 "url": "packages/flows",
-                "reference": "33cb005c15e83ea298c56e04245bc05adad35927"
+                "reference": "930f151bc8bd66919c0ce5a4f18c86c84a85d063"
             },
             "require": {
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
-                "symfony/clock": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.1",
                 "yorvoid/core": "^0.1",
                 "yorvoid/throttle": "^0.1"
@@ -5266,7 +5266,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "b4285c0846bcd30a61d6d5bf1bd8389675a9f1d1"
+                "reference": "0e9931ad973fae332d7b500368e1efcd672caf48"
             },
             "require": {
                 "ext-dom": "*",
@@ -5275,8 +5275,8 @@
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "spomky-labs/cbor-php": "^3.4",
-                "symfony/serializer": "^8.1",
-                "symfony/uid": "^8.1",
+                "symfony/serializer": "^7.4 || ^8.1",
+                "symfony/uid": "^7.4 || ^8.1",
                 "twig/twig": "^3.30",
                 "web-auth/cose-lib": "^4.8",
                 "web-auth/webauthn-lib": "^5.3.9"
@@ -5382,7 +5382,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/passkeys",
-                "reference": "ca838986dbc9e0845482f7434726ece275c02666"
+                "reference": "a9029bc218e3cba6e736f645fbc764ac92de25d1"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5394,10 +5394,10 @@
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
                 "spomky-labs/cbor-php": "^3.4",
-                "symfony/clock": "^8.1",
-                "symfony/serializer": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
+                "symfony/serializer": "^7.4 || ^8.1",
                 "symfony/translation-contracts": "^3.6",
-                "symfony/uid": "^8.1",
+                "symfony/uid": "^7.4 || ^8.1",
                 "web-auth/cose-lib": "^4.8",
                 "web-auth/webauthn-lib": "^5.3.9",
                 "yorvoid/authn": "^0.1",
@@ -5455,7 +5455,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "df610a0992c38c0325ffc169ca219fd93e61471f"
+                "reference": "0834da9f075af95abf83d27bd9400c29f5724d3e"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5466,19 +5466,19 @@
                 "ext-mbstring": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
-                "symfony/config": "^8.1",
-                "symfony/console": "^8.1",
-                "symfony/dependency-injection": "^8.1",
-                "symfony/framework-bundle": "^8.1",
-                "symfony/http-foundation": "^8.1",
-                "symfony/http-kernel": "^8.1",
-                "symfony/routing": "^8.1",
-                "symfony/security-bundle": "^8.1",
-                "symfony/security-core": "^8.1",
-                "symfony/security-http": "^8.1",
+                "symfony/config": "^7.4 || ^8.1",
+                "symfony/console": "^7.4 || ^8.1",
+                "symfony/dependency-injection": "^7.4 || ^8.1",
+                "symfony/framework-bundle": "^7.4 || ^8.1",
+                "symfony/http-foundation": "^7.4 || ^8.1",
+                "symfony/http-kernel": "^7.4 || ^8.1",
+                "symfony/routing": "^7.4 || ^8.1",
+                "symfony/security-bundle": "^7.4 || ^8.1",
+                "symfony/security-core": "^7.4 || ^8.1",
+                "symfony/security-http": "^7.4 || ^8.1",
                 "symfony/service-contracts": "^3.6",
                 "symfony/translation-contracts": "^3.6",
-                "symfony/uid": "^8.1",
+                "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.1",
                 "yorvoid/core": "^0.1",
                 "yorvoid/flows": "^0.1",
@@ -5539,13 +5539,13 @@
             "dist": {
                 "type": "path",
                 "url": "packages/testing",
-                "reference": "9ffaca8bae1d92febb32b80323f5fbe714c7496d"
+                "reference": "41a36c646fee769c86712924fd764f9bb3b1be88"
             },
             "require": {
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
                 "psr/container": "^2.0",
-                "symfony/clock": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.1",
                 "yorvoid/core": "^0.1",
                 "yorvoid/passkeys": "^0.1",
@@ -5601,14 +5601,14 @@
             "dist": {
                 "type": "path",
                 "url": "packages/throttle",
-                "reference": "c9e5866620d6d9b386efa8783fd5ab1c9b517b3d"
+                "reference": "f944d35f90030ee0392e153e05055ca06bbcd8fb"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "ext-filter": "*",
                 "php": ">=8.5",
                 "psr/clock": "^1.0",
-                "symfony/clock": "^8.1",
+                "symfony/clock": "^7.4 || ^8.1",
                 "yorvoid/core": "^0.1"
             },
             "type": "library",
@@ -7814,7 +7814,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-27T14:06:26+00:00"
+            "time": "2026-10-27T14:06:26+00:00",
+            "published-time": "2026-10-27T14:06:42+00:00"
         },
         {
             "name": "phpstan/phpstan-phpunit",

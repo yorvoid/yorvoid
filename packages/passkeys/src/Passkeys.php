@@ -407,15 +407,21 @@ final readonly class Passkeys
 
         $counter = new CounterSuspicion();
 
+        // The library isn't told the passkey's backup eligibility: some versions refuse another value as an
+        // invalid answer, where YorvoID treats it as a suspected copy, below.
+        $checked = $passkey->record();
+        $checked->backupEligible = null;
+
         // No user handle given: the answer must name the passkey's own.
         try {
-            $record = AuthenticatorAssertionResponseValidator::create($this->steps($counter)->requestCeremony())->check($passkey->record(), $assertion, $options, $this->policy->relyingPartyId, null);
+            $record = AuthenticatorAssertionResponseValidator::create($this->steps($counter)->requestCeremony())->check($checked, $assertion, $options, $this->policy->relyingPartyId, null);
         } catch (\Throwable $exception) {
             $this->refuse($passkey, $action, Refusal::InvalidResponse, $origin, $exception);
         }
 
-        // Backup eligibility is fixed when a passkey is created: another value is another authenticator.
-        if ($passkey->backupEligible !== (true === $record->backupEligible)) {
+        // Backup eligibility is fixed when a passkey is created: another value, in a verified answer, is
+        // another authenticator.
+        if ($passkey->backupEligible !== $assertion->authenticatorData->isBackupEligible()) {
             $counter->suspected = true;
         }
 

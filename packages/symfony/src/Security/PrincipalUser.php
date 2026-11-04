@@ -33,6 +33,10 @@ final readonly class PrincipalUser implements UserInterface
         return ['ROLE_USER'];
     }
 
+    /**
+     * Symfony 7's UserInterface asks for it; there are no credentials to erase.
+     */
+    #[\Deprecated]
     public function eraseCredentials(): void
     {
     }

@@ -101,6 +101,8 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                 'translator' => ['enabled' => $this->translations, 'default_path' => $this->directory.'/translations'],
                 'session' => $this->session ? ['storage_factory_id' => 'session.storage.factory.mock_file'] : false,
                 'router' => ['resource' => __DIR__.'/routes.php', 'type' => 'php', 'utf8' => true],
+                // Symfony 8's default, which 7.4 asks to be set.
+                'property_info' => ['with_constructor_extractor' => true],
             ]);
             $container->loadFromExtension('doctrine', ['dbal' => ['default_connection' => 'default', 'connections' => [
                 'default' => ['url' => 'sqlite:///'.$this->directory.'/yorvoid.sqlite'],
