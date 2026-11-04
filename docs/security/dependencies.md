@@ -58,7 +58,7 @@ Every dependency is code that runs with YorvoID's privileges, so YorvoID has few
 
 ## Current runtime dependencies of `yorvoid/intent-verifier`
 
-The verifier runs on its own server, so it doesn't use YorvoID's other packages.
+The verifier runs on its own server, so it doesn't use YorvoID's other packages. What the console relays from the browser, which the verifier doesn't trust, is read by hand into one fixed shape, every binary field strict base64url, before the WebAuthn library's byte-level checks see it: Symfony Serializer, which webauthn-lib requires, handles only the verifier's own options. Its trusted base is webauthn-lib and the packages below.
 
 | Package | Why |
 |---|---|

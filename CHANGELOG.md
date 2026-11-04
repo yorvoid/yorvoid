@@ -21,6 +21,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 - Passkeys check what the WebAuthn library leaves to them: the ceremony type, cross-origin answers, the public key, the counter with a compare-and-swap, and backup eligibility; ceremonies and flows started per address are limited.
 - The intent verifier checks answers, nonces and parameters itself, and caps waiting intents.
+- The intent verifier reads the browser's answers by hand into one fixed shape: Symfony Serializer's reflection-driven denormalizers no longer see what the console relays.
 - Signing in again ends the session the browser held; two step-ups at once both keep their proof.
 - Failed setup codes and tokens, and limits reached, are recorded in the security log.
 - The key file is replaced only by a complete, synced copy; Symfony's dumper shows secrets redacted.
