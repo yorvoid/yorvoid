@@ -18,6 +18,25 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
 
+  # The PostgreSQL versions the tests run against: each stays on its major version.
+  - package-ecosystem: docker
+    directories:
+      - /docker/postgres/16
+      - /docker/postgres/17
+      - /docker/postgres/18
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
+    groups:
+      postgres:
+        patterns: ["postgres"]
+
   - package-ecosystem: docker-compose
     directory: /
     schedule:
