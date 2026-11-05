@@ -6,7 +6,7 @@ YorvoID's translator: ICU messages from catalogues that packages ship, behind Sy
 composer require yorvoid/translation
 ```
 
-Applications usually install [`yorvoid/symfony`](https://github.com/yorvoid/yorvoid/tree/main/packages/symfony), or [`yorvoid/passkeys`](https://github.com/yorvoid/yorvoid/tree/main/packages/passkeys) without a framework, which bring this package along. Read [Translations](https://github.com/yorvoid/yorvoid/blob/main/docs/concepts/translations.md), and [the rest of the documentation](https://github.com/yorvoid/yorvoid/tree/main/docs).
+Applications usually install [`yorvoid/symfony`](https://github.com/yorvoid/yorvoid/tree/main/packages/symfony), which brings this package along; without a framework, require it to show YorvoID's messages, e.g. its notifications, in people's language. Read [Translations](https://github.com/yorvoid/yorvoid/blob/main/docs/concepts/translations.md), and [the rest of the documentation](https://github.com/yorvoid/yorvoid/tree/main/docs).
 
 ## Read-only
 

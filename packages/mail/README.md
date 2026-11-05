@@ -6,7 +6,7 @@ YorvoID's emails: built from structured content, rendered as plain text and as a
 composer require yorvoid/mail
 ```
 
-Applications usually install [`yorvoid/symfony`](https://github.com/yorvoid/yorvoid/tree/main/packages/symfony), or [`yorvoid/passkeys`](https://github.com/yorvoid/yorvoid/tree/main/packages/passkeys) without a framework, which bring this package along. Read [Mail](https://github.com/yorvoid/yorvoid/blob/main/docs/concepts/mail.md), and [the rest of the documentation](https://github.com/yorvoid/yorvoid/tree/main/docs).
+Applications usually install [`yorvoid/symfony`](https://github.com/yorvoid/yorvoid/tree/main/packages/symfony), or [`yorvoid/notifications`](https://github.com/yorvoid/yorvoid/tree/main/packages/notifications) without a framework, which bring this package along. Read [Mail](https://github.com/yorvoid/yorvoid/blob/main/docs/concepts/mail.md), and [the rest of the documentation](https://github.com/yorvoid/yorvoid/tree/main/docs).
 
 ## Read-only
 
