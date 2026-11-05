@@ -23,7 +23,7 @@
         "security": "https://github.com/yorvoid/yorvoid/security/policy"
     },
     "require": {
-        "php": ">=8.5",
+        "php": ">=8.4",
         "ext-filter": "*",
         "ext-mbstring": "*",
         "doctrine/dbal": "^4.3",

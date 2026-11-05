@@ -17,6 +17,7 @@ Documentation for two readers: **integrators**, who add YorvoID to an applicatio
 - [Turn on notifications](how-to/notifications.md) with Symfony Mailer.
 - [Rotate the signing keys](how-to/rotate-keys.md) without downtime.
 - [Change the sign-in pages](how-to/sign-in-pages.md) to your look.
+- [Sign operations with a Symfony console](how-to/signed-operations.md): signed intents end to end, the console and the privileged side.
 - [Integrate without a framework bridge](how-to/without-a-bridge.md): the security work the Symfony bridge does, for Laravel, Drupal or plain PHP.
 
 ## Reference
@@ -45,7 +46,7 @@ Documentation for two readers: **integrators**, who add YorvoID to an applicatio
 - [Translations](concepts/translations.md): ICU messages in English and German, and changing YorvoID's wording.
 - [Recovery codes](concepts/recovery-codes.md): codes people save to get back in once each.
 - [Recovery links](concepts/recovery-links.md): an operator restoring someone's access.
-- [Security log](concepts/security-log.md): the hash-chained record of everything security-relevant.
+- [Security log](concepts/security-log.md): the hash-chained record of everything security-relevant, and signed checkpoints kept outside the database.
 - [Configuration](concepts/configuration.md): typed configuration, and durations.
 - [Secrets](concepts/secrets.md): how secrets are held, compared and kept out of logs.
 - [Keys](concepts/keys.md): signing keys, where they're kept, and rotating them.

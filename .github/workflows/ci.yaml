@@ -117,12 +117,15 @@ jobs:
         if: failure()
         run: docker compose logs
 
-  # The oldest Symfony YorvoID supports, which Laravel 12 and Drupal 11 are on: the tests and PHPStan
-  # with every Symfony component at 7.4, and YorvoID's packages resolved next to both frameworks.
+  # The oldest PHP and Symfony YorvoID supports (PHP 8.4, Symfony 7.4 LTS, which Laravel 12 and
+  # Drupal 11 are on): the tests and PHPStan with every Symfony component at 7.4, and YorvoID's
+  # packages resolved next to both frameworks.
   symfony-lts:
-    name: Tests (Symfony 7.4 LTS)
+    name: Tests (PHP 8.4, Symfony 7.4 LTS)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      PHP_VERSION: '8.4'
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -146,6 +149,10 @@ jobs:
           GID=$(id -g)
           export UID GID
           docker compose up --wait --no-build
+      - name: Check the oldest supported PHP
+        # Dependabot may move the Dockerfile's 8.4 stage to a newer minor: this keeps it on 8.4.
+        run: |
+          docker compose exec -T php php -r 'exit(PHP_MAJOR_VERSION === 8 && PHP_MINOR_VERSION === 4 ? 0 : 1);'
       - name: Install Symfony 7.4
         run: |
           docker compose exec -T php composer install --no-interaction --no-progress

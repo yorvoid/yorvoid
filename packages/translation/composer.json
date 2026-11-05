@@ -23,7 +23,7 @@
         "security": "https://github.com/yorvoid/yorvoid/security/policy"
     },
     "require": {
-        "php": ">=8.5",
+        "php": ">=8.4",
         "ext-intl": "*",
         "symfony/translation-contracts": "^3.6",
         "yorvoid/core": "^0.1"

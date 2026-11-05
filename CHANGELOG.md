@@ -2,7 +2,9 @@
 
 All of YorvoID's packages are released together, with the same version ([compatibility](docs/compatibility.md)). Each release lists what changed, and what to do where a change breaks covered code.
 
-## Unreleased
+## 0.2.0 (2026-11-05)
+
+Stricter passkey and intent checks, signed checkpoints of the security log, Symfony 7.4 LTS next to 8.1, and two new packages: `yorvoid/notifications` and `yorvoid/intent-signing`.
 
 ### Breaking
 
@@ -16,7 +18,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - Security notifications, "This wasn't me" and `EmailVerification` moved from `yorvoid/authn` to the new `yorvoid/notifications` (namespace `YorvoID\Notifications`); signed intents' `IntentSigning`, `IntentSummaries` and `SignedOperationRan` from `yorvoid/passkeys` to the new `yorvoid/intent-signing` (`YorvoID\IntentSigning`). `yorvoid/authn` no longer requires `yorvoid/mail`, nor `yorvoid/passkeys` the intent verifier. Require the new packages if you use what moved; `yorvoid/symfony` requires both.
 - `CeremonyStore::take()` takes the session asking: a store of your own returns a ceremony only to the session that began it, and one begun outside a session only without one.
 - `ThrottleStore::advance()` replaces `replace()`: a store of your own counts an attempt, or refuses it, in one atomic step, so attempts at the same moment don't refuse each other.
-- Email addresses are compared in one Unicode form (NFC), with only A–Z in lowercase and the domain in its ASCII form (IDNA); `yorvoid/core` requires `ext-intl`. Addresses beyond ASCII stored by 0.1 are found again after `yorvoid:identifiers:normalize` (or `IdentifierRenormalization::run()`): run it once after upgrading, with `--dry-run` first.
+- Email addresses are compared in one Unicode form (NFC), with only A–Z in lowercase and the domain in its ASCII form (IDNA); an address whose domain has no valid ASCII form is refused; `yorvoid/core` requires `ext-intl`. Addresses beyond ASCII stored by 0.1 are found again after `yorvoid:identifiers:normalize` (or `IdentifierRenormalization::run()`): run it once after upgrading, with `--dry-run` first.
 
 ### Security
 
@@ -35,7 +37,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `SignInEntryPoint` for the firewall; `yorvoid:keys:rotate --public`; `StepResult::reopen()` and `StepFailed` for flow steps.
 - The recovery-link page names the account; the step-up page says what it confirms, and takes `within`; the signing page names the passkeys that can sign.
 - Each release is a GitHub release with every package's source, its CycloneDX SBOM, and build provenance; only a signed tag is released.
-- Symfony 7.4 LTS is supported next to 8.1, so YorvoID installs in Laravel 12 and Drupal 11 applications.
+- Symfony 7.4 LTS is supported next to 8.1, and PHP 8.4 next to 8.5, so YorvoID installs in Laravel 12 and Drupal 11 applications.
 - `Sessions::check()` gives a valid session with its principal; the Symfony bridge loads the principal once a request instead of twice.
 - `FlowSource` in the Symfony bridge adds an application's own flows, and the ones a request may start.
 

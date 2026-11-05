@@ -1,6 +1,6 @@
 # yorvoid/authn
 
-YorvoID's authentication: sessions, one-time tokens, setup and recovery codes, step-up and throttling. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
+YorvoID's authentication: sessions, step-up, credentials, one-time tokens, setup codes, invitations, recovery links and codes, and limits on attempts. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
 
 ```bash
 composer require yorvoid/authn

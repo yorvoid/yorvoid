@@ -2,7 +2,7 @@
 
 In about 15 minutes, a fresh Symfony application where you claim the first account with a passkey, sign out, and sign in again (PLT-080).
 
-You need PHP 8.5, [Composer](https://getcomposer.org), and a browser with passkeys: any current Chrome, Edge, Firefox or Safari, with your device's screen lock or a security key.
+You need PHP 8.4 or later, [Composer](https://getcomposer.org), and a browser with passkeys: any current Chrome, Edge, Firefox or Safari, with your device's screen lock or a security key.
 
 ## 1. Create the application
 

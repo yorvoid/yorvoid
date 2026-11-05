@@ -46,7 +46,7 @@ final readonly class MailerCheck implements Check
             return;
         }
 
-        $default = null === $this->transports ? null : array_first($this->transports);
+        $default = null === $this->transports ? null : array_values($this->transports)[0] ?? null;
 
         if (null === $default) {
             yield Finding::problem('Notifications are on, but the application has no Symfony Mailer to send them with.', 'Configure framework.mailer.dsn, or turn notifications off with notifications.enabled: false.', 'concepts/mail.md#delivering');

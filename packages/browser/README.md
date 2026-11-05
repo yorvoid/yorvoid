@@ -1,6 +1,6 @@
 # @yorvoid/browser
 
-The browser client of [YorvoID](https://github.com/yorvoid/yorvoid), the embedded IAM library for PHP: passkey sign-in with autofill, recovery, adding passkeys, step-up, the WebAuthn signal API, and every error as a code to translate. TypeScript, no dependencies.
+The browser client of [YorvoID](https://github.com/yorvoid/yorvoid), the embedded IAM library for PHP: passkey sign-in with autofill, recovery, adding passkeys, step-up, signing intents, the WebAuthn signal API, and every error as a code to translate. TypeScript, no dependencies.
 
 ```ts
 import { YorvoID } from '@yorvoid/browser';
