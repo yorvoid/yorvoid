@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "87ce6a4a4f2957566540da53c45ffa73",
+    "content-hash": "0a2ae444ec96912f55c754033075ddfd",
     "packages": [
         {
             "name": "brick/math",
@@ -5091,13 +5091,13 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "12d1be3add846c795aa8efac1aef67ffbe1037d0"
+                "reference": "183824cb905c0e0a1eb0c550a512a3b0f49b4607"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "ext-filter": "*",
                 "ext-mbstring": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
                 "symfony/clock": "^7.4 || ^8.1",
@@ -5149,14 +5149,14 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "7e6f7811909f6bfe7f7078454f5f40351a1892b7"
+                "reference": "2068f083583f06494065486b0484b699b4599d88"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "ext-intl": "*",
                 "ext-mbstring": "*",
                 "ext-sodium": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
                 "psr/log": "^3.0",
@@ -5209,10 +5209,10 @@
             "dist": {
                 "type": "path",
                 "url": "packages/flows",
-                "reference": "9300271ef14c9e2230e283839ad660957441dea2"
+                "reference": "1d4e6d9ba80d795af7a0e31d9aea450ff991fab2"
             },
             "require": {
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
                 "symfony/clock": "^7.4 || ^8.1",
@@ -5264,12 +5264,12 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-signing",
-                "reference": "9ea244234787a9e9e589fa5bd2dfa603d7f9c878"
+                "reference": "da008fc6eb0dbe9a2ae505403146d07106da3ae6"
             },
             "require": {
                 "ext-intl": "*",
                 "ext-mbstring": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
                 "symfony/clock": "^7.4 || ^8.1",
@@ -5328,13 +5328,13 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "47939b6733fb567962c262b405564d694f3ac50c"
+                "reference": "3e77d2a7d77201b0ca74beeccd54435539e5c242"
             },
             "require": {
                 "ext-dom": "*",
                 "ext-libxml": "*",
                 "ext-mbstring": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "spomky-labs/cbor-php": "^3.4",
                 "symfony/serializer": "^7.4 || ^8.1",
@@ -5391,12 +5391,12 @@
             "dist": {
                 "type": "path",
                 "url": "packages/mail",
-                "reference": "5e17797d39e6a3964f3fb5652653358a27ce061b"
+                "reference": "36d7c8b819863f8f115fa4d1fa8da7f1a7d7ce91"
             },
             "require": {
                 "ext-filter": "*",
                 "ext-mbstring": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "twig/twig": "^3.30",
                 "yorvoid/core": "^0.1"
             },
@@ -5444,11 +5444,11 @@
             "dist": {
                 "type": "path",
                 "url": "packages/notifications",
-                "reference": "95fbc651d06a296421bb6ee2736398c5329cb2aa"
+                "reference": "229719d1ce744b2669b344d66d5f2fc120b6d6fb"
             },
             "require": {
                 "ext-intl": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
                 "psr/log": "^3.0",
@@ -5504,13 +5504,13 @@
             "dist": {
                 "type": "path",
                 "url": "packages/passkeys",
-                "reference": "c0eda4e48bdae65c23f3e768f44b01c5a16fd009"
+                "reference": "6e922545c0ef5133eeb4e40e812d79edc06cb789"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "ext-filter": "*",
                 "ext-openssl": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "spomky-labs/cbor-php": "^3.4",
                 "symfony/clock": "^7.4 || ^8.1",
@@ -5571,7 +5571,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "2df8f51c260a016296c5f0afdf4d9063bb93b5d5"
+                "reference": "2909f3f326a8846ff8fc460f6e3b97c214ee6bac"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5580,7 +5580,7 @@
                 "ext-filter": "*",
                 "ext-libxml": "*",
                 "ext-mbstring": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "psr/log": "^3.0",
                 "symfony/config": "^7.4 || ^8.1",
@@ -5658,10 +5658,10 @@
             "dist": {
                 "type": "path",
                 "url": "packages/testing",
-                "reference": "a017509e072f85549e632c50201adeeb67bfac5b"
+                "reference": "9f374743cfedc4cb1366cf6bd27efbeeb2cfd04d"
             },
             "require": {
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "psr/container": "^2.0",
                 "symfony/clock": "^7.4 || ^8.1",
@@ -5720,12 +5720,12 @@
             "dist": {
                 "type": "path",
                 "url": "packages/throttle",
-                "reference": "5b54f7c7295b62dc6c00efa853e1b4efe79e2178"
+                "reference": "65c3e9c375bf29bfee9dbc592f4820eb32646eed"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "ext-filter": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "symfony/clock": "^7.4 || ^8.1",
                 "yorvoid/core": "^0.1"
@@ -5775,11 +5775,11 @@
             "dist": {
                 "type": "path",
                 "url": "packages/translation",
-                "reference": "adcf496d0dbfd6b79d4185268d628fb2c6eecad0"
+                "reference": "06d17b86e62e53725452a369c9239b216332e2e2"
             },
             "require": {
                 "ext-intl": "*",
-                "php": ">=8.5",
+                "php": ">=8.4",
                 "symfony/translation-contracts": "^3.6",
                 "yorvoid/core": "^0.1"
             },
@@ -5827,12 +5827,12 @@
             "dist": {
                 "type": "path",
                 "url": "packages/virtual-authenticator",
-                "reference": "9251cdb24e5890055debd0be1a0232060c5567c9"
+                "reference": "787e6d4c053fa0a7b3228ba68abdcb6f593445b8"
             },
             "require": {
                 "ext-openssl": "*",
                 "ext-sodium": "*",
-                "php": ">=8.5"
+                "php": ">=8.4"
             },
             "type": "library",
             "extra": {
@@ -12250,7 +12250,7 @@
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.5"
+        "php": ">=8.4"
     },
     "platform-dev": {},
     "plugin-api-version": "2.11.0"

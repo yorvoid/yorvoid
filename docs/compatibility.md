@@ -23,7 +23,7 @@ All of YorvoID's packages, Composer and npm, are released together with the same
 
 ## Supported platforms
 
-- **PHP** 8.5 or later.
+- **PHP** 8.4 or later. CI runs every test on 8.5, and on 8.4 with Symfony 7.4.
 - **Symfony** 7.4 (LTS) and 8.1 or later, for the components YorvoID uses and for the Symfony bridge. CI runs every test on both.
 - **Laravel** 12 and **Drupal** 11 install YorvoID's framework-free packages next to their own Symfony 7.4 components; CI checks that they resolve. There is no bridge for them yet: [integrate without one](how-to/without-a-bridge.md).
 - **PostgreSQL** 16, 17 and 18; **SQLite** for development and tests ([storage](concepts/storage.md)).

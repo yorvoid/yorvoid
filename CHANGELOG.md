@@ -37,7 +37,7 @@ Stricter passkey and intent checks, signed checkpoints of the security log, Symf
 - `SignInEntryPoint` for the firewall; `yorvoid:keys:rotate --public`; `StepResult::reopen()` and `StepFailed` for flow steps.
 - The recovery-link page names the account; the step-up page says what it confirms, and takes `within`; the signing page names the passkeys that can sign.
 - Each release is a GitHub release with every package's source, its CycloneDX SBOM, and build provenance; only a signed tag is released.
-- Symfony 7.4 LTS is supported next to 8.1, so YorvoID installs in Laravel 12 and Drupal 11 applications.
+- Symfony 7.4 LTS is supported next to 8.1, and PHP 8.4 next to 8.5, so YorvoID installs in Laravel 12 and Drupal 11 applications.
 - `Sessions::check()` gives a valid session with its principal; the Symfony bridge loads the principal once a request instead of twice.
 - `FlowSource` in the Symfony bridge adds an application's own flows, and the ones a request may start.
 

@@ -15,7 +15,7 @@ YorvoID is a library your application embeds, not a server you run beside it. It
 - **Federation and protocols** (after 1.0): OpenID Connect, SAML and SCIM; optionally an OAuth 2.1 / OpenID provider for MCP clients and agents.
 - **Assurance:** a tamper-evident security log, formal models of the authorization semantics, conformance tests, an independent audit before 1.0.
 
-It works in any PHP 8.5 application, with or without a framework, and integrates with Symfony first. It plugs into your security setup rather than replacing it.
+It works in any PHP 8.4 (or later) application, with or without a framework, and integrates with Symfony first. It plugs into your security setup rather than replacing it.
 
 ## Packages
 

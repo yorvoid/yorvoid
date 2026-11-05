@@ -24,7 +24,7 @@
         "security": "https://github.com/yorvoid/yorvoid/security/policy"
     },
     "require": {
-        "php": ">=8.5",
+        "php": ">=8.4",
         "ext-filter": "*",
         "doctrine/dbal": "^4.3",
         "psr/clock": "^1.0",

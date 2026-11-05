@@ -23,10 +23,18 @@ final class PinnedImagesTest extends TestCase
         self::assertGreaterThanOrEqual(6, \count($finder), 'The Dockerfiles moved.');
 
         foreach ($finder as $file) {
-            preg_match_all('/^FROM\s+(\S+)/mi', $file->getContents(), $from);
+            preg_match_all('/^FROM\s+(\S+)(?:\s+AS\s+(\S+))?/mi', $file->getContents(), $from);
             self::assertNotEmpty($from[1], $file->getRelativePathname());
+            $stages = array_filter($from[2], static fn (string $stage): bool => '' !== $stage);
 
             foreach ($from[1] as $image) {
+                // A stage of the same file, e.g. php-${PHP_VERSION}, is pinned where that stage starts.
+                $stage = '#^'.preg_replace('#\\\\\$\\\\\{[A-Z_]+\\\\\}#', '[^/:@]+', preg_quote($image, '#')).'$#';
+
+                if ([] !== preg_grep($stage, $stages)) {
+                    continue;
+                }
+
                 self::assertMatchesRegularExpression('/@sha256:[0-9a-f]{64}$/', $image, $file->getRelativePathname());
             }
         }

@@ -3,7 +3,10 @@ services:
   php:
     # Named, so that images built by `docker buildx bake` (CI) are the ones `docker compose up` runs.
     image: ${IMAGES_PREFIX:-}yorvoid-php-dev
-    build: .
+    build:
+      context: .
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.5}
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - .:/app
