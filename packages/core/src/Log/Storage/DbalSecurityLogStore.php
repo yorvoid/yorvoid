@@ -52,22 +52,7 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
             throw new IntegratorError('The security log was appended to outside a transaction.', 'Append through SecurityLog::record(), which opens one, or inside Transactions::run().', 'concepts/security-log.md');
         }
 
-        $head = $this->database->table(self::HEAD_TABLE);
-        // On PostgreSQL, the row stays locked until the transaction ends. SQLite writes one transaction
-        // at a time anyway.
-        $select = \sprintf('SELECT sequence, hash FROM %s WHERE realm = ?%s', $head, SqlPlatform::PostgreSQL === $this->database->platform ? ' FOR UPDATE' : '');
-        $current = $connection->fetchAssociative($select, [$realm->name]);
-
-        // A realm's first entry: its head, created once; of two at once, the second waits for the first's.
-        if (false === $current) {
-            $connection->executeStatement(match ($this->database->platform) {
-                SqlPlatform::PostgreSQL => \sprintf('INSERT INTO %s (realm, sequence, hash) VALUES (?, 0, NULL) ON CONFLICT (realm) DO NOTHING', $head),
-                SqlPlatform::SQLite => \sprintf('INSERT OR IGNORE INTO %s (realm, sequence, hash) VALUES (?, 0, NULL)', $head),
-            }, [$realm->name]);
-            $current = $connection->fetchAssociative($select, [$realm->name]);
-            \assert(\is_array($current));
-        }
-
+        $current = $this->lockedHead($realm);
         $entry = $build(Row::int($current, 'sequence') + 1, Row::nullableString($current, 'hash'));
 
         $connection->insert($this->database->table(self::TABLE), [
@@ -89,9 +74,24 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
             'hash' => $entry->hash,
         ], ['recorded_at' => Types::DATETIMETZ_IMMUTABLE, 'details' => Types::JSON]);
 
-        $connection->executeStatement(\sprintf('UPDATE %s SET sequence = ?, hash = ? WHERE realm = ?', $head), [$entry->sequence, $entry->hash, $realm->name]);
+        $connection->executeStatement(\sprintf('UPDATE %s SET sequence = ?, hash = ? WHERE realm = ?', $this->database->table(self::HEAD_TABLE)), [$entry->sequence, $entry->hash, $realm->name]);
 
         return $entry;
+    }
+
+    public function lock(Realm $realm): void
+    {
+        if (!$this->database->connection->isTransactionActive()) {
+            throw new IntegratorError('The security log was locked outside a transaction.', 'Lock it inside Transactions::run(), before reading what the change depends on.', 'concepts/security-log.md');
+        }
+
+        $this->lockedHead($realm);
+
+        // SQLite writes one transaction at a time, but reading takes no write lock: writing does. An
+        // update takes it for the whole database as it starts, before it looks for rows: it needs none.
+        if (SqlPlatform::SQLite === $this->database->platform) {
+            $this->database->connection->executeStatement(\sprintf('UPDATE %s SET sequence = sequence WHERE 1 = 0', $this->database->table(self::HEAD_TABLE)));
+        }
     }
 
     public function entries(Realm $realm, int $fromSequence): iterable
@@ -149,5 +149,31 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
             Row::string($row, 'previous_hash'),
             Row::string($row, 'hash'),
         );
+    }
+
+    /**
+     * The realm's head row, locked until the transaction ends: on PostgreSQL by FOR UPDATE; SQLite writes
+     * one transaction at a time anyway.
+     *
+     * @return array<string, mixed>
+     */
+    private function lockedHead(Realm $realm): array
+    {
+        $connection = $this->database->connection;
+        $head = $this->database->table(self::HEAD_TABLE);
+        $select = \sprintf('SELECT sequence, hash FROM %s WHERE realm = ?%s', $head, SqlPlatform::PostgreSQL === $this->database->platform ? ' FOR UPDATE' : '');
+        $current = $connection->fetchAssociative($select, [$realm->name]);
+
+        // A realm's first entry: its head, created once; of two at once, the second waits for the first's.
+        if (false === $current) {
+            $connection->executeStatement(match ($this->database->platform) {
+                SqlPlatform::PostgreSQL => \sprintf('INSERT INTO %s (realm, sequence, hash) VALUES (?, 0, NULL) ON CONFLICT (realm) DO NOTHING', $head),
+                SqlPlatform::SQLite => \sprintf('INSERT OR IGNORE INTO %s (realm, sequence, hash) VALUES (?, 0, NULL)', $head),
+            }, [$realm->name]);
+            $current = $connection->fetchAssociative($select, [$realm->name]);
+            \assert(\is_array($current));
+        }
+
+        return $current;
     }
 }

@@ -16,12 +16,17 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\Principal;
+use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\PrincipalStatus;
+use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Tests\Support\DatabaseTestCase;
@@ -217,6 +222,80 @@ final class SetupCodesTest extends DatabaseTestCase
         }
 
         self::assertFalse($setup->isClaimed(new Realm('acme')));
+    }
+
+    /**
+     * The claim locks the realm's log before it asks whether the realm has an active principal, so a
+     * principal created at the same moment comes before or after it (SetupClaimConcurrencyTest).
+     */
+    public function testTheClaimLocksTheLogBeforeAskingWhoIsActive(): void
+    {
+        $stack = $this->stack('memory');
+        /** @var \ArrayObject<int, string> $calls */
+        $calls = new \ArrayObject();
+        $log = new SecurityLog(new readonly class($stack->log, $calls) implements SecurityLogStore {
+            /** @param \ArrayObject<int, string> $calls */
+            public function __construct(private SecurityLogStore $store, private \ArrayObject $calls)
+            {
+            }
+
+            public function append(Realm $realm, \Closure $build): LogEntry
+            {
+                return $this->store->append($realm, $build);
+            }
+
+            public function lock(Realm $realm): void
+            {
+                $this->calls[] = 'lock';
+                $this->store->lock($realm);
+            }
+
+            public function entries(Realm $realm, int $fromSequence): iterable
+            {
+                return $this->store->entries($realm, $fromSequence);
+            }
+
+            public function head(Realm $realm): ?array
+            {
+                return $this->store->head($realm);
+            }
+        }, $stack->transactions);
+        $principals = new Principals(new readonly class($stack->principals, $calls) implements PrincipalStore {
+            /** @param \ArrayObject<int, string> $calls */
+            public function __construct(private PrincipalStore $store, private \ArrayObject $calls)
+            {
+            }
+
+            public function add(Principal $principal): void
+            {
+                $this->store->add($principal);
+            }
+
+            public function get(Realm $realm, PrincipalId $id): ?Principal
+            {
+                return $this->store->get($realm, $id);
+            }
+
+            public function hasActive(Realm $realm): bool
+            {
+                $this->calls[] = 'hasActive';
+
+                return $this->store->hasActive($realm);
+            }
+
+            public function changeStatus(Principal $before, Principal $after): bool
+            {
+                return $this->store->changeStatus($before, $after);
+            }
+        }, $stack->identifiers, $log, $stack->transactions);
+        $plainLog = new SecurityLog($stack->log, $stack->transactions);
+        $plain = new SetupCodes($stack->setup, new Principals($stack->principals, $stack->identifiers, $plainLog, $stack->transactions), $plainLog, $stack->transactions, new Attempts(new Throttle($stack->throttle)));
+        $code = $plain->create(new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
+        $codes = new SetupCodes($stack->setup, $principals, $log, $stack->transactions, new Attempts(new Throttle($stack->throttle)));
+
+        $codes->claim(new Realm('acme'), $code, new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Web));
+
+        self::assertSame(['lock', 'hasActive'], $calls->getArrayCopy());
     }
 
     public function testCodesAreUniformlyRandom(): void

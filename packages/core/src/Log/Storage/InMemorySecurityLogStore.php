@@ -28,6 +28,13 @@ final class InMemorySecurityLogStore implements SecurityLogStore, InMemoryStore
         return $entry;
     }
 
+    /**
+     * Nothing to wait for: one process, one change at a time.
+     */
+    public function lock(Realm $realm): void
+    {
+    }
+
     public function entries(Realm $realm, int $fromSequence): iterable
     {
         foreach ($this->entries[$realm->name] ?? [] as $entry) {

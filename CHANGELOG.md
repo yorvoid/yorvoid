@@ -7,6 +7,15 @@ All of YorvoID's packages are released together, with the same version ([compati
 ### Breaking
 
 - `TemplateLint`'s constructor is `@internal`: take the lint from the container, as the docs show.
+- `SecurityLogStore::lock()` is new: a store of your own locks the realm's log as an append does, without appending.
+
+### Added
+
+- `SecurityLog::lock()` locks a realm's log until the transaction ends, so that changes depending on what the realm holds take turns.
+
+### Fixed
+
+- A setup code claims a realm only if no principal became active before it, also one created at the same moment another way: the claim locks the realm's log before it checks.
 
 ## 0.2.0 (2026-11-05)
 
