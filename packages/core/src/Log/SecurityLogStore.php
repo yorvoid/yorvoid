@@ -25,6 +25,13 @@ interface SecurityLogStore
     public function append(Realm $realm, \Closure $build): LogEntry;
 
     /**
+     * Locks the realm's log as an append does, without appending: until the transaction ends, other
+     * appends to the realm wait, and so do other locks. What's read after it includes every change
+     * committed by an append before it. Called inside a transaction.
+     */
+    public function lock(Realm $realm): void;
+
+    /**
      * @return iterable<LogEntry> In order of sequence, from the given number
      */
     public function entries(Realm $realm, int $fromSequence): iterable;

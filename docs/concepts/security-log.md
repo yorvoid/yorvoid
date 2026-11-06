@@ -36,6 +36,17 @@ Details hold facts, never secrets, tokens, passwords or copies of personal data:
 
 An entry is written in the same transaction as the change it describes, so the log holds exactly what was committed, no more and no less. Appends to a realm's log are serialized: two processes can never give two entries the same number. After commit, each entry is dispatched as a `SecurityLogEntryRecorded` event, for your own audit log or a SIEM.
 
+Because every change to a realm records an entry, the log's lock is also how changes that depend on what the realm holds take turns. `lock()` takes it without recording, until the transaction ends: lock first, then read, then change. A setup code does it before checking that the realm has no active principal, so an invitation accepted at the same moment waits for the claim, or the claim waits and sees it.
+
+```php
+$transactions->run(function () use ($log, $realm): void {
+    $log->lock($realm);
+    // Read what the change depends on, then change it.
+});
+```
+
+A `SecurityLogStore` of your own implements `lock()` as an append locks: on a database, the realm's row that appends update, locked until the transaction ends.
+
 ## What the chain proves, and what it doesn't
 
 Verification detects any change to entries that left the rest of the chain in place, and entries removed from the end while the realm's head, which records the last one, still names them.

@@ -63,12 +63,14 @@ holds "verifier keys: safe (Quint, Apalache)" quint verify --main=counted --inva
 violated "verifier keys: counting only current keys loses them all (Quint, Apalache)" "\[violation\]" quint verify --main=uncounted --invariant=NEVER_WITHOUT_KEYS --max-steps=10 verifier/key_registry.qnt
 holds "verifier keys: safe (Quint, simulation)" quint run --main=counted --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 verifier/key_registry.qnt
 
-# Claiming a realm with its setup code, in Quint: one owner, whoever comes at the same moment. Marking
-# it claimed without a compare-and-swap must give it two.
+# Claiming a realm with its setup code, in Quint: one owner, whoever comes at the same moment, and the
+# realm's first principal, also when an invitation is accepted at the same moment. Marking it claimed
+# without a compare-and-swap must give it two; checking without the log's lock, an owner after someone.
 holds "setup claim: typecheck (Quint)" quint typecheck setup/setup_claim.qnt
-holds "setup claim: one owner (Quint, Apalache)" quint verify --main=atomic --invariant=SAFETY --max-steps=10 setup/setup_claim.qnt
-violated "setup claim: without a compare-and-swap, two owners (Quint, Apalache)" "\[violation\]" quint verify --main=naive --invariant=ONE_OWNER --max-steps=10 setup/setup_claim.qnt
-holds "setup claim: one owner (Quint, simulation)" quint run --main=atomic --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 setup/setup_claim.qnt
+holds "setup claim: one owner, the first principal (Quint, Apalache)" quint verify --main=atomic --invariant=SAFETY --max-steps=12 setup/setup_claim.qnt
+violated "setup claim: without a compare-and-swap, two owners (Quint, Apalache)" "\[violation\]" quint verify --main=naive --invariant=ONE_OWNER --max-steps=12 setup/setup_claim.qnt
+violated "setup claim: without the log's lock, an owner after someone (Quint, Apalache)" "\[violation\]" quint verify --main=unlocked --invariant=OWNER_FIRST --max-steps=12 setup/setup_claim.qnt
+holds "setup claim: one owner, the first principal (Quint, simulation)" quint run --main=atomic --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 setup/setup_claim.qnt
 
 # Apalache writes its working files next to the models; they aren't needed afterwards.
 rm -rf "$out" _apalache-out

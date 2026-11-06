@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Conformance;
 
+use Doctrine\DBAL\Exception\DriverException;
+use Doctrine\DBAL\Exception\LockWaitTimeoutException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Event\Origin;
@@ -163,6 +165,77 @@ final class SecurityLogStoreTest extends DatabaseTestCase
         self::assertSame(['sequence' => 1, 'hash' => $first->hash], $stack->log->head($realm));
         self::assertCount(1, iterator_to_array($stack->log->entries($realm, 1), false));
         self::assertSame(2, $this->append($stack, $realm, $seen)->sequence);
+    }
+
+    #[DataProvider('implementations')]
+    public function testLockingLeavesTheChainAsItWas(string $implementation): void
+    {
+        $stack = $this->stack($implementation);
+        $realm = new Realm('acme');
+        $seen = [];
+
+        $stack->transactions->run(static fn () => $stack->log->lock($realm));
+        self::assertNull($stack->log->head($realm), 'Locking a realm without entries adds none.');
+
+        $first = $this->append($stack, $realm, $seen);
+        $stack->transactions->run(static fn () => $stack->log->lock($realm));
+        $second = $this->append($stack, $realm, $seen);
+
+        self::assertSame([[1, null], [2, $first->hash]], $seen);
+        self::assertSame(['sequence' => 2, 'hash' => $second->hash], $stack->log->head($realm));
+    }
+
+    #[DataProvider('platforms')]
+    public function testALockHoldsOffAnotherUntilItsTransactionEnds(string $platform): void
+    {
+        $stack = $this->stack($platform);
+        \assert($stack->database instanceof Database);
+        $realm = new Realm('acme');
+        $seen = [];
+        $this->append($stack, $realm, $seen);
+        $holder = $stack->database->connection;
+        // Another process's connection, which gives up waiting quickly.
+        $other = $this->database($platform);
+        $otherLog = new DbalSecurityLogStore($other);
+
+        if ('sqlite' === $platform) {
+            $other->connection->executeStatement('PRAGMA busy_timeout = 100');
+        }
+
+        $holder->beginTransaction();
+        $stack->log->lock($realm);
+        $other->connection->beginTransaction();
+
+        if ('postgresql' === $platform) {
+            $other->connection->executeStatement("SET LOCAL lock_timeout = '200ms'");
+        }
+
+        try {
+            $otherLog->lock($realm);
+            self::fail('The second lock didn\'t wait for the first.');
+        } catch (DriverException $exception) {
+            // PostgreSQL's lock_timeout (55P03), or SQLite's busy database.
+            self::assertTrue($exception instanceof LockWaitTimeoutException || '55P03' === $exception->getSQLState(), $exception->getMessage());
+        } finally {
+            $other->connection->rollBack();
+            $holder->rollBack();
+        }
+
+        $other->connection->beginTransaction();
+        $otherLog->lock($realm);
+        $other->connection->rollBack();
+        self::assertSame(1, $stack->log->head($realm)['sequence'] ?? null);
+    }
+
+    #[DataProvider('platforms')]
+    public function testRefusesToLockOutsideATransaction(string $platform): void
+    {
+        $stack = $this->stack($platform);
+
+        $this->expectException(IntegratorError::class);
+        $this->expectExceptionMessage('outside a transaction');
+
+        $stack->log->lock(Realm::default());
     }
 
     #[DataProvider('platforms')]

@@ -113,6 +113,10 @@ final readonly class SetupCodes
     private function claimWith(Realm $realm, #[\SensitiveParameter] Secret $code, CreatePrincipal $owner, Origin $origin): Principal
     {
         return $this->transactions->run(function () use ($realm, $code, $owner, $origin): Principal {
+            // Before asking whether the realm has an active principal: a principal created at the same
+            // moment, e.g. by an invitation accepted, records it in the log, so it waits for this claim
+            // or this claim waits for it, and sees it.
+            $this->log->lock($realm);
             $state = $this->store->get($realm);
             $hash = self::hash(HumanCode::normalize($code->reveal()));
 

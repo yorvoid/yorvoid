@@ -39,6 +39,17 @@ final readonly class SecurityLog
     }
 
     /**
+     * Locks the realm's log until the current transaction ends, as recording does, without recording:
+     * changes that depend on what the realm holds take turns. Lock first, then read, then change: e.g. a
+     * setup code claims a realm only while it has no active principal, and an invitation accepted at the
+     * same moment waits, or is waited for.
+     */
+    public function lock(Realm $realm): void
+    {
+        $this->store->lock($realm);
+    }
+
+    /**
      * Records an entry, in the current transaction if one is open.
      *
      * @param string               $action  The operation, e.g. "yorvoid.principal.create"

@@ -17,7 +17,7 @@ The `spec` container has every tool, pinned and checksum-verified: Alloy 6.2.0, 
 | [`decisions/precedence.als`](decisions/precedence.als) | The outcome of a decision (Permit, Deny, Indeterminate) from the matching policy elements and the authority (requirements 06 §3) | Alloy: exhaustively, for up to 6 matching elements |
 | [`tokens/one_time_token.qnt`](tokens/one_time_token.qnt) | One-time tokens: at most once, never after expiry or revocation, newest only (ATN-030), with 3 consumers racing for 3 tokens | Apalache: every execution up to 10 steps, beyond the longest (9); simulation: 20 000 random runs |
 | [`verifier/key_registry.qnt`](verifier/key_registry.qnt) | The intent verifier's keys: the first with the bootstrap secret, every later change signed, delayed and cancellable, never the last one (INT-005, 006, 013, 016, 017), with 3 keys | Apalache: every execution up to 10 steps; simulation: 20 000 random runs |
-| [`setup/setup_claim.qnt`](setup/setup_claim.qnt) | Claiming a realm with its setup code: one owner, losers keep nothing (ATN-020), with 3 claimers at once | Apalache: every execution up to 10 steps, beyond the longest (9); simulation: 20 000 random runs |
+| [`setup/setup_claim.qnt`](setup/setup_claim.qnt) | Claiming a realm with its setup code: one owner, losers keep nothing (ATN-020), the owner is the realm's first principal (ATN-034), with 3 claimers and an invitation accepted at once | Apalache: every execution up to 12 steps, beyond the longest (10); simulation: 20 000 random runs |
 
 ### Properties of decisions
 
@@ -43,8 +43,9 @@ The `spec` container has every tool, pinned and checksum-verified: Alloy 6.2.0, 
 
 - A realm has **one first owner**, also when several people enter the code at the same moment.
 - Whoever loses the race keeps **no principal**: their transaction rolled back.
+- The owner is **the realm's first principal**: a claim never succeeds after someone became active another way, e.g. by an invitation accepted at the same moment. The claim locks the realm's log before it checks.
 
-Each model also contains a **deliberately broken variant**, e.g. the naive "read, then delete" token consumption, a removal that counts only the current keys, or a claim without a compare-and-swap, and the script requires the checker to find what each breaks. A checker that stopped finding problems would therefore fail the build too.
+Each model also contains a **deliberately broken variant**, e.g. the naive "read, then delete" token consumption, a removal that counts only the current keys, a claim without a compare-and-swap, or one that checks without the log's lock, and the script requires the checker to find what each breaks. A checker that stopped finding problems would therefore fail the build too.
 
 ## Bounds
 
