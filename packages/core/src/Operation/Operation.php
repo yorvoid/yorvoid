@@ -8,13 +8,14 @@ use YorvoID\Core\Exception\IntegratorError;
 
 /**
  * Marks a command class as an operation: something that changes YorvoID's state, with a stable name, a
- * description, the ability it needs, and the operation that undoes it, if any (PLT-041). Applications
- * list operations from the {@see OperationCatalogue} to build their own action catalogues, admin pages
- * and console commands, as Quire does with its actions.
+ * description, what authorizes it (D-38), the ability it needs, and the operation that undoes it, if any
+ * (PLT-041). Applications list operations from the {@see OperationCatalogue} to build their own action
+ * catalogues, admin pages and console commands, as Quire does with its actions; {@see Operations::run()}
+ * runs them.
  *
  * ```php
- * #[Operation('yorvoid.session.end', 'End a session', ability: 'yorvoid.sessions.manage')]
- * final readonly class EndSession { public function __construct(public string $sessionId) {} }
+ * #[Operation('yorvoid.principal.suspend', 'Suspend a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage')]
+ * final readonly class SuspendPrincipal implements Command { public function __construct(public Realm $realm, public PrincipalId $principalId) {} }
  * ```
  *
  * @api
@@ -25,15 +26,20 @@ final readonly class Operation
     /** Dot-separated lowercase segments, e.g. "yorvoid.session.end" or "acme.badge.issue" */
     public const string NAME = '/^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){2,}$/D';
 
+    /** @var non-empty-list<AuthorizedBy> */
+    public array $authorizedBy;
+
     /**
-     * @param string      $name        Stable, dot-separated, starting with the owner, e.g. "yorvoid.session.end"
-     * @param string      $description What it does, for people, e.g. "End a session"
-     * @param string|null $ability     The ability a principal needs to run it, if any
-     * @param string|null $inverse     The operation that undoes it, if any
+     * @param string                          $name         Stable, dot-separated, starting with the owner, e.g. "yorvoid.session.end"
+     * @param string                          $description  What it does, for people, e.g. "End a session"
+     * @param AuthorizedBy|list<AuthorizedBy> $authorizedBy What lets an actor run it; the first that permits wins
+     * @param string|null                     $ability      The ability a principal needs to run it, for AuthorizedBy::Ability
+     * @param string|null                     $inverse      The operation that undoes it, if any
      */
     public function __construct(
         public string $name,
         public string $description,
+        AuthorizedBy|array $authorizedBy,
         public ?string $ability = null,
         public ?string $inverse = null,
     ) {
@@ -46,5 +52,39 @@ final readonly class Operation
         if ('' === trim($description)) {
             throw new IntegratorError(\sprintf('The operation "%s" has no description.', $name), 'Describe what it does in a few words, e.g. "End a session".', 'concepts/operations-and-events.md#operations');
         }
+
+        $authorizedBy = \is_array($authorizedBy) ? array_values(array_unique($authorizedBy, \SORT_REGULAR)) : [$authorizedBy];
+
+        if ([] === $authorizedBy) {
+            throw new IntegratorError(\sprintf('The operation "%s" doesn\'t say what authorizes it.', $name), 'Name at least one AuthorizedBy, e.g. AuthorizedBy::Ability with the ability.', 'concepts/operations-and-events.md#operations');
+        }
+
+        if (\in_array(AuthorizedBy::Ability, $authorizedBy, true) !== (null !== $ability)) {
+            throw new IntegratorError(\sprintf('The operation "%s" needs an ability exactly when AuthorizedBy::Ability authorizes it.', $name), 'Name the ability together with AuthorizedBy::Ability, and neither without the other.', 'concepts/operations-and-events.md#operations');
+        }
+
+        if (\in_array(AuthorizedBy::Consequence, $authorizedBy, true) && [AuthorizedBy::Consequence] !== $authorizedBy) {
+            throw new IntegratorError(\sprintf('The operation "%s" is a consequence only, and something else.', $name), 'An operation that runs only as a consequence of others has AuthorizedBy::Consequence alone.', 'concepts/operations-and-events.md#operations');
+        }
+
+        $this->authorizedBy = $authorizedBy;
+    }
+
+    /**
+     * The operation a command class declares.
+     *
+     * @param class-string $command
+     *
+     * @throws IntegratorError When the class has no #[Operation]
+     */
+    public static function of(string $command): self
+    {
+        $attributes = new \ReflectionClass($command)->getAttributes(self::class);
+
+        if ([] === $attributes) {
+            throw new IntegratorError(\sprintf('The class %s has no #[Operation] attribute.', $command), 'Add #[Operation(name, description, authorizedBy)] to the command class, or leave it out of the catalogue.', 'concepts/operations-and-events.md#operations');
+        }
+
+        return $attributes[0]->newInstance();
     }
 }

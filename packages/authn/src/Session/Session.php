@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\Session;
 
+use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 
@@ -14,7 +15,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-final readonly class Session
+final readonly class Session implements Actor
 {
     /**
      * @param int         $principalStatusVersion The principal's status version when the session started; the

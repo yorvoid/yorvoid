@@ -4,23 +4,56 @@ Everything that changes YorvoID's state is an **operation**: a command object, h
 
 ## Operations
 
-A command class is marked with `#[Operation]`:
+A command class is marked with `#[Operation]` and implements `Command`:
 
 ```php
+use YorvoID\Core\Operation\AuthorizedBy;
+use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Operation;
+use YorvoID\Core\Principal\Principal;
+use YorvoID\Core\Principal\PrincipalId;
+use YorvoID\Core\Realm;
 
-#[Operation('yorvoid.principal.suspend', 'Suspend a principal', ability: 'yorvoid.principals.manage', inverse: 'yorvoid.principal.activate')]
-final readonly class SuspendPrincipal
+/** @implements Command<Principal> */
+#[Operation('yorvoid.principal.suspend', 'Suspend a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.principal.activate')]
+final readonly class SuspendPrincipal implements Command
 {
-    public function __construct(public string $principalId) {}
+    public function __construct(public Realm $realm, public PrincipalId $principalId) {}
 }
 ```
 
 - **The name** is stable and dot-separated, starting with its owner: `yorvoid.…` for YorvoID's own, your prefix for yours.
-- **The ability** is what a principal will need to run it, once YorvoID's authorization checks it (planned for 0.3). Today it's recorded, not enforced: check who may run the operation yourself before you call it.
+- **What authorizes it** is one or more of these; the first that permits wins:
+  - `Ability`: an actor holding **the ability** on the subject, as your policy says (see [Running an operation](#running-an-operation));
+  - `Self`: the actor's own account; the command implements `SelfOperation` and says whether it concerns the actor;
+  - `Authentication`: the operation *is* authentication, and its handler checks the secret, token or ceremony itself;
+  - `Operator`: the host's operator, from a console command, a job or YorvoID itself;
+  - `Consequence`: only as a consequence of another operation, e.g. starting a session after a sign-in.
 - **The inverse** is the operation that undoes it, if any.
 
-`OperationCatalogue` lists every operation with its typed parameters, so your application can build its own action catalogue, admin pages or console commands from it. Parameters marked `#[\SensitiveParameter]` are flagged, so they're never logged, shown or put on a command line. Mistakes fail when the catalogue is built: a command without the attribute, two operations with one name, or an inverse that isn't installed.
+`OperationCatalogue` lists every operation with its typed parameters, so your application can build its own action catalogue, admin pages or console commands from it. Parameters marked `#[\SensitiveParameter]` are flagged, so they're never logged, shown or put on a command line. Mistakes fail when the catalogue is built: a command without the attribute, two operations with one name, an inverse that isn't installed, an ability without `AuthorizedBy::Ability` or the other way round, or a `Self` operation that doesn't say whose account it concerns.
+
+## Running an operation
+
+`Operations::run()` is the way into every operation. It asks the `Authorization` whether the actor may run it, records a refusal in the security log, and on a Permit calls the operation's handler:
+
+```php
+use YorvoID\Core\Principal\SuspendPrincipal;
+
+$principal = $operations->run(new SuspendPrincipal($realm, $principalId), $session, $origin);
+```
+
+- **The actor** is a signed-in `Session`, or the host's `Operator`.
+- **The decision** is Permit, Deny or Indeterminate. Only Permit runs anything; otherwise `run()` throws `NotPermitted`, with the decision and its reason. Indeterminate means no policy could decide, and never permits.
+- **Abilities** are decided by an `AbilityPolicy` until YorvoID's own evaluator arrives. The Symfony bundle's asks Symfony's security (`isGranted()`), so your voters and role hierarchy decide. Without one, operations that need an ability are Indeterminate, except for the host's operator where they allow it.
+
+## Permits
+
+A handler takes a `Permit` instead of an actor. Only `Operations::run()` issues one, after a Permit decision, for one command and one run: the handler calls `$permit->use($command)` before it changes anything, which fails for another command or a second use. So a handler can't be called around the decision.
+
+What an operation causes runs on a consequence of its permit, e.g. a recovery ending every session: `$permit->consequence($command)` gives a permit for that command, in the same realm, recorded under the same decision rather than decided again.
+
+Your own operations plug in the same way: a command with `#[Operation]`, and a service implementing `OperationHandler` that maps each command to a method taking the command, a `Permit` and the `Origin`.
 
 ## Events
 
