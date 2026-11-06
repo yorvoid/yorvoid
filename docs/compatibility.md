@@ -10,6 +10,8 @@ Everything marked `@api` in the code: classes, interfaces, methods, constants, a
 - **Minor releases** (1.x) add features. Nothing covered breaks. Something that will be removed is deprecated first: it keeps working, triggers a deprecation notice, and the release notes say what to use instead.
 - **Major releases** (x.0) remove what was deprecated, and come with an upgrade guide.
 
+CI compares every package with its last release, and fails on a break of covered code that the changelog doesn't list under "Breaking". Before 1.0, minor releases (0.x) may break covered code; each break is listed there, with what to do.
+
 ## What isn't covered
 
 - Code marked `@internal`, and anything not marked `@api`. That includes `@internal` members of an `@api` class, such as a constructor only the container calls. A check in CI makes sure nothing covered names an `@internal` class.

@@ -1,0 +1,7 @@
+# Breaks the compatibility check reports that aren't breaks of the promise, one regular expression a
+# line, each with the reason above it. See bc-check.php.
+
+# Lists that grow with each release: a new template, a new translation domain. Code reads them; nothing
+# depends on them staying the same.
+^Value of constant YorvoID\\Symfony\\Templates\\Samples::TEMPLATES changed
+^Value of constant YorvoID\\Symfony\\YorvoIDBundle::TRANSLATIONS changed
