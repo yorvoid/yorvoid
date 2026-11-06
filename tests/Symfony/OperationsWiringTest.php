@@ -7,12 +7,18 @@ namespace YorvoID\Tests\Symfony;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\Filesystem\Filesystem;
+use YorvoID\Authn\Setup\CreateSetupCode;
+use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Permit;
+use YorvoID\Core\Realm;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Symfony\App\TestKernel;
 
 /**
@@ -55,6 +61,27 @@ final class OperationsWiringTest extends TestCase
             self::assertSame([$operation->command, Permit::class, Origin::class], $types, \sprintf('%s\'s handler', $operation->name));
             self::assertTrue(is_a($operation->command, Command::class, true));
             self::assertStringContainsString('$permit->use($command)', self::source($handler), \sprintf('%s\'s handler doesn\'t use its permit first.', $operation->name));
+        }
+    }
+
+    public function testEveryHandlerRefusesAPermitForAnotherCommand(): void
+    {
+        $container = $this->boot();
+        $catalogue = $container->get(OperationCatalogue::class);
+        \assert($catalogue instanceof OperationCatalogue);
+        $other = new CreateSetupCode(new Realm('acme'), Duration::days(1));
+
+        foreach ($catalogue->all() as $operation) {
+            $handler = $this->handler($container, $operation->command)->getClosure();
+            // Without its constructor: a handler that read the command before taking its permit fails otherwise.
+            $command = new \ReflectionClass($operation->command)->newInstanceWithoutConstructor();
+
+            try {
+                $handler($command, Permits::for($other), new Origin(OriginKind::Web));
+                self::fail(\sprintf('%s ran with a permit for another command.', $operation->name));
+            } catch (IntegratorError $error) {
+                self::assertSame('The permit for "yorvoid.setup.create_code" was given with another command.', $error->problem, $operation->name);
+            }
         }
     }
 

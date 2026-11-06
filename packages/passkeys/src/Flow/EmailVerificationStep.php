@@ -65,7 +65,7 @@ final readonly class EmailVerificationStep implements Step
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult
     {
         $token = $state->string(self::TOKEN) ?? '';
-        $verified = '' === $token ? null : $this->operations->run(new VerifyEmail($state->realm, Secret::fromString($token)), $context->session ?? new Anonymous(), $context->origin);
+        $verified = '' === $token ? null : $this->operations->run(new VerifyEmail($state->realm, Secret::fromString($token)), new Anonymous(), $context->origin);
 
         if (null === $verified) {
             return StepResult::failed(new Problem('yorvoid.flow.verify_email.not_working'));

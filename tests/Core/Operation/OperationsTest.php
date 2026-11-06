@@ -109,6 +109,13 @@ final class OperationsTest extends TestCase
     #[DataProvider('requestOrigins')]
     public function testTheOperatorDoesntActFromARequest(OriginKind $kind): void
     {
+        try {
+            $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), new Origin($kind));
+        } catch (NotPermitted $refused) {
+            self::assertSame('Not permitted to run "acme.badge.issue".', $refused->getMessage());
+        }
+
+        $this->log = new InMemorySecurityLogStore();
         $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Operator(), new Origin($kind, 'badges', 'request-1'));
 
         self::assertSame(Verdict::Deny, $decision->verdict);

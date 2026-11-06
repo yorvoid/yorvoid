@@ -35,7 +35,7 @@ final readonly class TestSignIns implements OperationHandler
         return [SignInForTest::class => $this->signIn(...)];
     }
 
-    public function signIn(SignInForTest $command, Permit $permit, Origin $origin): StartedSession
+    private function signIn(SignInForTest $command, Permit $permit, Origin $origin): StartedSession
     {
         $permit->use($command);
         $passkey = AuthenticationMethod::Passkey === $command->method;
