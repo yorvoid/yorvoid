@@ -29,25 +29,35 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
 {
     private const array EXPECTED = [
-        'yorvoid.credential.add' => ['self'],
+        'yorvoid.credential.add' => ['consequence'],
         'yorvoid.credential.remove' => ['self'],
         'yorvoid.credential.rename' => ['self'],
+        'yorvoid.email_verification.confirm' => ['authentication'],
         'yorvoid.identifier.remove' => ['self', 'ability', 'operator'],
         'yorvoid.identifier.set' => ['self', 'ability', 'operator'],
         'yorvoid.identifier.verify' => ['consequence'],
+        'yorvoid.invitation.accept' => ['authentication'],
         'yorvoid.invitation.resend' => ['ability', 'operator'],
         'yorvoid.invitation.send' => ['ability', 'operator'],
         'yorvoid.invitation.withdraw' => ['ability', 'operator'],
+        'yorvoid.notification.not_me' => ['authentication'],
+        'yorvoid.passkey.register' => ['self'],
+        'yorvoid.passkey.sign_in' => ['authentication'],
         'yorvoid.principal.activate' => ['ability', 'operator'],
         'yorvoid.principal.create' => ['ability', 'operator'],
         'yorvoid.principal.delete' => ['ability', 'operator'],
         'yorvoid.principal.suspend' => ['ability', 'operator'],
+        'yorvoid.recovery_code.recover' => ['authentication'],
+        'yorvoid.recovery_code.redeem' => ['authentication'],
         'yorvoid.recovery_codes.generate' => ['self'],
         'yorvoid.recovery_link.issue' => ['ability', 'operator'],
+        'yorvoid.recovery_link.use' => ['authentication'],
         'yorvoid.session.end' => ['self', 'ability', 'operator'],
         'yorvoid.session.end_all' => ['self', 'ability', 'operator'],
         'yorvoid.session.start' => ['consequence'],
+        'yorvoid.setup.claim' => ['authentication'],
         'yorvoid.setup.create_code' => ['operator'],
+        'yorvoid.testing.sign_in' => ['authentication'],
         'yorvoid.token.issue' => ['ability', 'operator'],
         'yorvoid.token.revoke' => ['ability', 'operator'],
     ];
@@ -97,7 +107,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
             }
         }
 
-        self::assertCount(21, $commands, 'The operations moved.');
+        self::assertCount(31, $commands, 'The operations moved.');
 
         return $commands;
     }

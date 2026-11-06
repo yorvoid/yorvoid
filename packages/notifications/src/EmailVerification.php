@@ -11,7 +11,11 @@ use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Operation\ActingPrincipal;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\Event\IdentifierChanged;
+use YorvoID\Core\Principal\Event\PrincipalCreated;
 use YorvoID\Core\Principal\Identifier;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalId;
@@ -32,12 +36,13 @@ use YorvoID\Mail\Mailer;
  * they open it. The link's token works once, for a day, and only while the address is still theirs;
  * a newer link replaces an older one.
  *
- * Register identifierChanged() as a listener of IdentifierChanged: a new address that isn't verified
- * then gets its link at once.
+ * Register identifierChanged() and principalCreated() as listeners of IdentifierChanged and
+ * PrincipalCreated: a new address that isn't verified then gets its link at once, as a consequence of the
+ * change.
  *
  * @api
  */
-final readonly class EmailVerification
+final readonly class EmailVerification implements OperationHandler
 {
     /** What the link's token is for */
     public const string PURPOSE = 'yorvoid.email_verification';
@@ -58,12 +63,18 @@ final readonly class EmailVerification
     ) {
     }
 
+    public function operations(): array
+    {
+        return [VerifyEmail::class => $this->confirm(...)];
+    }
+
     /**
-     * Sends a link to the principal's email address, unless there's none or it's verified.
+     * Sends a link to the principal's email address, unless there's none or it's verified, as a
+     * consequence of the operation that set it.
      *
      * @return bool Whether one was sent
      */
-    public function send(Realm $realm, PrincipalId $principalId, Origin $origin): bool
+    public function send(Realm $realm, PrincipalId $principalId, Permit $because, Origin $origin): bool
     {
         $email = $this->principals->identifiers($realm, $principalId)[IdentifierKind::Email->value] ?? null;
 
@@ -71,7 +82,7 @@ final readonly class EmailVerification
             return false;
         }
 
-        $issued = $this->tokens->issue(new IssueToken($realm, $principalId, self::PURPOSE, Duration::days(1), $email->value), $origin);
+        $issued = $because->cause($this->tokens->issue(...), new IssueToken($realm, $principalId, self::PURPOSE, Duration::days(1), $email->value), $origin);
         $locale = $this->settings->localeOf($realm, $principalId);
         $application = ['application' => $this->settings->applicationName];
 
@@ -95,20 +106,23 @@ final readonly class EmailVerification
     }
 
     /**
-     * Uses the link: the address it was sent to is verified, if it's still the principal's.
+     * Uses the link: the address it was sent to is verified, if it's still the principal's, acting as them.
      *
      * @return Identifier|null The address, verified; null if the link doesn't work (used, expired, replaced, or the address changed)
      */
-    public function confirm(Realm $realm, #[\SensitiveParameter] Secret $token, Origin $origin): ?Identifier
+    public function confirm(VerifyEmail $command, Permit $permit, Origin $origin): ?Identifier
     {
-        return $this->transactions->run(function () use ($realm, $token, $origin): ?Identifier {
-            $used = $this->tokens->consume($realm, self::PURPOSE, $token, $origin);
+        $permit->use($command);
+
+        return $this->transactions->run(function () use ($command, $permit, $origin): ?Identifier {
+            $realm = $command->realm;
+            $used = $this->tokens->consume($realm, self::PURPOSE, $command->token, $origin);
 
             if (null === $used || null === $used->email) {
                 return null;
             }
 
-            return $this->principals->verifyIdentifier(new VerifyIdentifier($realm, $used->principalId, IdentifierKind::Email, $used->email), $origin, $used->principalId);
+            return $permit->cause($this->principals->verifyIdentifier(...), new VerifyIdentifier($realm, $used->principalId, IdentifierKind::Email, $used->email), $origin, new ActingPrincipal($realm, $used->principalId));
         });
     }
 
@@ -124,11 +138,27 @@ final readonly class EmailVerification
             return;
         }
 
+        $this->sendAfter($new->realm, $new->principalId, $event->permit, $event->origin);
+    }
+
+    /**
+     * A principal created active with an email address that isn't verified, e.g. the owner claiming the
+     * installation, gets its link. An invited one doesn't: its invitation verifies the address.
+     */
+    public function principalCreated(PrincipalCreated $event): void
+    {
+        if ($event->principal->isActive()) {
+            $this->sendAfter($event->principal->realm, $event->principal->id, $event->permit, $event->origin);
+        }
+    }
+
+    private function sendAfter(Realm $realm, PrincipalId $principalId, Permit $because, Origin $origin): void
+    {
         try {
-            $this->send($new->realm, $new->principalId, $event->origin);
+            $this->send($realm, $principalId, $because, $origin);
         } catch (\Exception $exception) {
-            // The address changed: a mail outage doesn't undo that. The person asks for the link again.
-            $this->logger->error('YorvoID couldn\'t send the link to verify an email address: {message}', ['realm' => $new->realm->name, 'principal' => (string) $new->principalId, 'message' => $exception->getMessage(), 'exception' => $exception]);
+            // The change happened: a mail outage doesn't undo that. The person asks for the link again.
+            $this->logger->error('YorvoID couldn\'t send the link to verify an email address: {message}', ['realm' => $realm->name, 'principal' => (string) $principalId, 'message' => $exception->getMessage(), 'exception' => $exception]);
         }
     }
 

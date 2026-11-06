@@ -28,6 +28,7 @@ use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Symfony\App\TestKernel;
 
 /**
@@ -162,12 +163,12 @@ final class KeyRotationTest extends TestCase
         $sessions = $container->get(Sessions::class);
         $tokens = $container->get(OneTimeTokens::class);
         \assert($principals instanceof Principals && $sessions instanceof Sessions && $tokens instanceof OneTimeTokens);
-        $ana = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
+        $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
         $now = $container->get('clock');
         \assert($now instanceof MockClock);
         $now = $now->now();
-        $session = $sessions->start(new StartSession(Realm::default(), $ana->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $now, true, true))), new Origin(OriginKind::Web));
-        $token = $tokens->issue(new IssueToken(Realm::default(), $ana->id, 'acme.invitation', Duration::days(7)), new Origin(OriginKind::Console));
+        $session = Permits::call($sessions->start(...), new StartSession(Realm::default(), $ana->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $now, true, true))), new Origin(OriginKind::Web));
+        $token = Permits::call($tokens->issue(...), new IssueToken(Realm::default(), $ana->id, 'acme.invitation', Duration::days(7)), new Origin(OriginKind::Console));
 
         return [$session->token, $token->secret];
     }

@@ -82,19 +82,19 @@ use YorvoID\Authn\Session\EndSession;
 use YorvoID\Authn\Session\EndSessions;
 use YorvoID\Authn\Session\SessionEndReason;
 
-// Signing out
-$sessions->end(new EndSession($realm, $session->id, SessionEndReason::SignedOut), $origin);
+// Signing out: the session ends itself
+$operations->run(new EndSession($realm, $session->id, SessionEndReason::SignedOut), $session, $origin);
 
 // "Sign out everywhere else"
-$sessions->endAll(new EndSessions($realm, $principalId, SessionEndReason::EndedByPrincipal, except: $session->id), $origin, $principalId);
+$operations->run(new EndSessions($realm, $session->principalId, SessionEndReason::EndedByPrincipal, except: $session->id), $session, $origin);
 
 // An administrator ends someone's sessions
-$sessions->endAll(new EndSessions($realm, $principalId, SessionEndReason::EndedByAdministrator), $origin, $administratorId);
+$operations->run(new EndSessions($realm, $principalId, SessionEndReason::EndedByAdministrator), $administratorsSession, $origin);
 ```
 
 `current($realm, $principalId)` lists a principal's sessions, the most recently used first, for a "your devices" page or an administrator's.
 
-`end()` and `endAll()` end what they're told to: who may is your check, before you call them. Let people end their own sessions, and administrators anyone's, and ask for a recent authentication before either (OWASP ASVS 7.5.2), e.g. with [`StepUp::require()`](step-up.md). The operations name the ability `yorvoid.sessions.manage` for ending someone else's; YorvoID's authorization, from 0.2.0, will check it.
+[`Operations`](operations-and-events.md#running-an-operation) decides who may: a session may end itself, a principal all their own sessions, and ending someone else's needs the ability `yorvoid.sessions.manage` (or the host's operator). Ask for a recent authentication before an administrator ends someone's (OWASP ASVS 7.5.2), e.g. with [`StepUp::require()`](step-up.md).
 
 `end()` records a log entry with the session and the reason; `endAll()` ends the sessions in one statement and records one entry for them all, with how many and the reason. Each ended session gets a `SessionEnded` event.
 
@@ -108,10 +108,11 @@ With a `KnownDeviceStore` (`new Sessions(..., devices: new DbalKnownDeviceStore(
 
 ```php
 use Symfony\Component\HttpFoundation\Cookie;
-use YorvoID\Authn\Session\StartSession;
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Passkeys\SignInWithPasskey;
 
-$started = $sessions->start(new StartSession($realm, $principalId, $authentication, deviceCookie: $fromTheCookie), $origin);
-// The services that sign in take it as deviceCookie: too, e.g. $passkeys->finishSignIn(...).
+$started = $operations->run(new SignInWithPasskey($realm, $ceremonyId, $response, deviceCookie: $fromTheCookie), new Anonymous(), $origin);
+// Every sign-in takes it as deviceCookie:, e.g. RecoverWithCode, UseRecoveryLink, AcceptInvitation.
 
 $response->headers->setCookie(Cookie::create('__Host-yorvoid_device', $started->deviceCookie->reveal(), '+400 days', secure: true, httpOnly: true, sameSite: 'lax'));
 ```

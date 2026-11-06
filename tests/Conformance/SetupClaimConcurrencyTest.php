@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Conformance;
 
 use YorvoID\Authn\Attempt\Attempts;
+use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Authn\Setup\SetupCodes;
 use YorvoID\Core\Duration;
@@ -19,6 +20,7 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Throttle\Throttle;
 
 /**
@@ -37,8 +39,8 @@ final class SetupClaimConcurrencyTest extends DatabaseTestCase
         $realm = new Realm('acme');
         $log = new SecurityLog($stack->log, $stack->transactions);
         $principals = new Principals($stack->principals, $stack->identifiers, $log, $stack->transactions);
-        $codes = new SetupCodes($stack->setup, $principals, $log, $stack->transactions, new Attempts(new Throttle($stack->throttle)));
-        $code = $codes->create(new CreateSetupCode($realm, Duration::days(1)), new Origin(OriginKind::Console));
+        $codes = new SetupCodes($stack->setup, $principals, $log, $stack->transactions, new Attempts(new Throttle($stack->throttle)), new Sessions($stack->sessions, $principals, $log, $stack->transactions));
+        $code = Permits::call($codes->create(...), new CreateSetupCode($realm, Duration::days(1)), new Origin(OriginKind::Console));
         $start = \sprintf('%s/yorvoid-start-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
         $process = proc_open(
             [\PHP_BINARY, __DIR__.'/../Support/claim-setup.php', (string) getenv('YORVOID_TEST_POSTGRES_URL'), $database->location->schema, $code->reveal(), $start],
@@ -51,7 +53,7 @@ final class SetupClaimConcurrencyTest extends DatabaseTestCase
             touch($start);
             // Inside the claim's pause: it has asked, and not yet created the owner.
             usleep(200_000);
-            $other = $principals->create(new CreatePrincipal($realm, PrincipalKind::Human), new Origin(OriginKind::Web));
+            $other = Permits::call($principals->create(...), new CreatePrincipal($realm, PrincipalKind::Human), new Origin(OriginKind::Web));
             $output = stream_get_contents($pipes[1]).stream_get_contents($pipes[2]);
             $exitCode = proc_close($process);
         } finally {

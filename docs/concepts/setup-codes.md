@@ -7,9 +7,11 @@ use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Realm;
 
-$code = $setupCodes->create(new CreateSetupCode(Realm::default(), Duration::days(1)), new Origin(OriginKind::Console, 'app:install'));
+// Only the host's operator, from a console or a job, creates one.
+$code = $operations->run(new CreateSetupCode(Realm::default(), Duration::days(1)), new Operator(), new Origin(OriginKind::Console, 'app:install'));
 
 $output->writeln('Open https://example.com/setup and enter '.$code->reveal()); // e.g. 7KQ2M-W9XHE-…
 ```
@@ -22,26 +24,27 @@ $output->writeln('Open https://example.com/setup and enter '.$code->reveal()); /
 ## Claiming a realm
 
 ```php
+use YorvoID\Authn\Setup\ClaimSetup;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 
-$transactions->run(function () use ($setupCodes, $code, $yourRoles): void {
-    $owner = $setupCodes->claim(
+$transactions->run(function () use ($operations, $code, $yourRoles): void {
+    $started = $operations->run(new ClaimSetup(
         Realm::default(),
         Secret::fromString($code),
         new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com'),
-        new Origin(OriginKind::Web, 'setup'),
-    );
+    ), new Anonymous(), new Origin(OriginKind::Web, 'setup'));
 
-    $yourRoles->grantOwner($owner->id); // in the same transaction
+    $yourRoles->grantOwner($started->session->principalId); // in the same transaction
 });
 ```
 
-`claim()` checks the code, creates the principal (active, in the realm being claimed), and marks the realm claimed, in one transaction. The owner's email address isn't verified yet, so they get no [security notifications](notifications.md) until they confirm it: send them a link with `EmailVerification` (the setup flow does). Give the principal its authority in the same transaction, as above: if that fails, the realm stays unclaimed and the code keeps working.
+Claiming checks the code, creates the principal (active, in the realm being claimed), marks the realm claimed and signs the owner in, in one transaction. The owner's email address isn't verified yet, so they get no [security notifications](notifications.md) until they confirm it: `EmailVerification`, as a listener of `PrincipalCreated`, sends them a link. Give the principal its authority in the same transaction, as above: if that fails, the realm stays unclaimed and the code keeps working.
 
 A code that doesn't work throws `InvalidSetupCode`, without saying why.
 

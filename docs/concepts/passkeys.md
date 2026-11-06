@@ -28,10 +28,12 @@ Passkeys work only on these origins' own pages. An answer from a frame embedded 
 From a session that proved who it is in the last 5 minutes (see [credentials](credentials.md)), e.g. right after accepting an [invitation](invitations.md) or claiming a realm with a [setup code](setup-codes.md):
 
 ```php
+use YorvoID\Passkeys\RegisterPasskey;
+
 $ceremony = $passkeys->beginRegistration($session);
 // Send $ceremony->id and $ceremony->options to the browser, which calls navigator.credentials.create().
 
-$credential = $passkeys->finishRegistration($session, $ceremonyId, $responseFromTheBrowser, 'MacBook', $origin);
+$credential = $operations->run(new RegisterPasskey($realm, $ceremonyId, $responseFromTheBrowser, 'MacBook'), $session, $origin);
 ```
 
 The passkey is added to the [credential registry](credentials.md) with its label. The options are discoverable credentials ("resident keys"), so sign-in needs no username; ES256, EdDSA and RS256 keys; no attestation; and the principal's existing passkeys excluded, so a device isn't asked to make a second one for the same account.
@@ -41,10 +43,13 @@ Each principal has one WebAuthn user handle: 32 random bytes, stored on their au
 ## Signing in
 
 ```php
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Passkeys\SignInWithPasskey;
+
 $ceremony = $passkeys->beginSignIn($realm);
 // The browser calls navigator.credentials.get(), also as autofill (mediation: "conditional").
 
-$started = $passkeys->finishSignIn($realm, $ceremonyId, $responseFromTheBrowser, $origin, device: 'Firefox on Linux', address: $request->getClientIp());
+$started = $operations->run(new SignInWithPasskey($realm, $ceremonyId, $responseFromTheBrowser, device: 'Firefox on Linux', address: $request->getClientIp()), new Anonymous(), $origin);
 ```
 
 The browser offers the person's passkeys for the site; no username first. Success starts a [session](sessions.md) whose authentication context records a passkey: phishing-resistant, and two factors if the device verified its owner.

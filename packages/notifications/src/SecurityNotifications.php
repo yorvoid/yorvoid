@@ -19,9 +19,10 @@ use YorvoID\Authn\Recovery\Event\RecoveryLinkUsed;
 use YorvoID\Authn\Session\Event\NewDeviceSignedIn;
 use YorvoID\Authn\Session\UserAgent;
 use YorvoID\Authn\Token\IssueToken;
-use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\Event\IdentifierChanged;
 use YorvoID\Core\Principal\Identifier;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -64,7 +65,7 @@ final readonly class SecurityNotifications
 
     public function __construct(
         private Principals $principals,
-        private OneTimeTokens $tokens,
+        private Operations $operations,
         private Mailer $mailer,
         private TranslatorInterface $translator,
         private NotificationSettings $settings,
@@ -222,7 +223,8 @@ final readonly class SecurityNotifications
         $principalId = $email->principalId;
         $locale = $this->settings->localeOf($realm, $principalId);
         $application = ['application' => $this->settings->applicationName];
-        $issued = $this->tokens->issue(new IssueToken($realm, $principalId, self::notMePurpose($suspect?->id), $this->settings->notMeLifetime, $current ? $email->value : null, newestOnly: false), new Origin(OriginKind::System, 'security notification'));
+        // YorvoID's own doing, as the host's operator: whatever caused the notice already happened.
+        $issued = $this->operations->run(new IssueToken($realm, $principalId, self::notMePurpose($suspect?->id), $this->settings->notMeLifetime, $current ? $email->value : null, newestOnly: false), new Operator(), new Origin(OriginKind::System, 'security notification'));
         $url = strtr($this->settings->notMeUrl, ['{token}' => rawurlencode($issued->secret->reveal()), '{credential}' => null === $suspect ? '' : $suspect->id->uuid->toRfc4122()]);
         $labelled = [];
 

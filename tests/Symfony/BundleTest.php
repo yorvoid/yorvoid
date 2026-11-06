@@ -49,6 +49,7 @@ use YorvoID\Passkeys\ClonePolicy;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\UserVerification;
 use YorvoID\Symfony\Command\MigrateCommand;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Symfony\App\TestKernel;
 use YorvoID\Throttle\Limit;
 
@@ -207,7 +208,7 @@ final class BundleTest extends TestCase
 
         $principals = $container->get(Principals::class);
         \assert($principals instanceof Principals);
-        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
+        Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
         $link = new CommandTester($application->find('yorvoid:recovery-link'));
         self::assertSame(0, $link->execute(['email' => 'ANA@example.com', '--url' => 'https://example.com/recover/{token}']));
         self::assertMatchesRegularExpression('#^https://example\.com/recover/[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$#m', trim($link->getDisplay()));
@@ -220,9 +221,9 @@ final class BundleTest extends TestCase
 
         // An address 0.1 stored in its lowercase form, and one that is now the same as another.
         $database = $this->database($container);
-        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'Ána@Пример.рф'), new Origin(OriginKind::Console));
-        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: "Jose\u{301}@example.com"), new Origin(OriginKind::Console));
-        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
+        Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'Ána@Пример.рф'), new Origin(OriginKind::Console));
+        Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: "Jose\u{301}@example.com"), new Origin(OriginKind::Console));
+        Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
         $table = $database->table(DbalIdentifierStore::TABLE);
         $database->connection->update($table, ['normalized' => 'ána@пример.рф'], ['normalized' => 'Ána@xn--e1afmkfd.xn--p1ai']);
         $normalize = new CommandTester($application->find('yorvoid:identifiers:normalize'));
@@ -256,7 +257,7 @@ final class BundleTest extends TestCase
 
         $principals = $container->get(Principals::class);
         \assert($principals instanceof Principals);
-        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Console));
+        Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Console));
         self::assertSame(0, $checkpoint->execute([]));
         self::assertMatchesRegularExpression('/Checkpointed entry 1 of the realm "default", signed with the key "[^"]+"\./', $checkpoint->getDisplay());
         self::assertSame(0, $verify->execute([]));
@@ -296,8 +297,8 @@ final class BundleTest extends TestCase
         $principals = $container->get(Principals::class);
         $sessions = $container->get(Sessions::class);
         \assert($principals instanceof Principals && $sessions instanceof Sessions);
-        $ana = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
-        $signIn = static fn (): mixed => $sessions->start(new StartSession(Realm::default(), $ana->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable(), true, true)), 'Firefox on Linux'), new Origin(OriginKind::Web));
+        $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
+        $signIn = static fn (): mixed => Permits::call($sessions->start(...), new StartSession(Realm::default(), $ana->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable(), true, true)), 'Firefox on Linux'), new Origin(OriginKind::Web));
 
         // Inside the application's own transaction, as a Symfony controller's work often is.
         $transactions = $container->get(Transactions::class);
@@ -361,7 +362,7 @@ final class BundleTest extends TestCase
         $principals = $container->get(Principals::class);
         $dispatcher = $container->get('event_dispatcher');
         \assert($principals instanceof Principals && $dispatcher instanceof EventDispatcherInterface);
-        $ana = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
+        $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
         $intent = new Intent(OperationPolicy::REMOVE_KEY, ['credential_id' => 'x'], 'acme', 'n', new \DateTimeImmutable('@0'), new \DateTimeImmutable('@1'));
 
         $dispatcher->dispatch(new SignedOperationRan(Realm::default(), $ana->id, $intent, 'k', new \DateTimeImmutable(), new Origin(OriginKind::System)));
@@ -381,10 +382,10 @@ final class BundleTest extends TestCase
         $principals = $container->get(Principals::class);
         $sessions = $container->get(Sessions::class);
         \assert($principals instanceof Principals && $sessions instanceof Sessions);
-        $ana = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
+        $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
 
         for ($i = 0; $i < 2; ++$i) {
-            $sessions->start(new StartSession(Realm::default(), $ana->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web));
+            Permits::call($sessions->start(...), new StartSession(Realm::default(), $ana->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web));
         }
 
         $logger = $container->get('mailer.message_logger_listener');
@@ -401,9 +402,9 @@ final class BundleTest extends TestCase
         $principals = $container->get(Principals::class);
         $sessions = $container->get(Sessions::class);
         \assert($principals instanceof Principals && $sessions instanceof Sessions);
-        $ana = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
+        $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
 
-        $started = $sessions->start(new StartSession(Realm::default(), $ana->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web));
+        $started = Permits::call($sessions->start(...), new StartSession(Realm::default(), $ana->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web));
 
         self::assertNull($started->deviceCookie);
         self::assertFalse($container->has(SecurityNotifications::class));
@@ -416,7 +417,7 @@ final class BundleTest extends TestCase
         $principals = $container->get(Principals::class);
         $stepUp = $container->get(StepUp::class);
         \assert($principals instanceof Principals && $stepUp instanceof StepUp);
-        $ana = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Console));
 
         $stepUp->startCoolDown(Realm::default(), $ana->id, new Origin(OriginKind::Console));
 

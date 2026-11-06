@@ -47,8 +47,10 @@ use YorvoID\Notifications\NotificationSettings;
 use YorvoID\Notifications\SecurityNotifications;
 use YorvoID\Notifications\Translations as NotificationsTranslations;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\TestOperations;
 use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;
@@ -221,7 +223,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $translator = new Translator([NotificationsTranslations::DIRECTORY, Translations::DIRECTORY, __DIR__.'/catalogues']);
         $this->summaries = new IntentSummaries($translator, 'acme');
         $this->mailer = new InMemoryMailer();
-        $notifications = new SecurityNotifications($this->principals, new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock), $this->mailer, $translator, new NotificationSettings('Acme', 'https://example.com/not-me?token={token}'), $this->clock);
+        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, null, new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock)), $this->mailer, $translator, new NotificationSettings('Acme', 'https://example.com/not-me?token={token}'), $this->clock);
         $this->events->listen(SignedOperationRan::class, new SignedOperationNotification($notifications, $this->summaries)(...));
 
         return new IntentSigning($log, $this->stack->transactions, $throttle, $limit, $this->events, $this->clock);
@@ -229,9 +231,9 @@ final class IntentSigningTest extends DatabaseTestCase
 
     private function session(): Session
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: bin2hex(random_bytes(4)).'@example.com', emailVerified: true), new Origin(OriginKind::Console));
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: bin2hex(random_bytes(4)).'@example.com', emailVerified: true), new Origin(OriginKind::Console));
 
-        return $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true))), new Origin(OriginKind::Web))->session;
+        return Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true))), new Origin(OriginKind::Web))->session;
     }
 
     /**

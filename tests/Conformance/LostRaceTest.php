@@ -6,6 +6,7 @@ namespace YorvoID\Tests\Conformance;
 
 use Symfony\Component\Clock\MockClock;
 use YorvoID\Authn\Attempt\Attempts;
+use YorvoID\Authn\Invitation\AcceptInvitation;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Invitation\Invite;
 use YorvoID\Authn\Session\AuthenticationContext;
@@ -13,6 +14,7 @@ use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Setup\ClaimSetup;
 use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Authn\Setup\InvalidSetupCode;
 use YorvoID\Authn\Setup\SetupCodes;
@@ -33,6 +35,7 @@ use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\LosingSessionStore;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\Stack;
 use YorvoID\Throttle\Throttle;
 
@@ -82,11 +85,11 @@ final class LostRaceTest extends DatabaseTestCase
                 return false;
             }
         };
-        $codes = new SetupCodes($losing, $this->principals, $this->log, $this->stack->transactions, new Attempts(new Throttle($this->stack->throttle, $this->clock)), $this->clock);
-        $code = $codes->create(new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
+        $codes = new SetupCodes($losing, $this->principals, $this->log, $this->stack->transactions, new Attempts(new Throttle($this->stack->throttle, $this->clock)), new Sessions($this->stack->sessions, $this->principals, $this->log, $this->stack->transactions, clock: $this->clock), $this->clock);
+        $code = Permits::call($codes->create(...), new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
 
         try {
-            $codes->claim(new Realm('acme'), $code, new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Web));
+            Permits::call($codes->claim(...), new ClaimSetup(new Realm('acme'), $code, new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: 'ana@example.com')), new Origin(OriginKind::Web));
             self::fail('The loser of the race claimed the realm.');
         } catch (InvalidSetupCode) {
         }
@@ -97,8 +100,8 @@ final class LostRaceTest extends DatabaseTestCase
     public function testASessionThatEndedMeanwhileGetsNoNewTokenNorProof(): void
     {
         $sessions = new Sessions(new LosingSessionStore($this->stack->sessions), $this->principals, $this->log, $this->stack->transactions, clock: $this->clock);
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
-        $started = $sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $started = Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
         $entries = iterator_count($this->stack->log->entries(new Realm('acme'), 1));
 
         self::assertNull($sessions->refresh(new Realm('acme'), $started->session->id, new Origin(OriginKind::Web)));
@@ -110,7 +113,7 @@ final class LostRaceTest extends DatabaseTestCase
     public function testAnInvitationUsedMeanwhileActivatesNobody(): void
     {
         $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $this->log, $this->stack->transactions, clock: $this->clock);
-        $invitation = new Invitations($this->principals, $tokens, $this->stack->transactions, new Throttle($this->stack->throttle, $this->clock))->invite(new Invite(new Realm('acme'), 'ana@example.com'), new Origin(OriginKind::Console));
+        $invitation = Permits::call(new Invitations($this->principals, $tokens, $this->stack->transactions, new Throttle($this->stack->throttle, $this->clock), new Sessions($this->stack->sessions, $this->principals, $this->log, $this->stack->transactions, clock: $this->clock))->invite(...), new Invite(new Realm('acme'), 'ana@example.com'), new Origin(OriginKind::Console));
         $losing = new readonly class($this->stack->tokens) implements OneTimeTokenStore {
             public function __construct(private OneTimeTokenStore $store)
             {
@@ -142,9 +145,9 @@ final class LostRaceTest extends DatabaseTestCase
             }
         };
         $losingTokens = new OneTimeTokens($losing, $this->principals, $this->log, $this->stack->transactions, clock: $this->clock);
-        $invitations = new Invitations($this->principals, $losingTokens, $this->stack->transactions, new Throttle($this->stack->throttle, $this->clock));
+        $invitations = new Invitations($this->principals, $losingTokens, $this->stack->transactions, new Throttle($this->stack->throttle, $this->clock), new Sessions($this->stack->sessions, $this->principals, $this->log, $this->stack->transactions, clock: $this->clock));
 
-        self::assertNull($invitations->accept(new Realm('acme'), $invitation->token->secret, new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($invitations->accept(...), new AcceptInvitation(new Realm('acme'), $invitation->token->secret), new Origin(OriginKind::Web)));
         self::assertSame(PrincipalStatus::Invited, $this->principals->get(new Realm('acme'), $invitation->principal->id)?->status);
     }
 }

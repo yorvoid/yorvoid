@@ -50,6 +50,9 @@ use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\ActingPrincipal;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
@@ -78,7 +81,7 @@ use YorvoID\Throttle\Throttled;
  *
  * @api
  */
-final readonly class Passkeys
+final readonly class Passkeys implements OperationHandler
 {
     private SerializerInterface $serializer;
 
@@ -98,6 +101,14 @@ final readonly class Passkeys
         // Only "none" attestation, the library's default: what matters is the passkey, not which device made
         // it (ATN-004 adds that).
         $this->serializer = new WebauthnSerializerFactory(new AttestationStatementSupportManager())->create();
+    }
+
+    public function operations(): array
+    {
+        return [
+            RegisterPasskey::class => $this->finishRegistration(...),
+            SignInWithPasskey::class => $this->finishSignIn(...),
+        ];
     }
 
     /**
@@ -131,15 +142,15 @@ final readonly class Passkeys
     /**
      * Finishes adding a passkey: checks the browser's answer, and adds the passkey with its label.
      *
-     * @param string $response The browser's PublicKeyCredential, as JSON
-     * @param string $label    What its owner calls it, e.g. "MacBook"
-     *
      * @throws PasskeyRefused
      * @throws StepUpRequired
      */
-    public function finishRegistration(Session $session, string $ceremonyId, string $response, string $label, Origin $origin): Credential
+    public function finishRegistration(RegisterPasskey $command, Permit $permit, Origin $origin): Credential
     {
-        $ceremony = $this->takeForSession($session, $ceremonyId, CeremonyKind::Registration);
+        $permit->use($command);
+        $session = Credentials::session($permit, 'concepts/passkeys.md');
+        [$response, $label] = [$command->response, $command->label];
+        $ceremony = $this->takeForSession($session, $command->ceremonyId, CeremonyKind::Registration);
 
         $options = $this->serializer->deserialize(self::withoutRelyingPartyName($ceremony->options), PublicKeyCredentialCreationOptions::class, 'json');
         $credential = $this->credential($response);
@@ -163,8 +174,8 @@ final readonly class Passkeys
             throw new PasskeyRefused(Refusal::InvalidResponse);
         }
 
-        return $this->transactions->run(function () use ($session, $record, $label, $origin): Credential {
-            $credential = $this->credentials->add(new AddCredential($session->realm, CredentialKind::Passkey, $label), $session, $origin);
+        return $this->transactions->run(function () use ($session, $permit, $record, $label, $origin): Credential {
+            $credential = $permit->cause($this->credentials->add(...), new AddCredential($session->realm, CredentialKind::Passkey, $label), $origin);
             $existing = $this->store->of($session->realm, $session->principalId);
 
             // Adding the credential took the realm's log lock, so this sees a first passkey registered at the
@@ -204,27 +215,24 @@ final readonly class Passkeys
     }
 
     /**
-     * Finishes signing in: checks the browser's answer, and starts a session.
-     *
-     * @param string      $response     The browser's PublicKeyCredential, as JSON
-     * @param string|null $device       As for StartSession
-     * @param string|null $address      As for StartSession; pass it, so attempts from one address are limited
-     * @param Secret|null $deviceCookie The device cookie the browser sent, if any; the session's result says which to set
+     * Finishes signing in: checks the browser's answer, and starts a session as the passkey's principal.
      *
      * @throws PasskeyRefused
      * @throws Throttled      When there were too many attempts from the address; nothing was checked
      */
-    public function finishSignIn(Realm $realm, string $ceremonyId, string $response, Origin $origin, ?string $device = null, ?string $address = null, #[\SensitiveParameter] ?Secret $deviceCookie = null): StartedSession
+    public function finishSignIn(SignInWithPasskey $command, Permit $permit, Origin $origin): StartedSession
     {
+        $permit->use($command);
+        [$realm, $ceremonyId, $response, $device, $address, $deviceCookie] = [$command->realm, $command->ceremonyId, $command->response, $command->device, $command->address, $command->deviceCookie];
         $this->attempts->count('passkey_sign_in', $realm, null, $address);
         $ceremony = $this->recorded($realm, 'yorvoid.passkey.sign_in', $origin, fn (): Ceremony => $this->take($realm, $ceremonyId, CeremonyKind::SignIn));
         [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.sign_in');
 
-        return $this->transactions->run(function () use ($passkey, $credential, $userVerified, $counter, $origin, $device, $address, $deviceCookie): StartedSession {
+        return $this->transactions->run(function () use ($passkey, $credential, $userVerified, $counter, $permit, $origin, $device, $address, $deviceCookie): StartedSession {
             $this->recordUse($passkey, $credential, $counter, $origin);
 
             try {
-                return $this->sessions->start(new StartSession($passkey->realm, $passkey->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true)), $device, $address, $deviceCookie), $origin);
+                return $permit->cause($this->sessions->start(...), new StartSession($passkey->realm, $passkey->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true)), $device, $address, $deviceCookie), $origin, new ActingPrincipal($passkey->realm, $passkey->principalId));
             } catch (InactivePrincipal $exception) {
                 throw new PasskeyRefused(Refusal::PrincipalInactive, $exception);
             }

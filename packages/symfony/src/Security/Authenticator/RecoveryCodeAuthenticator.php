@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony\Security\Authenticator;
 
-use YorvoID\Authn\Recovery\RecoveryCodes;
+use YorvoID\Authn\Recovery\RecoverWithCode;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
@@ -27,7 +29,7 @@ final class RecoveryCodeAuthenticator extends YorvoIDAuthenticator
         PrincipalUserProvider $users,
         Realm $realm,
         string $deviceCookie,
-        private readonly RecoveryCodes $codes,
+        private readonly Operations $operations,
     ) {
         parent::__construct($current, $users, $realm, $deviceCookie);
     }
@@ -41,7 +43,7 @@ final class RecoveryCodeAuthenticator extends YorvoIDAuthenticator
     {
         $email = $body['email'] ?? null;
         $code = $body['code'] ?? null;
-        $started = $this->codes->recover($this->realm, IdentifierKind::Email, \is_string($email) ? $email : '', \is_string($code) ? $code : '', $origin, $device, $address, $deviceCookie);
+        $started = $this->operations->run(new RecoverWithCode($this->realm, IdentifierKind::Email, \is_string($email) ? $email : '', \is_string($code) ? $code : '', $device, $address, $deviceCookie), new Anonymous(), $origin);
 
         return $started ?? throw new SignInRefused('That code didn\'t work. Check it, or use another one.');
     }

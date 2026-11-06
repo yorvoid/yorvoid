@@ -7,6 +7,7 @@ namespace YorvoID\Passkeys\Flow;
 use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\StepUp\StepUp;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Secret;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
@@ -33,6 +34,7 @@ final readonly class RecoveryCodesStep implements Step
      * @param StepUp|null $stepUp For the cool-down after a recovery; without it, there's none to wait out
      */
     public function __construct(
+        private Operations $operations,
         private RecoveryCodes $codes,
         private ?StepUp $stepUp = null,
     ) {
@@ -63,7 +65,7 @@ final readonly class RecoveryCodesStep implements Step
             return $state;
         }
 
-        $codes = $this->codes->generate(new GenerateRecoveryCodes($context->session->realm), $context->session, $context->origin);
+        $codes = $this->operations->run(new GenerateRecoveryCodes($context->session->realm), $context->session, $context->origin);
 
         return $state->with([self::CODES => array_map(static fn (Secret $code): string => $code->reveal(), $codes)]);
     }

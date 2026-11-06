@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
+use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Realm;
 
@@ -64,10 +65,13 @@ final class Permit
      * @template T
      *
      * @param Command<T> $command
+     * @param Actor|null $actingAs Who the consequence acts as, for authentication only: the principal it
+     *                             authenticated, e.g. the invitee accepting; by default this permit's actor
      *
-     * @throws IntegratorError When this permit wasn't used yet, or the command is in another realm
+     * @throws IntegratorError When this permit wasn't used yet, the command is in another realm, or another
+     *                         actor is named outside authentication
      */
-    public function consequence(Command $command): self
+    public function consequence(Command $command, ?Actor $actingAs = null): self
     {
         if (!$this->used) {
             throw new IntegratorError(\sprintf('A consequence was asked of the permit for "%s" before it was used.', $this->operation), 'Call use() with the command first: only an operation that runs has consequences.', 'concepts/operations-and-events.md#permits');
@@ -77,6 +81,30 @@ final class Permit
             throw new IntegratorError(\sprintf('A consequence of "%s" is in another realm.', $this->operation), 'An operation\'s consequences stay in its realm.', 'concepts/operations-and-events.md#permits');
         }
 
-        return new self(Operation::of($command::class)->name, $this->actor, AuthorizedBy::Consequence, $this->decisionId, $command, $this);
+        if (null !== $actingAs && AuthorizedBy::Authentication !== $this->basis) {
+            throw new IntegratorError(\sprintf('A consequence of "%s" names who it acts as, but "%s" isn\'t authentication.', $this->operation, $this->operation), 'Only authentication says who someone is: other operations\' consequences act as their actor.', 'concepts/operations-and-events.md#permits');
+        }
+
+        return new self(Operation::of($command::class)->name, $actingAs ?? $this->actor, AuthorizedBy::Consequence, $this->decisionId, $command, $this);
+    }
+
+    /**
+     * Runs an operation this one causes: its handler, with a consequence() of this permit.
+     *
+     * ```php
+     * $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, $reason), $origin);
+     * ```
+     *
+     * @template T
+     * @template C of Command<T>
+     *
+     * @param \Closure(C, self, Origin): T $handler
+     * @param C                            $command
+     *
+     * @return T
+     */
+    public function cause(\Closure $handler, Command $command, Origin $origin, ?Actor $actingAs = null): mixed
+    {
+        return $handler($command, $this->consequence($command, $actingAs), $origin);
     }
 }

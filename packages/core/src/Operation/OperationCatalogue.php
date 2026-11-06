@@ -46,7 +46,23 @@ final readonly class OperationCatalogue
 
         ksort($operations);
         $this->operations = $operations;
-        $this->byCommand = array_column(array_map(static fn (OperationDescription $operation): array => [$operation->command, $operation], array_values($operations)), 1, 0);
+        $this->byCommand = array_column(array_map(static fn (OperationDescription $operation): array => [$operation->command, $operation], $operations), 1, 0);
+    }
+
+    /**
+     * The catalogue of the operations these handlers run.
+     *
+     * @param iterable<OperationHandler> $handlers
+     */
+    public static function of(iterable $handlers): self
+    {
+        $commands = [];
+
+        foreach ($handlers as $handler) {
+            $commands = [...$commands, ...array_keys($handler->operations())];
+        }
+
+        return new self($commands);
     }
 
     /**

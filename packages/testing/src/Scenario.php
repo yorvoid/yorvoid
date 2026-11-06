@@ -8,24 +8,26 @@ use Psr\Clock\ClockInterface;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\Clock\MockClock;
 use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
-use YorvoID\Authn\Recovery\RecoveryCodes;
-use YorvoID\Authn\Session\AuthenticationContext;
-use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
-use YorvoID\Authn\Session\StartSession;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\BuiltInAuthorization;
+use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalKind;
-use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Passkeys\RegisterPasskey;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
@@ -38,15 +40,24 @@ use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
  */
 final readonly class Scenario
 {
+    /** Scenario's own, only for signing in: the application's never runs SignInForTest */
+    private Operations $signIns;
+
+    /**
+     * @param Operations $operations The application's: what Scenario sets up runs through it, as the
+     *                               host's operator or the principal's own session
+     */
     public function __construct(
-        private Principals $principals,
-        private Sessions $sessions,
+        private Operations $operations,
+        Sessions $sessions,
+        SecurityLog $log,
         private Passkeys $passkeys,
-        private RecoveryCodes $recoveryCodes,
         private PasskeyPolicy $passkeyPolicy,
         private ClockInterface $clock,
         private Realm $realm = new Realm('default'),
     ) {
+        $signIns = new TestSignIns($sessions, $clock);
+        $this->signIns = new Operations(OperationCatalogue::of([$signIns]), new BuiltInAuthorization(), $log, [$signIns]);
     }
 
     /**
@@ -56,10 +67,10 @@ final readonly class Scenario
     public static function of(ContainerInterface $container): self
     {
         return new self(
-            self::service($container, Principals::class),
+            self::service($container, Operations::class),
             self::service($container, Sessions::class),
+            self::service($container, SecurityLog::class),
             self::service($container, Passkeys::class),
-            self::service($container, RecoveryCodes::class),
             self::service($container, PasskeyPolicy::class),
             self::service($container, ClockInterface::class),
             self::service($container, Realm::class),
@@ -71,7 +82,7 @@ final readonly class Scenario
      */
     public function principal(?string $email = null): Principal
     {
-        return $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, email: $email ?? \sprintf('%s@example.com', bin2hex(random_bytes(6))), emailVerified: true), new Origin(OriginKind::Console, 'test'));
+        return $this->operations->run(new CreatePrincipal($this->realm, PrincipalKind::Human, email: $email ?? \sprintf('%s@example.com', bin2hex(random_bytes(6))), emailVerified: true), new Operator(), new Origin(OriginKind::Console, 'test'));
     }
 
     /**
@@ -80,9 +91,7 @@ final readonly class Scenario
      */
     public function session(Principal $principal, AuthenticationMethod $method = AuthenticationMethod::Passkey): StartedSession
     {
-        $passkey = AuthenticationMethod::Passkey === $method;
-
-        return $this->sessions->start(new StartSession($this->realm, $principal->id, new AuthenticationContext(new AuthenticationFactor($method, $this->clock->now(), $passkey, $passkey))), new Origin(OriginKind::Web, 'test'));
+        return $this->signIns->run(new SignInForTest($this->realm, $principal->id, $method), new Anonymous(), new Origin(OriginKind::Web, 'test'));
     }
 
     /**
@@ -94,7 +103,7 @@ final readonly class Scenario
         $authenticator ??= new VirtualAuthenticator($this->passkeyPolicy->origins[0]);
         $session = $this->session($principal)->session;
         $ceremony = $this->passkeys->beginRegistration($session);
-        $this->passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), $label, new Origin(OriginKind::Web, 'test'));
+        $this->operations->run(new RegisterPasskey($this->realm, $ceremony->id, $authenticator->register($ceremony->options), $label), $session, new Origin(OriginKind::Web, 'test'));
 
         return $authenticator;
     }
@@ -106,7 +115,9 @@ final readonly class Scenario
      */
     public function recoveryCodes(Principal $principal): array
     {
-        return $this->recoveryCodes->generate(new GenerateRecoveryCodes($this->realm), $this->session($principal)->session, new Origin(OriginKind::Web, 'test'));
+        $session = $this->session($principal)->session;
+
+        return $this->operations->run(new GenerateRecoveryCodes($this->realm), $session, new Origin(OriginKind::Web, 'test'));
     }
 
     /**

@@ -121,10 +121,38 @@ framework:
 ## What the bundle wires
 
 - **Storage:** YorvoID's DBAL stores on your connection, and its transaction middleware added to that connection (and no other) through DoctrineBundle, so YorvoID's "-ed" events wait for your commits.
-- **Services:** `Principals`, `Sessions`, `StepUp`, `Credentials`, `Passkeys`, `RecoveryCodes`, `RecoveryLinks`, `SetupCodes`, `Invitations`, `NotMe`, `IntentSigning` and the rest, ready to inject.
+- **Operations:** `Operations`, the way into every change ([running an operation](operations-and-events.md#running-an-operation)), with every YorvoID handler and your own `OperationHandler` services. Someone's own account needs a recent proof where it matters (`StepUpSelfService`); an ability, e.g. `yorvoid.principals.manage`, is your Symfony security's to grant (below).
+- **Services:** `Principals`, `Sessions`, `StepUp`, `Credentials`, `Passkeys`, `RecoveryCodes`, `RecoveryLinks`, `SetupCodes`, `Invitations`, `NotMe`, `IntentSigning` and the rest, ready to inject for what they read.
 - **Events:** YorvoID's events go through Symfony's dispatcher, so your listeners hear them. Suspending a principal ends their sessions in the same transaction; removing a passkey from the registry removes its key.
 - **Mail:** [security notifications](notifications.md) through Symfony Mailer, as plain text and HTML, from the address you configure, after every commit; and a link to [verify](notifications.md#verifying-the-email-address) every new address that isn't verified, the claiming owner's included.
 - **Translations:** YorvoID's catalogues added to Symfony's translator; without one, YorvoID uses its own.
+
+## Who may run an operation
+
+An operation that needs an ability runs when the actor is the request's own session and `isGranted($ability, $command)` says yes, so your voters and role hierarchy decide. A voter for administrators:
+
+```php
+use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
+use Symfony\Component\Security\Core\Authorization\Voter\Vote;
+use Symfony\Component\Security\Core\Authorization\Voter\Voter;
+use YorvoID\Core\Operation\Command;
+
+/** @extends Voter<string, Command<mixed>> */
+final class AdministratorsManagePrincipals extends Voter
+{
+    protected function supports(string $attribute, mixed $subject): bool
+    {
+        return 'yorvoid.principals.manage' === $attribute && $subject instanceof Command;
+    }
+
+    protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
+    {
+        return \in_array('ROLE_ADMIN', $token->getRoleNames(), true);
+    }
+}
+```
+
+Without a voter for an ability, Symfony denies it, and the operation throws `NotPermitted`. The console and jobs run operations as the host's `Operator`, which needs no ability.
 
 ## Signing in
 

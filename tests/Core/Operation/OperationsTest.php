@@ -20,6 +20,7 @@ use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\BuiltInAuthorization;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\NoAbilityPolicy;
 use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationHandler;
@@ -36,6 +37,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Policy;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\RecordBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ScanBadge;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
 
 final class OperationsTest extends TestCase
 {
@@ -127,6 +129,19 @@ final class OperationsTest extends TestCase
 
         self::assertSame(AuthorizedBy::Self, $this->badges->permits[0]->basis);
         self::assertSame(0, $policy->asked, 'The first that permits wins.');
+    }
+
+    public function testWithoutASelfServicePolicyNobodyRunsOperationsOnTheirOwnAccount(): void
+    {
+        $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), new BuiltInAuthorization(), new SecurityLog($this->log, new InMemoryTransactions()), [$this->badges]);
+
+        try {
+            $operations->run(new IssueBadge($this->realm, $this->ana), new Member($this->realm, $this->ana), new Origin(OriginKind::Web));
+            self::fail('It was permitted.');
+        } catch (NotPermitted $refused) {
+            self::assertSame(Verdict::Indeterminate, $refused->decision->verdict);
+            self::assertSame('No self-service policy says what "acme.badge.issue" needs.', $refused->decision->reason);
+        }
     }
 
     public function testWithoutAnAbilityPolicyNobodyElseMayRunIt(): void
@@ -298,7 +313,7 @@ final class OperationsTest extends TestCase
     {
         $catalogue = new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]);
         $log = new SecurityLog($this->log, new InMemoryTransactions());
-        $authorization = null === $policy ? new BuiltInAuthorization() : new BuiltInAuthorization($policy);
+        $authorization = new BuiltInAuthorization($policy ?? new NoAbilityPolicy(), new SelfService());
 
         return new Operations($catalogue, $authorization, $log, $handlers ?? [$this->badges]);
     }

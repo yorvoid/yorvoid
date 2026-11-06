@@ -12,11 +12,12 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use YorvoID\Authn\Recovery\IssueRecoveryLink;
-use YorvoID\Authn\Recovery\RecoveryLinks;
 use YorvoID\Authn\Session\InactivePrincipal;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
@@ -31,7 +32,7 @@ use YorvoID\Core\Realm;
 final class RecoveryLinkCommand extends Command
 {
     public function __construct(
-        private readonly RecoveryLinks $links,
+        private readonly Operations $operations,
         private readonly Principals $principals,
     ) {
         parent::__construct();
@@ -58,7 +59,7 @@ final class RecoveryLinkCommand extends Command
         }
 
         try {
-            $link = $this->links->issue(new IssueRecoveryLink($realm, $principal->id, Duration::parse(Options::string($input->getOption('lifetime')))), new Origin(OriginKind::Console, 'yorvoid:recovery-link'));
+            $link = $this->operations->run(new IssueRecoveryLink($realm, $principal->id, Duration::parse(Options::string($input->getOption('lifetime')))), new Operator(), new Origin(OriginKind::Console, 'yorvoid:recovery-link'));
         } catch (InactivePrincipal $exception) {
             $io->error($exception->getMessage());
 

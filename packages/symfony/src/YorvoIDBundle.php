@@ -18,6 +18,7 @@ use Symfony\Component\Translation\Translator;
 use Symfony\Component\VarDumper\Cloner\AbstractCloner;
 use Twig\Extension\AbstractExtension;
 use YorvoID\Authn\Session\Sessions;
+use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\StorageLocation;
@@ -156,6 +157,8 @@ final class YorvoIDBundle extends AbstractBundle
         \assert(\is_array($completed));
         $builder->getDefinition(FlowController::class)->setArgument('$completed', $completed + ['default' => $settings['flows.completed_path']]);
         $builder->registerForAutoconfiguration(FlowCustomizer::class)->addTag('yorvoid.flow_customizer');
+        // The application's own operations run through Operations too.
+        $builder->registerForAutoconfiguration(OperationHandler::class)->addTag('yorvoid.operation_handler');
         $builder->registerForAutoconfiguration(FlowSource::class)->addTag('yorvoid.flow_source');
 
         // The flow pages' translations, when the application renders them with Twig.
@@ -205,7 +208,9 @@ final class YorvoIDBundle extends AbstractBundle
         $builder->register(EmailVerification::class)->setAutowired(true)->setPublic(true)
             ->setArgument('$translator', new Reference('yorvoid.translator.used'))
             ->setArgument('$link', (new Definition(\Closure::class))->setFactory([Factories::class, 'emailVerificationLink'])->setArguments([new Reference(UrlGeneratorInterface::class)]))
-            ->addTag('kernel.event_listener', ['method' => 'identifierChanged']);
+            ->addTag('kernel.event_listener', ['method' => 'identifierChanged'])
+            ->addTag('kernel.event_listener', ['method' => 'principalCreated'])
+            ->addTag('yorvoid.operation_handler');
     }
 
     /**

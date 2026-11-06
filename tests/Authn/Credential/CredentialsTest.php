@@ -48,6 +48,7 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\SuspendPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 
@@ -74,7 +75,7 @@ final class CredentialsTest extends DatabaseTestCase
         $credentials = $this->credentials($implementation);
         $session = $this->session();
 
-        $credential = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, '  MacBook  '), $session, new Origin(OriginKind::Web));
+        $credential = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, '  MacBook  '), new Origin(OriginKind::Web), $session);
 
         self::assertSame('MacBook', $credential->label);
         self::assertTrue($credential->principalId->equals($session->principalId), 'A credential was added to someone else.');
@@ -101,7 +102,7 @@ final class CredentialsTest extends DatabaseTestCase
 
         foreach ([
             static fn () => $credentials->requireStepUp($session, 'yorvoid.credential.add'),
-            static fn () => $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Attacker\'s'), $session, new Origin(OriginKind::Web)),
+            static fn () => Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Attacker\'s'), new Origin(OriginKind::Web), $session),
         ] as $change) {
             try {
                 $change();
@@ -120,12 +121,12 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation);
         $session = $this->session();
-        $phone = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
-        $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $session, new Origin(OriginKind::Web));
+        $phone = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
+        Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
         $this->clock->sleep(300);
 
         try {
-            $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $session, new Origin(OriginKind::Web));
+            Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
             self::fail('A session that proved nothing recently removed a passkey.');
         } catch (StepUpRequired $exception) {
             self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), phishingResistant: true, operation: 'yorvoid.credential.remove', heldAfterRecovery: true), $exception->requirement);
@@ -139,21 +140,21 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation);
         $owner = $this->session();
-        $phone = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $owner, new Origin(OriginKind::Web));
+        $phone = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $owner);
         // Someone in with one of the owner's recovery codes, a moment ago.
-        $recovered = $this->sessions->start(new StartSession(new Realm('acme'), $owner->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
+        $recovered = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $owner->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
 
-        $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $recovered, new Origin(OriginKind::Web));
+        Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $recovered);
 
         try {
-            $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $recovered, new Origin(OriginKind::Web));
+            Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $recovered);
             self::fail('A recovery code\'s proof removed a passkey.');
         } catch (StepUpRequired $exception) {
             self::assertTrue($exception->requirement->phishingResistant);
         }
 
         self::assertCount(2, $credentials->of(new Realm('acme'), $owner->principalId));
-        $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $owner, new Origin(OriginKind::Web));
+        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $owner);
         self::assertCount(1, $credentials->of(new Realm('acme'), $owner->principalId), 'A passkey\'s proof didn\'t remove one.');
     }
 
@@ -163,18 +164,18 @@ final class CredentialsTest extends DatabaseTestCase
         $credentials = $this->credentials($implementation);
         $session = $this->session();
         $other = $this->session();
-        $phone = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
-        $codes = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::RecoveryCodes, ''), $session, new Origin(OriginKind::Web));
-        $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $other, new Origin(OriginKind::Web));
+        $phone = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
+        $codes = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::RecoveryCodes, ''), new Origin(OriginKind::Web), $session);
+        Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $other);
         $this->stack->recoveryCodes->replace(new Realm('acme'), $session->principalId, [hash('sha256', 'a')], $this->clock->now());
         $this->events->listen(PrincipalStatusChanging::class, new ForgetCredentialsOfDeletedPrincipals($credentials, $this->stack->recoveryCodes, $this->clock)(...));
         $principals = new Principals($this->stack->principals, $this->stack->identifiers, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, events: $this->events, clock: $this->clock);
 
-        $principals->suspend(new SuspendPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
+        Permits::call($principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
         self::assertCount(2, $credentials->of(new Realm('acme'), $session->principalId), 'Suspending forgot credentials.');
         $this->events->dispatched = [];
 
-        $principals->delete(new DeletePrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
+        Permits::call($principals->delete(...), new DeletePrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
 
         self::assertSame([], $credentials->of(new Realm('acme'), $session->principalId));
         self::assertSame(0, $this->stack->recoveryCodes->count(new Realm('acme'), $session->principalId));
@@ -207,11 +208,11 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation);
         $session = $this->session();
-        $this->sessions->end(new EndSession(new Realm('acme'), $session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->end(...), new EndSession(new Realm('acme'), $session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
 
         $this->expectException(StepUpRequired::class);
 
-        $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Passkey'), $session, new Origin(OriginKind::Web));
+        Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Passkey'), new Origin(OriginKind::Web), $session);
     }
 
     #[DataProvider('implementations')]
@@ -219,18 +220,18 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation);
         $session = $this->session();
-        $phone = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
-        $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $session, new Origin(OriginKind::Web));
+        $phone = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
+        Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
         $this->clock->sleep(1800);
         $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove'), new Origin(OriginKind::Web));
 
         try {
-            $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Attacker\'s'), $session, new Origin(OriginKind::Web));
+            Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Attacker\'s'), new Origin(OriginKind::Web), $session);
             self::fail('Confirming a removal let the session add a passkey.');
         } catch (StepUpRequired) {
         }
 
-        $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $session, new Origin(OriginKind::Web));
+        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
         self::assertCount(1, $credentials->of(new Realm('acme'), $session->principalId));
     }
 
@@ -239,22 +240,22 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation, Duration::hours(24));
         $session = $this->session();
-        $phone = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
+        $phone = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
         $this->stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
 
         // Adding isn't held: someone who lost their passkeys recovers to add a new one.
-        $laptop = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $session, new Origin(OriginKind::Web));
+        $laptop = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
 
         try {
-            $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $session, new Origin(OriginKind::Web));
+            Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
             self::fail('A credential was removed during the cool-down.');
         } catch (HeldAfterRecovery $exception) {
             self::assertEquals(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'), $exception->until);
         }
 
         $this->clock->sleep(86_400);
-        $session = $this->sessions->start(new StartSession(new Realm('acme'), $session->principalId, self::passkey($this->clock)), new Origin(OriginKind::Web))->session;
-        $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $session, new Origin(OriginKind::Web));
+        $session = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $session->principalId, self::passkey($this->clock)), new Origin(OriginKind::Web))->session;
+        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
         self::assertEquals([$laptop->id], array_map(static fn (Credential $credential): CredentialId => $credential->id, $credentials->of(new Realm('acme'), $session->principalId)));
     }
 
@@ -263,7 +264,7 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation);
         $session = $this->session();
-        $add = static fn (string $label): string => $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, $label), $session, new Origin(OriginKind::Web))->label;
+        $add = static fn (string $label): string => Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, $label), new Origin(OriginKind::Web), $session)->label;
 
         self::assertSame(str_repeat('a', 63), $add(str_repeat('a', 63).' and more'), 'Cut at 64, with no space at the end.');
         self::assertSame('Work laptop', $add("  Work\n\u{202E}laptop\u{202C}  "));
@@ -276,9 +277,9 @@ final class CredentialsTest extends DatabaseTestCase
         $session = $this->session();
 
         $this->expectException(IntegratorError::class);
-        $this->expectExceptionMessage('The session is in another realm than the credential.');
+        $this->expectExceptionMessage('"yorvoid.credential.add" runs from the signed-in session, in its realm.');
 
-        $credentials->add(new AddCredential(new Realm('globex'), CredentialKind::Passkey, 'Passkey'), $session, new Origin(OriginKind::Web));
+        Permits::call($credentials->add(...), new AddCredential(new Realm('globex'), CredentialKind::Passkey, 'Passkey'), new Origin(OriginKind::Web), $session);
     }
 
     #[DataProvider('implementations')]
@@ -286,16 +287,16 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation);
         $session = $this->session();
-        $phone = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
-        $laptop = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $session, new Origin(OriginKind::Web));
-        $codes = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::RecoveryCodes, ''), $session, new Origin(OriginKind::Web));
+        $phone = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
+        $laptop = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
+        $codes = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::RecoveryCodes, ''), new Origin(OriginKind::Web), $session);
         $this->events->dispatched = [];
 
-        $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $session, new Origin(OriginKind::Web));
+        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
         self::assertSame([CredentialRemoving::class, SecurityLogEntryRecorded::class, CredentialRemoved::class], $this->events->classes());
 
         try {
-            $credentials->remove(new RemoveCredential(new Realm('acme'), $laptop->id), $session, new Origin(OriginKind::Web));
+            Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $laptop->id), new Origin(OriginKind::Web), $session);
             self::fail('The last passkey was removed; recovery codes don\'t sign in.');
         } catch (LastCredential $exception) {
             self::assertEquals($laptop, $exception->credential);
@@ -304,7 +305,7 @@ final class CredentialsTest extends DatabaseTestCase
 
         self::assertEquals([$laptop, $codes], $credentials->of(new Realm('acme'), $session->principalId));
         self::assertSame('Recovery codes', $codes->label);
-        $credentials->remove(new RemoveCredential(new Realm('acme'), $codes->id), $session, new Origin(OriginKind::Web));
+        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $codes->id), new Origin(OriginKind::Web), $session);
         self::assertEquals([$laptop], $credentials->of(new Realm('acme'), $session->principalId));
     }
 
@@ -313,8 +314,8 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation);
         $session = $this->session();
-        $copied = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Copied'), $session, new Origin(OriginKind::Web));
-        $other = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Other'), $session, new Origin(OriginKind::Web));
+        $copied = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Copied'), new Origin(OriginKind::Web), $session);
+        $other = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Other'), new Origin(OriginKind::Web), $session);
 
         $disabled = $credentials->disable($copied, 'signature counter went backwards', new Origin(OriginKind::Web));
 
@@ -327,7 +328,7 @@ final class CredentialsTest extends DatabaseTestCase
 
         $this->expectException(LastCredential::class);
 
-        $credentials->remove(new RemoveCredential(new Realm('acme'), $other->id), $session, new Origin(OriginKind::Web));
+        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $other->id), new Origin(OriginKind::Web), $session);
     }
 
     #[DataProvider('implementations')]
@@ -335,15 +336,15 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation);
         $session = $this->session();
-        $lostPhone = $this->sessions->start(new StartSession(new Realm('acme'), $session->principalId, self::passkey($this->clock)), new Origin(OriginKind::Web));
-        $keep = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $session, new Origin(OriginKind::Web));
-        $phone = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
-        $other = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Tablet'), $session, new Origin(OriginKind::Web));
+        $lostPhone = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $session->principalId, self::passkey($this->clock)), new Origin(OriginKind::Web));
+        $keep = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
+        $phone = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
+        $other = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Tablet'), new Origin(OriginKind::Web), $session);
 
-        $credentials->remove(new RemoveCredential(new Realm('acme'), $other->id), $session, new Origin(OriginKind::Web));
+        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $other->id), new Origin(OriginKind::Web), $session);
         self::assertNotNull($this->sessions->validate(new Realm('acme'), $lostPhone->token), 'Other sessions ended without being asked to.');
 
-        $credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id, endOtherSessions: true), $session, new Origin(OriginKind::Web));
+        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id, endOtherSessions: true), new Origin(OriginKind::Web), $session);
         self::assertSame(SessionEndReason::CredentialChanged, $this->sessions->get(new Realm('acme'), $lostPhone->session->id)?->endReason);
         self::assertTrue($this->sessions->get(new Realm('acme'), $session->id)?->isCurrentAt($this->clock->now()), 'The session that asked ended.');
         self::assertCount(1, $credentials->of(new Realm('acme'), $keep->principalId));
@@ -355,13 +356,12 @@ final class CredentialsTest extends DatabaseTestCase
         $credentials = $this->credentials($implementation);
         $owner = $this->session();
         $intruder = $this->session();
-        $credential = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $owner, new Origin(OriginKind::Web));
+        $credential = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $owner);
 
         foreach ([
-            static fn () => $credentials->remove(new RemoveCredential(new Realm('acme'), $credential->id), $intruder, new Origin(OriginKind::Web)),
-            static fn () => $credentials->rename(new RenameCredential(new Realm('acme'), $credential->id, 'Mine now'), $intruder, new Origin(OriginKind::Web)),
-            static fn () => $credentials->rename(new RenameCredential(new Realm('globex'), $credential->id, 'Elsewhere'), $owner, new Origin(OriginKind::Web)),
-            static fn () => $credentials->remove(new RemoveCredential(new Realm('acme'), new CredentialId(new UuidV7Generator()->next())), $owner, new Origin(OriginKind::Web)),
+            static fn () => Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $credential->id), new Origin(OriginKind::Web), $intruder),
+            static fn () => Permits::call($credentials->rename(...), new RenameCredential(new Realm('acme'), $credential->id, 'Mine now'), new Origin(OriginKind::Web), $intruder),
+            static fn () => Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), new CredentialId(new UuidV7Generator()->next())), new Origin(OriginKind::Web), $owner),
         ] as $change) {
             try {
                 $change();
@@ -369,6 +369,13 @@ final class CredentialsTest extends DatabaseTestCase
             } catch (UnknownCredential $exception) {
                 self::assertStringStartsWith('There is no credential', $exception->getMessage());
             }
+        }
+
+        try {
+            Permits::call($credentials->rename(...), new RenameCredential(new Realm('globex'), $credential->id, 'Elsewhere'), new Origin(OriginKind::Web), $owner);
+            self::fail('A credential changed from another realm.');
+        } catch (IntegratorError $error) {
+            self::assertSame('"yorvoid.credential.rename" runs from the signed-in session, in its realm.', $error->problem);
         }
 
         self::assertEquals($credential, $credentials->get(new Realm('acme'), $credential->id));
@@ -379,10 +386,10 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials($implementation);
         $session = $this->session();
-        $credential = $credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
+        $credential = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
         $this->clock->sleep(3600);
 
-        $renamed = $credentials->rename(new RenameCredential(new Realm('acme'), $credential->id, str_repeat('ü', 70)."\xC3"), $session, new Origin(OriginKind::Web));
+        $renamed = Permits::call($credentials->rename(...), new RenameCredential(new Realm('acme'), $credential->id, str_repeat('ü', 70)."\xC3"), new Origin(OriginKind::Web), $session);
         self::assertSame($renamed->label, $credentials->get(new Realm('acme'), $credential->id)?->label, 'The new label wasn\'t kept.');
         $used = $credentials->markUsed($renamed);
 
@@ -396,7 +403,7 @@ final class CredentialsTest extends DatabaseTestCase
     {
         $credentials = $this->credentials('memory');
         $session = $this->session();
-        $labels = array_map(static fn (CredentialKind $kind): string => $credentials->add(new AddCredential(new Realm('acme'), $kind, ' '), $session, new Origin(OriginKind::Web))->label, [CredentialKind::Passkey, CredentialKind::RecoveryCodes]);
+        $labels = array_map(static fn (CredentialKind $kind): string => Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), $kind, ' '), new Origin(OriginKind::Web), $session)->label, [CredentialKind::Passkey, CredentialKind::RecoveryCodes]);
 
         self::assertSame(['Passkey', 'Recovery codes'], $labels);
         self::assertSame([true, true, false, false], array_map(static fn (CredentialKind $kind): bool => $kind->signsIn(), CredentialKind::cases()));
@@ -410,7 +417,7 @@ final class CredentialsTest extends DatabaseTestCase
 
         foreach ([CredentialKind::Password, CredentialKind::Totp] as $kind) {
             try {
-                $credentials->add(new AddCredential(new Realm('acme'), $kind, 'Mine'), $session, new Origin(OriginKind::Web));
+                Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), $kind, 'Mine'), new Origin(OriginKind::Web), $session);
                 self::fail('A credential nothing checks was added: '.$kind->value);
             } catch (IntegratorError $error) {
                 self::assertSame(\sprintf('YorvoID can\'t check %s credentials yet.', $kind->value), $error->problem);
@@ -443,8 +450,8 @@ final class CredentialsTest extends DatabaseTestCase
 
     private function session(): Session
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
-        $session = $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, self::passkey($this->clock)), new Origin(OriginKind::Web))->session;
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $session = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, self::passkey($this->clock)), new Origin(OriginKind::Web))->session;
         $this->events->dispatched = [];
 
         return $session;

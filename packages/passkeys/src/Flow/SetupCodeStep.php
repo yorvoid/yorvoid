@@ -4,14 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
-use Psr\Clock\ClockInterface;
-use YorvoID\Authn\Session\AuthenticationContext;
-use YorvoID\Authn\Session\AuthenticationFactor;
-use YorvoID\Authn\Session\AuthenticationMethod;
-use YorvoID\Authn\Session\Sessions;
-use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Setup\ClaimSetup;
 use YorvoID\Authn\Setup\InvalidSetupCode;
-use YorvoID\Authn\Setup\SetupCodes;
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\InvalidIdentifier;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -38,10 +34,7 @@ final readonly class SetupCodeStep implements Step
     public const string NAME = 'setup_code';
 
     public function __construct(
-        private SetupCodes $setupCodes,
-        private Sessions $sessions,
-        private ClockInterface $clock,
-        private ?EmailVerification $emailVerification = null,
+        private Operations $operations,
     ) {
     }
 
@@ -75,20 +68,12 @@ final readonly class SetupCodeStep implements Step
         }
 
         try {
-            $owner = $this->setupCodes->claim($state->realm, Secret::fromString($code), new CreatePrincipal($state->realm, PrincipalKind::Human, email: $email), $context->origin, $context->address);
+            // The owner's address gets its link to confirm it from EmailVerification, as a consequence.
+            $signedIn = $this->operations->run(new ClaimSetup($state->realm, Secret::fromString($code), new CreatePrincipal($state->realm, PrincipalKind::Human, email: $email), $context->device, $context->address, $context->deviceCookie), new Anonymous(), $context->origin);
         } catch (InvalidSetupCode) {
             return StepResult::refused(new Problem('yorvoid.flow.setup_code.invalid', field: 'code'));
         } catch (InvalidIdentifier) {
             return StepResult::refused(new Problem('yorvoid.flow.email.invalid', field: 'email'));
-        }
-
-        $signedIn = $this->sessions->start(new StartSession($state->realm, $owner->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now())), $context->device, $context->address, $context->deviceCookie), $context->origin);
-
-        try {
-            $this->emailVerification?->send($state->realm, $owner->id, $context->origin);
-        } catch (\Exception) {
-            // The realm is claimed and the owner signed in: an email that couldn't go mustn't lock them out
-            // of their own installation. Changing the address later sends another.
         }
 
         return StepResult::done(signedIn: $signedIn);

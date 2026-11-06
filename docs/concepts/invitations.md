@@ -5,26 +5,29 @@ Invite a person by email: YorvoID creates an invited principal, and a link for y
 ```php
 use YorvoID\Authn\Invitation\Invite;
 
-$invitation = $invitations->invite(new Invite($realm, 'ana@example.com'), $origin, $administratorId);
+$invitation = $operations->run(new Invite($realm, 'ana@example.com'), $administratorsSession, $origin);
 
 $mailer->send('ana@example.com', 'https://example.com/invitation/'.$invitation->token->secret->reveal());
 ```
 
 - The link works for 7 days by default (pass `lifetime` to change it), once, and only while the address is still the invitee's.
-- `resend()` sends a new link; the earlier one stops working.
-- `withdraw()` deletes the invited principal; its link stops working.
+- `ResendInvitation` sends a new link; the earlier one stops working.
+- `WithdrawInvitation` deletes the invited principal; its link stops working.
+- Each needs the ability `yorvoid.principals.manage`, or the host's operator.
 - An address that another principal in the realm has throws `IdentifierTaken`.
 
 ## Accepting
 
 ```php
+use YorvoID\Authn\Invitation\AcceptInvitation;
+use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Secret;
 
 // The invitation's page
 $principal = $invitations->peek($realm, Secret::fromString($fromTheLink)); // null: show "this link doesn't work"
 
 // When they accept
-$principal = $invitations->accept($realm, Secret::fromString($fromTheLink), $origin);
+$started = $operations->run(new AcceptInvitation($realm, Secret::fromString($fromTheLink)), new Anonymous(), $origin);
 ```
 
-`accept()` uses the link, activates the principal and verifies its email address, in one transaction. In the same request, start their [session](sessions.md) and let them add a passkey.
+Accepting uses the link, activates the principal, verifies its email address and starts their [session](sessions.md), in one transaction; null if the link doesn't work. In the same request, let them add a passkey.

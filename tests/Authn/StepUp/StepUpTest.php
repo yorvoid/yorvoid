@@ -30,6 +30,7 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\SuspendPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\Stack;
 
 /**
@@ -72,7 +73,7 @@ final class StepUpTest extends DatabaseTestCase
     {
         $stepUp = $this->stepUp($implementation);
         $ended = $this->session();
-        $this->sessions->end(new EndSession(new Realm('acme'), $ended->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->end(...), new EndSession(new Realm('acme'), $ended->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         $unknown = new Session($ended->id, new Realm('globex'), $ended->principalId, 1, $ended->authentication, $ended->startedAt, $ended->lastSeenAt, $ended->expiresAt, $ended->idleExpiresAt);
 
         foreach ([$ended, $unknown] as $session) {
@@ -96,7 +97,7 @@ final class StepUpTest extends DatabaseTestCase
         $stepUp = $this->stepUp($implementation);
         $suspended = $this->session();
         // Without the listener that ends a suspended principal's sessions, as the bare package is.
-        $this->principals->suspend(new SuspendPrincipal(new Realm('acme'), $suspended->principalId), new Origin(OriginKind::Console));
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $suspended->principalId), new Origin(OriginKind::Console));
 
         try {
             $stepUp->require($suspended, new AuthenticationRequirement(Duration::minutes(5)));
@@ -211,13 +212,13 @@ final class StepUpTest extends DatabaseTestCase
 
     private function session(): Session
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
 
         return $this->signIn($principal->id);
     }
 
     private function signIn(PrincipalId $principalId): Session
     {
-        return $this->sessions->start(new StartSession(new Realm('acme'), $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true))), new Origin(OriginKind::Web))->session;
+        return Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true))), new Origin(OriginKind::Web))->session;
     }
 }

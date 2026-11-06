@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
-use Psr\Clock\ClockInterface;
+use YorvoID\Authn\Invitation\AcceptInvitation;
 use YorvoID\Authn\Invitation\Invitations;
-use YorvoID\Authn\Session\AuthenticationContext;
-use YorvoID\Authn\Session\AuthenticationFactor;
-use YorvoID\Authn\Session\AuthenticationMethod;
-use YorvoID\Authn\Session\Sessions;
-use YorvoID\Authn\Session\StartSession;
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Secret;
@@ -38,10 +35,9 @@ final readonly class InvitationStep implements Step
     private const string EMAIL = self::NAME.'.email';
 
     public function __construct(
+        private Operations $operations,
         private Invitations $invitations,
         private Principals $principals,
-        private Sessions $sessions,
-        private ClockInterface $clock,
     ) {
     }
 
@@ -72,12 +68,12 @@ final readonly class InvitationStep implements Step
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult
     {
         $token = $state->string(self::TOKEN) ?? '';
-        $invitee = '' === $token ? null : $this->invitations->accept($state->realm, Secret::fromString($token), $context->origin);
+        $signedIn = '' === $token ? null : $this->operations->run(new AcceptInvitation($state->realm, Secret::fromString($token), $context->device, $context->address, $context->deviceCookie), new Anonymous(), $context->origin);
 
-        if (null === $invitee) {
+        if (null === $signedIn) {
             return StepResult::failed(new Problem('yorvoid.flow.invitation.not_working'));
         }
 
-        return StepResult::done(forget: [self::TOKEN], signedIn: $this->sessions->start(new StartSession($state->realm, $invitee->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::EmailLink, $this->clock->now())), $context->device, $context->address, $context->deviceCookie), $context->origin));
+        return StepResult::done(forget: [self::TOKEN], signedIn: $signedIn);
     }
 }

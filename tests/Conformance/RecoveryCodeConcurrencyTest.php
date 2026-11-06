@@ -25,6 +25,7 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Throttle\Throttle;
 
 /**
@@ -46,9 +47,9 @@ final class RecoveryCodeConcurrencyTest extends DatabaseTestCase
         $sessions = new Sessions($stack->sessions, $principals, $log, $stack->transactions);
         $stepUp = new StepUp($sessions, $stack->coolDowns, $log);
         $codes = new RecoveryCodes($stack->recoveryCodes, new Credentials($stack->credentials, $sessions, $stepUp, $log, $stack->transactions), $sessions, $stepUp, new Attempts(new Throttle($stack->throttle)), $log, $stack->transactions, $principals);
-        $principal = $principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
-        $session = $sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web))->session;
-        $code = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web))[0];
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $session = Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web))->session;
+        $code = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session)[0];
         $start = \sprintf('%s/yorvoid-start-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
         $processes = [];
 

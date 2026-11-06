@@ -16,9 +16,10 @@ use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\ActingPrincipal;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\PrincipalId;
-use YorvoID\Core\Realm;
-use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Notifications\Event\NotMeReported;
 
@@ -30,7 +31,7 @@ use YorvoID\Notifications\Event\NotMeReported;
  *
  * @api
  */
-final readonly class NotMe
+final readonly class NotMe implements OperationHandler
 {
     public function __construct(
         private OneTimeTokens $tokens,
@@ -42,20 +43,25 @@ final readonly class NotMe
     ) {
     }
 
+    public function operations(): array
+    {
+        return [ReportNotMe::class => $this->confirm(...)];
+    }
+
     /**
-     * @param string|null $credential The {credential} of the link, if it had one
-     *
      * @return PrincipalId|null Whose account it is; null if the link doesn't work
      */
-    public function confirm(Realm $realm, #[\SensitiveParameter] Secret $token, ?string $credential, Origin $origin): ?PrincipalId
+    public function confirm(ReportNotMe $command, Permit $permit, Origin $origin): ?PrincipalId
     {
+        $permit->use($command);
+        [$realm, $token, $credential] = [$command->realm, $command->token, $command->credential];
         $suspect = null === $credential || '' === $credential ? null : (Uuid::isValid($credential) ? CredentialId::fromString($credential) : false);
 
         if (false === $suspect) {
             return null;
         }
 
-        return $this->transactions->run(function () use ($realm, $token, $suspect, $origin): ?PrincipalId {
+        return $this->transactions->run(function () use ($realm, $token, $suspect, $permit, $origin): ?PrincipalId {
             $used = $this->tokens->consume($realm, SecurityNotifications::notMePurpose($suspect), $token, $origin);
 
             if (null === $used) {
@@ -68,7 +74,7 @@ final readonly class NotMe
                 $this->credentials->disable($disabled, 'its principal said they didn\'t add it', $origin);
             }
 
-            $this->sessions->endAll(new EndSessions($realm, $used->principalId, SessionEndReason::Reported), $origin, $used->principalId);
+            $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Reported), $origin, new ActingPrincipal($realm, $used->principalId));
             $this->log->record($realm, 'yorvoid.notification.not_me', Outcome::Success, $origin, $used->principalId, 'principal', (string) $used->principalId, null === $suspect ? [] : ['credential' => (string) $suspect]);
 
             $this->transactions->afterCommit(function () use ($realm, $used, $suspect, $origin): void {

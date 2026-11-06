@@ -41,6 +41,7 @@ use YorvoID\Flows\StepFailed;
 use YorvoID\Flows\StepResult;
 use YorvoID\Flows\Storage\InMemoryFlowStore;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Storage\InMemoryThrottleStore;
@@ -289,9 +290,9 @@ final class FlowsTest extends DatabaseTestCase
 
     public function testTheStepsAfterASignInRunInItsSession(): void
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
-        $started = $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now()))), new Origin(OriginKind::Web));
-        $renewed = $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $started = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now()))), new Origin(OriginKind::Web));
+        $renewed = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
         $terms = new TestStep('terms');
         $after = new TestStep('after');
         $later = new TestStep('later');
@@ -331,14 +332,14 @@ final class FlowsTest extends DatabaseTestCase
 
     public function testASessionThatEndedMeanwhileIsntHandedOver(): void
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
-        $started = $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $started = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
         $terms = new TestStep('terms');
         $flows = $this->flows(new Flow('acme.sign_in', [new TestStep('sign_in', static fn (): StepResult => StepResult::done(signedIn: $started)), $terms], ['terms']));
         $flow = $flows->start('acme.sign_in', new Realm('acme'), $this->context);
         $flows->submit($flow->state->id, 'sign_in', new Input(), $this->context);
 
-        $this->sessions->end(new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->end(...), new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         $done = $flows->submit($flow->state->id, 'terms', new Input(), $this->context);
 
         self::assertSame([FlowStatus::Completed, null], [$done?->status, $done?->signedIn]);

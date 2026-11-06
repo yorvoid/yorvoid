@@ -16,8 +16,8 @@ People change their own credentials, from their session:
 use YorvoID\Authn\Credential\RemoveCredential;
 use YorvoID\Authn\Credential\RenameCredential;
 
-$credentials->rename(new RenameCredential($realm, $credentialId, 'Work laptop'), $session, $origin);
-$credentials->remove(new RemoveCredential($realm, $credentialId, endOtherSessions: true), $session, $origin);
+$operations->run(new RenameCredential($realm, $credentialId, 'Work laptop'), $session, $origin);
+$operations->run(new RemoveCredential($realm, $credentialId, endOtherSessions: true), $session, $origin);
 ```
 
 Packages add credentials as part of their own flow, e.g. [registering a passkey](passkeys.md).

@@ -14,6 +14,7 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 
 /**
  * Two administrators suspend the last two owners at the same moment, each in their own process: a guard
@@ -29,8 +30,8 @@ final class GuardRuleConcurrencyTest extends DatabaseTestCase
         \assert($database instanceof Database && null !== $database->location->schema);
         $principals = new Principals($stack->principals, $stack->identifiers, new SecurityLog($stack->log, $stack->transactions), $stack->transactions);
         $owners = [
-            $principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console)),
-            $principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console)),
+            Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console)),
+            Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console)),
         ];
         $group = implode(',', array_map(static fn (Principal $owner): string => (string) $owner->id, $owners));
         $start = \sprintf('%s/yorvoid-start-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));

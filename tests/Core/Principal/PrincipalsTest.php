@@ -42,6 +42,7 @@ use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Core\Principal\VerifyIdentifier;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 
@@ -61,7 +62,7 @@ final class PrincipalsTest extends DatabaseTestCase
         $actor = new PrincipalId(new UuidV7Generator()->next());
         $origin = new Origin(OriginKind::Console, 'yorvoid:principal:create', 'req-1');
 
-        $principal = $principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Agent, PrincipalStatus::Invited), $origin, $actor);
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Agent, PrincipalStatus::Invited), $origin, $actor);
 
         self::assertSame(PrincipalKind::Agent, $principal->kind);
         self::assertSame(PrincipalStatus::Invited, $principal->status);
@@ -101,7 +102,7 @@ final class PrincipalsTest extends DatabaseTestCase
         });
 
         $stack->transactions->run(static function () use ($principals, &$seen): void {
-            $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
+            Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
             $seen['committed'] = isset($seen['created']);
         });
 
@@ -118,7 +119,7 @@ final class PrincipalsTest extends DatabaseTestCase
         });
 
         try {
-            $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Agent), new Origin(OriginKind::Api));
+            Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Agent), new Origin(OriginKind::Api));
             self::fail('The creation went ahead.');
         } catch (OperationCancelled $exception) {
             self::assertSame('yorvoid.principal.create', $exception->operation);
@@ -139,7 +140,7 @@ final class PrincipalsTest extends DatabaseTestCase
 
         try {
             $stack->transactions->run(static function () use ($principals, &$created): void {
-                $created = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
+                $created = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
 
                 throw new \RuntimeException('The application failed afterwards.');
             });
@@ -158,7 +159,7 @@ final class PrincipalsTest extends DatabaseTestCase
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack, new MockClock('2026-10-27 18:45:30 UTC'));
 
-        $principal = $principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: 'Ana@Example.com', username: 'Ana', emailVerified: true), new Origin(OriginKind::Web));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: 'Ana@Example.com', username: 'Ana', emailVerified: true), new Origin(OriginKind::Web));
 
         $identifiers = $principals->identifiers(new Realm('acme'), $principal->id);
         self::assertSame(['email', 'username'], array_keys($identifiers));
@@ -183,11 +184,11 @@ final class PrincipalsTest extends DatabaseTestCase
     {
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack);
-        $ana = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Web));
+        $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Web));
         self::assertFalse($principals->identifiers(Realm::default(), $ana->id)['email']->isVerified(), 'An email address was verified without saying so.');
 
         try {
-            $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'bob', email: 'ANA@example.com'), new Origin(OriginKind::Web));
+            Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'bob', email: 'ANA@example.com'), new Origin(OriginKind::Web));
             self::fail('Two principals have the same email address.');
         } catch (IdentifierTaken $exception) {
             self::assertSame(IdentifierKind::Email, $exception->kind);
@@ -205,7 +206,7 @@ final class PrincipalsTest extends DatabaseTestCase
         $principals = $this->principals($stack);
 
         try {
-            $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'not valid'), new Origin(OriginKind::Web));
+            Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'not valid'), new Origin(OriginKind::Web));
             self::fail('An invalid username was accepted.');
         } catch (InvalidIdentifier) {
         }
@@ -222,13 +223,13 @@ final class PrincipalsTest extends DatabaseTestCase
         $principals = $this->principals($stack, $clock);
         $realm = new Realm('acme');
         $actor = new PrincipalId(new UuidV7Generator()->next());
-        $invited = $principals->create(new CreatePrincipal($realm, PrincipalKind::Human, PrincipalStatus::Invited), new Origin(OriginKind::Web));
+        $invited = Permits::call($principals->create(...), new CreatePrincipal($realm, PrincipalKind::Human, PrincipalStatus::Invited), new Origin(OriginKind::Web));
 
         $clock->sleep(60);
-        $active = $principals->activate(new ActivatePrincipal($realm, $invited->id), new Origin(OriginKind::Web, 'invitation.accept'));
-        $suspended = $principals->suspend(new SuspendPrincipal($realm, $invited->id), new Origin(OriginKind::Console), $actor);
+        $active = Permits::call($principals->activate(...), new ActivatePrincipal($realm, $invited->id), new Origin(OriginKind::Web, 'invitation.accept'));
+        $suspended = Permits::call($principals->suspend(...), new SuspendPrincipal($realm, $invited->id), new Origin(OriginKind::Console), $actor);
         $clock->sleep(60);
-        $again = $principals->activate(new ActivatePrincipal($realm, $invited->id), new Origin(OriginKind::Console), $actor);
+        $again = Permits::call($principals->activate(...), new ActivatePrincipal($realm, $invited->id), new Origin(OriginKind::Console), $actor);
 
         self::assertSame([PrincipalStatus::Active, PrincipalStatus::Suspended, PrincipalStatus::Active], [$active->status, $suspended->status, $again->status]);
         self::assertSame([2, 3, 4], [$active->statusVersion, $suspended->statusVersion, $again->statusVersion]);
@@ -249,7 +250,7 @@ final class PrincipalsTest extends DatabaseTestCase
     {
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack);
-        $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
         $this->events->dispatched = [];
         $seen = [];
 
@@ -261,7 +262,7 @@ final class PrincipalsTest extends DatabaseTestCase
         });
 
         $stack->transactions->run(static function () use ($principals, $principal, &$seen): void {
-            $principals->suspend(new SuspendPrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
+            Permits::call($principals->suspend(...), new SuspendPrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
             $seen['committed'] = isset($seen['changed']);
         });
 
@@ -278,13 +279,13 @@ final class PrincipalsTest extends DatabaseTestCase
     {
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack);
-        $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
         $this->events->listen(PrincipalStatusChanging::class, static function (PrincipalStatusChanging $event): void {
             $event->cancel('Accounts with open orders can\'t be deleted.');
         });
 
         try {
-            $principals->delete(new DeletePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
+            Permits::call($principals->delete(...), new DeletePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
             self::fail('The deletion went ahead.');
         } catch (OperationCancelled $exception) {
             self::assertSame('yorvoid.principal.delete', $exception->operation);
@@ -299,14 +300,14 @@ final class PrincipalsTest extends DatabaseTestCase
     {
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack);
-        $invited = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, PrincipalStatus::Invited), new Origin(OriginKind::Web));
-        $deleted = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
-        $principals->delete(new DeletePrincipal(Realm::default(), $deleted->id), new Origin(OriginKind::Web));
+        $invited = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, PrincipalStatus::Invited), new Origin(OriginKind::Web));
+        $deleted = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
+        Permits::call($principals->delete(...), new DeletePrincipal(Realm::default(), $deleted->id), new Origin(OriginKind::Web));
 
         foreach ([
-            static fn () => $principals->suspend(new SuspendPrincipal(Realm::default(), $invited->id), new Origin(OriginKind::Web)),
-            static fn () => $principals->activate(new ActivatePrincipal(Realm::default(), $deleted->id), new Origin(OriginKind::Web)),
-            static fn () => $principals->delete(new DeletePrincipal(Realm::default(), $deleted->id), new Origin(OriginKind::Web)),
+            static fn () => Permits::call($principals->suspend(...), new SuspendPrincipal(Realm::default(), $invited->id), new Origin(OriginKind::Web)),
+            static fn () => Permits::call($principals->activate(...), new ActivatePrincipal(Realm::default(), $deleted->id), new Origin(OriginKind::Web)),
+            static fn () => Permits::call($principals->delete(...), new DeletePrincipal(Realm::default(), $deleted->id), new Origin(OriginKind::Web)),
         ] as $change) {
             try {
                 $change();
@@ -324,12 +325,12 @@ final class PrincipalsTest extends DatabaseTestCase
     {
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack);
-        $principal = $principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Web));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Web));
 
         $this->expectException(UnknownPrincipal::class);
         $this->expectExceptionMessage(\sprintf('There is no principal %s in the realm "globex".', $principal->id));
 
-        $principals->suspend(new SuspendPrincipal(new Realm('globex'), $principal->id), new Origin(OriginKind::Web));
+        Permits::call($principals->suspend(...), new SuspendPrincipal(new Realm('globex'), $principal->id), new Origin(OriginKind::Web));
     }
 
     #[DataProvider('implementations')]
@@ -337,7 +338,7 @@ final class PrincipalsTest extends DatabaseTestCase
     {
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack);
-        $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
 
         // Someone else suspends it after this request read it, and before it writes.
         $this->events->listen(PrincipalStatusChanging::class, static function (PrincipalStatusChanging $event) use ($stack): void {
@@ -349,7 +350,7 @@ final class PrincipalsTest extends DatabaseTestCase
         $this->expectException(ConcurrentChange::class);
         $this->expectExceptionMessage(\sprintf('The principal %s was changed by someone else meanwhile; try again.', $principal->id));
 
-        $principals->delete(new DeletePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
+        Permits::call($principals->delete(...), new DeletePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
     }
 
     #[DataProvider('implementations')]
@@ -357,20 +358,20 @@ final class PrincipalsTest extends DatabaseTestCase
     {
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack);
-        $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', username: 'ana'), new Origin(OriginKind::Web));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', username: 'ana'), new Origin(OriginKind::Web));
 
-        $deleted = $principals->delete(new DeletePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
+        $deleted = Permits::call($principals->delete(...), new DeletePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
 
         self::assertSame(PrincipalStatus::Deleted, $principals->get(Realm::default(), $principal->id)?->status);
         self::assertSame(PrincipalStatus::Deleted, $deleted->status);
         self::assertSame([], $principals->identifiers(Realm::default(), $principal->id));
         self::assertNull($principals->findByIdentifier(Realm::default(), IdentifierKind::Email, 'ana@example.com'));
-        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', username: 'ana'), new Origin(OriginKind::Web));
+        Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', username: 'ana'), new Origin(OriginKind::Web));
 
         foreach ([
-            static fn () => $principals->setIdentifier(new SetIdentifier(Realm::default(), $principal->id, IdentifierKind::Username, 'ghost'), new Origin(OriginKind::Web)),
-            static fn () => $principals->removeIdentifier(new RemoveIdentifier(Realm::default(), $principal->id, IdentifierKind::Username), new Origin(OriginKind::Web)),
-            static fn () => $principals->verifyIdentifier(new VerifyIdentifier(Realm::default(), $principal->id, IdentifierKind::Email, 'ana@example.com'), new Origin(OriginKind::Web)),
+            static fn () => Permits::call($principals->setIdentifier(...), new SetIdentifier(Realm::default(), $principal->id, IdentifierKind::Username, 'ghost'), new Origin(OriginKind::Web)),
+            static fn () => Permits::call($principals->removeIdentifier(...), new RemoveIdentifier(Realm::default(), $principal->id, IdentifierKind::Username), new Origin(OriginKind::Web)),
+            static fn () => Permits::call($principals->verifyIdentifier(...), new VerifyIdentifier(Realm::default(), $principal->id, IdentifierKind::Email, 'ana@example.com'), new Origin(OriginKind::Web)),
         ] as $change) {
             try {
                 $change();
@@ -401,12 +402,12 @@ final class PrincipalsTest extends DatabaseTestCase
             }
         };
         $principals = $this->principals($stack, guardRules: [$rule]);
-        $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Web));
-        $principals->suspend(new SuspendPrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Web));
+        Permits::call($principals->suspend(...), new SuspendPrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
         $this->events->dispatched = [];
 
         try {
-            $principals->delete(new DeletePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
+            Permits::call($principals->delete(...), new DeletePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
             self::fail('The guard rule didn\'t stop the deletion.');
         } catch (GuardRuleViolated $exception) {
             self::assertSame('yorvoid.principal.delete', $exception->operation);
@@ -448,10 +449,10 @@ final class PrincipalsTest extends DatabaseTestCase
             yield 'rule' => $rule('second');
         })();
         $principals = new Principals($stack->principals, $stack->identifiers, new SecurityLog($stack->log, $stack->transactions), $stack->transactions, guardRules: $rules);
-        $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Web));
 
-        $principals->suspend(new SuspendPrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
-        $principals->activate(new ActivatePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
+        Permits::call($principals->suspend(...), new SuspendPrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
+        Permits::call($principals->activate(...), new ActivatePrincipal(Realm::default(), $principal->id), new Origin(OriginKind::Web));
 
         self::assertSame(['first', 'second', 'first', 'second'], $checked->getArrayCopy());
     }
@@ -463,35 +464,35 @@ final class PrincipalsTest extends DatabaseTestCase
         $clock = new MockClock('2026-10-27 18:45:30 UTC');
         $principals = $this->principals($stack, $clock);
         $realm = new Realm('acme');
-        $id = $principals->create(new CreatePrincipal($realm, PrincipalKind::Human), new Origin(OriginKind::Web))->id;
+        $id = Permits::call($principals->create(...), new CreatePrincipal($realm, PrincipalKind::Human), new Origin(OriginKind::Web))->id;
         $changes = [];
         $this->events->listen(IdentifierChanged::class, static function (IdentifierChanged $event) use (&$changes): void {
             $changes[] = $event;
         });
 
-        $set = $principals->setIdentifier(new SetIdentifier($realm, $id, IdentifierKind::Email, 'Ana@Example.com'), new Origin(OriginKind::Web));
+        $set = Permits::call($principals->setIdentifier(...), new SetIdentifier($realm, $id, IdentifierKind::Email, 'Ana@Example.com'), new Origin(OriginKind::Web));
         self::assertFalse($set->isVerified());
         self::assertEquals(['email' => $set], $principals->identifiers($realm, $id));
 
         $clock->sleep(60);
-        self::assertNull($principals->verifyIdentifier(new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'bob@example.com'), new Origin(OriginKind::Web)), 'Another address was verified for this one.');
-        self::assertNull($principals->verifyIdentifier(new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'not an address'), new Origin(OriginKind::Web)));
-        self::assertNull($principals->verifyIdentifier(new VerifyIdentifier($realm, $id, IdentifierKind::Username, 'ana'), new Origin(OriginKind::Web)));
-        $verified = $principals->verifyIdentifier(new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.com'), new Origin(OriginKind::Web));
+        self::assertNull(Permits::call($principals->verifyIdentifier(...), new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'bob@example.com'), new Origin(OriginKind::Web)), 'Another address was verified for this one.');
+        self::assertNull(Permits::call($principals->verifyIdentifier(...), new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'not an address'), new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($principals->verifyIdentifier(...), new VerifyIdentifier($realm, $id, IdentifierKind::Username, 'ana'), new Origin(OriginKind::Web)));
+        $verified = Permits::call($principals->verifyIdentifier(...), new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.com'), new Origin(OriginKind::Web));
         self::assertEquals(new \DateTimeImmutable('2026-10-27 18:46:30 UTC'), $verified?->verifiedAt);
         self::assertEquals($set->createdAt, $verified?->createdAt);
-        self::assertEquals($verified, $principals->verifyIdentifier(new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.com'), new Origin(OriginKind::Web)), 'Verifying again changed it.');
+        self::assertEquals($verified, Permits::call($principals->verifyIdentifier(...), new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.com'), new Origin(OriginKind::Web)), 'Verifying again changed it.');
 
-        $recased = $principals->setIdentifier(new SetIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.com'), new Origin(OriginKind::Web));
+        $recased = Permits::call($principals->setIdentifier(...), new SetIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.com'), new Origin(OriginKind::Web));
         self::assertEquals($verified?->verifiedAt, $recased->verifiedAt, 'The same address in other letters is still verified.');
         self::assertEquals($set->createdAt, $recased->createdAt, 'Changing an identifier changed when the principal first had one of its kind.');
-        $changed = $principals->setIdentifier(new SetIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.org'), new Origin(OriginKind::Web));
+        $changed = Permits::call($principals->setIdentifier(...), new SetIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.org'), new Origin(OriginKind::Web));
         self::assertFalse($changed->isVerified(), 'A new address was verified without its owner showing it\'s theirs.');
-        $trusted = $principals->setIdentifier(new SetIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.net', verified: true), new Origin(OriginKind::Web));
+        $trusted = Permits::call($principals->setIdentifier(...), new SetIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.net', verified: true), new Origin(OriginKind::Web));
         self::assertTrue($trusted->isVerified());
 
-        $principals->removeIdentifier(new RemoveIdentifier($realm, $id, IdentifierKind::Email), new Origin(OriginKind::Web));
-        $principals->removeIdentifier(new RemoveIdentifier($realm, $id, IdentifierKind::Email), new Origin(OriginKind::Web));
+        Permits::call($principals->removeIdentifier(...), new RemoveIdentifier($realm, $id, IdentifierKind::Email), new Origin(OriginKind::Web));
+        Permits::call($principals->removeIdentifier(...), new RemoveIdentifier($realm, $id, IdentifierKind::Email), new Origin(OriginKind::Web));
         self::assertSame([], $principals->identifiers($realm, $id));
 
         $entries = \array_slice(iterator_to_array($stack->log->entries($realm, 1), false), 1);
@@ -516,11 +517,11 @@ final class PrincipalsTest extends DatabaseTestCase
     {
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack);
-        $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'ana'), new Origin(OriginKind::Web));
-        $bob = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'bob'), new Origin(OriginKind::Web));
+        Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'ana'), new Origin(OriginKind::Web));
+        $bob = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'bob'), new Origin(OriginKind::Web));
 
         try {
-            $principals->setIdentifier(new SetIdentifier(Realm::default(), $bob->id, IdentifierKind::Username, 'ANA'), new Origin(OriginKind::Web));
+            Permits::call($principals->setIdentifier(...), new SetIdentifier(Realm::default(), $bob->id, IdentifierKind::Username, 'ANA'), new Origin(OriginKind::Web));
             self::fail('Two principals have the same username.');
         } catch (IdentifierTaken) {
         }
@@ -533,13 +534,13 @@ final class PrincipalsTest extends DatabaseTestCase
     {
         $stack = $this->stack($implementation);
         $principals = $this->principals($stack);
-        $ana = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'ana'), new Origin(OriginKind::Web));
+        $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, username: 'ana'), new Origin(OriginKind::Web));
         $this->events->listen(IdentifierChanging::class, static function (IdentifierChanging $event): void {
             $event->cancel('Usernames can\'t change.');
         });
 
         try {
-            $principals->setIdentifier(new SetIdentifier(Realm::default(), $ana->id, IdentifierKind::Username, 'anna'), new Origin(OriginKind::Web));
+            Permits::call($principals->setIdentifier(...), new SetIdentifier(Realm::default(), $ana->id, IdentifierKind::Username, 'anna'), new Origin(OriginKind::Web));
             self::fail('The change went ahead.');
         } catch (OperationCancelled $exception) {
             self::assertSame('yorvoid.identifier.set', $exception->operation);

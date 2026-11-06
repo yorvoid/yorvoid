@@ -9,6 +9,7 @@ use Symfony\Component\Clock\MockClock;
 use YorvoID\Authn\Recovery\Event\RecoveryLinkUsed;
 use YorvoID\Authn\Recovery\IssueRecoveryLink;
 use YorvoID\Authn\Recovery\RecoveryLinks;
+use YorvoID\Authn\Recovery\UseRecoveryLink;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -33,6 +34,7 @@ use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 
@@ -57,10 +59,10 @@ final class RecoveryLinksTest extends DatabaseTestCase
     public function testARecoveryLinkEndsEverySessionAndStartsANewOne(string $implementation): void
     {
         $links = $this->links($implementation);
-        $owner = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
-        $attackers = $this->sessions->start(new StartSession(new Realm('acme'), $owner->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
+        $owner = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $attackers = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $owner->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
 
-        $link = $links->issue(new IssueRecoveryLink(new Realm('acme'), $owner->id), new Origin(OriginKind::Console, 'owner:recover'));
+        $link = Permits::call($links->issue(...), new IssueRecoveryLink(new Realm('acme'), $owner->id), new Origin(OriginKind::Console, 'owner:recover'));
 
         self::assertSame(RecoveryLinks::PURPOSE, $link->token->purpose);
         self::assertNull($link->token->email, 'An operator hands the link over: it isn\'t sent by email.');
@@ -68,7 +70,7 @@ final class RecoveryLinksTest extends DatabaseTestCase
 
         $origin = new Origin(OriginKind::Web);
         $this->events->dispatched = [];
-        $started = $links->redeem(new Realm('acme'), $link->secret, $origin, 'Firefox on Linux', '192.0.2.10');
+        $started = Permits::call($links->redeem(...), new UseRecoveryLink(new Realm('acme'), $link->secret, 'Firefox on Linux', '192.0.2.10'), $origin);
 
         self::assertNotNull($started);
         self::assertEquals(new RecoveryLinkUsed(new Realm('acme'), $owner->id, $origin), $this->events->last(), 'Using the link wasn\'t announced, for a notification.');
@@ -78,7 +80,7 @@ final class RecoveryLinksTest extends DatabaseTestCase
         self::assertNull($this->sessions->validate(new Realm('acme'), $attackers->token), 'A session from before the recovery survived it.');
         self::assertSame(SessionEndReason::Recovered, $this->sessions->get(new Realm('acme'), $attackers->session->id)?->endReason);
         $this->events->dispatched = [];
-        self::assertNull($links->redeem(new Realm('acme'), $link->secret, new Origin(OriginKind::Web)), 'A recovery link worked twice.');
+        self::assertNull(Permits::call($links->redeem(...), new UseRecoveryLink(new Realm('acme'), $link->secret), new Origin(OriginKind::Web)), 'A recovery link worked twice.');
         self::assertSame([], $this->events->of(RecoveryLinkUsed::class), 'A link that didn\'t work was announced.');
         self::assertEquals(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'), $this->stepUp->coolDownEndsAt(new Realm('acme'), $owner->id), 'The recovery started no cool-down.');
     }
@@ -87,22 +89,22 @@ final class RecoveryLinksTest extends DatabaseTestCase
     public function testARecoveryLinkExpiresSoon(string $implementation): void
     {
         $links = $this->links($implementation);
-        $owner = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
-        $link = $links->issue(new IssueRecoveryLink(new Realm('acme'), $owner->id, Duration::minutes(5)), new Origin(OriginKind::Console));
+        $owner = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $link = Permits::call($links->issue(...), new IssueRecoveryLink(new Realm('acme'), $owner->id, Duration::minutes(5)), new Origin(OriginKind::Console));
 
         $this->clock->sleep(300);
 
-        self::assertNull($links->redeem(new Realm('acme'), $link->secret, new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($links->redeem(...), new UseRecoveryLink(new Realm('acme'), $link->secret), new Origin(OriginKind::Web)));
         self::assertNull($this->stepUp->coolDownEndsAt(new Realm('acme'), $owner->id), 'A link that didn\'t work started a cool-down.');
     }
 
     public function testOnlyAnActivePrincipalCanRecover(): void
     {
         $links = $this->links('memory');
-        $invited = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Invited), new Origin(OriginKind::Console));
+        $invited = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Invited), new Origin(OriginKind::Console));
 
         try {
-            $links->issue(new IssueRecoveryLink(new Realm('acme'), $invited->id), new Origin(OriginKind::Console));
+            Permits::call($links->issue(...), new IssueRecoveryLink(new Realm('acme'), $invited->id), new Origin(OriginKind::Console));
             self::fail('An invited principal got a recovery link.');
         } catch (InactivePrincipal $exception) {
             self::assertStringEndsWith('can\'t recover access; activate it first.', $exception->getMessage());
@@ -110,7 +112,7 @@ final class RecoveryLinksTest extends DatabaseTestCase
 
         $this->expectException(UnknownPrincipal::class);
 
-        $links->issue(new IssueRecoveryLink(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next())), new Origin(OriginKind::Console));
+        Permits::call($links->issue(...), new IssueRecoveryLink(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next())), new Origin(OriginKind::Console));
     }
 
     public function testALinkWorksADayAtMost(): void

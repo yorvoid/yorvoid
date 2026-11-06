@@ -9,8 +9,8 @@ use YorvoID\Core\Event\OriginKind;
 
 /**
  * YorvoID's decisions until its evaluator (0.3): the host's operator from a console, job or system
- * origin; someone on their own account; an ability as the {@see AbilityPolicy} says; and authentication,
- * which the handler checks. Anything else is Deny, and Indeterminate never permits.
+ * origin; someone on their own account, as the {@see SelfServicePolicy} says; an ability as the
+ * {@see AbilityPolicy} says; and authentication, which the handler checks. Anything else is Deny, and Indeterminate never permits.
  *
  * @api
  */
@@ -20,6 +20,7 @@ final readonly class BuiltInAuthorization implements Authorization
 
     public function __construct(
         private AbilityPolicy $abilities = new NoAbilityPolicy(),
+        private SelfServicePolicy $selfService = new NoSelfService(),
     ) {
     }
 
@@ -33,7 +34,7 @@ final readonly class BuiltInAuthorization implements Authorization
                     ? Decision::permit($by, 'The host\'s operator.')
                     : null,
                 AuthorizedBy::Self => $command instanceof SelfOperation && self::inRealm($actor, $command) && $command->concerns($actor)
-                    ? Decision::permit($by, 'The actor\'s own account.')
+                    ? $this->selfService->decide($operation, $command, $actor)
                     : null,
                 AuthorizedBy::Ability => $this->ability($operation, $command, $actor),
                 AuthorizedBy::Authentication => Decision::permit($by, 'Authentication: the handler checks it.'),

@@ -6,6 +6,7 @@ namespace YorvoID\Symfony;
 
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use YorvoID\Authn\Attempt\AttemptLimits;
+use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
@@ -18,6 +19,7 @@ use YorvoID\Passkeys\UserVerification;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Flow\FlowCustomizer;
 use YorvoID\Symfony\Flow\FlowSource;
+use YorvoID\Symfony\Security\CurrentSession;
 
 /**
  * YorvoID's typed configuration from the bundle's: the container calls these.
@@ -52,6 +54,18 @@ final class Factories
     public static function duration(?string $duration): ?Duration
     {
         return null === $duration ? null : Duration::parse($duration);
+    }
+
+    /**
+     * The request's YorvoID session, asked for when it's needed.
+     *
+     * @param \Closure(): CurrentSession $current
+     *
+     * @return \Closure(): ?Session
+     */
+    public static function currentSession(\Closure $current): \Closure
+    {
+        return static fn (): ?Session => $current()->get();
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Core\Principal\Event;
 
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\Identifier;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
@@ -24,6 +25,7 @@ final readonly class PrincipalCreated
         public array $identifiers,
         public Origin $origin,
         public ?PrincipalId $actor,
+        public Permit $permit,
     ) {
     }
 }

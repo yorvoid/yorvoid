@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
-use YorvoID\Authn\Recovery\RecoveryCodes;
+use YorvoID\Authn\Recovery\RecoverWithCode;
 use YorvoID\Authn\Session\InactivePrincipal;
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
@@ -28,7 +30,7 @@ final readonly class RecoveryCodeStep implements Step
     public const string NAME = 'recovery_code';
 
     public function __construct(
-        private RecoveryCodes $codes,
+        private Operations $operations,
     ) {
     }
 
@@ -55,7 +57,7 @@ final readonly class RecoveryCodeStep implements Step
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult
     {
         try {
-            $started = $this->codes->recover($state->realm, IdentifierKind::Email, $input->string('email') ?? '', $input->string('code') ?? '', $context->origin, $context->device, $context->address, $context->deviceCookie);
+            $started = $this->operations->run(new RecoverWithCode($state->realm, IdentifierKind::Email, $input->string('email') ?? '', $input->string('code') ?? '', $context->device, $context->address, $context->deviceCookie), new Anonymous(), $context->origin);
         } catch (InactivePrincipal) {
             return StepResult::refused(new Problem(Refusal::PrincipalInactive->messageId()));
         }

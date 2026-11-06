@@ -26,6 +26,8 @@ use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
@@ -44,7 +46,7 @@ use YorvoID\Core\Time;
  *
  * @api
  */
-final readonly class Credentials
+final readonly class Credentials implements OperationHandler
 {
     private Duration $reauthenticationWindow;
 
@@ -60,6 +62,33 @@ final readonly class Credentials
         ?Duration $reauthenticationWindow = null,
     ) {
         $this->reauthenticationWindow = $reauthenticationWindow ?? Duration::minutes(5);
+    }
+
+    public function operations(): array
+    {
+        return [
+            AddCredential::class => $this->add(...),
+            RemoveCredential::class => $this->remove(...),
+            RenameCredential::class => $this->rename(...),
+        ];
+    }
+
+    /**
+     * The session an operation on someone's own credentials acts from.
+     *
+     * @throws IntegratorError When the permit's actor isn't a session in the operation's realm
+     *
+     * @internal For the packages that keep credentials
+     */
+    public static function session(Permit $permit, string $docs = 'concepts/credentials.md#changing-how-someone-signs-in'): Session
+    {
+        $session = $permit->actor;
+
+        if (!$session instanceof Session || !$session->realm->equals($permit->realm)) {
+            throw new IntegratorError(\sprintf('"%s" runs from the signed-in session, in its realm.', $permit->operation), 'Run it through Operations::run() with the session as the actor.', $docs);
+        }
+
+        return $session;
     }
 
     /**
@@ -80,16 +109,15 @@ final readonly class Credentials
     }
 
     /**
-     * Adds a credential to the session's principal. The package keeping the credential's secret part
-     * stores that in the same transaction.
+     * Adds a credential to the session's principal, as a consequence of what makes one, e.g. registering a
+     * passkey. The package keeping the credential's secret part stores that in the same transaction.
      *
      * @throws StepUpRequired
      */
-    public function add(AddCredential $command, Session $session, Origin $origin): Credential
+    public function add(AddCredential $command, Permit $permit, Origin $origin): Credential
     {
-        if (!$command->realm->equals($session->realm)) {
-            throw new IntegratorError('The session is in another realm than the credential.', 'Add credentials in the realm of the signed-in session.', 'concepts/credentials.md#changing-how-someone-signs-in');
-        }
+        $permit->use($command);
+        $session = self::session($permit);
 
         // Kinds no package checks yet: one added would count as a way to sign in, and let the last passkey go.
         if (!$command->kind->isBuilt()) {
@@ -116,9 +144,12 @@ final readonly class Credentials
      * @throws HeldAfterRecovery When the account was recovered recently
      * @throws LastCredential    When it's the principal's last way to sign in
      */
-    public function remove(RemoveCredential $command, Session $session, Origin $origin): void
+    public function remove(RemoveCredential $command, Permit $permit, Origin $origin): void
     {
-        $this->transactions->run(function () use ($command, $session, $origin): void {
+        $permit->use($command);
+        $session = self::session($permit);
+
+        $this->transactions->run(function () use ($command, $session, $permit, $origin): void {
             $credential = $this->own($command->realm, $command->credentialId, $session);
             $this->requireStepUp($session, 'yorvoid.credential.remove', heldAfterRecovery: true, phishingResistant: true);
 
@@ -133,7 +164,7 @@ final readonly class Credentials
             }
 
             if ($command->endOtherSessions) {
-                $this->sessions->endAll(new EndSessions($credential->realm, $credential->principalId, SessionEndReason::CredentialChanged, except: $session->id), $origin, $credential->principalId);
+                $permit->cause($this->sessions->endAll(...), new EndSessions($credential->realm, $credential->principalId, SessionEndReason::CredentialChanged, except: $session->id), $origin);
             }
 
             $this->transactions->afterCommit(function () use ($credential, $origin): void {
@@ -145,8 +176,11 @@ final readonly class Credentials
     /**
      * @throws UnknownCredential When the session's principal has no such credential
      */
-    public function rename(RenameCredential $command, Session $session, Origin $origin): Credential
+    public function rename(RenameCredential $command, Permit $permit, Origin $origin): Credential
     {
+        $permit->use($command);
+        $session = self::session($permit);
+
         return $this->transactions->run(function () use ($command, $session, $origin): Credential {
             $credential = $this->own($command->realm, $command->credentialId, $session);
             $renamed = new Credential($credential->id, $credential->realm, $credential->principalId, $credential->kind, self::label($command->label, $credential->kind), $credential->createdAt, $credential->lastUsedAt, $credential->status);
@@ -223,6 +257,8 @@ final readonly class Credentials
      * A principal's credentials, the oldest first: for "your sign-in methods".
      *
      * @return list<Credential>
+     *
+     * @phpstan-impure
      */
     public function of(Realm $realm, PrincipalId $principalId): array
     {

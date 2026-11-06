@@ -2,6 +2,25 @@
 
 All of YorvoID's packages are released together, with the same version ([compatibility](docs/compatibility.md)). Each release lists what changed, and what to do where a change breaks covered code.
 
+## Unreleased
+
+Every operation runs through one decision point: `Operations::run()` decides, and gives its handler a permit.
+
+### Breaking
+
+- Services take a `Permit` where they took an actor or a session (`Principals`, `Sessions`, `Credentials`, `Invitations`, `SetupCodes`, `RecoveryCodes`, `RecoveryLinks`, `Passkeys`, `NotMe`): run operations with `$operations->run($command, $actor, $origin)`, where the actor is the signed-in `Session` or, on the host, `Operator`. A handler called directly, without a permit from `Operations`, doesn't run.
+- `#[Operation]` takes what authorizes the operation (`AuthorizedBy`), and its command implements `Command`; one people run on their own account implements `SelfOperation`. `OperationDescription` says what authorizes the operation and what it causes.
+- Signing in, claiming a setup code, accepting an invitation, using a recovery code or link, confirming an email address and "This wasn't me" are commands run through `Operations` (`SignInWithPasskey`, `ClaimSetup`, `AcceptInvitation`, `RecoverWithCode`, `RedeemRecoveryCode`, `UseRecoveryLink`, `VerifyEmail`, `ReportNotMe`), as is registering a passkey (`RegisterPasskey`). Claiming and accepting sign the person in and return their session.
+- `StartSession`, `AddCredential` and `VerifyIdentifier` run only as a consequence of another operation, e.g. a sign-in.
+- `OwnIdentifiers` is gone: someone changes their own email address or username with `SetIdentifier` through `Operations`, and `StepUpSelfService` asks for the recent proof it needed.
+- Principals' events (`PrincipalCreating`, `PrincipalCreated`, `PrincipalStatusChanging`, `PrincipalStatusChanged`, `IdentifierChanging`, `IdentifierChanged`) carry the operation's permit; `EmailVerification::send()` takes the permit of the operation that set the address, and `EmailVerification::principalCreated()` sends the link for a principal created active.
+- `SecurityNotifications` takes `Operations` instead of `OneTimeTokens`; `PasskeyFlows`, its steps (`PasskeySignInStep`, `PasskeyRegistrationStep`, `SetupCodeStep`, `InvitationStep`, `RecoveryCodeStep`, `RecoveryCodesStep`, `RecoveryLinkStep`, `EmailVerificationStep`), `CurrentSession`, the authenticators (`PasskeyAuthenticator`, `RecoveryCodeAuthenticator`, `RecoveryLinkAuthenticator`) and `Scenario` take `Operations`.
+
+### Added
+
+- `Operations`, `Permit`, `BuiltInAuthorization` with `AbilityPolicy` and `SelfServicePolicy`, `NotPermitted`, and the actors `Operator`, `Anonymous` and `ActingPrincipal`. In Symfony, abilities are decided by the application's security (`isGranted()`), and the application's own `OperationHandler`s are registered.
+- A refused operation is recorded in the security log.
+
 ## 0.3.0 (2026-11-06)
 
 A setup code claims a realm under the security log's lock, and CI holds the packages to the compatibility promise: no `@internal` type in the API, no break the changelog doesn't list.

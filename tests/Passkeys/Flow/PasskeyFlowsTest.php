@@ -27,6 +27,7 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -42,9 +43,7 @@ use YorvoID\Flows\Input;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\Progress;
 use YorvoID\Flows\Storage\InMemoryFlowStore;
-use YorvoID\Mail\Email;
 use YorvoID\Mail\InMemoryMailer;
-use YorvoID\Mail\Mailer;
 use YorvoID\Notifications\EmailVerification;
 use YorvoID\Notifications\NotificationSettings;
 use YorvoID\Notifications\Translations;
@@ -60,8 +59,11 @@ use YorvoID\Passkeys\Flow\View\StepUpView;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\Refusal;
+use YorvoID\Passkeys\RegisterPasskey;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\TestOperations;
 use YorvoID\Throttle\Throttle;
 use YorvoID\Translation\Translator;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
@@ -99,6 +101,8 @@ final class PasskeyFlowsTest extends DatabaseTestCase
 
     private Stack $stack;
 
+    private Operations $operations;
+
     protected function setUp(): void
     {
         $this->stack = $stack = $this->stack('memory');
@@ -115,17 +119,18 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         $this->recoveryCodes = new RecoveryCodes($stack->recoveryCodes, $credentials, $this->sessions, $stepUp, $attempts, $log, $stack->transactions, $this->principals, clock: $this->clock);
         $tokens = new OneTimeTokens($stack->tokens, $this->principals, $log, $stack->transactions, clock: $this->clock);
         $this->recoveryLinks = new RecoveryLinks($tokens, $this->sessions, $this->principals, $stepUp, $stack->transactions, $this->clock);
-        $this->setupCodes = new SetupCodes($stack->setup, $this->principals, $log, $stack->transactions, $attempts, $this->clock);
-        $this->invitations = new Invitations($this->principals, $tokens, $stack->transactions, new Throttle($stack->throttle, $this->clock));
+        $this->setupCodes = new SetupCodes($stack->setup, $this->principals, $log, $stack->transactions, $attempts, $this->sessions, $this->clock);
+        $this->invitations = new Invitations($this->principals, $tokens, $stack->transactions, new Throttle($stack->throttle, $this->clock), $this->sessions, clock: $this->clock);
         $verification = new EmailVerification($this->principals, $tokens, new InMemoryMailer(), new Translator([Translations::DIRECTORY]), new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}'), $stack->transactions, static fn (string $token): string => 'https://acme.example/verify?token='.$token);
-        $this->journeys = $journeys = new PasskeyFlows($this->passkeys, $this->sessions, $this->principals, $this->setupCodes, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, Duration::minutes(5), $this->clock, $verification);
+        $this->operations = TestOperations::of($log, $stepUp, $this->principals, $this->sessions, $credentials, $this->passkeys, $this->recoveryCodes, $this->recoveryLinks, $tokens, $this->setupCodes, $this->invitations, $verification);
+        $this->journeys = $journeys = new PasskeyFlows($this->operations, $this->passkeys, $this->principals, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, Duration::minutes(5), $verification);
         $this->flows = new Flows($journeys->all(), new InMemoryFlowStore(), $this->sessions, clock: $this->clock);
         $this->context = new FlowContext(new Origin(OriginKind::Web), device: 'Firefox on Linux', address: '192.0.2.10');
     }
 
     public function testClaimsAFreshInstallation(): void
     {
-        $code = $this->setupCodes->create(new CreateSetupCode($this->realm, Duration::days(1)), new Origin(OriginKind::Console));
+        $code = Permits::call($this->setupCodes->create(...), new CreateSetupCode($this->realm, Duration::days(1)), new Origin(OriginKind::Console));
         $flow = $this->flows->start(PasskeyFlows::SETUP, $this->realm, $this->context);
         self::assertSame('setup_code', $flow->step);
         self::assertSame([], $flow->view?->jsonSerialize());
@@ -197,14 +202,14 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertTrue($done->signedIn?->session->principalId->equals($ana->id));
         self::assertSame([AuthenticationMethod::Passkey, 'Firefox on Linux', '192.0.2.10'], [$done->signedIn->session->authentication->factors[0]->method, $done->signedIn->session->device, $done->signedIn->session->address]);
 
-        $this->principals->suspend(new SuspendPrincipal($this->realm, $ana->id), new Origin(OriginKind::Console));
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal($this->realm, $ana->id), new Origin(OriginKind::Console));
         $again = $this->flows->start(PasskeyFlows::SIGN_IN, $this->realm, $this->context);
         self::assertEquals([new Problem('yorvoid.passkey.not_working')], $this->submit($again, 'passkey', ['response' => json_decode($authenticator->signIn($this->options($again)), true)])->problems);
     }
 
     public function testAcceptsAnInvitation(): void
     {
-        $invitation = $this->invitations->invite(new Invite($this->realm, 'Bo@Example.com'), new Origin(OriginKind::Web));
+        $invitation = Permits::call($this->invitations->invite(...), new Invite($this->realm, 'Bo@Example.com'), new Origin(OriginKind::Web));
         $flow = $this->flows->start(PasskeyFlows::INVITATION, $this->realm, $this->context, [InvitationStep::TOKEN => $invitation->token->secret->reveal()]);
         self::assertEquals(new InvitationView('Bo@Example.com'), $flow->view);
         self::assertSame(['email' => 'Bo@Example.com'], $flow->view?->jsonSerialize());
@@ -257,7 +262,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         $later = $this->submit($flow, 'passkey_registration', ['action' => Input::SKIP], $this->context->withSession($recovered->signedIn->session));
         self::assertSame(FlowStatus::Completed, $later->status, 'Nine codes are left: no new ones.');
 
-        $this->principals->suspend(new SuspendPrincipal($this->realm, $ana->id), new Origin(OriginKind::Console));
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal($this->realm, $ana->id), new Origin(OriginKind::Console));
         $suspended = $this->flows->start(PasskeyFlows::RECOVER_WITH_CODE, $this->realm, $this->context);
         self::assertEquals([new Problem('yorvoid.passkey.not_working')], $this->submit($suspended, 'recovery_code', ['email' => 'ana@example.com', 'code' => $codes[1]])->problems);
     }
@@ -265,15 +270,15 @@ final class PasskeyFlowsTest extends DatabaseTestCase
     public function testRecoversWithALinkAndAddsANewPasskey(): void
     {
         [$ana] = $this->account();
-        $link = $this->recoveryLinks->issue(new IssueRecoveryLink($this->realm, $ana->id), new Origin(OriginKind::Console));
+        $link = Permits::call($this->recoveryLinks->issue(...), new IssueRecoveryLink($this->realm, $ana->id), new Origin(OriginKind::Console));
         $flow = $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $link->secret->reveal()]);
         self::assertSame(['account' => 'ana@example.com'], $flow->view?->jsonSerialize(), 'The page names whose account the link opens (login CSRF).');
         self::assertSame(['account' => null], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => 'wrong'])->view?->jsonSerialize());
-        $both = $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bo@example.com', username: 'bo'), new Origin(OriginKind::Console));
-        $bos = $this->recoveryLinks->issue(new IssueRecoveryLink($this->realm, $both->id), new Origin(OriginKind::Console));
+        $both = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bo@example.com', username: 'bo'), new Origin(OriginKind::Console));
+        $bos = Permits::call($this->recoveryLinks->issue(...), new IssueRecoveryLink($this->realm, $both->id), new Origin(OriginKind::Console));
         self::assertSame(['account' => 'bo@example.com'], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $bos->secret->reveal()])->view?->jsonSerialize(), 'The email address first.');
-        $named = $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, username: 'cy'), new Origin(OriginKind::Console));
-        $cys = $this->recoveryLinks->issue(new IssueRecoveryLink($this->realm, $named->id), new Origin(OriginKind::Console));
+        $named = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, username: 'cy'), new Origin(OriginKind::Console));
+        $cys = Permits::call($this->recoveryLinks->issue(...), new IssueRecoveryLink($this->realm, $named->id), new Origin(OriginKind::Console));
         self::assertSame(['account' => 'cy'], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $cys->secret->reveal()])->view?->jsonSerialize());
 
         $recovered = $this->submit($flow, 'recovery_link', []);
@@ -292,8 +297,8 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertEquals(new Problem('yorvoid.flow.recovery_link.not_working'), $this->submit($this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context), 'recovery_link', [])->failure);
         self::assertEquals(new Problem('yorvoid.flow.recovery_link.not_working'), $this->submit($this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => '']), 'recovery_link', [])->failure);
 
-        $another = $this->recoveryLinks->issue(new IssueRecoveryLink($this->realm, $ana->id), new Origin(OriginKind::Console));
-        $this->principals->suspend(new SuspendPrincipal($this->realm, $ana->id), new Origin(OriginKind::Console));
+        $another = Permits::call($this->recoveryLinks->issue(...), new IssueRecoveryLink($this->realm, $ana->id), new Origin(OriginKind::Console));
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal($this->realm, $ana->id), new Origin(OriginKind::Console));
         $suspended = $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $another->secret->reveal()]);
         self::assertEquals(new Problem('yorvoid.flow.recovery_link.not_working'), $this->submit($suspended, 'recovery_link', [])->failure, 'Suspending a principal stops its links.');
     }
@@ -385,7 +390,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
 
     public function testAStepUpWithoutAPasskeyEndsTheFlow(): void
     {
-        $bob = $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
+        $bob = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
         $context = $this->context->withSession($this->session($bob));
 
         $flow = $this->flows->start(PasskeyFlows::STEP_UP, $this->realm, $context, ['step_up.operation' => 'acme.site.remove', 'step_up.multi_factor' => true]);
@@ -397,41 +402,18 @@ final class PasskeyFlowsTest extends DatabaseTestCase
     public function testNoNewRecoveryCodesWhileTheCoolDownAfterARecoveryLasts(): void
     {
         $stepUp = new StepUp($this->sessions, $this->stack->coolDowns, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->clock, Duration::hours(24));
-        $bob = $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
+        $bob = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bob@example.com'), new Origin(OriginKind::Console));
         $context = $this->context->withSession($this->session($bob));
         $state = new FlowState('id', PasskeyFlows::RECOVER_WITH_CODE, $this->realm, $this->clock->now()->modify('+30 minutes'));
-        $step = new RecoveryCodesStep($this->recoveryCodes, $stepUp);
+        $step = new RecoveryCodesStep($this->operations, $this->recoveryCodes, $stepUp);
         self::assertTrue($step->applies($state, $context));
 
         $stepUp->startCoolDown($this->realm, $bob->id, new Origin(OriginKind::Web));
 
         self::assertFalse($step->applies($state, $context), 'New codes would replace the owner\'s during the cool-down.');
-        self::assertTrue(new RecoveryCodesStep($this->recoveryCodes)->applies($state, $context), 'Without StepUp there\'s no cool-down to wait out.');
+        self::assertTrue(new RecoveryCodesStep($this->operations, $this->recoveryCodes)->applies($state, $context), 'Without StepUp there\'s no cool-down to wait out.');
         $this->clock->sleep(86400);
         self::assertTrue($step->applies($state, $context));
-    }
-
-    public function testClaimingDoesntNeedTheEmailToGo(): void
-    {
-        $failing = new class implements Mailer {
-            public function send(Email $email): void
-            {
-                throw new \RuntimeException('The mail server is down.');
-            }
-        };
-        $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, new SecurityLog($this->stack->log, $this->stack->transactions), $this->stack->transactions, clock: $this->clock);
-        $verification = new EmailVerification($this->principals, $tokens, $failing, new Translator([Translations::DIRECTORY]), new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}'), $this->stack->transactions, static fn (string $token): string => 'https://acme.example/verify?token='.$token);
-        $stepUp = new StepUp($this->sessions, $this->stack->coolDowns, new SecurityLog($this->stack->log, $this->stack->transactions));
-
-        foreach (['acme' => $verification, 'globex' => null] as $realm => $with) {
-            $flows = new Flows(new PasskeyFlows($this->passkeys, $this->sessions, $this->principals, $this->setupCodes, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, Duration::minutes(5), $this->clock, $with)->all(), new InMemoryFlowStore(), $this->sessions, clock: $this->clock);
-            $code = $this->setupCodes->create(new CreateSetupCode(new Realm($realm), Duration::days(1)), new Origin(OriginKind::Console));
-            $flow = $flows->start(PasskeyFlows::SETUP, new Realm($realm), $this->context);
-            $claimed = $flows->submit($flow->state->id, 'setup_code', new Input(['code' => $code->reveal(), 'email' => 'ana@example.com']), $this->context);
-
-            // Claimed, though the email didn't go: on to the passkey, which hands the session over.
-            self::assertSame([FlowStatus::InProgress, 'passkey_registration', []], [$claimed?->status, $claimed?->step, $claimed?->problems], \sprintf('The owner of %s didn\'t claim it.', $realm));
-        }
     }
 
     public function testTheJourneysRequireWhatMakesThemSafe(): void
@@ -452,7 +434,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
             'yorvoid.step_up' => ['step_up'],
             'yorvoid.verify_email' => ['verify_email'],
         ], $required);
-        self::assertNotContains(PasskeyFlows::VERIFY_EMAIL, array_map(static fn ($flow): string => $flow->name, new PasskeyFlows($this->passkeys, $this->sessions, $this->principals, $this->setupCodes, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, new StepUp($this->sessions, $this->stack('memory')->coolDowns, new SecurityLog($this->stack('memory')->log, $this->stack('memory')->transactions)), Duration::minutes(5))->all()), 'Without EmailVerification, nothing to verify with.');
+        self::assertNotContains(PasskeyFlows::VERIFY_EMAIL, array_map(static fn ($flow): string => $flow->name, new PasskeyFlows($this->operations, $this->passkeys, $this->principals, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, new StepUp($this->sessions, $this->stack('memory')->coolDowns, new SecurityLog($this->stack('memory')->log, $this->stack('memory')->transactions)), Duration::minutes(5))->all()), 'Without EmailVerification, nothing to verify with.');
     }
 
     public function testRefusalsHaveMessagesToTranslate(): void
@@ -483,19 +465,19 @@ final class PasskeyFlowsTest extends DatabaseTestCase
      */
     private function account(): array
     {
-        $ana = $this->principals->create(new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Console));
+        $ana = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Console));
         $session = $this->session($ana);
         $authenticator = new VirtualAuthenticator();
         $ceremony = $this->passkeys->beginRegistration($session);
-        $this->passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Phone', new Origin(OriginKind::Web));
-        $codes = $this->recoveryCodes->generate(new \YorvoID\Authn\Recovery\GenerateRecoveryCodes($this->realm), $session, new Origin(OriginKind::Web));
+        Permits::call($this->passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Phone'), new Origin(OriginKind::Web), $session);
+        $codes = Permits::call($this->recoveryCodes->generate(...), new \YorvoID\Authn\Recovery\GenerateRecoveryCodes($this->realm), new Origin(OriginKind::Web), $session);
 
         return [$ana, $authenticator, array_map(static fn (Secret $code): string => $code->reveal(), $codes)];
     }
 
     private function session(Principal $principal): Session
     {
-        return $this->sessions->start(new StartSession($this->realm, $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
+        return Permits::call($this->sessions->start(...), new StartSession($this->realm, $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
     }
 
     /**

@@ -46,9 +46,12 @@ use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Passkeys\Refusal;
+use YorvoID\Passkeys\RegisterPasskey;
 use YorvoID\Passkeys\RemovePasskeyWithCredential;
+use YorvoID\Passkeys\SignInWithPasskey;
 use YorvoID\Passkeys\UserVerification;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 use YorvoID\Throttle\Limit;
@@ -88,7 +91,7 @@ final class PasskeysTest extends DatabaseTestCase
         \assert(\is_array($answer) && \is_array($answer['response']));
         $answer['response']['transports'] = [1, 'usb', ['nfc'], 'carrier-pigeon', 'usb', null, str_repeat('x', 10_000)];
 
-        $passkeys->finishRegistration($session, $ceremony->id, json_encode($answer, \JSON_THROW_ON_ERROR), 'Key', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, json_encode($answer, \JSON_THROW_ON_ERROR), 'Key'), new Origin(OriginKind::Web), $session);
 
         self::assertSame(['usb'], $passkeys->of(new Realm('acme'), $session->principalId)[0]->transports);
         $this->assertThePrincipalCanStillUseItsPasskeys($passkeys, $session);
@@ -112,7 +115,7 @@ final class PasskeysTest extends DatabaseTestCase
         $authenticator = new VirtualAuthenticator();
 
         $ceremony = $passkeys->beginRegistration($session);
-        $credential = $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'MacBook', new Origin(OriginKind::Web));
+        $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'MacBook'), new Origin(OriginKind::Web), $session);
 
         self::assertSame('MacBook', $credential->label);
         $stored = $passkeys->of(new Realm('acme'), $session->principalId);
@@ -128,7 +131,7 @@ final class PasskeysTest extends DatabaseTestCase
 
         $this->clock->sleep(3600);
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $started = $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options), new Origin(OriginKind::Web), 'Firefox on Linux', '192.0.2.10');
+        $started = Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options), 'Firefox on Linux', '192.0.2.10'), new Origin(OriginKind::Web));
 
         self::assertTrue($started->session->principalId->equals($session->principalId));
         $factor = $started->session->authentication->factors[0];
@@ -145,7 +148,7 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session(email: 'ana@example.com', username: 'ana');
         $authenticator = new VirtualAuthenticator();
         $first = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $first->id, $authenticator->register($first->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $first->id, $authenticator->register($first->options), 'Phone'), new Origin(OriginKind::Web), $session);
 
         $registration = self::json($passkeys->beginRegistration($session)->options);
         $signIn = self::json($passkeys->beginSignIn(new Realm('acme'))->options);
@@ -181,7 +184,7 @@ final class PasskeysTest extends DatabaseTestCase
         $this->clock->sleep(100);
 
         try {
-            $passkeys->finishRegistration($session, $ceremony->id, $response, 'Attacker\'s', new Origin(OriginKind::Web));
+            Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $response, 'Attacker\'s'), new Origin(OriginKind::Web), $session);
             self::fail('A passkey was added from a session that proved nothing recently.');
         } catch (StepUpRequired) {
         }
@@ -201,12 +204,12 @@ final class PasskeysTest extends DatabaseTestCase
         $authenticator = new VirtualAuthenticator();
 
         $ceremony = $passkeys->beginRegistration($session);
-        $this->refused(Refusal::UserNotVerified, static fn () => $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options, userVerified: false), 'Phone', new Origin(OriginKind::Web)));
+        $this->refused(Refusal::UserNotVerified, static fn () => Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options, userVerified: false), 'Phone'), new Origin(OriginKind::Web), $session));
 
         $ceremony = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Phone'), new Origin(OriginKind::Web), $session);
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::UserNotVerified, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 1, userVerified: false), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::UserNotVerified, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 1, userVerified: false)), new Origin(OriginKind::Web)));
 
         $entry = \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), -1)[0];
         self::assertSame(['yorvoid.passkey.sign_in', Outcome::Failed], [$entry->action, $entry->outcome]);
@@ -225,7 +228,7 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator();
         $ceremony = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Phone'), new Origin(OriginKind::Web), $session);
 
         foreach (['discouraged', 'preferred'] as $downgrade) {
             $signIn = $passkeys->beginSignIn(new Realm('acme'));
@@ -235,7 +238,7 @@ final class PasskeysTest extends DatabaseTestCase
             self::assertNotSame($stored->options, $weakened);
             $this->stack->ceremonies->add(new Ceremony($stored->id, $stored->realm, $stored->kind, $weakened, $stored->expiresAt));
 
-            $this->refused(Refusal::UserNotVerified, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($weakened, userVerified: false), new Origin(OriginKind::Web)));
+            $this->refused(Refusal::UserNotVerified, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($weakened, userVerified: false)), new Origin(OriginKind::Web)));
         }
     }
 
@@ -247,18 +250,18 @@ final class PasskeysTest extends DatabaseTestCase
         $authenticator = new VirtualAuthenticator();
         $ceremony = $passkeys->beginRegistration($session);
         self::assertSame('preferred', ((array) self::json($ceremony->options)['authenticatorSelection'])['userVerification']);
-        $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options, userVerified: false), 'Key', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options, userVerified: false), 'Key'), new Origin(OriginKind::Web), $session);
         self::assertFalse($passkeys->of(new Realm('acme'), $session->principalId)[0]->userVerificationInitialized);
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $started = $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, userVerified: false), new Origin(OriginKind::Web));
+        $started = Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, userVerified: false)), new Origin(OriginKind::Web));
 
         self::assertFalse($started->session->authentication->factors[0]->multiFactor, 'Without user verification, a passkey is one factor (NIST SP 800-63B-4, appendix B).');
         self::assertTrue($started->session->authentication->factors[0]->phishingResistant);
         self::assertFalse($passkeys->of(new Realm('acme'), $session->principalId)[0]->userVerificationInitialized);
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        self::assertTrue($passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options), new Origin(OriginKind::Web))->session->authentication->factors[0]->multiFactor);
+        self::assertTrue(Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options)), new Origin(OriginKind::Web))->session->authentication->factors[0]->multiFactor);
         self::assertTrue($passkeys->of(new Realm('acme'), $session->principalId)[0]->userVerificationInitialized, 'The first verified use was recorded.');
     }
 
@@ -271,8 +274,8 @@ final class PasskeysTest extends DatabaseTestCase
         $before = \count(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false));
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::UnknownPasskey, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $stranger->signIn($signIn->options), new Origin(OriginKind::Web)));
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), 'not-a-ceremony', '{}', new Origin(OriginKind::Web)));
+        $this->refused(Refusal::UnknownPasskey, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $stranger->signIn($signIn->options)), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), 'not-a-ceremony', '{}'), new Origin(OriginKind::Web)));
 
         $recorded = \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), $before);
         self::assertSame([
@@ -291,29 +294,29 @@ final class PasskeysTest extends DatabaseTestCase
         $registration = $passkeys->beginRegistration($session);
         $response = $authenticator->register($registration->options);
 
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishRegistration($other, $registration->id, $response, 'Phone', new Origin(OriginKind::Web)));
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), $registration->id, $response, new Origin(OriginKind::Web)));
-        $passkeys->finishRegistration($session, $registration->id, $response, 'Phone', new Origin(OriginKind::Web));
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishRegistration($session, $registration->id, $response, 'Phone', new Origin(OriginKind::Web)), 'A ceremony worked twice.');
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($other->realm, $registration->id, $response, 'Phone'), new Origin(OriginKind::Web), $other));
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $registration->id, $response), new Origin(OriginKind::Web)));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $response, 'Phone'), new Origin(OriginKind::Web), $session);
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $response, 'Phone'), new Origin(OriginKind::Web), $session), 'A ceremony worked twice.');
 
         $registration = $passkeys->beginRegistration($session);
         $response = $authenticator->register($registration->options);
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), $registration->id, $response, new Origin(OriginKind::Web)));
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $registration->id, $response), new Origin(OriginKind::Web)));
 
         $registration = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Phone'), new Origin(OriginKind::Web), $session);
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
         $answer = $authenticator->signIn($signIn->options, credential: 2);
-        $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $answer, new Origin(OriginKind::Web));
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $answer, new Origin(OriginKind::Web)), 'A sign-in was replayed.');
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $answer), new Origin(OriginKind::Web));
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $answer), new Origin(OriginKind::Web)), 'A sign-in was replayed.');
 
         $elsewhere = $passkeys->beginSignIn(new Realm('globex'));
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), $elsewhere->id, $authenticator->signIn($elsewhere->options, credential: 2), new Origin(OriginKind::Web)));
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), 'not-an-id', $answer, new Origin(OriginKind::Web)));
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $elsewhere->id, $authenticator->signIn($elsewhere->options, credential: 2)), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), 'not-an-id', $answer), new Origin(OriginKind::Web)));
 
         $late = $passkeys->beginSignIn(new Realm('acme'));
         $this->clock->sleep(300);
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), $late->id, $authenticator->signIn($late->options, credential: 2), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $late->id, $authenticator->signIn($late->options, credential: 2)), new Origin(OriginKind::Web)));
     }
 
     #[DataProvider('implementations')]
@@ -323,9 +326,9 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator();
         $registration = $passkeys->beginRegistration($session);
-        $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options, origin: 'https://examp1e.com'), 'Phone', new Origin(OriginKind::Web)));
+        $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options, origin: 'https://examp1e.com'), 'Phone'), new Origin(OriginKind::Web), $session));
         $registration = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Phone'), new Origin(OriginKind::Web), $session);
 
         foreach ([
             'a look-alike origin' => ['origin' => 'https://examp1e.com'],
@@ -334,12 +337,12 @@ final class PasskeysTest extends DatabaseTestCase
             'another challenge' => ['challenge' => VirtualAuthenticator::encode(random_bytes(32))],
         ] as $what => $tampering) {
             $signIn = $passkeys->beginSignIn(new Realm('acme'));
-            $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, 1, true, null, $tampering['origin'] ?? null, $tampering['challenge'] ?? null, $tampering['rpId'] ?? null), new Origin(OriginKind::Web)), \sprintf('An answer with %s was accepted.', $what));
+            $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, 1, true, null, $tampering['origin'] ?? null, $tampering['challenge'] ?? null, $tampering['rpId'] ?? null)), new Origin(OriginKind::Web)), \sprintf('An answer with %s was accepted.', $what));
         }
 
         foreach (['', 'null', '{}', '{"id": "x", "rawId": "x", "type": "public-key", "response": {}}', $authenticator->register($registration->options)] as $garbage) {
             $signIn = $passkeys->beginSignIn(new Realm('acme'));
-            $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $garbage, new Origin(OriginKind::Web)));
+            $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $garbage), new Origin(OriginKind::Web)));
         }
     }
 
@@ -353,21 +356,21 @@ final class PasskeysTest extends DatabaseTestCase
 
         foreach ([...$frames, 'a sign-in\'s type' => ['type' => 'webauthn.get']] as $what => $clientData) {
             $registration = $passkeys->beginRegistration($session);
-            $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options, clientData: $clientData), 'Phone', new Origin(OriginKind::Web)), \sprintf('A registration from %s was accepted.', $what));
+            $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options, clientData: $clientData), 'Phone'), new Origin(OriginKind::Web), $session), \sprintf('A registration from %s was accepted.', $what));
         }
 
         $registration = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Phone'), new Origin(OriginKind::Web), $session);
         // The refused registrations made passkeys too: the one registered is the last.
         $registered = \count($authenticator->credentials) - 1;
 
         foreach ([...$frames, 'a registration\'s type' => ['type' => 'webauthn.create']] as $what => $clientData) {
             $signIn = $passkeys->beginSignIn(new Realm('acme'));
-            $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: $registered, clientData: $clientData), new Origin(OriginKind::Web)), \sprintf('A sign-in from %s was accepted.', $what));
+            $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: $registered, clientData: $clientData)), new Origin(OriginKind::Web)), \sprintf('A sign-in from %s was accepted.', $what));
         }
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: $registered, clientData: ['crossOrigin' => false]), new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: $registered, clientData: ['crossOrigin' => false])), new Origin(OriginKind::Web));
     }
 
     #[DataProvider('implementations')]
@@ -377,12 +380,12 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator();
         $registration = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Key', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Key'), new Origin(OriginKind::Web), $session);
         $syncing = new VirtualAuthenticator(synced: true);
         $syncing->credentials = $authenticator->credentials;
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::SuspectedCopy, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $syncing->signIn($signIn->options, counter: 5), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $syncing->signIn($signIn->options, counter: 5)), new Origin(OriginKind::Web)));
         self::assertFalse($passkeys->of(new Realm('acme'), $session->principalId)[0]->backupEligible);
         self::assertSame(0, $passkeys->of(new Realm('acme'), $session->principalId)[0]->signCount);
     }
@@ -394,11 +397,11 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator();
         $registration = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Key', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Key'), new Origin(OriginKind::Web), $session);
         $first = $passkeys->beginSignIn(new Realm('acme'));
         $second = $passkeys->beginSignIn(new Realm('acme'));
         $copy = $authenticator->signIn($second->options, counter: 6);
-        $passkeys->finishSignIn(new Realm('acme'), $first->id, $authenticator->signIn($first->options, counter: 6), new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $first->id, $authenticator->signIn($first->options, counter: 6)), new Origin(OriginKind::Web));
 
         // The second read the counter before the first recorded its own: it's the store's update that refuses.
         $stale = $this->stack->passkeys;
@@ -435,7 +438,7 @@ final class PasskeysTest extends DatabaseTestCase
             }
         });
 
-        $this->refused(Refusal::SuspectedCopy, static fn () => $passkeys->finishSignIn(new Realm('acme'), $second->id, $copy, new Origin(OriginKind::Web)));
+        $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $second->id, $copy), new Origin(OriginKind::Web)));
         self::assertSame(6, $stale->find(new Realm('acme'), $authenticator->credentials[0]['id'])?->signCount);
     }
 
@@ -449,14 +452,14 @@ final class PasskeysTest extends DatabaseTestCase
         // Two tabs begin the first registration at once: each gets a new handle.
         $first = $passkeys->beginRegistration($session);
         $second = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $first->id, $phone->register($first->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $first->id, $phone->register($first->options), 'Phone'), new Origin(OriginKind::Web), $session);
 
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishRegistration($session, $second->id, $laptop->register($second->options), 'Laptop', new Origin(OriginKind::Web)));
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $second->id, $laptop->register($second->options), 'Laptop'), new Origin(OriginKind::Web), $session));
         self::assertCount(1, $passkeys->of(new Realm('acme'), $session->principalId));
         self::assertCount(1, $this->credentials->of(new Realm('acme'), $session->principalId), 'The refused passkey\'s credential was kept.');
 
         $again = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $again->id, $laptop->register($again->options), 'Laptop', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $again->id, $laptop->register($again->options), 'Laptop'), new Origin(OriginKind::Web), $session);
         self::assertCount(1, array_unique(array_map(static fn (Passkey $passkey): string => $passkey->userHandle, $passkeys->of(new Realm('acme'), $session->principalId))));
     }
 
@@ -488,35 +491,35 @@ final class PasskeysTest extends DatabaseTestCase
 
         for ($i = 0; $i < 3; ++$i) {
             $ceremony = $passkeys->beginRegistration($session);
-            $credentials[] = $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Key '.$i, new Origin(OriginKind::Web));
+            $credentials[] = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key '.$i), new Origin(OriginKind::Web), $session);
         }
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::UnknownPasskey, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $stranger->signIn($signIn->options), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::UnknownPasskey, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $stranger->signIn($signIn->options)), new Origin(OriginKind::Web)));
 
         $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove'), new Origin(OriginKind::Web));
-        $this->credentials->remove(new RemoveCredential(new Realm('acme'), $credentials[0]->id), $session, new Origin(OriginKind::Web));
+        Permits::call($this->credentials->remove(...), new RemoveCredential(new Realm('acme'), $credentials[0]->id), new Origin(OriginKind::Web), $session);
         self::assertCount(2, $passkeys->of(new Realm('acme'), $session->principalId), 'The removed passkey\'s key was kept.');
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::UnknownPasskey, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 0), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::UnknownPasskey, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 0)), new Origin(OriginKind::Web)));
 
         // Without the listener, the key stays, but the registry entry is gone: it doesn't sign in either.
         $this->stack->credentials->remove(new Realm('acme'), $credentials[2]->id);
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::UnknownPasskey, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 2), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::UnknownPasskey, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 2)), new Origin(OriginKind::Web)));
         $ceremony = $passkeys->beginRegistration($session);
-        $credentials[] = $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Key 3', new Origin(OriginKind::Web));
+        $credentials[] = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key 3'), new Origin(OriginKind::Web), $session);
 
         $this->credentials->disable($credentials[1], 'reported lost', new Origin(OriginKind::Web));
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::PasskeyDisabled, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 1), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::PasskeyDisabled, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 1)), new Origin(OriginKind::Web)));
 
-        $this->principals->suspend(new SuspendPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::PrincipalInactive, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 3), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::PrincipalInactive, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 3)), new Origin(OriginKind::Web)));
 
         $signIn = $passkeys->beginSignIn(new Realm('globex'));
-        $this->refused(Refusal::UnknownPasskey, static fn () => $passkeys->finishSignIn(new Realm('globex'), $signIn->id, $authenticator->signIn($signIn->options, credential: 3), new Origin(OriginKind::Web)), 'A passkey worked in another realm.');
+        $this->refused(Refusal::UnknownPasskey, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('globex'), $signIn->id, $authenticator->signIn($signIn->options, credential: 3)), new Origin(OriginKind::Web)), 'A passkey worked in another realm.');
     }
 
     #[DataProvider('implementations')]
@@ -527,15 +530,15 @@ final class PasskeysTest extends DatabaseTestCase
         $bob = $this->session();
         $authenticator = new VirtualAuthenticator();
         $ceremony = $passkeys->beginRegistration($ana);
-        $passkeys->finishRegistration($ana, $ceremony->id, $authenticator->register($ceremony->options), 'Ana\'s', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($ana->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Ana\'s'), new Origin(OriginKind::Web), $ana);
         $ceremony = $passkeys->beginRegistration($bob);
-        $passkeys->finishRegistration($bob, $ceremony->id, new VirtualAuthenticator()->register($ceremony->options), 'Bob\'s', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($bob->realm, $ceremony->id, new VirtualAuthenticator()->register($ceremony->options), 'Bob\'s'), new Origin(OriginKind::Web), $bob);
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
         $bobsHandle = $passkeys->of(new Realm('acme'), $bob->principalId)[0]->userHandle;
-        $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, userHandle: $bobsHandle), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, userHandle: $bobsHandle)), new Origin(OriginKind::Web)));
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, userHandle: ''), new Origin(OriginKind::Web)), 'An answer naming no account was accepted.');
+        $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, userHandle: '')), new Origin(OriginKind::Web)), 'An answer naming no account was accepted.');
     }
 
     #[DataProvider('implementations')]
@@ -545,11 +548,11 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator(edwards: true);
         $ceremony = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Ed25519', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Ed25519'), new Origin(OriginKind::Web), $session);
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
 
-        self::assertTrue($passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options), new Origin(OriginKind::Web))->session->principalId->equals($session->principalId));
+        self::assertTrue(Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options)), new Origin(OriginKind::Web))->session->principalId->equals($session->principalId));
     }
 
     #[DataProvider('implementations')]
@@ -559,10 +562,10 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator();
         $ceremony = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Phone'), new Origin(OriginKind::Web), $session);
 
         $again = $passkeys->beginRegistration($session);
-        $this->refused(Refusal::AlreadyRegistered, static fn () => $passkeys->finishRegistration($session, $again->id, $authenticator->register($again->options, credentialId: $authenticator->credentials[0]['id']), 'Phone again', new Origin(OriginKind::Web)));
+        $this->refused(Refusal::AlreadyRegistered, static fn () => Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $again->id, $authenticator->register($again->options, credentialId: $authenticator->credentials[0]['id']), 'Phone again'), new Origin(OriginKind::Web), $session));
 
         self::assertCount(1, $this->credentials->of(new Realm('acme'), $session->principalId), 'A refused registration left a credential behind.');
     }
@@ -575,20 +578,20 @@ final class PasskeysTest extends DatabaseTestCase
             $session = $this->session();
             $authenticator = new VirtualAuthenticator();
             $ceremony = $passkeys->beginRegistration($session);
-            $credential = $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Key', new Origin(OriginKind::Web));
+            $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key'), new Origin(OriginKind::Web), $session);
             $signIn = $passkeys->beginSignIn(new Realm('acme'));
-            $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 5), new Origin(OriginKind::Web));
+            Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 5)), new Origin(OriginKind::Web));
 
             $signIn = $passkeys->beginSignIn(new Realm('acme'));
             $copy = $authenticator->signIn($signIn->options, counter: 5);
 
             if (ClonePolicy::Allow === $policy) {
-                $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $copy, new Origin(OriginKind::Web));
+                Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web));
                 $entry = \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), -2)[0];
                 self::assertSame('yorvoid.passkey.suspected_copy', $entry->action);
                 self::assertSame(['principal' => (string) $session->principalId], $entry->details);
             } else {
-                $this->refused(Refusal::SuspectedCopy, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $copy, new Origin(OriginKind::Web)));
+                $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web)));
                 self::assertSame(5, $passkeys->of(new Realm('acme'), $session->principalId)[0]->signCount);
             }
 
@@ -603,14 +606,14 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator();
         $ceremony = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Key', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key'), new Origin(OriginKind::Web), $session);
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 3), new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 3)), new Origin(OriginKind::Web));
         self::assertSame(3, $passkeys->of(new Realm('acme'), $session->principalId)[0]->signCount, 'A key whose count starts at 0 counts up.');
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::SuspectedCopy, static fn () => $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 0), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 0)), new Origin(OriginKind::Web)));
         $entry = \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), -1)[0];
         self::assertSame(['principal' => (string) $session->principalId, 'reason' => 'suspected_copy'], $entry->details);
     }
@@ -622,13 +625,13 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator(synced: true);
         $ceremony = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'iCloud Keychain', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'iCloud Keychain'), new Origin(OriginKind::Web), $session);
         $registered = $passkeys->of(new Realm('acme'), $session->principalId)[0];
         self::assertSame([true, true], [$registered->backupEligible, $registered->backedUp]);
 
         for ($i = 0; $i < 3; ++$i) {
             $signIn = $passkeys->beginSignIn(new Realm('acme'));
-            $passkeys->finishSignIn(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options), new Origin(OriginKind::Web));
+            Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options)), new Origin(OriginKind::Web));
         }
 
         $stored = $passkeys->of(new Realm('acme'), $session->principalId)[0];
@@ -655,7 +658,7 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator();
         $registration = $passkeys->beginRegistration($session);
-        $credential = $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Phone', new Origin(OriginKind::Web));
+        $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Phone'), new Origin(OriginKind::Web), $session);
         $this->clock->sleep(1800);
         $removing = new AuthenticationRequirement(Duration::minutes(5), multiFactor: true, phishingResistant: true, operation: 'acme.site.remove');
 
@@ -694,9 +697,9 @@ final class PasskeysTest extends DatabaseTestCase
         $authenticator = new VirtualAuthenticator();
         $stranger = new VirtualAuthenticator();
         $registration = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Phone'), new Origin(OriginKind::Web), $session);
         $registration = $passkeys->beginRegistration($other);
-        $passkeys->finishRegistration($other, $registration->id, $stranger->register($registration->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($other->realm, $registration->id, $stranger->register($registration->options), 'Phone'), new Origin(OriginKind::Web), $other);
         $requirement = new AuthenticationRequirement(Duration::minutes(5));
 
         $ceremony = $passkeys->beginStepUp($session, $requirement);
@@ -712,11 +715,11 @@ final class PasskeysTest extends DatabaseTestCase
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
         $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishStepUp($session, $signIn->id, $authenticator->signIn($signIn->options), new Origin(OriginKind::Web)));
         $ceremony = $passkeys->beginStepUp($session, $requirement);
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishSignIn(new Realm('acme'), $ceremony->id, $authenticator->signIn($ceremony->options), new Origin(OriginKind::Web)), 'A step-up ceremony started a session.');
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $ceremony->id, $authenticator->signIn($ceremony->options)), new Origin(OriginKind::Web)), 'A step-up ceremony started a session.');
 
         $ceremony = $passkeys->beginStepUp($session, $requirement);
         $answer = $authenticator->signIn($ceremony->options);
-        $this->sessions->end(new EndSession(new Realm('acme'), $session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->end(...), new EndSession(new Realm('acme'), $session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishStepUp($session, $ceremony->id, $answer, new Origin(OriginKind::Web)), 'An ended session stepped up.');
         // The authenticator counted the signature, which is recorded; the passkey wasn't used.
         self::assertNull($this->credentials->get(new Realm('acme'), $passkeys->of(new Realm('acme'), $session->principalId)[0]->credentialId)?->lastUsedAt, 'A refused step-up was recorded as a use.');
@@ -735,7 +738,7 @@ final class PasskeysTest extends DatabaseTestCase
 
         for ($i = 0; $i < 2; ++$i) {
             $registration = $passkeys->beginRegistration($session);
-            $credentials[] = $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Key '.$i, new Origin(OriginKind::Web));
+            $credentials[] = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Key '.$i), new Origin(OriginKind::Web), $session);
         }
 
         $this->credentials->disable($credentials[0], 'reported lost', new Origin(OriginKind::Web));
@@ -763,7 +766,7 @@ final class PasskeysTest extends DatabaseTestCase
         $session = $this->session();
         $authenticator = new VirtualAuthenticator();
         $registration = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Key', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Key'), new Origin(OriginKind::Web), $session);
 
         $ceremony = $passkeys->beginStepUp($session, new AuthenticationRequirement(Duration::minutes(5), multiFactor: true));
         self::assertSame('required', self::json($ceremony->options)['userVerification']);
@@ -781,17 +784,17 @@ final class PasskeysTest extends DatabaseTestCase
         $passkeys = $this->passkeys($implementation, limits: new AttemptLimits(perAddress: new Limit(2, Duration::minutes(1))));
 
         for ($i = 0; $i < 2; ++$i) {
-            $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishSignIn(new Realm('acme'), $passkeys->beginSignIn(new Realm('acme'))->id, '{}', new Origin(OriginKind::Web), address: '192.0.2.1'));
+            $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $passkeys->beginSignIn(new Realm('acme'))->id, '{}', address: '192.0.2.1'), new Origin(OriginKind::Web)));
         }
 
         try {
-            $passkeys->finishSignIn(new Realm('acme'), $passkeys->beginSignIn(new Realm('acme'))->id, '{}', new Origin(OriginKind::Web), address: '192.0.2.1');
+            Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $passkeys->beginSignIn(new Realm('acme'))->id, '{}', address: '192.0.2.1'), new Origin(OriginKind::Web));
             self::fail('A third sign-in from the address in a minute was checked.');
         } catch (Throttled $exception) {
             self::assertSame(30, $exception->seconds);
         }
 
-        $this->refused(Refusal::InvalidResponse, static fn () => $passkeys->finishSignIn(new Realm('acme'), $passkeys->beginSignIn(new Realm('acme'))->id, '{}', new Origin(OriginKind::Web), address: '192.0.2.2'));
+        $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $passkeys->beginSignIn(new Realm('acme'))->id, '{}', address: '192.0.2.2'), new Origin(OriginKind::Web)));
     }
 
     #[DataProvider('implementations')]
@@ -806,7 +809,7 @@ final class PasskeysTest extends DatabaseTestCase
 
         foreach ([$phone, $laptop] as $authenticator) {
             $ceremony = $passkeys->beginRegistration($session);
-            $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Passkey', new Origin(OriginKind::Web));
+            Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Passkey'), new Origin(OriginKind::Web), $session);
         }
 
         $signals = $passkeys->signals($session);
@@ -828,7 +831,7 @@ final class PasskeysTest extends DatabaseTestCase
 
         $other = $this->session(username: 'bob');
         $ceremony = $passkeys->beginRegistration($other);
-        $passkeys->finishRegistration($other, $ceremony->id, new VirtualAuthenticator()->register($ceremony->options), 'Passkey', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($other->realm, $ceremony->id, new VirtualAuthenticator()->register($ceremony->options), 'Passkey'), new Origin(OriginKind::Web), $other);
         $bobs = $passkeys->signals($other);
         self::assertNotNull($bobs);
         self::assertSame('bob', $bobs->name);
@@ -884,9 +887,9 @@ final class PasskeysTest extends DatabaseTestCase
 
     private function session(?string $email = null, ?string $username = null): Session
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: $email, username: $username), new Origin(OriginKind::Console));
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: $email, username: $username), new Origin(OriginKind::Console));
 
-        return $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
+        return Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
     }
 
     /**
