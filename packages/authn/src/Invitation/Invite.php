@@ -17,7 +17,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.invitation.send', 'Invite a person by email', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.invitation.withdraw')]
+#[Operation('yorvoid.invitation.send', 'Invite a person by email', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.invitation.withdraw', causes: ['yorvoid.principal.create', 'yorvoid.token.issue'])]
 final readonly class Invite implements Command
 {
     /**

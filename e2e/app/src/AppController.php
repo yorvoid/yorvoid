@@ -84,7 +84,8 @@ final readonly class AppController
 
     public function setupCode(): Response
     {
-        return new Response($this->operations->run(new CreateSetupCode(Realm::default(), Duration::days(1)), new Operator(), new Origin(OriginKind::Console))->reveal());
+        // The test app stands in for the host's shell, from its web server: as YorvoID itself.
+        return new Response($this->operations->run(new CreateSetupCode(Realm::default(), Duration::days(1)), new Operator(), new Origin(OriginKind::System, 'e2e'))->reveal());
     }
 
     public function recoveryLink(Request $request): Response
@@ -92,7 +93,7 @@ final readonly class AppController
         $principal = $this->principals->findByIdentifier(Realm::default(), IdentifierKind::Email, $request->getPayload()->getString('email'));
         \assert(null !== $principal);
 
-        return new Response($this->operations->run(new IssueRecoveryLink(Realm::default(), $principal->id), new Operator(), new Origin(OriginKind::Console))->secret->reveal());
+        return new Response($this->operations->run(new IssueRecoveryLink(Realm::default(), $principal->id), new Operator(), new Origin(OriginKind::System, 'e2e'))->secret->reveal());
     }
 
     /**

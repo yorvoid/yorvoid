@@ -14,7 +14,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.principal.create', 'Create a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.principal.delete')]
+#[Operation('yorvoid.principal.create', 'Create a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.principal.delete', causes: ['yorvoid.token.issue'])]
 final readonly class CreatePrincipal implements Command
 {
     /**

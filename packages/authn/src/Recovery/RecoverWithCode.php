@@ -19,7 +19,7 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
-#[Operation('yorvoid.recovery_code.recover', 'Recover access with a recovery code', AuthorizedBy::Authentication)]
+#[Operation('yorvoid.recovery_code.recover', 'Recover access with a recovery code', AuthorizedBy::Authentication, causes: ['yorvoid.session.end_all', 'yorvoid.session.start'])]
 final readonly class RecoverWithCode implements Command
 {
     /**

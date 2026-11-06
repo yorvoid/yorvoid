@@ -246,6 +246,43 @@ final class OperationsTest extends TestCase
         $this->operations(handlers: [$badges])->run(new ScanBadge($this->realm, 'K7'), new Operator(), new Origin(OriginKind::Console));
     }
 
+    public function testAConsequenceIsOneTheOperationSaysItCauses(): void
+    {
+        $badges = new class implements OperationHandler {
+            public function operations(): array
+            {
+                return [ScanBadge::class => static function (ScanBadge $command, Permit $permit): Permit {
+                    $permit->use($command);
+
+                    return $permit->consequence(new IssueBadge($command->realm, new PrincipalId(new UuidV7())));
+                }];
+            }
+        };
+
+        $this->expectException(IntegratorError::class);
+        $this->expectExceptionMessage('"acme.badge.scan" doesn\'t say it causes "acme.badge.issue".');
+
+        $this->operations(handlers: [$badges])->run(new ScanBadge($this->realm, 'K7'), new Operator(), new Origin(OriginKind::Console));
+    }
+
+    public function testTheHostsConsoleAndJobsActFromTheCommandLineOnly(): void
+    {
+        $log = new SecurityLog($this->log, new InMemoryTransactions());
+        $catalogue = new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]);
+        $served = new Operations($catalogue, new BuiltInAuthorization(commandLine: false), $log, [$this->badges]);
+
+        foreach ([OriginKind::Console, OriginKind::Job] as $kind) {
+            try {
+                $served->run(new IssueBadge($this->realm, $this->ana), new Operator(), new Origin($kind));
+                self::fail(\sprintf('A web server ran an operation as the %s.', $kind->value));
+            } catch (NotPermitted) {
+            }
+        }
+
+        $served->run(new IssueBadge($this->realm, $this->ana), new Operator(), new Origin(OriginKind::System));
+        self::assertSame(AuthorizedBy::Operator, $this->badges->permits[0]->basis, 'YorvoID itself acts from anywhere.');
+    }
+
     public function testAConsequenceStaysInItsRealm(): void
     {
         $badges = new class implements OperationHandler {

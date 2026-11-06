@@ -18,7 +18,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.invitation.resend', 'Send an invited person a new link', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage')]
+#[Operation('yorvoid.invitation.resend', 'Send an invited person a new link', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', causes: ['yorvoid.token.issue'])]
 final readonly class ResendInvitation implements Command
 {
     public function __construct(

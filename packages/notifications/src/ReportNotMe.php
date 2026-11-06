@@ -18,7 +18,7 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
-#[Operation('yorvoid.notification.not_me', 'Report that a security notification wasn\'t one\'s own doing', AuthorizedBy::Authentication)]
+#[Operation('yorvoid.notification.not_me', 'Report that a security notification wasn\'t one\'s own doing', AuthorizedBy::Authentication, causes: ['yorvoid.session.end_all'])]
 final readonly class ReportNotMe implements Command
 {
     /**

@@ -17,7 +17,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.invitation.withdraw', 'Withdraw an invitation', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage')]
+#[Operation('yorvoid.invitation.withdraw', 'Withdraw an invitation', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', causes: ['yorvoid.token.revoke', 'yorvoid.principal.delete'])]
 final readonly class WithdrawInvitation implements Command
 {
     public function __construct(

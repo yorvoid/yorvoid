@@ -14,7 +14,8 @@ use YorvoID\Core\Realm;
  * changes anything, so a handler can't be called around the decision point (D-38).
  *
  * What an operation causes, e.g. a recovery ending every session, runs on a consequence() of the
- * handler's permit: decided as part of the operation, not again.
+ * handler's permit: decided as part of the operation, not again. Only what the operation declares it
+ * causes (#[Operation(causes: [...])]), so a listener handed the permit can't run anything else with it.
  *
  * @api
  */
@@ -68,8 +69,9 @@ final class Permit
      * @param Actor|null $actingAs Who the consequence acts as, for authentication only: the principal it
      *                             authenticated, e.g. the invitee accepting; by default this permit's actor
      *
-     * @throws IntegratorError When this permit wasn't used yet, the command is in another realm, or another
-     *                         actor is named outside authentication
+     * @throws IntegratorError When this permit wasn't used yet, its operation doesn't say it causes the
+     *                         command's, the command is in another realm, or another actor is named outside
+     *                         authentication
      */
     public function consequence(Command $command, ?Actor $actingAs = null): self
     {
@@ -85,7 +87,13 @@ final class Permit
             throw new IntegratorError(\sprintf('A consequence of "%s" names who it acts as, but "%s" isn\'t authentication.', $this->operation, $this->operation), 'Only authentication says who someone is: other operations\' consequences act as their actor.', 'concepts/operations-and-events.md#permits');
         }
 
-        return new self(Operation::of($command::class)->name, $actingAs ?? $this->actor, AuthorizedBy::Consequence, $this->decisionId, $command, $this);
+        $consequence = Operation::of($command::class)->name;
+
+        if (!\in_array($consequence, Operation::of($this->command::class)->causes, true)) {
+            throw new IntegratorError(\sprintf('"%s" doesn\'t say it causes "%s".', $this->operation, $consequence), 'Name what an operation runs as its consequences in #[Operation(causes: [...])]; run anything else through Operations::run().', 'concepts/operations-and-events.md#permits');
+        }
+
+        return new self($consequence, $actingAs ?? $this->actor, AuthorizedBy::Consequence, $this->decisionId, $command, $this);
     }
 
     /**

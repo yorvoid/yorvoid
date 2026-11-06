@@ -161,6 +161,19 @@ final class OperationCatalogueTest extends TestCase
         self::assertSame('yorvoid.session.end_all', new Operation('yorvoid.session.end_all', 'End all', AuthorizedBy::Operator, inverse: 'yorvoid.session.x.y')->name);
     }
 
+    public function testRefusesACauseThatIsntAnOperationsName(): void
+    {
+        $this->expectException(IntegratorError::class);
+        $this->expectExceptionMessage('names "end sessions" among what it causes');
+
+        new Operation('acme.badge.revoke', 'Revoke a badge', AuthorizedBy::Operator, causes: ['end sessions']);
+    }
+
+    public function testDescribesWhatAnOperationCauses(): void
+    {
+        self::assertSame(['acme.badge.record'], new OperationCatalogue([Fixtures\Badges\IssueBadge::class, Fixtures\Badges\RecordBadge::class])->get('acme.badge.issue')->causes);
+    }
+
     public function testListsWhatAuthorizesAnOperationOnceEach(): void
     {
         self::assertSame([AuthorizedBy::Operator], new Operation('acme.badge.issue', 'Issue a badge', AuthorizedBy::Operator)->authorizedBy);

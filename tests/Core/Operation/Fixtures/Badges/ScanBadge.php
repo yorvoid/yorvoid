@@ -12,7 +12,7 @@ use YorvoID\Core\Realm;
 /**
  * @implements Command<string>
  */
-#[Operation('acme.badge.scan', 'Scan a badge at the door', AuthorizedBy::Authentication)]
+#[Operation('acme.badge.scan', 'Scan a badge at the door', AuthorizedBy::Authentication, causes: ['acme.badge.record'])]
 final readonly class ScanBadge implements Command
 {
     public function __construct(

@@ -30,6 +30,7 @@ final readonly class SuspendPrincipal implements Command
   - `Operator`: the host's operator, from a console command, a job or YorvoID itself;
   - `Consequence`: only as a consequence of another operation, e.g. starting a session after a sign-in.
 - **The inverse** is the operation that undoes it, if any.
+- **What it causes** (`causes`) are the operations it runs as its consequences, if any (see [permits](#permits)).
 
 `OperationCatalogue` lists every operation with its typed parameters, so your application can build its own action catalogue, admin pages or console commands from it. Parameters marked `#[\SensitiveParameter]` are flagged, so they're never logged, shown or put on a command line. Mistakes fail when the catalogue is built: a command without the attribute, two operations with one name, an inverse that isn't installed, an ability without `AuthorizedBy::Ability` or the other way round, or a `Self` operation that doesn't say whose account it concerns.
 
@@ -43,7 +44,7 @@ use YorvoID\Core\Principal\SuspendPrincipal;
 $principal = $operations->run(new SuspendPrincipal($realm, $principalId), $session, $origin);
 ```
 
-- **The actor** is a signed-in `Session`, or the host's `Operator`.
+- **The actor** is a signed-in `Session`, or the host's `Operator`. The operator acts from a console command or a job only when PHP runs from the command line, so a web request that says it's the console is refused; YorvoID itself (`OriginKind::System`) acts from anywhere. Your code says who the actor is: never take it from the request.
 - **The decision** is Permit, Deny or Indeterminate. Only Permit runs anything; otherwise `run()` throws `NotPermitted`, with the decision and its reason. Indeterminate means no policy could decide, and never permits.
 - **Abilities** are decided by an `AbilityPolicy` until YorvoID's own evaluator arrives. The Symfony bundle's asks Symfony's security (`isGranted()`), so your voters and role hierarchy decide. Without one, operations that need an ability are Indeterminate, except for the host's operator where they allow it.
 
@@ -51,7 +52,7 @@ $principal = $operations->run(new SuspendPrincipal($realm, $principalId), $sessi
 
 A handler takes a `Permit` instead of an actor. Only `Operations::run()` issues one, after a Permit decision, for one command and one run: the handler calls `$permit->use($command)` before it changes anything, which fails for another command or a second use. So a handler can't be called around the decision.
 
-What an operation causes runs on a consequence of its permit, e.g. a recovery ending every session: `$permit->consequence($command)` gives a permit for that command, in the same realm, recorded under the same decision rather than decided again.
+What an operation causes runs on a consequence of its permit, e.g. a recovery ending every session: `$permit->consequence($command)` gives a permit for that command, in the same realm, recorded under the same decision rather than decided again. Only for what the operation declares it causes, `#[Operation(..., causes: ['yorvoid.session.end_all'])]`: principals' events carry their operation's permit, and a listener can run with it what the operation causes, nothing else. Your listeners run your own operations through `Operations::run()`.
 
 Your own operations plug in the same way: a command with `#[Operation]`, and a service implementing `OperationHandler` that maps each command to a method taking the command, a `Permit` and the `Origin`.
 

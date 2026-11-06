@@ -17,7 +17,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.credential.remove', 'Remove a sign-in method from one\'s account', AuthorizedBy::Self)]
+#[Operation('yorvoid.credential.remove', 'Remove a sign-in method from one\'s account', AuthorizedBy::Self, causes: ['yorvoid.session.end_all'])]
 final readonly class RemoveCredential implements SelfOperation
 {
     /**

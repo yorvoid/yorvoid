@@ -17,7 +17,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.recovery_codes.generate', 'Generate new recovery codes, replacing the old ones', AuthorizedBy::Self)]
+#[Operation('yorvoid.recovery_codes.generate', 'Generate new recovery codes, replacing the old ones', AuthorizedBy::Self, causes: ['yorvoid.credential.add'])]
 final readonly class GenerateRecoveryCodes implements SelfOperation
 {
     public function __construct(

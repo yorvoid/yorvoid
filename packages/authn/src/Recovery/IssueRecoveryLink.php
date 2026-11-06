@@ -20,7 +20,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.recovery_link.issue', 'Issue a recovery link', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.recover')]
+#[Operation('yorvoid.recovery_link.issue', 'Issue a recovery link', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.recover', causes: ['yorvoid.token.issue'])]
 final readonly class IssueRecoveryLink implements Command
 {
     /**

@@ -46,8 +46,6 @@ final class DecisionPointPropertiesTest extends TestCase
 {
     use BlackBox;
 
-    private const array HOST = [OriginKind::Console, OriginKind::Job, OriginKind::System];
-
     public function testOnlyAPermitRunsTheHandler(): void
     {
         self::forAll(
@@ -96,7 +94,8 @@ final class DecisionPointPropertiesTest extends TestCase
             Set::of(...OriginKind::cases()),
             Set::of(true, false, null),
             Set::of(...Verdict::cases()),
-        )->then(static function (array $rules, string $who, OriginKind $kind, ?bool $holds, Verdict $selfService): void {
+            Set::of(true, false),
+        )->then(static function (array $rules, string $who, OriginKind $kind, ?bool $holds, Verdict $selfService, bool $commandLine): void {
             /** @var list<AuthorizedBy> $rules */
             $realm = new Realm('acme');
             $ana = new PrincipalId(new UuidV7());
@@ -112,13 +111,13 @@ final class DecisionPointPropertiesTest extends TestCase
             $rules = array_values(array_unique($rules, \SORT_REGULAR));
             \assert([] !== $rules);
             $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', $rules, \in_array(AuthorizedBy::Ability, $rules, true) ? 'acme.badges.issue' : null, null, IssueBadge::class, []);
-            $authorization = new BuiltInAuthorization(self::abilities($holds), self::selfService($selfService));
+            $authorization = new BuiltInAuthorization(self::abilities($holds), self::selfService($selfService), $commandLine);
 
             $decision = $authorization->decide($operation, new IssueBadge($realm, $ana), $actor, new Origin($kind));
 
             $inRealm = \in_array($who, ['own', 'other'], true);
             $allowed = [
-                AuthorizedBy::Operator->value => 'operator' === $who && \in_array($kind, self::HOST, true),
+                AuthorizedBy::Operator->value => 'operator' === $who && (OriginKind::System === $kind || ($commandLine && \in_array($kind, [OriginKind::Console, OriginKind::Job], true))),
                 AuthorizedBy::Self->value => 'own' === $who && Verdict::Permit === $selfService,
                 AuthorizedBy::Ability->value => $inRealm && true === $holds,
                 AuthorizedBy::Authentication->value => true,

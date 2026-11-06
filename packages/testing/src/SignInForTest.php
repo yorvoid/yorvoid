@@ -19,7 +19,7 @@ use YorvoID\Core\Realm;
  *
  * @internal
  */
-#[Operation('yorvoid.testing.sign_in', 'Sign a principal in, in a test', AuthorizedBy::Authentication)]
+#[Operation('yorvoid.testing.sign_in', 'Sign a principal in, in a test', AuthorizedBy::Authentication, causes: ['yorvoid.session.start'])]
 final readonly class SignInForTest implements Command
 {
     public function __construct(

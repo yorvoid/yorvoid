@@ -17,7 +17,7 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
-#[Operation('yorvoid.recovery_link.use', 'Recover access with a recovery link', AuthorizedBy::Authentication)]
+#[Operation('yorvoid.recovery_link.use', 'Recover access with a recovery link', AuthorizedBy::Authentication, causes: ['yorvoid.session.end_all', 'yorvoid.session.start'])]
 final readonly class UseRecoveryLink implements Command
 {
     /**

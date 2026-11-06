@@ -14,7 +14,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.principal.suspend', 'Suspend a principal until it is activated again', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.principal.activate')]
+#[Operation('yorvoid.principal.suspend', 'Suspend a principal until it is activated again', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.principal.activate', causes: ['yorvoid.session.end_all'])]
 final readonly class SuspendPrincipal implements Command
 {
     public function __construct(

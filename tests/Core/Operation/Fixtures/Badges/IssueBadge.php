@@ -14,7 +14,7 @@ use YorvoID\Core\Realm;
 /**
  * @implements SelfOperation<string>
  */
-#[Operation('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Self, AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'acme.badges.issue')]
+#[Operation('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Self, AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'acme.badges.issue', causes: ['acme.badge.record'])]
 final readonly class IssueBadge implements SelfOperation
 {
     public function __construct(

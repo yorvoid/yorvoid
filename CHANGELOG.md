@@ -20,6 +20,8 @@ Every operation runs through one decision point: `Operations::run()` decides, an
 
 - `Operations`, `Permit`, `BuiltInAuthorization` with `AbilityPolicy` and `SelfServicePolicy`, `NotPermitted`, and the actors `Operator`, `Anonymous` and `ActingPrincipal`. In Symfony, abilities are decided by the application's security (`isGranted()`), and the application's own `OperationHandler`s are registered.
 - A refused operation is recorded in the security log.
+- An operation declares what it causes (`#[Operation(causes: [...])]`), and its permit gives consequences for those only.
+- The host's operator acts from a console or job origin only when PHP runs from the command line.
 
 ## 0.3.0 (2026-11-06)
 

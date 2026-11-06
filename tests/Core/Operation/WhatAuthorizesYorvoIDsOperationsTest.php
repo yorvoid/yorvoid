@@ -62,11 +62,42 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.token.revoke' => ['ability', 'operator'],
     ];
 
+    /** What each runs as its consequences (#[Operation(causes: [...])]): a permit gives nothing else */
+    private const array CAUSES = [
+        'yorvoid.credential.remove' => ['yorvoid.session.end_all'],
+        'yorvoid.email_verification.confirm' => ['yorvoid.identifier.verify'],
+        'yorvoid.identifier.set' => ['yorvoid.token.issue'],
+        'yorvoid.invitation.accept' => ['yorvoid.principal.activate', 'yorvoid.identifier.verify', 'yorvoid.session.start'],
+        'yorvoid.invitation.resend' => ['yorvoid.token.issue'],
+        'yorvoid.invitation.send' => ['yorvoid.principal.create', 'yorvoid.token.issue'],
+        'yorvoid.invitation.withdraw' => ['yorvoid.token.revoke', 'yorvoid.principal.delete'],
+        'yorvoid.notification.not_me' => ['yorvoid.session.end_all'],
+        'yorvoid.passkey.register' => ['yorvoid.credential.add'],
+        'yorvoid.passkey.sign_in' => ['yorvoid.session.start'],
+        'yorvoid.principal.create' => ['yorvoid.token.issue'],
+        'yorvoid.principal.delete' => ['yorvoid.session.end_all'],
+        'yorvoid.principal.suspend' => ['yorvoid.session.end_all'],
+        'yorvoid.recovery_code.recover' => ['yorvoid.session.end_all', 'yorvoid.session.start'],
+        'yorvoid.recovery_code.redeem' => ['yorvoid.session.end_all', 'yorvoid.session.start'],
+        'yorvoid.recovery_codes.generate' => ['yorvoid.credential.add'],
+        'yorvoid.recovery_link.issue' => ['yorvoid.token.issue'],
+        'yorvoid.recovery_link.use' => ['yorvoid.session.end_all', 'yorvoid.session.start'],
+        'yorvoid.setup.claim' => ['yorvoid.principal.create', 'yorvoid.session.start'],
+        'yorvoid.testing.sign_in' => ['yorvoid.session.start'],
+    ];
+
     public function testEachOperationSaysWhatAuthorizesIt(): void
     {
         $actual = array_map(static fn ($operation): array => array_map(static fn (AuthorizedBy $by): string => $by->value, $operation->authorizedBy), new OperationCatalogue(self::commands())->all());
 
         self::assertSame(self::EXPECTED, $actual);
+    }
+
+    public function testEachOperationSaysWhatItCauses(): void
+    {
+        $actual = array_filter(array_map(static fn ($operation): array => $operation->causes, new OperationCatalogue(self::commands())->all()));
+
+        self::assertSame(self::CAUSES, $actual);
     }
 
     public function testNobodyMarksTheirOwnAddressVerified(): void

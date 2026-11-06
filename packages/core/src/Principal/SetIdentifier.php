@@ -17,7 +17,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.identifier.set', 'Set an email address or username of a principal', [AuthorizedBy::Self, AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.identifier.remove')]
+#[Operation('yorvoid.identifier.set', 'Set an email address or username of a principal', [AuthorizedBy::Self, AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.identifier.remove', causes: ['yorvoid.token.issue'])]
 final readonly class SetIdentifier implements SelfOperation
 {
     /**

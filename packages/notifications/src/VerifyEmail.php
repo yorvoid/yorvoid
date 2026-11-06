@@ -18,7 +18,7 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
-#[Operation('yorvoid.email_verification.confirm', 'Confirm an email address with the link sent to it', AuthorizedBy::Authentication)]
+#[Operation('yorvoid.email_verification.confirm', 'Confirm an email address with the link sent to it', AuthorizedBy::Authentication, causes: ['yorvoid.identifier.verify'])]
 final readonly class VerifyEmail implements Command
 {
     public function __construct(

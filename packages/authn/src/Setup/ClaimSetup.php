@@ -19,7 +19,7 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
-#[Operation('yorvoid.setup.claim', 'Claim a fresh installation with its setup code', AuthorizedBy::Authentication)]
+#[Operation('yorvoid.setup.claim', 'Claim a fresh installation with its setup code', AuthorizedBy::Authentication, causes: ['yorvoid.principal.create', 'yorvoid.session.start'])]
 final readonly class ClaimSetup implements Command
 {
     /**

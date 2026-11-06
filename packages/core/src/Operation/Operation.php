@@ -14,7 +14,7 @@ use YorvoID\Core\Exception\IntegratorError;
  * runs them.
  *
  * ```php
- * #[Operation('yorvoid.principal.suspend', 'Suspend a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage')]
+ * #[Operation('yorvoid.principal.suspend', 'Suspend a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', causes: ['yorvoid.session.end_all'])]
  * final readonly class SuspendPrincipal implements Command { public function __construct(public Realm $realm, public PrincipalId $principalId) {} }
  * ```
  *
@@ -35,6 +35,8 @@ final readonly class Operation
      * @param AuthorizedBy|list<AuthorizedBy> $authorizedBy What lets an actor run it; the first that permits wins
      * @param string|null                     $ability      The ability a principal needs to run it, for AuthorizedBy::Ability
      * @param string|null                     $inverse      The operation that undoes it, if any
+     * @param list<string>                    $causes       The operations it may run as its consequences, e.g. ending sessions:
+     *                                                      a permit gives a consequence for these only
      */
     public function __construct(
         public string $name,
@@ -42,10 +44,17 @@ final readonly class Operation
         AuthorizedBy|array $authorizedBy,
         public ?string $ability = null,
         public ?string $inverse = null,
+        public array $causes = [],
     ) {
         foreach (['name' => $name, 'inverse' => $inverse] as $field => $value) {
             if (null !== $value && 1 !== preg_match(self::NAME, $value)) {
                 throw new IntegratorError(\sprintf('The operation %s "%s" is invalid.', $field, $value), 'Use at least three dot-separated lowercase segments starting with the owner, e.g. "yorvoid.session.end".', 'concepts/operations-and-events.md#operations');
+            }
+        }
+
+        foreach ($causes as $cause) {
+            if (1 !== preg_match(self::NAME, $cause)) {
+                throw new IntegratorError(\sprintf('The operation "%s" names "%s" among what it causes, which isn\'t an operation\'s name.', $name, $cause), 'Name the operations it runs as consequences, e.g. "yorvoid.session.end_all".', 'concepts/operations-and-events.md#permits');
             }
         }
 

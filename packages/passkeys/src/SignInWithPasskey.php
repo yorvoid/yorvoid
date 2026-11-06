@@ -18,7 +18,7 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
-#[Operation('yorvoid.passkey.sign_in', 'Sign in with a passkey', AuthorizedBy::Authentication)]
+#[Operation('yorvoid.passkey.sign_in', 'Sign in with a passkey', AuthorizedBy::Authentication, causes: ['yorvoid.session.start'])]
 final readonly class SignInWithPasskey implements Command
 {
     /**

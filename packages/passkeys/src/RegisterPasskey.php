@@ -18,7 +18,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.passkey.register', 'Add a passkey to one\'s account', AuthorizedBy::Self)]
+#[Operation('yorvoid.passkey.register', 'Add a passkey to one\'s account', AuthorizedBy::Self, causes: ['yorvoid.credential.add'])]
 final readonly class RegisterPasskey implements SelfOperation
 {
     /**

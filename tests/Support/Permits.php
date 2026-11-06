@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Support;
 
-use YorvoID\Authn\Setup\CreateSetupCode;
-use YorvoID\Core\Duration;
+use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
@@ -14,7 +13,9 @@ use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Permit;
+use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalId;
+use YorvoID\Core\Principal\SetIdentifier;
 use YorvoID\Core\Realm;
 
 /**
@@ -55,11 +56,12 @@ final class Permits
     }
 
     /**
-     * A permit that was used, for what takes the operation that caused it, e.g. EmailVerification::send().
+     * A permit that was used, for what takes the operation that caused it, e.g. EmailVerification::send(): an
+     * address change's, which causes the link's token.
      */
     public static function because(Realm $realm): Permit
     {
-        $command = new CreateSetupCode($realm, Duration::days(1));
+        $command = new SetIdentifier($realm, new PrincipalId(new UuidV7()), IdentifierKind::Email, 'ana@example.com');
         $permit = self::for($command);
         $permit->use($command);
 

@@ -18,7 +18,7 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
-#[Operation('yorvoid.invitation.accept', 'Accept an invitation', AuthorizedBy::Authentication)]
+#[Operation('yorvoid.invitation.accept', 'Accept an invitation', AuthorizedBy::Authentication, causes: ['yorvoid.principal.activate', 'yorvoid.identifier.verify', 'yorvoid.session.start'])]
 final readonly class AcceptInvitation implements Command
 {
     /**
