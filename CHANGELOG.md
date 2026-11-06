@@ -2,6 +2,12 @@
 
 All of YorvoID's packages are released together, with the same version ([compatibility](docs/compatibility.md)). Each release lists what changed, and what to do where a change breaks covered code.
 
+## Unreleased
+
+### Breaking
+
+- `TemplateLint`'s constructor is `@internal`: take the lint from the container, as the docs show.
+
 ## 0.2.0 (2026-11-05)
 
 Stricter passkey and intent checks, signed checkpoints of the security log, Symfony 7.4 LTS next to 8.1, and two new packages: `yorvoid/notifications` and `yorvoid/intent-signing`.

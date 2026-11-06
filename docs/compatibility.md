@@ -12,7 +12,7 @@ Everything marked `@api` in the code: classes, interfaces, methods, constants, a
 
 ## What isn't covered
 
-- Code marked `@internal`, and anything not marked `@api`.
+- Code marked `@internal`, and anything not marked `@api`. That includes `@internal` members of an `@api` class, such as a constructor only the container calls. A check in CI makes sure nothing covered names an `@internal` class.
 - The exact wording of messages, which can improve in any release. Translations change with it.
 - Security fixes. When the only way to close a vulnerability is a breaking change, it ships in a patch release, and the advisory explains what to do.
 - Database tables. Use YorvoID's services, not its tables: migrations change them as needed, always without downtime.
