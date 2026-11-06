@@ -1,7 +1,7 @@
 # The tools that check YorvoID's formal models, pinned and verified, so that a check gives the same
 # answer on every machine and in CI, and nothing is downloaded while models run.
 # Debian 13: Apalache needs Java 21, and Quint's evaluator glibc 2.39 or later.
-FROM node:25-trixie-slim@sha256:aabbe39553d15ede8a97cc60c9e1a97034ff772afcf696ea42b94e7f5f2ec71b
+FROM node:26.12.1-trixie-slim@sha256:94816674c62774da0d099a947bf4613b9e1972a2733abd0d0cd80e795f8411d0
 
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends ca-certificates curl openjdk-21-jre-headless \

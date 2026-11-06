@@ -40,6 +40,27 @@ final class PinnedImagesTest extends TestCase
         }
     }
 
+    /**
+     * Node's even major versions become LTS; odd ones end six months after release. Dependabot proposes
+     * both, so the odd ones are refused here.
+     */
+    public function testNodeImagesAreOnALongTermVersion(): void
+    {
+        $finder = new Finder()->files()->in(self::ROOT)->name('Dockerfile')->exclude(['vendor', 'var'])->notPath('node_modules');
+        $images = 0;
+
+        foreach ($finder as $file) {
+            preg_match_all('/^FROM\s+node:(\d+)/mi', $file->getContents(), $node);
+
+            foreach ($node[1] as $major) {
+                ++$images;
+                self::assertSame(0, (int) $major % 2, \sprintf('%s uses Node %s, which never becomes LTS.', $file->getRelativePathname(), $major));
+            }
+        }
+
+        self::assertGreaterThanOrEqual(2, $images, 'The Node images moved.');
+    }
+
     public function testComposePullsOnlyDigests(): void
     {
         $compose = Yaml::parseFile(self::ROOT.'/compose.yaml');
