@@ -10,7 +10,10 @@ use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Filesystem\Filesystem;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Key\KeyRing;
+use YorvoID\Core\Key\PerRealmKeyRings;
+use YorvoID\Core\Key\SharedKeyRings;
 use YorvoID\Core\Key\SigningKey;
 use YorvoID\Core\Log\Checkpoint\Checkpoint;
 use YorvoID\Core\Log\Checkpoint\Checkpoints;
@@ -113,6 +116,58 @@ final class CheckpointsTest extends DatabaseTestCase
         self::assertSame([], iterator_to_array(new FileCheckpoints($this->file.'.missing')->read($realm)), 'A file that isn\'t there has checkpoints.');
     }
 
+    public function testEachRealmSignsWithItsOwnKeys(): void
+    {
+        $directory = \sprintf('%s/yorvoid-keys-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
+        mkdir($directory, 0o700);
+        $rings = new PerRealmKeyRings($directory);
+        $acme = new Realm('acme');
+        $globex = new Realm('globex');
+
+        try {
+            // The same key ID in two realms: a realm's IDs are its own.
+            new KeyRing([SigningKey::generate('2026-11-06')])->toFile($rings->file($acme));
+            new KeyRing([SigningKey::generate('2026-11-06')])->toFile($rings->file($globex));
+            self::assertSame($directory.'/acme.json', $rings->file($acme));
+            self::assertTrue($rings->has($acme));
+            self::assertFalse($rings->has(new Realm('initech')));
+
+            $stack = $this->stack('memory');
+            $log = new SecurityLog($stack->log, $stack->transactions);
+            $checkpoints = new Checkpoints($stack->log, $log, $rings, [], new MockClock('2026-11-06 18:00:00 UTC'));
+
+            foreach ([$acme, $globex] as $realm) {
+                $log->record($realm, 'yorvoid.principal.create', Outcome::Success, new Origin(OriginKind::Console));
+            }
+
+            $ofAcme = $checkpoints->take($acme);
+            $ofGlobex = $checkpoints->take($globex);
+            \assert(null !== $ofAcme && null !== $ofGlobex);
+
+            self::assertSame($ofAcme->keyId, $ofGlobex->keyId);
+            self::assertNotSame($ofAcme->signature, $ofGlobex->signature);
+            self::assertTrue($checkpoints->verify($acme, [$ofAcme])->isIntact());
+            self::assertTrue($ofAcme->isSignedBy($rings->forRealm($acme)));
+            self::assertFalse($ofAcme->isSignedBy($rings->forRealm($globex)), 'One realm\'s checkpoint verified with another\'s keys.');
+
+            // Globex's keys, under Acme's name: what one realm signed doesn't pass for another's.
+            $swapped = new Checkpoints($stack->log, $log, new SharedKeyRings($rings->forRealm($globex)), []);
+            self::assertStringContainsString('isn\'t signed by a key in the ring', (string) $swapped->verify($acme, [$ofAcme])->problem);
+
+            $log->record(new Realm('initech'), 'yorvoid.principal.create', Outcome::Success, new Origin(OriginKind::Console));
+
+            try {
+                $checkpoints->take(new Realm('initech'));
+                self::fail('A realm without keys signed.');
+            } catch (IntegratorError $error) {
+                self::assertSame(\sprintf('The realm "initech" has no keys: "%s/initech.json" doesn\'t exist.', $directory), $error->problem);
+                self::assertSame('Create them with yorvoid:keys:rotate --realm initech, or KeyRing::toFile().', $error->fix);
+            }
+        } finally {
+            new Filesystem()->remove($directory);
+        }
+    }
+
     public function testCheckpointsGoToEverySinkAndRoundTrip(): void
     {
         $logger = new class extends AbstractLogger {
@@ -149,7 +204,7 @@ final class CheckpointsTest extends DatabaseTestCase
         $log = new SecurityLog($stack->log, $stack->transactions);
         $file = new FileCheckpoints($this->file);
 
-        return [$stack, $log, new Checkpoints($stack->log, $log, new KeyRing([SigningKey::generate('2026-11-04')]), [$file, ...$sinks], new MockClock('2026-11-04 18:00:00 UTC')), $file];
+        return [$stack, $log, new Checkpoints($stack->log, $log, new SharedKeyRings(new KeyRing([SigningKey::generate('2026-11-04')])), [$file, ...$sinks], new MockClock('2026-11-04 18:00:00 UTC')), $file];
     }
 
     private static function record(SecurityLog $log, int $entries, string $action = 'yorvoid.principal.create'): void

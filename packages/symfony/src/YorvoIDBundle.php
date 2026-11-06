@@ -69,7 +69,12 @@ final class YorvoIDBundle extends AbstractBundle
         $children->scalarNode('realm')->defaultValue('default')->info('The realm people sign in to');
         $children->scalarNode('users')->defaultNull()->info('The service ID of your PrincipalUsers, to sign in your own users; PrincipalUser if not given');
         $children->arrayNode('keys')->addDefaultsIfNotSet()->children()
-            ->scalarNode('file')->defaultNull()->info('The signing keys\' file, only its owner may read, e.g. "/run/secrets/yorvoid-keys.json"; yorvoid:keys:rotate creates it')->end();
+            ->scalarNode('file')->defaultNull()->info('The signing keys\' file, only its owner may read, e.g. "/run/secrets/yorvoid-keys.json"; yorvoid:keys:rotate creates it')->end()
+            ->booleanNode('per_realm')->defaultFalse()->info('Whether each realm has keys of its own, in keys.directory: "acme.json" for the realm "acme"')->end()
+            ->scalarNode('directory')->defaultNull()->info('The folder of each realm\'s key file, with per_realm, e.g. "/run/secrets/yorvoid-keys"; yorvoid:keys:rotate --realm creates them')->end()
+            ->end()
+            ->validate()->ifTrue(static fn (mixed $value): bool => \is_array($value) && true === $value['per_realm'] && null === $value['directory'])
+            ->thenInvalid('Keys per realm need a folder for them: set keys.directory.')->end();
         $children->arrayNode('log')->addDefaultsIfNotSet()->children()
             ->scalarNode('checkpoint_file')->defaultNull()->info('Where yorvoid:log:checkpoint appends signed checkpoints of the security log, out of the database user\'s reach, e.g. on another disk or host; needs keys.file')->end()
             ->booleanNode('checkpoint_logger')->defaultFalse()->info('Whether checkpoints also go to the application\'s logger, for a pipeline that ships logs elsewhere')->end();

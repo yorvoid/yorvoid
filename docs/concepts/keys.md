@@ -42,6 +42,25 @@ In code, each step is a new ring: `$ring->with(SigningKey::generate('2026-11', K
 
 What's in flight doesn't notice a rotation: what the old key signed verifies until the old key is removed, and sessions and one-time tokens are random secrets kept as hashes, not signatures. Intents are signed by people's passkeys, and the verifier's keys rotate by intents ([signed intents](signed-intents.md)); an intent prepared before a rotation is signed by whichever key the verifier has then. Tests keep all of this so (OPS-045).
 
+## A ring for each realm
+
+By default every realm signs with the one ring. Where realms are tenants that mustn't share keys (one's rotation or compromise mustn't touch another's, and a tenant that leaves takes its keys), give each realm a ring of its own (D-40):
+
+```php
+use YorvoID\Core\Key\KeyRing;
+use YorvoID\Core\Key\PerRealmKeyRings;
+use YorvoID\Core\Key\SharedKeyRings;
+
+$rings = new SharedKeyRings(KeyRing::fromFile('/run/secrets/yorvoid-keys.json'));  // one for every realm
+$rings = new PerRealmKeyRings('/run/secrets/yorvoid-keys');  // acme.json for the realm "acme", and so on
+
+$ring = $rings->forRealm($realm);
+```
+
+- What YorvoID signs names its realm next to the key's ID, and is verified with that realm's ring only: a realm's key IDs are its own, and what one realm signed doesn't verify with another's keys.
+- A realm without its file can't sign: `forRealm()` says how to create it. Each file is a key file like any other, only its owner may read it, and it rotates by itself.
+- With the Symfony bundle, set `keys.per_realm: true` and `keys.directory`; `yorvoid:keys:rotate --realm acme` creates and rotates the realm's ring, and `yorvoid:doctor` reports a realm without keys.
+
 ## Algorithms
 
 Ed25519 is the only algorithm today. Keys and signatures record theirs (`EdDSA`), so post-quantum signatures (ML-DSA) can be added beside it once PHP offers them, without changing what's already stored.

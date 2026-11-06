@@ -68,13 +68,14 @@ What's recorded after the last checkpoint has only the chain's protection until 
 
 ```php
 use YorvoID\Core\Key\KeyRing;
+use YorvoID\Core\Key\SharedKeyRings;
 use YorvoID\Core\Log\Checkpoint\Checkpoints;
 use YorvoID\Core\Log\Checkpoint\FileCheckpoints;
 use YorvoID\Core\Log\Checkpoint\LoggerCheckpoints;
 use YorvoID\Core\Realm;
 
 $file = new FileCheckpoints('/mnt/audit/yorvoid-checkpoints.jsonl');  // another disk or host
-$checkpoints = new Checkpoints($logStore, $log, KeyRing::fromFile('/run/secrets/yorvoid-keys.json'), [$file, new LoggerCheckpoints($logger)]);
+$checkpoints = new Checkpoints($logStore, $log, new SharedKeyRings(KeyRing::fromFile('/run/secrets/yorvoid-keys.json')), [$file, new LoggerCheckpoints($logger)]);
 
 $checkpoints->take(Realm::default());  // from cron, every few minutes
 

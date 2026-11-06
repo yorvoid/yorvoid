@@ -15,6 +15,7 @@ Every operation runs through one decision point: `Operations::run()` decides, an
 - `OwnIdentifiers` is gone: someone changes their own email address or username with `SetIdentifier` through `Operations`, and `StepUpSelfService` asks for the recent proof it needed.
 - Principals' events (`PrincipalCreating`, `PrincipalCreated`, `PrincipalStatusChanging`, `PrincipalStatusChanged`, `IdentifierChanging`, `IdentifierChanged`) carry the operation's permit; `EmailVerification::send()` takes the permit of the operation that set the address, and `EmailVerification::principalCreated()` sends the link for a principal created active.
 - `SecurityNotifications` takes `Operations` instead of `OneTimeTokens`; `PasskeyFlows`, its steps (`PasskeySignInStep`, `PasskeyRegistrationStep`, `SetupCodeStep`, `InvitationStep`, `RecoveryCodeStep`, `RecoveryCodesStep`, `RecoveryLinkStep`, `EmailVerificationStep`), `CurrentSession`, the authenticators (`PasskeyAuthenticator`, `RecoveryCodeAuthenticator`, `RecoveryLinkAuthenticator`) and `Scenario` take `Operations`.
+- `Checkpoints` takes `KeyRings`, each realm's signing keys, instead of one `KeyRing`: pass `new SharedKeyRings($ring)` for what it did before.
 
 ### Added
 
@@ -22,6 +23,7 @@ Every operation runs through one decision point: `Operations::run()` decides, an
 - A refused operation is recorded in the security log.
 - An operation declares what it causes (`#[Operation(causes: [...])]`), and its permit gives consequences for those only.
 - The host's operator acts from a console or job origin only when PHP runs from the command line.
+- Signing keys for each realm (`KeyRings`, `SharedKeyRings`, `PerRealmKeyRings`): a realm's checkpoints are signed and verified with its own ring. In Symfony, `keys.per_realm` and `keys.directory`, `yorvoid:keys:rotate --realm`, and the doctor reports a realm without keys.
 
 ## 0.3.0 (2026-11-06)
 

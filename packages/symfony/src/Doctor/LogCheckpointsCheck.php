@@ -7,6 +7,7 @@ namespace YorvoID\Symfony\Doctor;
 use Psr\Clock\ClockInterface;
 use YorvoID\Core\Log\Checkpoint\FileCheckpoints;
 use YorvoID\Core\Realm;
+use YorvoID\Symfony\Key\KeyFiles;
 
 /**
  * Whether the security log's checkpoints are taken (AUD-003): without them, someone who can write the
@@ -20,7 +21,7 @@ final readonly class LogCheckpointsCheck implements Check
     private const int STALE = 86_400;
 
     public function __construct(
-        private ?string $keys,
+        private KeyFiles $keys,
         private ?string $file,
         private bool $logger,
         private Realm $realm,
@@ -35,7 +36,7 @@ final readonly class LogCheckpointsCheck implements Check
             return;
         }
 
-        if (null === $this->keys || (null === $this->file && !$this->logger)) {
+        if (!$this->keys->isConfigured() || (null === $this->file && !$this->logger)) {
             yield Finding::warning('The security log has no checkpoints: someone who can write the database could cut off its end, or rewrite it, unnoticed.', 'Set yorvoid.keys.file and yorvoid.log.checkpoint_file (or checkpoint_logger), and run yorvoid:log:checkpoint from cron.', 'concepts/security-log.md#checkpoints');
 
             return;

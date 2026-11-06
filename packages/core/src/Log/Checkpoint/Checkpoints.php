@@ -6,7 +6,7 @@ namespace YorvoID\Core\Log\Checkpoint;
 
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
-use YorvoID\Core\Key\KeyRing;
+use YorvoID\Core\Key\KeyRings;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\SecurityLogStore;
@@ -28,7 +28,7 @@ final readonly class Checkpoints
     public function __construct(
         private SecurityLogStore $store,
         private SecurityLog $log,
-        private KeyRing $keys,
+        private KeyRings $keys,
         private array $sinks,
         private ClockInterface $clock = new NativeClock(),
     ) {
@@ -48,7 +48,7 @@ final readonly class Checkpoints
         }
 
         $takenAt = new \DateTimeImmutable('@'.$this->clock->now()->getTimestamp());
-        $signer = $this->keys->signer();
+        $signer = $this->keys->forRealm($realm)->signer();
         $checkpoint = new Checkpoint($realm, $head['sequence'], $head['hash'], $takenAt, $signer->id, $signer->sign(Checkpoint::message($realm, $head['sequence'], $head['hash'], $takenAt)));
 
         foreach ($this->sinks as $sink) {
@@ -59,7 +59,7 @@ final readonly class Checkpoints
     }
 
     /**
-     * The chain's own verification, then each checkpoint: signed by a key in the ring, and its entry
+     * The chain's own verification, then each checkpoint: signed by a key in the realm's ring, and its entry
      * still in the log, with the hash it had. Entries removed from the end, or changed up to a
      * checkpoint and the chain recomputed, are found.
      *
@@ -73,8 +73,10 @@ final readonly class Checkpoints
             return $chain;
         }
 
+        $keys = $this->keys->forRealm($realm);
+
         foreach ($checkpoints as $checkpoint) {
-            if (!$checkpoint->realm->equals($realm) || !$checkpoint->isSignedBy($this->keys)) {
+            if (!$checkpoint->realm->equals($realm) || !$checkpoint->isSignedBy($keys)) {
                 return new Verification($chain->entriesChecked, $checkpoint->sequence, \sprintf('A checkpoint of entry %d isn\'t signed by a key in the ring: the checkpoints were changed, or the key is missing.', $checkpoint->sequence));
             }
 

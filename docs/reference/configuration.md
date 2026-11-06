@@ -20,6 +20,12 @@ yorvoid:
 
         # The signing keys' file, only its owner may read, e.g. "/run/secrets/yorvoid-keys.json"; yorvoid:keys:rotate creates it
         file:                 null
+
+        # Whether each realm has keys of its own, in keys.directory: "acme.json" for the realm "acme"
+        per_realm:            false
+
+        # The folder of each realm's key file, with per_realm, e.g. "/run/secrets/yorvoid-keys"; yorvoid:keys:rotate --realm creates them
+        directory:            null
     log:
 
         # Where yorvoid:log:checkpoint appends signed checkpoints of the security log, out of the database user's reach, e.g. on another disk or host; needs keys.file
