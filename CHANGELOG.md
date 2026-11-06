@@ -15,13 +15,15 @@ Stricter passkey and intent checks, signed checkpoints of the security log, Symf
 ### Breaking
 
 - `SessionStore::stepUp()` takes the factor to add and returns the stored context with it, or null; a store of your own adds the factor itself, with a compare-and-swap on the token.
-- `PrincipalStore::hasActive()` is new: a store of your own implements it.
+- `PrincipalStore::hasActive()`, `KnownDeviceStore::isKnown()` and the intent verifier's `VerifierLog::usedNonce()` are new: a store or log of your own implements them.
+- `PasskeyStore::update()` returns whether it recorded the sign-in: a store of your own records it only over a lower counter, or a counter of 0, in one step.
+- `SessionEndReason::Replaced` and `Refusal::TooManyWaiting` are new cases: a `match` over either handles them.
 - `AuthenticationFactor::NO_OPERATION` records a step-up for no operation: it counts only for requirements that name none, not for every operation.
 - `yorvoid/symfony` requires DoctrineBundle and FrameworkBundle, which it always needed.
 - The bundle refuses at boot a configuration it would refuse later: a wrong realm, table prefix, duration, limit, origin, cookie name, script or notification address.
 - `NotificationSettings` and email actions accept `https://` addresses only (`http://` for `localhost`), without a user before the host.
 - A setup code works only while the realm has no active principal.
-- Security notifications, "This wasn't me" and `EmailVerification` moved from `yorvoid/authn` to the new `yorvoid/notifications` (namespace `YorvoID\Notifications`); signed intents' `IntentSigning`, `IntentSummaries` and `SignedOperationRan` from `yorvoid/passkeys` to the new `yorvoid/intent-signing` (`YorvoID\IntentSigning`). `yorvoid/authn` no longer requires `yorvoid/mail`, nor `yorvoid/passkeys` the intent verifier. Require the new packages if you use what moved; `yorvoid/symfony` requires both.
+- Security notifications (`SecurityNotifications`, with its `Translations`), "This wasn't me" (`NotMe`, `NotMeReported`) and `EmailVerification` moved from `yorvoid/authn` to the new `yorvoid/notifications` (namespace `YorvoID\Notifications`); signed intents' `IntentSigning`, `IntentSummaries`, `IntentSummary`, `SignedOperationNotification` and `SignedOperationRan` from `yorvoid/passkeys` to the new `yorvoid/intent-signing` (`YorvoID\IntentSigning`). `yorvoid/authn` no longer requires `yorvoid/mail`, nor `yorvoid/passkeys` the intent verifier. Require the new packages if you use what moved; `yorvoid/symfony` requires both.
 - `CeremonyStore::take()` takes the session asking: a store of your own returns a ceremony only to the session that began it, and one begun outside a session only without one.
 - `ThrottleStore::advance()` replaces `replace()`: a store of your own counts an attempt, or refuses it, in one atomic step, so attempts at the same moment don't refuse each other.
 - Email addresses are compared in one Unicode form (NFC), with only A–Z in lowercase and the domain in its ASCII form (IDNA); an address whose domain has no valid ASCII form is refused; `yorvoid/core` requires `ext-intl`. Addresses beyond ASCII stored by 0.1 are found again after `yorvoid:identifiers:normalize` (or `IdentifierRenormalization::run()`): run it once after upgrading, with `--dry-run` first.

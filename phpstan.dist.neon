@@ -12,6 +12,8 @@ parameters:
     excludePaths:
         - packages/*/vendor/*
         - packages/*/node_modules/*
+        # The compatibility check's own tool.
+        - tools/compat/bc/vendor/*
         # Code that breaks the rules on purpose, to test them.
         - tests/Tools/PHPStan/data/*
     tmpDir: var/cache/phpstan

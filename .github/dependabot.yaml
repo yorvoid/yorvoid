@@ -50,7 +50,9 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: composer
-    directory: /
+    directories:
+      - /
+      - /tools/compat/bc
     schedule:
       interval: weekly
     commit-message:

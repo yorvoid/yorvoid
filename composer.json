@@ -90,6 +90,10 @@
         "phpstan": "phpstan analyse --memory-limit=1G",
         "deptrac": "deptrac analyse --no-progress",
         "dependencies": "sh tools/dependencies/check.sh",
+        "bc": [
+            "@composer install -d tools/compat/bc --no-interaction --no-progress --quiet",
+            "@php tools/compat/bc-check.php"
+        ],
         "test": "phpunit",
         "infection": [
             "Composer\\Config::disableProcessTimeout",
@@ -104,6 +108,7 @@
             "@phpstan",
             "@deptrac",
             "@dependencies",
+            "@bc",
             "@test"
         ],
         "fuzz": [
@@ -117,6 +122,7 @@
         "phpstan": "Static analysis at the maximum level",
         "deptrac": "Checks the dependency rules between packages",
         "dependencies": "Checks that each package requires what it uses, and uses what it requires",
+        "bc": "Checks the compatibility promise against the last release: every break of @api code is in the changelog",
         "test": "Runs the tests",
         "infection": "Mutation testing",
         "docs-reference": "Writes the reference pages from the code: the configuration and the console commands",

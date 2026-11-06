@@ -1,0 +1,12 @@
+{
+    "name": "yorvoid/bc-check",
+    "description": "The tool that checks YorvoID's compatibility promise, apart from the packages' own dependencies: see ../bc-check.php.",
+    "license": "Apache-2.0",
+    "require": {
+        "php": ">=8.4",
+        "roave/backward-compatibility-check": "^8.27"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
