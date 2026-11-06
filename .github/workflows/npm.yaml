@@ -50,6 +50,7 @@ jobs:
           docker compose run --rm node sh -c 'npm ci && npm run build'
       # The tag's version, e.g. v0.1.0 → 0.1.0. A pre-release (0.1.0-rc.1) goes to "next", not "latest".
       - name: Publish
+        shell: bash
         env:
           TAG: ${{ github.ref_name }}
         run: |
@@ -62,8 +63,14 @@ jobs:
             *-*) channel=next ;;
           esac
 
-          # npm finds the workflow's identity, for trusted publishing and provenance, in these.
-          passed=$(env | grep -oE '^(GITHUB|RUNNER|ACTIONS)_[A-Z0-9_]+' | sed 's/^/-e /' | tr '\n' ' ')
+          # npm finds the workflow's identity, for trusted publishing and provenance, in these. Each goes in
+          # with its value: a bare -e NAME leaves it to Compose to read the runner's environment.
+          passed=()
 
-          # shellcheck disable=SC2086
-          docker compose run --rm -e CI=true $passed node sh -c "npm version '$version' --no-git-tag-version && npm publish --access public --provenance --tag '$channel'"
+          for name in $(compgen -e | grep -E '^(GITHUB|RUNNER|ACTIONS)_'); do
+            passed+=(-e "$name=${!name}")
+          done
+
+          # Verbose, because npm logs why trusted publishing failed only at that level, then reports
+          # just ENEEDAUTH.
+          docker compose run --rm -e CI=true "${passed[@]}" node sh -c "npm version '$version' --no-git-tag-version && npm publish --access public --provenance --tag '$channel' --loglevel verbose"
