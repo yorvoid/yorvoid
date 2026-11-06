@@ -19,6 +19,9 @@ use Dom\HTMLDocument;
  */
 final readonly class TemplateLint
 {
+    /**
+     * @internal The bundle builds it: take it from the container
+     */
     public function __construct(
         private FlowPages $pages,
     ) {
