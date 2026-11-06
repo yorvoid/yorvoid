@@ -2,7 +2,8 @@
     "$schema": "vendor/infection/infection/resources/schema.json",
     "source": {
         "directories": ["packages"],
-        "excludes": ["vendor", "node_modules"]
+        // The stores' contracts are tests themselves: mutating their assertions tests nothing.
+        "excludes": ["vendor", "node_modules", "testing/src/Contract"]
     },
     // Infection skips mutants whose covering tests take longer than this, and leaves them out of the
     // score: long enough for the slowest (the bridge's tests in separate processes), and

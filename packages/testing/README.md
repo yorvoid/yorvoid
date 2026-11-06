@@ -1,6 +1,6 @@
 # yorvoid/testing
 
-YorvoID's test helpers: scenario fixtures made through YorvoID's own services, a movable clock, and signing in to Symfony functional tests. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
+YorvoID's test helpers: scenario fixtures made through YorvoID's own services, a movable clock, signing in to Symfony functional tests, and the tests a store of your own must pass. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
 
 ```bash
 composer require --dev yorvoid/testing
