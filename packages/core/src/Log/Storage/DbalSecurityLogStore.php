@@ -87,9 +87,10 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
 
         $this->lockedHead($realm);
 
-        // SQLite writes one transaction at a time, but reading takes no write lock: writing does.
+        // SQLite writes one transaction at a time, but reading takes no write lock: writing does. An
+        // update takes it for the whole database as it starts, before it looks for rows: it needs none.
         if (SqlPlatform::SQLite === $this->database->platform) {
-            $this->database->connection->executeStatement(\sprintf('UPDATE %s SET sequence = sequence WHERE realm = ?', $this->database->table(self::HEAD_TABLE)), [$realm->name]);
+            $this->database->connection->executeStatement(\sprintf('UPDATE %s SET sequence = sequence WHERE 1 = 0', $this->database->table(self::HEAD_TABLE)));
         }
     }
 
