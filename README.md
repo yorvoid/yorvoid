@@ -61,4 +61,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the details, and [SECURITY.md](SECURI
 
 ## License
 
-[Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE). For licensing questions, write to [legal@poposki.mk](mailto:legal@poposki.mk).

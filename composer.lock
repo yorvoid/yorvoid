@@ -5091,7 +5091,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "183824cb905c0e0a1eb0c550a512a3b0f49b4607"
+                "reference": "1bbba5b1c4d977ec9c94325131a1ad8962145a79"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5122,7 +5122,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's authentication: sessions, one-time tokens, setup and recovery codes, step-up and throttling.",
@@ -5134,6 +5134,7 @@
                 "sessions"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/authn",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5149,7 +5150,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "2068f083583f06494065486b0484b699b4599d88"
+                "reference": "94087bda730605f1a866b7777a8806051553211b"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5180,7 +5181,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's core: principals, realms, the security log, keys and storage.",
@@ -5194,6 +5195,7 @@
                 "security"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/core",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5209,7 +5211,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/flows",
-                "reference": "1d4e6d9ba80d795af7a0e31d9aea450ff991fab2"
+                "reference": "649a0f94f95290afab89b7591c9708ed90e60a4d"
             },
             "require": {
                 "php": ">=8.4",
@@ -5237,7 +5239,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's flows: sign-in, recovery, enrolment and other journeys as server-side steps that applications insert into, replace or remove, rendered by templates or the browser client.",
@@ -5249,6 +5251,7 @@
                 "security"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/flows",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5264,7 +5267,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-signing",
-                "reference": "da008fc6eb0dbe9a2ae505403146d07106da3ae6"
+                "reference": "ab1fb8d3c57486266e67ca8484ed358c1d663ef3"
             },
             "require": {
                 "ext-intl": "*",
@@ -5300,7 +5303,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's side of signed intents in the application: asking for an operation's signature, limits on asking, the security log, and summaries of what is signed.",
@@ -5313,6 +5316,7 @@
                 "webauthn"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/intent-signing",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5328,7 +5332,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "3e77d2a7d77201b0ca74beeccd54435539e5c242"
+                "reference": "7993b3e13570b4aa391fdb7e0157ad36cf7d33fe"
             },
             "require": {
                 "ext-dom": "*",
@@ -5363,7 +5367,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's intent verifier: runs a privileged operation only after a passkey signed exactly that operation, checked against keys the verifier holds itself. Stands alone: no framework, no database layer.",
@@ -5376,6 +5380,7 @@
                 "webauthn"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/intent-verifier",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5391,7 +5396,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/mail",
-                "reference": "36d7c8b819863f8f115fa4d1fa8da7f1a7d7ce91"
+                "reference": "fd9fc5c6a3996a8a52a505a43fa67f129f1f2189"
             },
             "require": {
                 "ext-filter": "*",
@@ -5417,7 +5422,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's emails: built from structured content, rendered as plain text and as accessible HTML from a Twig template you can replace, delivered through an interface.",
@@ -5429,6 +5434,7 @@
                 "notifications"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/mail",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5444,7 +5450,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/notifications",
-                "reference": "229719d1ce744b2669b344d66d5f2fc120b6d6fb"
+                "reference": "26340fd3b2a798d24959a9567103805b6c627419"
             },
             "require": {
                 "ext-intl": "*",
@@ -5476,7 +5482,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's security notifications: emails about sign-ins, new devices and changed sign-in methods, \"This wasn't me\", and email address verification.",
@@ -5489,6 +5495,7 @@
                 "security"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/notifications",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5504,7 +5511,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/passkeys",
-                "reference": "6e922545c0ef5133eeb4e40e812d79edc06cb789"
+                "reference": "b7d2584eae8d4b3bf7966f4562cdbb2110b9f6f6"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5542,7 +5549,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's passkeys: WebAuthn registration and sign-in, user-verification policy, and passkey management.",
@@ -5556,6 +5563,7 @@
                 "webauthn"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/passkeys",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5571,7 +5579,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "2909f3f326a8846ff8fc460f6e3b97c214ee6bac"
+                "reference": "341b24530f17bfb59a3edcb679416e33994da123"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5629,7 +5637,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID for Symfony: configuration, services, authenticators for any firewall, the user provider and checker, console commands, and the mailer, translator and event glue.",
@@ -5643,6 +5651,7 @@
                 "symfony"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/symfony",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5658,7 +5667,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/testing",
-                "reference": "9f374743cfedc4cb1366cf6bd27efbeeb2cfd04d"
+                "reference": "6c72535c51929ec6af772ea8daa964f5ee2e8991"
             },
             "require": {
                 "php": ">=8.4",
@@ -5692,7 +5701,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's test helpers: scenario fixtures made through YorvoID's own services, a movable clock, and signing in to Symfony functional tests.",
@@ -5705,6 +5714,7 @@
                 "testing"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/testing",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5720,7 +5730,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/throttle",
-                "reference": "65c3e9c375bf29bfee9dbc592f4820eb32646eed"
+                "reference": "503beafd68a79e603c3a8b8315fc00b6b152cd3a"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -5747,7 +5757,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's throttle: at most so many attempts per period, per key, shared by every server through the database, atomic under concurrent requests.",
@@ -5760,6 +5770,7 @@
                 "throttling"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/throttle",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5775,7 +5786,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/translation",
-                "reference": "06d17b86e62e53725452a369c9239b216332e2e2"
+                "reference": "9af86453c2d1b0c460ba97d5c19fcde25acb1596"
             },
             "require": {
                 "ext-intl": "*",
@@ -5800,7 +5811,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's translator: ICU messages from catalogues that packages ship, behind Symfony's translation contracts.",
@@ -5812,6 +5823,7 @@
                 "translation"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/translation",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
@@ -5827,7 +5839,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/virtual-authenticator",
-                "reference": "787e6d4c053fa0a7b3228ba68abdcb6f593445b8"
+                "reference": "fe8e9447ab36cd021ee63d1d9f34acd6c76024b4"
             },
             "require": {
                 "ext-openssl": "*",
@@ -5851,7 +5863,7 @@
             "authors": [
                 {
                     "name": "Darko Poposki",
-                    "email": "poposki.darko@gmail.com"
+                    "email": "contact@yorvolabs.com"
                 }
             ],
             "description": "YorvoID's virtual authenticator: a software WebAuthn authenticator for tests that answers registration and sign-in options as a browser would, and misbehaves on request.",
@@ -5864,6 +5876,7 @@
                 "webauthn"
             ],
             "support": {
+                "email": "contact@yorvolabs.com",
                 "issues": "https://github.com/yorvoid/yorvoid/issues",
                 "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/virtual-authenticator",
                 "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",

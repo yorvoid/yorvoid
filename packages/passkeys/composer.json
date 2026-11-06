@@ -15,10 +15,11 @@
     "authors": [
         {
             "name": "Darko Poposki",
-            "email": "poposki.darko@gmail.com"
+            "email": "contact@yorvolabs.com"
         }
     ],
     "support": {
+        "email": "contact@yorvolabs.com",
         "issues": "https://github.com/yorvoid/yorvoid/issues",
         "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/passkeys",
         "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",

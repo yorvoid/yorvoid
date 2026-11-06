@@ -6,7 +6,9 @@ YorvoID is security software, so we treat reports about it with priority.
 
 **Please do not report security vulnerabilities through public GitHub issues, discussions or pull requests.**
 
-Report them privately through GitHub instead:
+Report them privately instead, through GitHub or by email.
+
+Through GitHub:
 
 1. Go to the [Security tab](https://github.com/yorvoid/yorvoid/security) of this repository.
 2. Click **Report a vulnerability**.
@@ -17,6 +19,8 @@ Report them privately through GitHub instead:
    - the impact, i.e. what an attacker could achieve, and under which configuration.
 
 Only the maintainers can see your report.
+
+By email: write to [security@yorvolabs.com](mailto:security@yorvolabs.com), with the same details.
 
 ## What happens next
 
