@@ -17,7 +17,7 @@ final readonly class SuspendPrincipal
 ```
 
 - **The name** is stable and dot-separated, starting with its owner: `yorvoid.…` for YorvoID's own, your prefix for yours.
-- **The ability** is what a principal will need to run it, once YorvoID's authorization checks it (0.2.0). Today it's recorded, not enforced: check who may run the operation yourself before you call it.
+- **The ability** is what a principal will need to run it, once YorvoID's authorization checks it (planned for 0.3). Today it's recorded, not enforced: check who may run the operation yourself before you call it.
 - **The inverse** is the operation that undoes it, if any.
 
 `OperationCatalogue` lists every operation with its typed parameters, so your application can build its own action catalogue, admin pages or console commands from it. Parameters marked `#[\SensitiveParameter]` are flagged, so they're never logged, shown or put on a command line. Mistakes fail when the catalogue is built: a command without the attribute, two operations with one name, or an inverse that isn't installed.

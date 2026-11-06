@@ -73,6 +73,7 @@ export default defineConfig({
         text: 'Concepts',
         collapsed: true,
         items: [
+          { text: 'Architecture', link: '/concepts/architecture' },
           { text: 'Realms', link: '/concepts/realms' },
           { text: 'Principals', link: '/concepts/principals' },
           { text: 'Passkeys', link: '/concepts/passkeys' },
