@@ -2,7 +2,9 @@
 
 All of YorvoID's packages are released together, with the same version ([compatibility](docs/compatibility.md)). Each release lists what changed, and what to do where a change breaks covered code.
 
-## Unreleased
+## 0.3.0 (2026-11-06)
+
+A setup code claims a realm under the security log's lock, and CI holds the packages to the compatibility promise: no `@internal` type in the API, no break the changelog doesn't list.
 
 ### Breaking
 

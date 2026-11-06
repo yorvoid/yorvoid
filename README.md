@@ -4,7 +4,7 @@
 
 YorvoID is a library your application embeds, not a server you run beside it. It covers who someone is, how they proved it, what they may do, under whose authority, and why. Humans, services, workloads and autonomous agents are all principals, and they all go through the same authorization. Authority can be delegated along chains of agents, and it can only shrink as it's passed on. Decisions can depend on verified facts, such as a human approval, never on what an agent claims. Every decision can explain itself.
 
-> **Status:** 0.2.0, the first milestone: passkeys, recovery codes, sessions, step-up and passkey-signed operations. Early development: the API can change between 0.x releases. Start with [the Symfony quickstart](docs/tutorials/symfony-quickstart.md) (`composer require yorvoid/symfony`); the browser client is `npm install @yorvoid/browser`.
+> **Status:** 0.3.0, the first milestone: passkeys, recovery codes, sessions, step-up and passkey-signed operations. Early development: the API can change between 0.x releases. Start with [the Symfony quickstart](docs/tutorials/symfony-quickstart.md) (`composer require yorvoid/symfony`); the browser client is `npm install @yorvoid/browser`.
 
 ## What it will do
 
