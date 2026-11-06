@@ -36,7 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement through GitHub: on the issue, pull request or comment concerned, open the **···** menu, choose **Report content**, then **Report to repository admins**. Only the maintainers see these reports. For behavior that also breaks GitHub's own rules, you can report it to GitHub as well.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement through GitHub: on the issue, pull request or comment concerned, open the **···** menu, choose **Report content**, then **Report to repository admins**. Only the maintainers see these reports. You can also write to [contact@yorvolabs.com](mailto:contact@yorvolabs.com), for instance about behavior outside GitHub. For behavior that also breaks GitHub's own rules, you can report it to GitHub as well.
 
 All complaints will be reviewed and investigated promptly and fairly.
 
@@ -72,7 +72,7 @@ Community leaders will follow these Community Impact Guidelines in determining t
 
 ## Attribution
 
-This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 2.1, available at [https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1]. The Enforcement section was changed to describe how to report through GitHub.
+This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 2.1, available at [https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1]. The Enforcement section was changed to describe how to report through GitHub or by email.
 
 Community Impact Guidelines were inspired by [Mozilla's code of conduct enforcement ladder][Mozilla CoC].
 

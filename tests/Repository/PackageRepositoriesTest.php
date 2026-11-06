@@ -66,6 +66,7 @@ final class PackageRepositoriesTest extends TestCase
         self::assertSame($repository, $composer['name'] ?? null);
         self::assertSame('Apache-2.0', $composer['license'] ?? null);
         self::assertSame([
+            'email' => 'contact@yorvolabs.com',
             'issues' => self::MONOREPO.'/issues',
             'source' => self::MONOREPO.'/tree/main/'.$path,
             'docs' => self::MONOREPO.'/tree/main/docs',
