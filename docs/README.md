@@ -27,6 +27,7 @@ Documentation for two readers: **integrators**, who add YorvoID to an applicatio
 
 ## Concepts
 
+- [Architecture](concepts/architecture.md): what runs where, the packages and which may use which, and the design rules.
 - [Realms](concepts/realms.md): the isolation boundary every record belongs to.
 - [Principals](concepts/principals.md): people, services, workloads, agents and capability holders; their lifecycle, identifiers and guard rules.
 - [Passkeys](concepts/passkeys.md): registering them, signing in, user verification, suspected copies.
