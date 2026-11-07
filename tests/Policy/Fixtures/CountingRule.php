@@ -19,12 +19,13 @@ final class CountingRule implements Rule
 
     public function __construct(
         private readonly RuleAnswer $answer,
+        private readonly string $name = 'acme.locked',
     ) {
     }
 
     public function name(): string
     {
-        return 'acme.locked';
+        return $this->name;
     }
 
     public function matches(Request $request): bool

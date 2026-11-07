@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace YorvoID\Policy;
 
 use YorvoID\Core\Exception\IntegratorError;
-use YorvoID\Core\Operation\OperationCatalogue;
 
 /**
- * Every declared ability and role, checked when YorvoID is built (PLT-004): names are unique, default
- * roles are declared, and every operation's ability is declared.
+ * Every declared ability and role, checked when YorvoID is built (PLT-004): names are unique, and default
+ * roles are declared. The role permit checks that every operation's ability is declared.
  *
  * @api
  */
@@ -27,11 +26,10 @@ final readonly class PolicyCatalogue
 
     /**
      * @param iterable<PolicyDeclarations> $declarations
-     * @param OperationCatalogue|null      $operations   Whose abilities must be declared
      *
      * @throws IntegratorError
      */
-    public static function of(iterable $declarations, ?OperationCatalogue $operations = null): self
+    public static function of(iterable $declarations): self
     {
         $abilities = [];
         $roles = [];
@@ -64,12 +62,6 @@ final readonly class PolicyCatalogue
                 }
 
                 $abilities[$ability->name] = $ability;
-            }
-        }
-
-        foreach ($operations?->all() ?? [] as $operation) {
-            if (null !== $operation->ability && !isset($abilities[$operation->ability])) {
-                throw new IntegratorError(\sprintf('The operation "%s" needs the ability "%s", which isn\'t declared.', $operation->name, $operation->ability), 'Declare it in a PolicyDeclarations of its owner.', 'concepts/authorization.md#abilities');
             }
         }
 

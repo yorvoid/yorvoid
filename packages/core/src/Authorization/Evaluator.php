@@ -21,6 +21,7 @@ use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\NoSelfService;
+use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\SelfServicePolicy;
 use YorvoID\Core\Operation\Verdict;
@@ -193,6 +194,20 @@ final readonly class Evaluator implements Authorization
         $this->logger->warning('YorvoID permitted "{operation}" offline: {reason}', ['operation' => $request->subject(), 'reason' => $offline->reason]);
 
         return $offline;
+    }
+
+    /**
+     * Has every element that checks the operations check them: Operations asks when it's built.
+     *
+     * @throws IntegratorError
+     */
+    public function checkCatalogue(OperationCatalogue $catalogue): void
+    {
+        foreach ($this->elements as $element) {
+            if ($element instanceof ChecksCatalogue) {
+                $element->checkCatalogue($catalogue);
+            }
+        }
     }
 
     /**

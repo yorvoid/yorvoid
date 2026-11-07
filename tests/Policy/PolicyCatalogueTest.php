@@ -5,14 +5,24 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Policy\Ability;
 use YorvoID\Policy\InvalidRole;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\PolicyDeclarations;
 use YorvoID\Policy\Role;
+use YorvoID\Policy\RolePermit;
+use YorvoID\Policy\Roles;
+use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\Policy\YorvoIDDeclarations;
+use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
 
@@ -58,15 +68,16 @@ final class PolicyCatalogueTest extends TestCase
     public function testEveryOperationsAbilityMustBeDeclared(): void
     {
         $operations = new OperationCatalogue([IssueBadge::class]);
+        $permit = static fn (PolicyDeclarations ...$declarations): RolePermit => new RolePermit(new Roles(PolicyCatalogue::of($declarations), new InMemoryPolicyStore()));
 
         try {
-            PolicyCatalogue::of([new AcmeDeclarations()], $operations);
+            new Operations($operations, new Evaluator([$permit(new AcmeDeclarations())], new StubAuthority(Truth::holds('valid'))), new SecurityLog(new InMemorySecurityLogStore(), new InMemoryTransactions()), []);
             self::fail('An undeclared ability was taken.');
         } catch (IntegratorError $error) {
             self::assertStringStartsWith('The operation "acme.badge.issue" needs the ability "acme.badges.issue", which isn\'t declared.', $error->getMessage());
         }
 
-        PolicyCatalogue::of([new AcmeDeclarations(), self::declaring([new Ability('acme.badges.issue', 'Issue badges', 'acme')])], $operations);
+        $permit(new AcmeDeclarations(), self::declaring([new Ability('acme.badges.issue', 'Issue badges', 'acme')]))->checkCatalogue($operations);
         $this->addToAssertionCount(1);
     }
 

@@ -33,6 +33,8 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - `yorvoid/policy`: declared abilities and roles (`PolicyDeclarations`, `Ability`, `Role`), super roles, strict abilities, the `everyone` role, a realm's changes to the defaults kept as differences (`AbilityChanges`), roles created in a realm, roles assigned in a realm or on one resource with an expiry (`RoleAssignment`), roles from a `RoleSource`, and rules in PHP that permit, forbid or can't tell (`Rule`). The role permit (`RolePermit`) decides operations that need an ability; `Policy` decides an application's own abilities, in Symfony also through `isGranted()` ([authorization](docs/concepts/authorization.md#abilities)).
 - A request can be about an ability on a resource (`ResourceRef`) instead of an operation: `Evaluator::decideAbility()`. A command about one resource implements `ConcernsResource`.
 - A deleted principal's roles are taken.
+- The policy changes through operations (`yorvoid.role.*`, `yorvoid.ability.*`, `PolicyChanges`), each in the security log and incrementing the realm's policy version. Nobody gives what they don't hold (`NoEscalation`), and giving a strict ability or a super role takes a recent proof (`StepUpCheck`, `SessionStepUpCheck`).
+- A policy element can check the operations when `Operations` is built (`ChecksCatalogue`): the role permit refuses an operation whose ability isn't declared.
 
 ### Fixed
 

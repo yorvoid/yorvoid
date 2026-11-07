@@ -93,6 +93,28 @@ A principal has the roles assigned to it in its realm (`RoleAssignment`): in the
 
 `Roles` reads it all, for pages that show the policy: the realm's roles, the roles with an ability, a role's abilities, the changes.
 
+### Changing the policy
+
+Roles and their abilities change through operations, each recorded in the security log and incrementing the realm's policy version:
+
+| Operation | Command | Ability |
+|---|---|---|
+| `yorvoid.role.create`, `.relabel`, `.delete` | `CreateRole` (optionally from another role's abilities), `RelabelRole`, `DeleteRole` | `yorvoid.roles.manage` |
+| `yorvoid.role.assign`, `.unassign` | `AssignRole` (in the realm or on a resource, with an expiry), `UnassignRole` | `yorvoid.roles.manage` |
+| `yorvoid.ability.grant`, `.revoke`, `.set`, `.reset` | `GrantAbilities`, `RevokeAbilities`, `SetAbilities`, `ResetAbilities` | `yorvoid.permissions.manage` |
+
+```php
+use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Policy\Change\AssignRole;
+
+$operations->run(new AssignRole($realm, $principalId, 'manager', new ResourceRef('site', '42')), $session, $origin);
+```
+
+Two rules hold for everyone but the host's operator:
+
+- **Nobody gives what they don't hold** (`NoEscalation`): a role whose abilities they don't all have, a super role unless they have one, an ability they lack.
+- **Giving a strict ability or a super role takes a recent proof** of who one is (AUZ-052): the role permit asks a `StepUpCheck` (in Symfony, the session's step-up, within `step_up.window`), and a refusal carries a `StepUpRemedy`. Without a `StepUpCheck`, only the operator gives them.
+
 ## Resources
 
 A request may be about one resource, by its type and ID (`ResourceRef`, e.g. `site:42`); YorvoID never loads it. A role assigned on that resource counts for the request. A command about one resource implements `ConcernsResource`, and isGranted()'s subject is the resource when it's a `ResourceRef` or a `ConcernsResource`.

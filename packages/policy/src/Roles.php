@@ -68,6 +68,11 @@ final readonly class Roles
         return null === $label ? null : new Role($name, $label);
     }
 
+    public function ability(string $name): ?Ability
+    {
+        return $this->catalogue->ability($name);
+    }
+
     public function has(Realm $realm, string $role): bool
     {
         return isset($this->roles($realm)[$role]);
