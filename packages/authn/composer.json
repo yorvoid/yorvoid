@@ -32,8 +32,8 @@
         "psr/event-dispatcher": "^1.0",
         "symfony/clock": "^7.4 || ^8.1",
         "symfony/uid": "^7.4 || ^8.1",
-        "yorvoid/core": "^0.1",
-        "yorvoid/throttle": "^0.1"
+        "yorvoid/core": "^0.4",
+        "yorvoid/throttle": "^0.4"
     },
     "autoload": {
         "psr-4": {
@@ -42,7 +42,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.1.x-dev"
+            "dev-main": "0.4.x-dev"
         }
     }
 }

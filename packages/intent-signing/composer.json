@@ -32,10 +32,10 @@
         "psr/event-dispatcher": "^1.0",
         "symfony/clock": "^7.4 || ^8.1",
         "symfony/translation-contracts": "^3.6",
-        "yorvoid/authn": "^0.1",
-        "yorvoid/core": "^0.1",
-        "yorvoid/intent-verifier": "^0.1",
-        "yorvoid/throttle": "^0.1"
+        "yorvoid/authn": "^0.4",
+        "yorvoid/core": "^0.4",
+        "yorvoid/intent-verifier": "^0.4",
+        "yorvoid/throttle": "^0.4"
     },
     "suggest": {
         "symfony/translation": "Refuses an intent's summary that has no message in the catalogue",
@@ -48,7 +48,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.1.x-dev"
+            "dev-main": "0.4.x-dev"
         }
     }
 }

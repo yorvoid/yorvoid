@@ -6,13 +6,13 @@
     "require": {
         "php": ">=8.4",
         "ext-pdo_sqlite": "*",
-        "yorvoid/core": "^0.1",
-        "yorvoid/flows": "^0.1",
-        "yorvoid/throttle": "^0.1"
+        "yorvoid/core": "^0.4",
+        "yorvoid/flows": "^0.4",
+        "yorvoid/throttle": "^0.4"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.0",
-        "yorvoid/testing": "^0.1"
+        "yorvoid/testing": "^0.4"
     },
     "autoload": {
         "psr-4": {

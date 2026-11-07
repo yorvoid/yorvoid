@@ -15,7 +15,7 @@ The rule that keeps this simple: **the application has one YorvoID, and configur
 ```json
 {
     "require": {
-        "yorvoid/symfony": "^0.1"
+        "yorvoid/symfony": "^0.4"
     }
 }
 ```

@@ -22,7 +22,7 @@ CI compares every package with its last release, and fails on a break of covered
 
 ## Versions
 
-All of YorvoID's packages, Composer and npm, are released together with the same version: `yorvoid/core` 0.2.0 goes with `yorvoid/passkeys` 0.2.0 and `@yorvoid/browser` 0.2.0. Require the same version of each. Every release is listed in the [changelog](https://github.com/yorvoid/yorvoid/blob/main/CHANGELOG.md).
+All of YorvoID's packages, Composer and npm, are released together with the same version: `yorvoid/core` 0.2.0 goes with `yorvoid/passkeys` 0.2.0 and `@yorvoid/browser` 0.2.0. Require the same version of each: each package requires the others at its own minor, e.g. `^0.4` for 0.4.0, so Composer installs them as one set. Every release is listed in the [changelog](https://github.com/yorvoid/yorvoid/blob/main/CHANGELOG.md).
 
 ## Supported platforms
 

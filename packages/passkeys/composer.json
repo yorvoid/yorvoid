@@ -37,9 +37,9 @@
         "symfony/uid": "^7.4 || ^8.1",
         "web-auth/cose-lib": "^4.8",
         "web-auth/webauthn-lib": "^5.3.9",
-        "yorvoid/authn": "^0.1",
-        "yorvoid/core": "^0.1",
-        "yorvoid/flows": "^0.1"
+        "yorvoid/authn": "^0.4",
+        "yorvoid/core": "^0.4",
+        "yorvoid/flows": "^0.4"
     },
     "suggest": {
         "yorvoid/notifications": "Sends the link that confirms the owner's email address in the setup flow, and the verify_email flow"
@@ -51,7 +51,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.1.x-dev"
+            "dev-main": "0.4.x-dev"
         }
     }
 }

@@ -27,7 +27,7 @@
         "php": ">=8.4",
         "ext-intl": "*",
         "symfony/translation-contracts": "^3.6",
-        "yorvoid/core": "^0.1"
+        "yorvoid/core": "^0.4"
     },
     "autoload": {
         "psr-4": {
@@ -36,7 +36,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.1.x-dev"
+            "dev-main": "0.4.x-dev"
         }
     }
 }
