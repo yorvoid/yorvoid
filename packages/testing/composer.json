@@ -34,6 +34,7 @@
         "symfony/uid": "^7.4 || ^8.1",
         "yorvoid/authn": "^0.1",
         "yorvoid/core": "^0.1",
+        "yorvoid/flows": "^0.1",
         "yorvoid/passkeys": "^0.1",
         "yorvoid/throttle": "^0.1",
         "yorvoid/virtual-authenticator": "^0.1"

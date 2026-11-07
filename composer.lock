@@ -7545,7 +7545,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/testing",
-                "reference": "a0ddd4a8e4c37784350f03bb293a92ae84e3f3c9"
+                "reference": "7c838e0f62673787f7d2af95fa713ad80c20799a"
             },
             "require": {
                 "ext-mbstring": "*",
@@ -7557,6 +7557,7 @@
                 "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.1",
                 "yorvoid/core": "^0.1",
+                "yorvoid/flows": "^0.1",
                 "yorvoid/passkeys": "^0.1",
                 "yorvoid/throttle": "^0.1",
                 "yorvoid/virtual-authenticator": "^0.1"

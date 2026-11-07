@@ -82,6 +82,12 @@ So each package directory carries what its repository needs on its own: a README
    docker compose run --rm quickstart npx playwright test --config playwright.quickstart.config.ts
    ```
 
+   The store kit runs as another project would run it: `tools/store-kit/project` has stores of its own, on PDO, and tests them with `yorvoid/testing`'s contracts, installed with Composer. A contract that needs more than its package declares fails there:
+
+   ```bash
+   docker compose exec php php tools/store-kit/check.php
+   ```
+
    The documentation site arranges `docs/` with VitePress (`site/`). It refuses dead links; preview it at <http://localhost:5173/yorvoid/>:
 
    ```bash

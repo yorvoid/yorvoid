@@ -167,6 +167,8 @@ jobs:
         run: docker compose exec -T php composer phpstan
       - name: Install next to Laravel 12 and Drupal 11
         run: docker compose exec -T php sh tools/compat/frameworks.sh
+      - name: Run the store kit in a project of its own
+        run: docker compose exec -T php php tools/store-kit/check.php
       - name: Show logs on failure
         if: failure()
         run: docker compose logs
