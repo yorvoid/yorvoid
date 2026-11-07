@@ -123,3 +123,20 @@ check IndeterminateOnlyWhenItCouldMatter for 6 Element expect 1
 run SomePermit { some es: set Element, a: Authority | outcome[es, a] = Permit } for 3 Element expect 1
 run SomeDeny { some es: set Element, a: Authority | outcome[es, a] = Deny } for 3 Element expect 1
 run SomeIndeterminate { some es: set Element, a: Authority | outcome[es, a] = Indeterminate } for 3 Element expect 1
+
+/* The fixtures the PHP evaluator is tested against (tests/Core/Authorization/PrecedenceFixturesTest.php):
+ * every request with up to 6 matching elements, its authority, and the outcome the table gives it.
+ * decisions/fixtures.mjs enumerates them into decisions/fixtures.json; check.sh fails if that file isn't
+ * what the model gives. */
+one sig Request {
+    elements: set Element,
+    authority: one Authority,
+    result: one Outcome
+}
+
+fact fixture {
+    Request.elements = Element
+    Request.result = outcome[Request.elements, Request.authority]
+}
+
+run fixtures {} for 6 Element
