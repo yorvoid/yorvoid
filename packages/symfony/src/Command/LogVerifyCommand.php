@@ -10,12 +10,12 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Log\Checkpoint\Checkpoints;
 use YorvoID\Core\Log\Checkpoint\FileCheckpoints;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Realm;
+use YorvoID\Symfony\Key\KeyFiles;
 
 /**
  * Verifies a realm's security log: its chain, and, with a checkpoint file, against the checkpoints.
@@ -28,7 +28,7 @@ final class LogVerifyCommand extends Command
     public function __construct(
         private readonly SecurityLogStore $store,
         private readonly SecurityLog $log,
-        private readonly ?string $keys,
+        private readonly KeyFiles $keys,
         private readonly ?string $file,
     ) {
         parent::__construct();
@@ -43,9 +43,9 @@ final class LogVerifyCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
         $realm = new Realm(Options::string($input->getOption('realm')));
-        $withCheckpoints = null !== $this->keys && null !== $this->file;
+        $withCheckpoints = $this->keys->isConfigured() && null !== $this->file;
         $verification = $withCheckpoints
-            ? new Checkpoints($this->store, $this->log, KeyRing::fromFile($this->keys), [])->verify($realm, new FileCheckpoints($this->file)->read($realm))
+            ? new Checkpoints($this->store, $this->log, $this->keys->rings(), [])->verify($realm, new FileCheckpoints($this->file)->read($realm))
             : $this->log->verify($realm);
 
         if (!$verification->isIntact()) {

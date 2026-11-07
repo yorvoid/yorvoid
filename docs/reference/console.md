@@ -38,6 +38,7 @@ php bin/console yorvoid:keys:rotate [options]
 |---|---|---|
 | `--remove` | Remove this verify-only key, once nothing it signed still needs checking |  |
 | `--public` | Print the public key set to deploy where signatures are checked, and change nothing |  |
+| `--realm` | The realm whose keys to rotate, with yorvoid.keys.per_realm | `default` |
 
 ## `yorvoid:log:checkpoint`
 

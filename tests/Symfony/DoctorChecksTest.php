@@ -28,6 +28,7 @@ use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
 use YorvoID\Symfony\Doctor\ProxiesCheck;
 use YorvoID\Symfony\Doctor\TestHelpersCheck;
+use YorvoID\Symfony\Key\KeyFiles;
 use YorvoID\Symfony\Migrations;
 use YorvoID\Symfony\Presets;
 use YorvoID\Tests\Support\DatabaseTestCase;
@@ -122,7 +123,7 @@ final class DoctorChecksTest extends DatabaseTestCase
     {
         $file = \sprintf('%s/yorvoid-checkpoints-%s.jsonl', sys_get_temp_dir(), bin2hex(random_bytes(6)));
         $clock = new MockClock('2026-11-04 18:00:00 UTC');
-        $check = static fn (?string $keys, ?string $at, bool $logger = false, bool $debug = false): array => array_map(static fn (Finding $finding): string => $finding->what, iterator_to_array(new LogCheckpointsCheck($keys, $at, $logger, Realm::default(), $clock, $debug)->findings(), false));
+        $check = static fn (?string $keys, ?string $at, bool $logger = false, bool $debug = false): array => array_map(static fn (Finding $finding): string => $finding->what, iterator_to_array(new LogCheckpointsCheck(new KeyFiles($keys), $at, $logger, Realm::default(), $clock, $debug)->findings(), false));
 
         try {
             self::assertSame([], $check(null, null, debug: true), 'Development has no checkpoints, and needs none.');

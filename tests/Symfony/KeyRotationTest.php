@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Symfony;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Clock\MockClock;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -154,6 +155,48 @@ final class KeyRotationTest extends TestCase
         self::assertStringContainsString('How to fix it: Run: chmod 600 '.$this->file(), $display);
     }
 
+    public function testEachRealmRotatesItsOwnKeys(): void
+    {
+        $realms = $this->directory.'/realms';
+        mkdir($realms, 0o700, true);
+        $this->boot(['keys' => ['per_realm' => true, 'directory' => $realms]]);
+
+        [$status, $display] = $this->command('yorvoid:doctor');
+        self::assertSame(Command::FAILURE, $status);
+        self::assertStringContainsString(\sprintf('Problem: The realm "default" has no keys: "%s/default.json" doesn\'t exist.', $realms), $display);
+        self::assertStringContainsString('How to fix it: Create them with yorvoid:keys:rotate --realm default.', $display);
+
+        $this->command('yorvoid:keys:rotate', ['--realm' => 'acme']);
+        $this->command('yorvoid:keys:rotate', ['--realm' => 'globex']);
+        [, $display] = $this->command('yorvoid:keys:rotate', ['--realm' => 'acme']);
+        self::assertStringContainsString('then run yorvoid:keys:rotate --realm acme again to make it active', $display);
+
+        self::assertCount(2, KeyRing::fromFile($realms.'/acme.json')->keys());
+        self::assertCount(1, KeyRing::fromFile($realms.'/globex.json')->keys(), 'Rotating one realm\'s keys touched another\'s.');
+        self::assertFileDoesNotExist($realms.'/default.json');
+
+        $this->command('yorvoid:keys:rotate');
+        self::assertStringContainsString('✔ Keys', $this->command('yorvoid:doctor')[1], 'The configured realm has its keys.');
+    }
+
+    public function testOneSharedRingHasNoRealmsToRotate(): void
+    {
+        $this->boot();
+        [$status, $display] = $this->command('yorvoid:keys:rotate', ['--realm' => 'acme']);
+
+        self::assertSame(Command::FAILURE, $status);
+        self::assertSame('[ERROR] Every realm shares one key ring: --realm needs yorvoid.keys.per_realm.', trim($display), 'The command went on after refusing.');
+        self::assertFileDoesNotExist($this->file());
+    }
+
+    public function testKeysPerRealmNeedAFolder(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('Keys per realm need a folder for them: set keys.directory.');
+
+        $this->boot(['keys' => ['per_realm' => true]]);
+    }
+
     /**
      * @return array{\YorvoID\Core\Secret, \YorvoID\Core\Secret} The session's token and a one-time token
      */
@@ -202,9 +245,12 @@ final class KeyRotationTest extends TestCase
         return $this->directory.'/keys.json';
     }
 
-    private function boot(bool $keys = true): ContainerInterface
+    /**
+     * @param bool|array<string, mixed> $keys The key file, none, or this configuration
+     */
+    private function boot(bool|array $keys = true): ContainerInterface
     {
-        $this->kernel = new TestKernel($this->directory, $keys ? ['keys' => ['file' => $this->file()]] : []);
+        $this->kernel = new TestKernel($this->directory, \is_array($keys) ? $keys : ($keys ? ['keys' => ['file' => $this->file()]] : []));
         $this->kernel->boot();
         $container = $this->kernel->getContainer()->get('test.service_container');
         \assert($container instanceof ContainerInterface);

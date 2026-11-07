@@ -103,6 +103,7 @@ use YorvoID\Symfony\Doctor\TestHelpersCheck;
 use YorvoID\Symfony\Factories;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Flow\SessionFlowStore;
+use YorvoID\Symfony\Key\KeyFiles;
 use YorvoID\Symfony\Limits;
 use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\RecoveryCodeAuthenticator;
@@ -181,6 +182,9 @@ return static function (ContainerConfigurator $container): void {
     $services->set(SessionPolicy::class)->factory([Factories::class, 'sessionPolicy'])->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle')]);
     $services->set(PasskeyPolicy::class)->factory([Factories::class, 'passkeyPolicy'])->args([param('yorvoid.passkeys.relying_party_id'), param('yorvoid.passkeys.origins'), param('yorvoid.passkeys.user_verification'), param('yorvoid.passkeys.clone_policy'), param('yorvoid.passkeys.timeout')]);
     $services->set(AttemptLimits::class)->factory([Factories::class, 'attemptLimits'])->args([param('yorvoid.limits.per_account_and_address'), param('yorvoid.limits.per_account'), param('yorvoid.limits.per_address')]);
+
+    // The signing keys: one file for every realm, or one for each (D-40).
+    $services->set(KeyFiles::class)->args([param('yorvoid.keys.file'), param('yorvoid.keys.per_realm'), param('yorvoid.keys.directory')]);
 
     // The services.
     $services->set(SecurityLog::class);
@@ -261,9 +265,9 @@ return static function (ContainerConfigurator $container): void {
         array_map(service_closure(...), [PasskeyPolicy::class, SessionPolicy::class, AttemptLimits::class, Database::class]),
         param('kernel.debug'),
     ])->tag('yorvoid.doctor_check', ['name' => 'Configuration']);
-    $services->set(KeysCheck::class)->args([param('yorvoid.keys.file')])->tag('yorvoid.doctor_check', ['name' => 'Keys']);
+    $services->set(KeysCheck::class)->args([service(KeyFiles::class), service(Realm::class)])->tag('yorvoid.doctor_check', ['name' => 'Keys']);
     $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
-    $services->set(LogCheckpointsCheck::class)->args([param('yorvoid.keys.file'), param('yorvoid.log.checkpoint_file'), param('yorvoid.log.checkpoint_logger'), service(Realm::class), service(ClockInterface::class), param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Security log checkpoints']);
+    $services->set(LogCheckpointsCheck::class)->args([service(KeyFiles::class), param('yorvoid.log.checkpoint_file'), param('yorvoid.log.checkpoint_logger'), service(Realm::class), service(ClockInterface::class), param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Security log checkpoints']);
     $services->set(LogGrantsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Security log privileges']);
     $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);
     $services->set(AssuranceCheck::class)->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle'), param('yorvoid.passkeys.user_verification')])->tag('yorvoid.doctor_check', ['name' => 'Assurance level']);
@@ -274,9 +278,9 @@ return static function (ContainerConfigurator $container): void {
     $services->set(TemplatesCheck::class)->tag('yorvoid.doctor_check', ['name' => 'Flow pages']);
     $services->set(TestHelpersCheck::class)->args([param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Test helpers']);
     $services->set(EnvironmentCheck::class)->args([param('kernel.environment'), param('kernel.debug'), param('kernel.secret')])->tag('yorvoid.doctor_check', ['name' => 'Environment']);
-    $services->set(KeysRotateCommand::class)->arg('$file', param('yorvoid.keys.file'))->tag('console.command');
-    $services->set(LogCheckpointCommand::class)->arg('$keys', param('yorvoid.keys.file'))->arg('$file', param('yorvoid.log.checkpoint_file'))->arg('$toLogger', param('yorvoid.log.checkpoint_logger'))->arg('$logger', service('logger')->nullOnInvalid())->tag('console.command');
-    $services->set(LogVerifyCommand::class)->arg('$keys', param('yorvoid.keys.file'))->arg('$file', param('yorvoid.log.checkpoint_file'))->tag('console.command');
+    $services->set(KeysRotateCommand::class)->tag('console.command');
+    $services->set(LogCheckpointCommand::class)->arg('$file', param('yorvoid.log.checkpoint_file'))->arg('$toLogger', param('yorvoid.log.checkpoint_logger'))->arg('$logger', service('logger')->nullOnInvalid())->tag('console.command');
+    $services->set(LogVerifyCommand::class)->arg('$file', param('yorvoid.log.checkpoint_file'))->tag('console.command');
     $services->set(DoctorCommand::class)->args([tagged_locator('yorvoid.doctor_check', 'name')])->tag('console.command');
 
     // Console commands.

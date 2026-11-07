@@ -15,6 +15,8 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Key\KeyStatus;
 use YorvoID\Core\Key\SigningKey;
+use YorvoID\Core\Realm;
+use YorvoID\Symfony\Key\KeyFiles;
 
 /**
  * Rotates the signing keys without downtime (OPS-003), one step per run, saying what comes next: a
@@ -27,7 +29,7 @@ use YorvoID\Core\Key\SigningKey;
 final class KeysRotateCommand extends Command
 {
     public function __construct(
-        private readonly ?string $file,
+        private readonly KeyFiles $keys,
         private readonly ClockInterface $clock,
     ) {
         parent::__construct();
@@ -37,13 +39,23 @@ final class KeysRotateCommand extends Command
     {
         $this->addOption('remove', null, InputOption::VALUE_REQUIRED, 'Remove this verify-only key, once nothing it signed still needs checking');
         $this->addOption('public', null, InputOption::VALUE_NONE, 'Print the public key set to deploy where signatures are checked, and change nothing');
+        $this->addOption('realm', null, InputOption::VALUE_REQUIRED, 'The realm whose keys to rotate, with yorvoid.keys.per_realm', Realm::default()->name);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
+        $realm = new Realm(Options::string($input->getOption('realm')));
 
-        if (null === $this->file) {
+        if (!$this->keys->isPerRealm() && $input->hasParameterOption('--realm')) {
+            $io->error('Every realm shares one key ring: --realm needs yorvoid.keys.per_realm.');
+
+            return Command::FAILURE;
+        }
+
+        $file = $this->keys->path($realm);
+
+        if (null === $file) {
             $io->error('YorvoID has no key file to rotate: set yorvoid.keys.file, e.g. to "/run/secrets/yorvoid-keys.json".');
 
             return Command::FAILURE;
@@ -51,7 +63,7 @@ final class KeysRotateCommand extends Command
 
         if (true === $input->getOption('public')) {
             try {
-                $output->writeln(KeyRing::fromFile($this->file)->toJwks()->reveal());
+                $output->writeln(KeyRing::fromFile($file)->toJwks()->reveal());
             } catch (IntegratorError $error) {
                 $io->error([$error->problem, 'How to fix it: '.$error->fix]);
 
@@ -62,8 +74,8 @@ final class KeysRotateCommand extends Command
         }
 
         try {
-            [$ring, $done] = $this->step($this->file, $input->getOption('remove'));
-            $ring->toFile($this->file);
+            [$ring, $done] = $this->step($file, $input->getOption('remove'), $this->keys->isPerRealm() ? ' --realm '.$realm->name : '');
+            $ring->toFile($file);
         } catch (IntegratorError $error) {
             $io->error([$error->problem, 'How to fix it: '.$error->fix]);
 
@@ -79,9 +91,11 @@ final class KeysRotateCommand extends Command
     /**
      * The next step: the ring after it, and what to say about it.
      *
+     * @param string $realm The --realm option to say, if any
+     *
      * @return array{KeyRing, string}
      */
-    private function step(string $file, mixed $remove): array
+    private function step(string $file, mixed $remove, string $realm): array
     {
         if (!file_exists($file)) {
             $key = SigningKey::generate($this->newId([]));
@@ -105,13 +119,13 @@ final class KeysRotateCommand extends Command
             }
 
             if (null !== $key->seed) {
-                return [$ring->activating($key->id), \sprintf('%s signs now, and %s only verifies. Once nothing %2$s signed still needs checking, run: yorvoid:keys:rotate --remove %2$s', $key->id, $old->id)];
+                return [$ring->activating($key->id), \sprintf('%s signs now, and %s only verifies. Once nothing %2$s signed still needs checking, run: yorvoid:keys:rotate --remove %2$s%3$s', $key->id, $old->id, $realm)];
             }
         }
 
         $new = SigningKey::generate($this->newId(array_map(static fn (SigningKey $key): string => $key->id, $keys)), KeyStatus::VerifyOnly);
 
-        return [$ring->with($new), \sprintf('Added %s, verify-only. Deploy the public key set (yorvoid:keys:rotate --public, never the key file) everywhere signatures are checked, then run yorvoid:keys:rotate again to make it active.', $new->id)];
+        return [$ring->with($new), \sprintf('Added %s, verify-only. Deploy the public key set (yorvoid:keys:rotate --public%2$s, never the key file) everywhere signatures are checked, then run yorvoid:keys:rotate%2$s again to make it active.', $new->id, $realm)];
     }
 
     /**
