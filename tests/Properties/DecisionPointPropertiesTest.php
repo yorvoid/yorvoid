@@ -8,8 +8,15 @@ use Innmind\BlackBox\PHPUnit\BlackBox;
 use Innmind\BlackBox\Set;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\UuidV7;
+use YorvoID\Core\Authorization\AuthorityCheck;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\IndeterminateReason;
+use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
@@ -18,7 +25,6 @@ use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Operation\Authorization;
 use YorvoID\Core\Operation\AuthorizedBy;
-use YorvoID\Core\Operation\BuiltInAuthorization;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\NotPermitted;
@@ -53,7 +59,15 @@ final class DecisionPointPropertiesTest extends TestCase
             Set::of(null, ...AuthorizedBy::cases()),
             Set::of(...OriginKind::cases()),
         )->then(static function (Verdict $verdict, ?AuthorizedBy $basis, OriginKind $kind): void {
-            $decision = new Decision($verdict, $basis, 'decided');
+            try {
+                $decision = new Decision($verdict, $basis, 'decided', indeterminate: Verdict::Indeterminate === $verdict ? [IndeterminateReason::MissingData] : []);
+            } catch (IntegratorError) {
+                // A permit without a basis, or a refusal with one: no Authorization can give it.
+                self::assertSame(null === $basis, \in_array($verdict, [Verdict::Permit, Verdict::PermitOffline], true));
+
+                return;
+            }
+
             $authorization = new readonly class($decision) implements Authorization {
                 public function __construct(private Decision $decision)
                 {
@@ -93,9 +107,9 @@ final class DecisionPointPropertiesTest extends TestCase
             Set::of('operator', 'anonymous', 'own', 'other', 'elsewhere', 'nowhere'),
             Set::of(...OriginKind::cases()),
             Set::of(true, false, null),
-            Set::of(...Verdict::cases()),
+            Set::of(...TruthValue::cases()),
             Set::of(true, false),
-        )->then(static function (array $rules, string $who, OriginKind $kind, ?bool $holds, Verdict $selfService, bool $commandLine): void {
+        )->then(static function (array $rules, string $who, OriginKind $kind, ?bool $holds, TruthValue $selfService, bool $commandLine): void {
             /** @var list<AuthorizedBy> $rules */
             $realm = new Realm('acme');
             $ana = new PrincipalId(new UuidV7());
@@ -111,14 +125,14 @@ final class DecisionPointPropertiesTest extends TestCase
             $rules = array_values(array_unique($rules, \SORT_REGULAR));
             \assert([] !== $rules);
             $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', $rules, \in_array(AuthorizedBy::Ability, $rules, true) ? 'acme.badges.issue' : null, null, IssueBadge::class, []);
-            $authorization = new BuiltInAuthorization(self::abilities($holds), self::selfService($selfService), $commandLine);
+            $authorization = Evaluator::builtIn(self::validAuthority(), self::abilities($holds), self::selfService($selfService), commandLine: $commandLine);
 
             $decision = $authorization->decide($operation, new IssueBadge($realm, $ana), $actor, new Origin($kind));
 
             $inRealm = \in_array($who, ['own', 'other'], true);
             $allowed = [
                 AuthorizedBy::Operator->value => 'operator' === $who && (OriginKind::System === $kind || ($commandLine && \in_array($kind, [OriginKind::Console, OriginKind::Job], true))),
-                AuthorizedBy::Self->value => 'own' === $who && Verdict::Permit === $selfService,
+                AuthorizedBy::Self->value => 'own' === $who && TruthValue::Holds === $selfService,
                 AuthorizedBy::Ability->value => $inRealm && true === $holds,
                 AuthorizedBy::Authentication->value => true,
                 AuthorizedBy::Consequence->value => false,
@@ -155,20 +169,33 @@ final class DecisionPointPropertiesTest extends TestCase
         };
     }
 
-    private static function selfService(Verdict $verdict): SelfServicePolicy
+    private static function selfService(TruthValue $value): SelfServicePolicy
     {
-        return new readonly class($verdict) implements SelfServicePolicy {
-            public function __construct(private Verdict $verdict)
+        return new readonly class($value) implements SelfServicePolicy {
+            public function __construct(private TruthValue $value)
             {
             }
 
-            public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Decision
+            public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Truth
             {
-                return match ($this->verdict) {
-                    Verdict::Permit => Decision::permit(AuthorizedBy::Self, 'Their own.'),
-                    Verdict::Deny => Decision::deny('No.'),
-                    Verdict::Indeterminate => Decision::indeterminate('Can\'t tell.'),
+                return match ($this->value) {
+                    TruthValue::Holds => Truth::holds('Their own.'),
+                    TruthValue::Fails => Truth::fails('No.'),
+                    TruthValue::Unknown => Truth::unknown(IndeterminateReason::MissingData, 'Can\'t tell.'),
                 };
+            }
+        };
+    }
+
+    /**
+     * The bases are what's under test here: every actor's authority is valid.
+     */
+    private static function validAuthority(): AuthorityCheck
+    {
+        return new readonly class implements AuthorityCheck {
+            public function check(Request $request): Truth
+            {
+                return Truth::holds('Valid.');
             }
         };
     }

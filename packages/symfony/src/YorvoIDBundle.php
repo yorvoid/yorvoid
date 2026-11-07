@@ -18,6 +18,7 @@ use Symfony\Component\Translation\Translator;
 use Symfony\Component\VarDumper\Cloner\AbstractCloner;
 use Twig\Extension\AbstractExtension;
 use YorvoID\Authn\Session\Sessions;
+use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
@@ -164,6 +165,7 @@ final class YorvoIDBundle extends AbstractBundle
         $builder->registerForAutoconfiguration(FlowCustomizer::class)->addTag('yorvoid.flow_customizer');
         // The application's own operations run through Operations too.
         $builder->registerForAutoconfiguration(OperationHandler::class)->addTag('yorvoid.operation_handler');
+        $builder->registerForAutoconfiguration(PolicyElement::class)->addTag('yorvoid.policy_element');
         $builder->registerForAutoconfiguration(FlowSource::class)->addTag('yorvoid.flow_source');
 
         // The flow pages' translations, when the application renders them with Twig.

@@ -12,10 +12,12 @@ use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
-use YorvoID\Authn\StepUp\HeldAfterRecovery;
 use YorvoID\Authn\StepUp\StepUp;
-use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Authn\StepUp\StepUpSelfService;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\PrincipalAuthority;
+use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -23,8 +25,6 @@ use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\ActingPrincipal;
-use YorvoID\Core\Operation\BuiltInAuthorization;
-use YorvoID\Core\Operation\NoAbilityPolicy;
 use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\Operations;
@@ -78,8 +78,12 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
             try {
                 $change();
                 self::fail(\sprintf('An old session could %s the email address.', $operation));
-            } catch (StepUpRequired $exception) {
-                self::assertSame('yorvoid.identifier.'.$operation, $exception->requirement->operation);
+            } catch (NotPermitted $exception) {
+                $remedy = $exception->decision->remedies[0] ?? null;
+                self::assertInstanceOf(StepUpRemedy::class, $remedy);
+                self::assertSame('yorvoid.identifier.'.$operation, $remedy->operation);
+                self::assertSame(300, $remedy->within->seconds);
+                self::assertSame(Verdict::Deny, $exception->decision->verdict);
             }
         }
 
@@ -100,8 +104,8 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
         try {
             $identifiers->run(new SetIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email, 'thief@example.net'), $session, new Origin(OriginKind::Web));
             self::fail('The email address changed during the cool-down.');
-        } catch (HeldAfterRecovery $exception) {
-            self::assertEquals(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'), $exception->until);
+        } catch (NotPermitted $exception) {
+            self::assertEquals([new WaitRemedy(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'))], $exception->decision->remedies);
         }
 
         self::assertSame([], $this->principals->identifiers(new Realm('acme'), $session->principalId));
@@ -118,8 +122,8 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
         try {
             $identifiers->run(new RemoveIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email), $session, new Origin(OriginKind::Web));
             self::fail('The email address went during the cool-down.');
-        } catch (HeldAfterRecovery $exception) {
-            self::assertEquals(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'), $exception->until);
+        } catch (NotPermitted $exception) {
+            self::assertEquals([new WaitRemedy(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'))], $exception->decision->remedies);
         }
 
         self::assertSame('ana@example.com', $this->principals->identifiers(new Realm('acme'), $session->principalId)['email']->value);
@@ -129,7 +133,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
     public function testAnApplicationsRequirementsReplaceYorvoIDs(string $implementation): void
     {
         $this->identifiers($implementation);
-        $identifiers = new Operations(OperationCatalogue::of([$this->principals]), new BuiltInAuthorization(new NoAbilityPolicy(), new StepUpSelfService($this->stepUp, ['yorvoid.identifier.set' => null])), $this->log, [$this->principals]);
+        $identifiers = new Operations(OperationCatalogue::of([$this->principals]), Evaluator::builtIn(new PrincipalAuthority($this->stack->principals), selfService: new StepUpSelfService($this->stepUp, ['yorvoid.identifier.set' => null])), $this->log, [$this->principals]);
         $session = $this->session();
         // Long past the window: only YorvoID's requirement would ask for a proof now.
         $this->clock->sleep(3600);
@@ -193,8 +197,10 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
             $identifiers->run(new SetIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email, 'ana@example.org'), new ActingPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Api));
             self::fail('Someone changed their own address without a session.');
         } catch (NotPermitted $refused) {
-            // Not on its own account: no session. Nor as an administrator: no ability policy says who holds one.
-            self::assertSame(Verdict::Indeterminate, $refused->decision->verdict);
+            // Not on its own account: no session. Nor as an administrator: without an ability policy, no
+            // ability permits anything.
+            self::assertSame(Verdict::Deny, $refused->decision->verdict);
+            self::assertSame([], $refused->decision->remedies, 'A step-up wouldn\'t help without a session.');
         }
 
         self::assertSame([], array_values(array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn ($entry): bool => 'yorvoid.identifier.set' === $entry->action && Outcome::Success === $entry->outcome)));
@@ -217,7 +223,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
 
     private function operations(?Duration $window = null): Operations
     {
-        return new Operations(OperationCatalogue::of([$this->principals]), new BuiltInAuthorization(new NoAbilityPolicy(), new StepUpSelfService($this->stepUp, window: $window)), $this->log, [$this->principals]);
+        return new Operations(OperationCatalogue::of([$this->principals]), Evaluator::builtIn(new PrincipalAuthority($this->stack->principals), selfService: new StepUpSelfService($this->stepUp, window: $window)), $this->log, [$this->principals]);
     }
 
     private function session(): Session

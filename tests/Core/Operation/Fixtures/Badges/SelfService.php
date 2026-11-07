@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Core\Operation\Fixtures\Badges;
 
+use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Operation\Actor;
-use YorvoID\Core\Operation\AuthorizedBy;
-use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\SelfOperation;
 use YorvoID\Core\Operation\SelfServicePolicy;
@@ -16,8 +15,8 @@ use YorvoID\Core\Operation\SelfServicePolicy;
  */
 final readonly class SelfService implements SelfServicePolicy
 {
-    public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Decision
+    public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Truth
     {
-        return Decision::permit(AuthorizedBy::Self, 'Their own.');
+        return Truth::holds('Their own.');
     }
 }

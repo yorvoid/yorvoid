@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\IndeterminateReason;
+use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\IdGenerator;
@@ -29,6 +32,9 @@ final readonly class Operations
 
     /**
      * @param iterable<OperationHandler> $handlers
+     *
+     * @throws IntegratorError When two handlers run one command, or an OfflineDecider and the operations that
+     *                         accept Permit-offline don't go together
      */
     public function __construct(
         private OperationCatalogue $catalogue,
@@ -50,6 +56,17 @@ final readonly class Operations
         }
 
         $this->handlers = $map;
+        $accepting = array_keys(array_filter($catalogue->all(), static fn (OperationDescription $operation): bool => $operation->acceptsOffline));
+        $decidesOffline = $authorization instanceof Evaluator && $authorization->decidesOffline();
+
+        // Offline is decided when YorvoID is built, never switched on by accident (PLT-004).
+        if ($decidesOffline && [] === $accepting) {
+            throw new IntegratorError('An OfflineDecider is registered, but no operation accepts Permit-offline.', 'Declare #[Operation(acceptsOffline: true)] on the operations that may run while a store is unreachable, or don\'t register the decider.', 'concepts/authorization.md#offline');
+        }
+
+        if (!$decidesOffline && [] !== $accepting) {
+            throw new IntegratorError(\sprintf('"%s" accepts Permit-offline, but nothing decides offline.', $accepting[0]), 'Give the evaluator an OfflineDecider, or take acceptsOffline off the operation.', 'concepts/authorization.md#offline');
+        }
     }
 
     /**
@@ -59,26 +76,39 @@ final readonly class Operations
      *
      * @return T
      *
-     * @throws NotPermitted When the decision isn't Permit; the handler's own exceptions otherwise
+     * @throws NotPermitted When the decision isn't Permit, or Permit-offline for an operation that accepts it; the
+     *                      handler's own exceptions otherwise
      */
     public function run(Command $command, Actor $actor, Origin $origin): mixed
     {
         $operation = $this->catalogue->forCommand($command::class);
         $handler = $this->handlers[$command::class] ?? throw new IntegratorError(\sprintf('Nothing runs the operation "%s".', $operation->name), 'Register the service that handles it as an OperationHandler.', 'concepts/operations-and-events.md#operations');
         $decision = $this->authorization->decide($operation, $command, $actor, $origin);
+        // Permit-offline runs only an operation that accepts it (P1′); nothing else but a Permit runs.
+        $offline = match ($decision->verdict) {
+            Verdict::Permit => false,
+            Verdict::PermitOffline => $operation->acceptsOffline ? true : null,
+            Verdict::Deny, Verdict::Indeterminate => null,
+        };
 
-        if (!$decision->permits() || null === $decision->basis) {
-            $this->log->record($command->realm, $operation->name, Outcome::Denied, $origin, $actor->principalId, details: [
+        if (null === $offline || null === $decision->basis) {
+            $this->log->record($command->realm, $operation->name, Outcome::Denied, $origin, $actor->principalId, details: array_filter([
                 'verdict' => $decision->verdict->value,
                 'reason' => $decision->reason,
-            ]);
+                'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate),
+                'remedies' => array_map(static fn (Remedy $remedy): string => $remedy->name(), $decision->remedies),
+            ], static fn (string|array $value): bool => [] !== $value));
 
             throw new NotPermitted($operation->name, $decision);
         }
 
-        // Only here: Permit's constructor is private to everything else.
-        $issue = \Closure::bind(static fn (string $name, Actor $actor, AuthorizedBy $basis, string $id, Command $command): Permit => new Permit($name, $actor, $basis, $id, $command), null, Permit::class);
+        if ($offline) {
+            $this->log->record($command->realm, 'yorvoid.decision.offline', Outcome::Success, $origin, $actor->principalId, 'operation', $operation->name, ['reason' => $decision->reason]);
+        }
 
-        return $handler($command, $issue($operation->name, $actor, $decision->basis, (string) $this->ids->next(), $command), $origin);
+        // Only here: Permit's constructor is private to everything else.
+        $issue = \Closure::bind(static fn (string $name, Actor $actor, AuthorizedBy $basis, string $id, Command $command, bool $offline): Permit => new Permit($name, $actor, $basis, $id, $command, offline: $offline), null, Permit::class);
+
+        return $handler($command, $issue($operation->name, $actor, $decision->basis, (string) $this->ids->next(), $command, $offline), $origin);
     }
 }

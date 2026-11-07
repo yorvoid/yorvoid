@@ -68,3 +68,4 @@ rules:
     - YorvoID\Tools\PHPStan\SecretComparisonRule
     - YorvoID\Tools\PHPStan\InternalAcrossPackagesRule
     - YorvoID\Tools\PHPStan\ApiExposesInternalRule
+    - YorvoID\Tools\PHPStan\VerdictMatchRule

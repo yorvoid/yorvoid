@@ -14,8 +14,9 @@ final readonly class OperationDescription
     /**
      * @param non-empty-list<AuthorizedBy> $authorizedBy
      * @param class-string                 $command
-     * @param list<Parameter>              $parameters   In the constructor's order
-     * @param list<string>                 $causes       The operations it may run as its consequences
+     * @param list<Parameter>              $parameters     In the constructor's order
+     * @param list<string>                 $causes         The operations it may run as its consequences
+     * @param bool                         $acceptsOffline Whether it runs on Permit-offline (P1′)
      */
     public function __construct(
         public string $name,
@@ -26,6 +27,7 @@ final readonly class OperationDescription
         public string $command,
         public array $parameters,
         public array $causes = [],
+        public bool $acceptsOffline = false,
     ) {
     }
 }

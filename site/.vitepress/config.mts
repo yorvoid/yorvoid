@@ -98,6 +98,7 @@ export default defineConfig({
           { text: 'Secrets', link: '/concepts/secrets' },
           { text: 'Keys', link: '/concepts/keys' },
           { text: 'Operations and events', link: '/concepts/operations-and-events' },
+          { text: 'Authorization', link: '/concepts/authorization' },
           { text: 'Storage', link: '/concepts/storage' },
           { text: 'Testing', link: '/concepts/testing' },
         ],

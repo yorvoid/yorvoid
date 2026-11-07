@@ -103,6 +103,8 @@ final class RedisSessionStoreTest extends TestCase
 
 There's one for each store (`CeremonyStoreContract`, `CoolDownStoreContract`, `CredentialStoreContract`, `FlowStoreContract`, `IdentifierStoreContract`, `KnownDeviceStoreContract`, `OneTimeTokenStoreContract`, `PasskeyStoreContract`, `PrincipalStoreContract`, `RecoveryCodeStoreContract`, `SecurityLogStoreContract`, `SessionStoreContract`, `SetupStoreContract`, `ThrottleStoreContract`), and `TransactionsContract` for your own `Transactions`. `SecurityLogStoreContract` and `TransactionsContract` also ask for what the store takes part in: the same instances within a test. Use one in each test case: their helpers have the same names. A store that doesn't pass them isn't one YorvoID can rely on: what YorvoID promises, e.g. one use of a token among requests at the same moment, rests on what the store does.
 
+When your store can't reach what it keeps its records in (the connection is refused or lost, a request times out, a failover is in progress), it throws `YorvoID\Core\Storage\StoreUnreachable`, so a decision that needed it is Indeterminate for that reason, and not for an error ([authorization](authorization.md#when-a-store-cant-be-reached)). The contracts can't make your store unreachable, so this one is yours to keep.
+
 The tests check what one connection can show. That a store holds when many requests use it at once (a lock waits for another, one of two claims wins) needs your database's own concurrency tests: YorvoID's are in its repository, for PostgreSQL and SQLite.
 
 ## Migrations

@@ -43,6 +43,9 @@ alloy() { java -jar /opt/alloy/alloy.jar exec -q -c '*' -o /tmp/alloy -f -t json
 
 # Decisions: the precedence table (Alloy; its own "expect" annotations are checked by exec).
 holds "decisions/precedence.als (Alloy)" alloy decisions/precedence.als
+# The requests that tests/Core/Authorization/PrecedenceFixturesTest.php decides with the PHP evaluator
+# must be the model's: regenerate them with "node decisions/fixtures.mjs > decisions/fixtures.json".
+holds "decisions: the fixtures the PHP tests decide are the model's" sh -c 'node decisions/fixtures.mjs | cmp -s - decisions/fixtures.json'
 
 # One-time tokens, in Quint: Apalache checks every execution up to the bound (10 steps, beyond the
 # model's longest execution of 9 steps), and simulation runs random executions.

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
+use YorvoID\Core\Authorization\IndeterminateReason;
+use YorvoID\Core\Authorization\Truth;
+
 /**
  * Can't tell what someone must show to change their own account, so nobody may: the default without a
  * self-service policy.
@@ -12,8 +15,8 @@ namespace YorvoID\Core\Operation;
  */
 final readonly class NoSelfService implements SelfServicePolicy
 {
-    public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Decision
+    public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Truth
     {
-        return Decision::indeterminate(\sprintf('No self-service policy says what "%s" needs.', $operation->name));
+        return Truth::unknown(IndeterminateReason::MissingData, \sprintf('No self-service policy says what "%s" needs.', $operation->name));
     }
 }

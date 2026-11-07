@@ -17,6 +17,9 @@ use YorvoID\Core\Realm;
  * handler's permit: decided as part of the operation, not again. Only what the operation declares it
  * causes (#[Operation(causes: [...])]), so a listener handed the permit can't run anything else with it.
  *
+ * A permit issued on Permit-offline, while a store was unreachable, says so ($offline), and so do its
+ * consequences: only operations that declare acceptsOffline get one (P1′).
+ *
  * @api
  */
 final class Permit
@@ -37,6 +40,7 @@ final class Permit
         public readonly string $decisionId,
         private readonly Command $command,
         public readonly ?self $parent = null,
+        public readonly bool $offline = false,
     ) {
     }
 
@@ -93,7 +97,7 @@ final class Permit
             throw new IntegratorError(\sprintf('"%s" doesn\'t say it causes "%s".', $this->operation, $consequence), 'Name what an operation runs as its consequences in #[Operation(causes: [...])]; run anything else through Operations::run().', 'concepts/operations-and-events.md#permits');
         }
 
-        return new self($consequence, $actingAs ?? $this->actor, AuthorizedBy::Consequence, $this->decisionId, $command, $this);
+        return new self($consequence, $actingAs ?? $this->actor, AuthorizedBy::Consequence, $this->decisionId, $command, $this, $this->offline);
     }
 
     /**

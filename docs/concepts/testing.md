@@ -71,4 +71,4 @@ A store you wrote yourself runs YorvoID's tests for its kind, from `YorvoID\Test
 
 ## Decisions
 
-Assertions on authorization decisions (Permit, Deny and Indeterminate, with their reasons) arrive with authorization in milestone M2.
+A refused operation throws `NotPermitted`, whose `decision` has the verdict, the reasons, what couldn't be established and the remedies ([authorization](authorization.md)): assert on those. Helpers that explain a decision come with explanations, later in M2.

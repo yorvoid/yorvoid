@@ -34,13 +34,15 @@ use YorvoID\Authn\StepUp\Storage\DbalCoolDownStore;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\OfflineDecider;
+use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
 use YorvoID\Core\Operation\Authorization;
-use YorvoID\Core\Operation\BuiltInAuthorization;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Operations;
@@ -205,12 +207,24 @@ return static function (ContainerConfigurator $container): void {
     $services->set(IntentSigning::class)->arg('$limit', inline_service()->factory([Limits::class, 'parse'])->args([param('yorvoid.limits.signature_requests')]));
 
     // The decision point: every operation runs through Operations, which decides and gives its handler a
-    // permit. Abilities are the application's Symfony security's to decide, until YorvoID's evaluator.
+    // permit. The evaluator decides by YorvoID's ways to authorize and the application's own policy
+    // elements (tagged yorvoid.policy_element); abilities are the application's Symfony security's to decide.
     $services->set(OperationCatalogue::class)->factory([OperationCatalogue::class, 'of'])->args([tagged_iterator('yorvoid.operation_handler')])->public();
     $services->set(StepUpSelfService::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
     $services->set(SymfonyAbilityPolicy::class)->args([service('security.authorization_checker'), inline_service(Closure::class)->factory([Factories::class, 'currentSession'])->args([service_closure(CurrentSession::class)])]);
-    $services->set(BuiltInAuthorization::class)->args([service(SymfonyAbilityPolicy::class), service(StepUpSelfService::class)]);
-    $services->alias(Authorization::class, BuiltInAuthorization::class);
+    $services->set(PrincipalAuthority::class);
+    $services->set(Evaluator::class)->factory([Evaluator::class, 'builtIn'])->args([
+        service(PrincipalAuthority::class),
+        service(SymfonyAbilityPolicy::class),
+        service(StepUpSelfService::class),
+        tagged_iterator('yorvoid.policy_element'),
+        null,
+        service(ClockInterface::class),
+        service('logger')->nullOnInvalid(),
+        // Off unless the application registers one: offline decisions are its own build-time choice.
+        service(OfflineDecider::class)->nullOnInvalid(),
+    ]);
+    $services->alias(Authorization::class, Evaluator::class);
     $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->public();
 
     // Listeners of YorvoID's events, through Symfony's dispatcher.
