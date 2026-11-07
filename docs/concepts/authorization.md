@@ -39,13 +39,67 @@ YorvoID's ways to authorize, which each operation names in `#[Operation(authoriz
 | `Authentication` | Always: the handler checks the secret the person brings, e.g. a passkey or a recovery code |
 | `Operator` | The host's `Operator`, from a console command or a job on the command line, or YorvoID itself |
 | `Self` | The actor's own account, in its realm, with what the self-service policy asks, e.g. a recent step-up (`StepUpSelfService`) |
-| `Ability` | The actor holds the operation's ability, as the `AbilityPolicy` says. Without an ability policy, there's no ability permit |
+| `Ability` | A role the actor has has the operation's ability ([roles](#roles)), or an `AbilityPolicy` you give the evaluator says the actor holds it |
 
 A permit speaks only for the operations that name its way to authorize: an ability never permits an operation only the host's operator runs. When several permits hold, the decision's basis is the first the operation names.
 
 ## Authority
 
 `PrincipalAuthority` checks the actor's own authority: a principal that exists, is active and acts in the command's realm. A suspended or deleted principal is denied whatever the permits say; one that isn't on record is Indeterminate (`missing_data`). The host's operator and someone not signed in claim no authority, so there's nothing to invalidate.
+
+## Abilities
+
+An ability is what a role can have, e.g. "publish pages". Its owner declares it in a `PolicyDeclarations`, with a label, the roles that have it by default, a group for pages that list them, and whether it's **strict**:
+
+```php
+use YorvoID\Policy\Ability;
+use YorvoID\Policy\PolicyDeclarations;
+use YorvoID\Policy\Role;
+
+final readonly class AcmeDeclarations implements PolicyDeclarations
+{
+    public function abilities(): iterable
+    {
+        yield new Ability('acme.pages.view', 'View pages', 'acme', ['everyone']);
+        yield new Ability('acme.pages.publish', 'Publish pages', 'acme', ['editor']);
+        yield new Ability('acme.pages.purge', 'Purge pages for good', 'acme', strict: true);
+    }
+
+    public function roles(): iterable
+    {
+        yield new Role('editor', 'Editor', 'acme');
+        yield new Role('admin', 'Admin', 'acme', super: true);
+    }
+}
+```
+
+Names start with the owner's namespace (`acme.`). Every ability an operation needs (`#[Operation(ability: ...)]`) must be declared; YorvoID declares its own (`YorvoIDDeclarations`): managing principals, issuing recovery links (strict: it hands an account over), signing others out, managing roles, and changing which roles have which abilities. A declaration that doesn't fit (a name twice, a default role that isn't declared, an operation's undeclared ability) fails when YorvoID is built. In Symfony, a service implementing `PolicyDeclarations` is collected by itself.
+
+Ask about one of your own abilities with `Policy::decide()` or `allows()`, or in Symfony with `isGranted()`, which YorvoID decides for every declared ability:
+
+```php
+use YorvoID\Core\Authorization\ResourceRef;
+
+$this->denyAccessUnlessGranted('acme.pages.publish', new ResourceRef('page', $page->id));
+```
+
+## Roles
+
+The `everyone` role is every actor's, signed in or not, and is never assigned. The other roles are declared, or created in a realm while it runs (they can be relabelled and deleted; declared ones can't). A **super role** has every ability that isn't strict; a strict one reaches it only when it's granted to it.
+
+A realm changes the defaults by giving a role an ability or taking one away. Only the differences are kept (`AbilityChanges`): giving a role back what it has by default leaves nothing, so a later change of the defaults still reaches every role nobody changed.
+
+A principal has the roles assigned to it in its realm (`RoleAssignment`): in the whole realm, or on one resource, e.g. a manager of one site, and until a moment if it expires. A `RoleSource` adds roles for one request without storing them, e.g. mapped from the host application's own roles. A suspended or deleted principal has no role at all: its authority is invalid. Deleting a principal takes its roles.
+
+`Roles` reads it all, for pages that show the policy: the realm's roles, the roles with an ability, a role's abilities, the changes.
+
+## Resources
+
+A request may be about one resource, by its type and ID (`ResourceRef`, e.g. `site:42`); YorvoID never loads it. A role assigned on that resource counts for the request. A command about one resource implements `ConcernsResource`, and isGranted()'s subject is the resource when it's a `ResourceRef` or a `ConcernsResource`.
+
+## Rules
+
+A rule in PHP (`Rule`) permits, forbids, abstains, or can't tell (`RuleAnswer`). A refusal wins over every role, super roles included; a permit lets the request through without a role; "can't tell" makes the decision Indeterminate, never a Permit. Give it to the evaluator as `RuleElements::of($rule)`; in Symfony, a service implementing `Rule` is added by itself.
 
 ## Remedies
 

@@ -73,6 +73,14 @@ use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
+use YorvoID\Policy\ForgetRolesOfDeletedPrincipals;
+use YorvoID\Policy\Policy;
+use YorvoID\Policy\PolicyCatalogue;
+use YorvoID\Policy\PolicyStore;
+use YorvoID\Policy\RolePermit;
+use YorvoID\Policy\Roles;
+use YorvoID\Policy\Storage\DbalPolicyStore;
+use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\Symfony\Command\DoctorCommand;
 use YorvoID\Symfony\Command\IdentifiersNormalizeCommand;
 use YorvoID\Symfony\Command\KeysRotateCommand;
@@ -114,11 +122,11 @@ use YorvoID\Symfony\Security\Authenticator\SessionAuthenticator;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\DefaultPrincipalUsers;
 use YorvoID\Symfony\Security\EndSessionOnSignOut;
+use YorvoID\Symfony\Security\PolicyVoter;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
 use YorvoID\Symfony\Security\SignInEntryPoint;
-use YorvoID\Symfony\Security\SymfonyAbilityPolicy;
 use YorvoID\Symfony\Security\ValidateSessionListener;
 use YorvoID\Symfony\Templates\FlowPages;
 use YorvoID\Symfony\Templates\TemplateLint;
@@ -169,6 +177,7 @@ return static function (ContainerConfigurator $container): void {
         PasskeyStore::class => DbalPasskeyStore::class,
         CeremonyStore::class => DbalCeremonyStore::class,
         ThrottleStore::class => DbalThrottleStore::class,
+        PolicyStore::class => DbalPolicyStore::class,
     ] as $interface => $implementation) {
         $services->set($implementation);
         $services->alias($interface, $implementation);
@@ -208,16 +217,22 @@ return static function (ContainerConfigurator $container): void {
 
     // The decision point: every operation runs through Operations, which decides and gives its handler a
     // permit. The evaluator decides by YorvoID's ways to authorize and the application's own policy
-    // elements (tagged yorvoid.policy_element); abilities are the application's Symfony security's to decide.
+    // elements (tagged yorvoid.policy_element): the roles' permit, the rules (tagged yorvoid.rule) and the
+    // application's own. Abilities are declared (tagged yorvoid.policy_declarations) and decided here, and
+    // Symfony's isGranted() asks the evaluator for them too.
     $services->set(OperationCatalogue::class)->factory([OperationCatalogue::class, 'of'])->args([tagged_iterator('yorvoid.operation_handler')])->public();
+    $services->set(YorvoIDDeclarations::class)->tag('yorvoid.policy_declarations');
+    $services->set(PolicyCatalogue::class)->factory([PolicyCatalogue::class, 'of'])->args([tagged_iterator('yorvoid.policy_declarations'), service(OperationCatalogue::class)])->public();
+    $services->set(Roles::class)->arg('$sources', tagged_iterator('yorvoid.role_source'))->public();
+    $services->set(RolePermit::class)->tag('yorvoid.policy_element');
+    $services->set('yorvoid.rule_elements', 'array')->factory([Factories::class, 'ruleElements'])->args([tagged_iterator('yorvoid.rule')]);
     $services->set(StepUpSelfService::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
-    $services->set(SymfonyAbilityPolicy::class)->args([service('security.authorization_checker'), inline_service(Closure::class)->factory([Factories::class, 'currentSession'])->args([service_closure(CurrentSession::class)])]);
     $services->set(PrincipalAuthority::class);
     $services->set(Evaluator::class)->factory([Evaluator::class, 'builtIn'])->args([
         service(PrincipalAuthority::class),
-        service(SymfonyAbilityPolicy::class),
+        null,
         service(StepUpSelfService::class),
-        tagged_iterator('yorvoid.policy_element'),
+        inline_service('array')->factory([Factories::class, 'elements'])->args([tagged_iterator('yorvoid.policy_element'), service('yorvoid.rule_elements')]),
         null,
         service(ClockInterface::class),
         service('logger')->nullOnInvalid(),
@@ -226,10 +241,13 @@ return static function (ContainerConfigurator $container): void {
     ]);
     $services->alias(Authorization::class, Evaluator::class);
     $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->public();
+    $services->set(Policy::class)->public();
+    $services->set(PolicyVoter::class)->tag('security.voter');
 
     // Listeners of YorvoID's events, through Symfony's dispatcher.
     $services->set(EndSessionsOfInactivePrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
     $services->set(ForgetCredentialsOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
+    $services->set(ForgetRolesOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
     $services->set(RemovePasskeyWithCredential::class)->tag('kernel.event_listener', ['event' => CredentialRemoving::class]);
 
     // Security: the user, the request's YorvoID session, the authenticators, the endpoints.

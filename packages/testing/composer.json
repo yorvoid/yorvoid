@@ -36,6 +36,7 @@
         "yorvoid/core": "^0.4",
         "yorvoid/flows": "^0.4",
         "yorvoid/passkeys": "^0.4",
+        "yorvoid/policy": "^0.4",
         "yorvoid/throttle": "^0.4",
         "yorvoid/virtual-authenticator": "^0.4"
     },

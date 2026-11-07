@@ -6,8 +6,8 @@ namespace YorvoID\Symfony;
 
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use YorvoID\Authn\Attempt\AttemptLimits;
-use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionPolicy;
+use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Flows\Flow;
@@ -16,10 +16,11 @@ use YorvoID\Passkeys\ClonePolicy;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\UserVerification;
+use YorvoID\Policy\Rule\Rule;
+use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Flow\FlowCustomizer;
 use YorvoID\Symfony\Flow\FlowSource;
-use YorvoID\Symfony\Security\CurrentSession;
 
 /**
  * YorvoID's typed configuration from the bundle's: the container calls these.
@@ -57,15 +58,32 @@ final class Factories
     }
 
     /**
-     * The request's YorvoID session, asked for when it's needed.
+     * Each rule as its two elements, a permit and a forbid.
      *
-     * @param \Closure(): CurrentSession $current
+     * @param iterable<Rule> $rules
      *
-     * @return \Closure(): ?Session
+     * @return list<PolicyElement>
      */
-    public static function currentSession(\Closure $current): \Closure
+    public static function ruleElements(iterable $rules): array
     {
-        return static fn (): ?Session => $current()->get();
+        $elements = [];
+
+        foreach ($rules as $rule) {
+            array_push($elements, ...RuleElements::of($rule));
+        }
+
+        return $elements;
+    }
+
+    /**
+     * @param iterable<PolicyElement> $elements
+     * @param list<PolicyElement>     $rules
+     *
+     * @return list<PolicyElement>
+     */
+    public static function elements(iterable $elements, array $rules): array
+    {
+        return [...iterator_to_array($elements, false), ...$rules];
     }
 
     /**

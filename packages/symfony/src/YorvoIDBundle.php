@@ -32,6 +32,9 @@ use YorvoID\Notifications\NotificationSettings;
 use YorvoID\Notifications\SecurityNotifications;
 use YorvoID\Notifications\Translations as NotificationsTranslations;
 use YorvoID\Passkeys\Translations as PasskeysTranslations;
+use YorvoID\Policy\PolicyDeclarations;
+use YorvoID\Policy\RoleSource;
+use YorvoID\Policy\Rule\Rule;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Debug\SecretCaster;
 use YorvoID\Symfony\Flow\FlowCustomizer;
@@ -166,6 +169,9 @@ final class YorvoIDBundle extends AbstractBundle
         // The application's own operations run through Operations too.
         $builder->registerForAutoconfiguration(OperationHandler::class)->addTag('yorvoid.operation_handler');
         $builder->registerForAutoconfiguration(PolicyElement::class)->addTag('yorvoid.policy_element');
+        $builder->registerForAutoconfiguration(PolicyDeclarations::class)->addTag('yorvoid.policy_declarations');
+        $builder->registerForAutoconfiguration(Rule::class)->addTag('yorvoid.rule');
+        $builder->registerForAutoconfiguration(RoleSource::class)->addTag('yorvoid.role_source');
         $builder->registerForAutoconfiguration(FlowSource::class)->addTag('yorvoid.flow_source');
 
         // The flow pages' translations, when the application renders them with Twig.

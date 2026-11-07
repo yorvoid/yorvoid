@@ -17,7 +17,7 @@ final class InMemoryStorageTest extends TestCase
     {
         $memory = new InMemoryStorage();
         $stores = array_filter(get_object_vars($memory), static fn (mixed $store): bool => $store instanceof InMemoryStore);
-        self::assertCount(12, $stores, 'The throttle\'s counts aren\'t undone: an attempt counts even when its work is.');
+        self::assertCount(13, $stores, 'The throttle\'s counts aren\'t undone: an attempt counts even when its work is.');
         $before = array_map(static fn (InMemoryStore $store): mixed => $store->snapshot(), $stores);
 
         try {

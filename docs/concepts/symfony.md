@@ -129,30 +129,36 @@ framework:
 
 ## Who may run an operation
 
-An operation that needs an ability runs when the actor is the request's own session and `isGranted($ability, $command)` says yes, so your voters and role hierarchy decide. A voter for administrators:
+An operation that needs an ability runs when a role the actor has has it ([roles](authorization.md#roles)). Declare your abilities and roles in a service implementing `PolicyDeclarations`; `isGranted()` for any declared ability is decided by YorvoID too, so a controller asks as it always does:
 
 ```php
-use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
-use Symfony\Component\Security\Core\Authorization\Voter\Vote;
-use Symfony\Component\Security\Core\Authorization\Voter\Voter;
-use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Authorization\ResourceRef;
 
-/** @extends Voter<string, Command<mixed>> */
-final class AdministratorsManagePrincipals extends Voter
+$this->denyAccessUnlessGranted('acme.pages.publish', new ResourceRef('page', $id));
+```
+
+Roles your application already gives, e.g. Symfony's `ROLE_ADMIN`, can count as YorvoID roles for each request without being stored, through a `RoleSource`:
+
+```php
+use Symfony\Bundle\SecurityBundle\Security;
+use YorvoID\Core\Authorization\Request;
+use YorvoID\Policy\RoleSource;
+
+final readonly class AdminsFromSymfony implements RoleSource
 {
-    protected function supports(string $attribute, mixed $subject): bool
-    {
-        return 'yorvoid.principals.manage' === $attribute && $subject instanceof Command;
+    public function __construct(
+        private Security $security,
+    ) {
     }
 
-    protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
+    public function roles(Request $request): iterable
     {
-        return \in_array('ROLE_ADMIN', $token->getRoleNames(), true);
+        return $this->security->isGranted('ROLE_ADMIN') ? ['admin'] : [];
     }
 }
 ```
 
-Without a voter for an ability, Symfony denies it, and the operation throws `NotPermitted`. The console and jobs run operations as the host's `Operator`, which needs no ability.
+`admin` must be a declared role, here a super role. Without a role that has an ability, the operation throws `NotPermitted`. The console and jobs run operations as the host's `Operator`, which needs no ability.
 
 ## Signing in
 
