@@ -108,7 +108,7 @@ final readonly class NoBadgesAtNight implements ForbidElement
 
     public function matches(Request $request): bool
     {
-        return 'acme.badge.issue' === $request->operation->name;
+        return 'acme.badge.issue' === $request->operation?->name;
     }
 
     public function evaluate(Request $request): Truth

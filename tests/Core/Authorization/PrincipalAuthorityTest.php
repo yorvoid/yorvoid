@@ -56,7 +56,7 @@ final class PrincipalAuthorityTest extends TestCase
         foreach ([new Realm('globex'), null] as $realm) {
             $truth = $authority->check(self::request(new Member($realm, $id)));
 
-            self::assertSame([TruthValue::Fails, 'The actor acts in another realm than the command\'s.'], [$truth->value, $truth->detail]);
+            self::assertSame([TruthValue::Fails, 'The actor acts in another realm than the request\'s.'], [$truth->value, $truth->detail]);
         }
     }
 
@@ -96,6 +96,6 @@ final class PrincipalAuthorityTest extends TestCase
     {
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Ability], 'acme.badges.issue', null, IssueBadge::class, []);
 
-        return new Request($operation, new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7())), $actor, new Origin(OriginKind::Web), new \DateTimeImmutable());
+        return Request::forOperation($operation, new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7())), $actor, new Origin(OriginKind::Web), new \DateTimeImmutable());
     }
 }

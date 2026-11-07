@@ -8,7 +8,7 @@ use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\PrincipalStore;
 
 /**
- * An actor's own authority (06 §4): a principal that exists, is active and acts in the command's realm.
+ * An actor's own authority (06 §4): a principal that exists, is active and acts in the request's realm.
  * The host's operator and someone not signed in claim none, so there's nothing to invalidate: what they
  * may run is up to the permits.
  *
@@ -29,8 +29,8 @@ final readonly class PrincipalAuthority implements AuthorityCheck
             return Truth::holds('No principal acts, so no authority is claimed.');
         }
 
-        if (null === $actor->realm || !$actor->realm->equals($request->command->realm)) {
-            return Truth::fails('The actor acts in another realm than the command\'s.');
+        if (null === $actor->realm || !$actor->realm->equals($request->realm)) {
+            return Truth::fails('The actor acts in another realm than the request\'s.');
         }
 
         $principal = $this->principals->get($actor->realm, $actor->principalId);
