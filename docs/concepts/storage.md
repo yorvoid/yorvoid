@@ -77,7 +77,7 @@ A store built on its own and not registered with `InMemoryTransactions::register
 
 ## Stores of your own
 
-Each kind of record is kept by a store behind an interface: `PrincipalStore`, `SessionStore`, `SecurityLogStore` and the others. YorvoID has one on DBAL and one in memory; you can write your own, e.g. for another database, as long as it keeps the same promises. `yorvoid/testing` has them as tests, one trait for each store, which YorvoID's own stores pass. Run the store's in your test suite, and keep it passing:
+Each kind of record is kept by a store behind an interface: `PrincipalStore`, `SessionStore`, `SecurityLogStore` and the others. YorvoID has one on DBAL and one in memory; you can write your own, e.g. for another database, as long as it keeps the same promises. `yorvoid/testing` has them as tests, one trait for each store, which YorvoID's own stores pass. A store of your own must pass its store's tests: run them in your test suite, and keep them passing. They're traits, so your test case keeps the base class it has:
 
 ```php
 use App\Storage\RedisSessionStore;
@@ -101,7 +101,9 @@ final class RedisSessionStoreTest extends TestCase
 }
 ```
 
-There's one for each store (`CeremonyStoreContract`, `CoolDownStoreContract`, `CredentialStoreContract`, `IdentifierStoreContract`, `KnownDeviceStoreContract`, `OneTimeTokenStoreContract`, `PasskeyStoreContract`, `PrincipalStoreContract`, `RecoveryCodeStoreContract`, `SecurityLogStoreContract`, `SessionStoreContract`, `SetupStoreContract`, `ThrottleStoreContract`), and `TransactionsContract` for your own `Transactions`. `SecurityLogStoreContract` and `TransactionsContract` also ask for what the store takes part in: the same instances within a test. A store that doesn't pass them isn't one YorvoID can rely on: what YorvoID promises, e.g. one use of a token among requests at the same moment, rests on what the store does.
+There's one for each store (`CeremonyStoreContract`, `CoolDownStoreContract`, `CredentialStoreContract`, `FlowStoreContract`, `IdentifierStoreContract`, `KnownDeviceStoreContract`, `OneTimeTokenStoreContract`, `PasskeyStoreContract`, `PrincipalStoreContract`, `RecoveryCodeStoreContract`, `SecurityLogStoreContract`, `SessionStoreContract`, `SetupStoreContract`, `ThrottleStoreContract`), and `TransactionsContract` for your own `Transactions`. `SecurityLogStoreContract` and `TransactionsContract` also ask for what the store takes part in: the same instances within a test. Use one in each test case: their helpers have the same names. A store that doesn't pass them isn't one YorvoID can rely on: what YorvoID promises, e.g. one use of a token among requests at the same moment, rests on what the store does.
+
+The tests check what one connection can show. That a store holds when many requests use it at once (a lock waits for another, one of two claims wins) needs your database's own concurrency tests: YorvoID's are in its repository, for PostgreSQL and SQLite.
 
 ## Migrations
 

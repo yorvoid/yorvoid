@@ -1,0 +1,27 @@
+{
+    "name": "acme/yorvoid-pdo-stores",
+    "description": "Another project's own YorvoID stores, on PDO: what tools/store-kit/check.php runs the store kit against.",
+    "type": "library",
+    "license": "Apache-2.0",
+    "require": {
+        "php": ">=8.4",
+        "ext-pdo_sqlite": "*",
+        "yorvoid/core": "^0.1",
+        "yorvoid/flows": "^0.1",
+        "yorvoid/throttle": "^0.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0",
+        "yorvoid/testing": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Acme\\Storage\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Acme\\Storage\\Tests\\": "tests/"
+        }
+    }
+}
