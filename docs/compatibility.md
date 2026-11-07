@@ -16,6 +16,7 @@ CI compares every package with its last release, and fails on a break of covered
 
 - Code marked `@internal`, and anything not marked `@api`. That includes `@internal` members of an `@api` class, such as a constructor only the container calls. A check in CI makes sure nothing covered names an `@internal` class.
 - The exact wording of messages, which can improve in any release. Translations change with it.
+- New cases of an enum that lists reasons, e.g. `IndeterminateReason`: a minor release can add one. A `match` of yours on them needs a default arm. YorvoID's own code matches them, and a decision's `Verdict`, exhaustively.
 - Security fixes. When the only way to close a vulnerability is a breaking change, it ships in a patch release, and the advisory explains what to do.
 - Database tables. Use YorvoID's services, not its tables: migrations change them as needed, always without downtime.
 

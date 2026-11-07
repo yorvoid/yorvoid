@@ -82,7 +82,7 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 
 | Threat | Mitigation | Status |
 |---|---|---|
-| An unknown condition or missing data turns into a Permit | Three outcomes; Indeterminate is never Permit | Specified and model-checked; implementation in M2 |
+| An unknown condition or missing data turns into a Permit | Three outcomes; Indeterminate is never Permit; an element that throws, or a store that can't be reached, counts as unknown; Permit-offline is a verdict of its own, off by default, that only operations accepting it run on | In place: the evaluator ([authorization](../concepts/authorization.md)) decides every request of the precedence model as the model does, and a PHPStan rule reads a verdict only through an exhaustive match |
 | A child agent gets more authority than its parent | Attenuation checked at issuance and at every use; the delegator's own rights re-checked at every use | Planned (M3) |
 | An agent forges evidence ("the review was approved") | Evidence only from registered sources; never from the agent itself | Planned (M3) |
 | Revocation races with the effect | The final check runs in the effect's own transaction | Planned (M3) |

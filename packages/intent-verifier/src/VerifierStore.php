@@ -7,6 +7,10 @@ namespace YorvoID\IntentVerifier;
 /**
  * Where the verifier keeps its state (INT-007, INT-009): itself, surviving restarts.
  *
+ * Use FileVerifierStore (InMemoryVerifierStore in tests); one of your own isn't supported. The state
+ * decides which keys sign, so it stays on the verifier's side, out of the console's reach, with the
+ * checks FileVerifierStore makes: a regular file, not a link, the verifier's user's alone.
+ *
  * @api
  */
 interface VerifierStore
