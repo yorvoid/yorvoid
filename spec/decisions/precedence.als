@@ -124,6 +124,58 @@ run SomePermit { some es: set Element, a: Authority | outcome[es, a] = Permit } 
 run SomeDeny { some es: set Element, a: Authority | outcome[es, a] = Deny } for 3 Element expect 1
 run SomeIndeterminate { some es: set Element, a: Authority | outcome[es, a] = Indeterminate } for 3 Element expect 1
 
+/* Permit-offline (XP-03, P1′): an outcome of its own, which an OfflineDecider may give while a store is
+ * unreachable. The table's outcome is Indeterminate first; the offline path is asked only when every
+ * reason for that is an unreachable store (never for an unknown forbid: unknown_forbid is a reason of
+ * its own), for an operation that accepts it, where a permit could have applied, and the decider holds.
+ * The PHP evaluator's tests check the same conditions (tests/Core/Authorization/OfflineTest.php). */
+one sig PermitOffline extends Outcome {}
+
+abstract sig Flag {}
+one sig On, Off extends Flag {}
+
+fun offlineOutcome[es: set Element, a: Authority, unreachable: set Element, authorityUnreachable, decider, accepts, holds: Flag]: one Outcome {
+    (outcome[es, a] = Indeterminate
+        and decider = On and accepts = On and holds = On
+        and (no e: es | e.effect = ForbidEffect and e.condition = Unknown)
+        and (a = AuthorityUnknown
+            implies authorityUnreachable = On
+            else (all e: es | (e.effect = PermitEffect and e.condition = Unknown) implies e in unreachable))
+        and (some e: es | e.effect = PermitEffect and e.condition in True + Unknown))
+    => PermitOffline else outcome[es, a]
+}
+
+/* P1′: Permit-offline arises only from Indeterminate, only with a decider registered, only for an
+ * operation that accepts it, and never with a forbid that couldn't be ruled out. */
+assert PermitOfflineOnlyFromAnUnreachableStore {
+    all es, u: set Element, a: Authority, au, d, acc, h: Flag |
+        offlineOutcome[es, a, u, au, d, acc, h] = PermitOffline implies {
+            outcome[es, a] = Indeterminate
+            d = On and acc = On
+            no e: es | e.effect = ForbidEffect and e.condition = Unknown
+        }
+}
+check PermitOfflineOnlyFromAnUnreachableStore for 6 Element expect 0
+
+/* The offline path never gives a Permit, nor takes one away (P1 holds as written). */
+assert OfflineNeverPermits {
+    all es, u: set Element, a: Authority, au, d, acc, h: Flag |
+        (offlineOutcome[es, a, u, au, d, acc, h] = Permit) iff (outcome[es, a] = Permit)
+}
+check OfflineNeverPermits for 6 Element expect 0
+
+/* Without a decider, or for an operation that doesn't accept it, nothing changes: off by default. */
+assert OffByDefault {
+    all es, u: set Element, a: Authority, au, h: Flag |
+        offlineOutcome[es, a, u, au, Off, On, h] = outcome[es, a] and offlineOutcome[es, a, u, au, On, Off, h] = outcome[es, a]
+}
+check OffByDefault for 6 Element expect 0
+
+-- And it does happen: the checks above aren't about an empty set.
+run SomePermitOffline {
+    some es, u: set Element, a: Authority, au: Flag | offlineOutcome[es, a, u, au, On, On, On] = PermitOffline
+} for 6 Element expect 1
+
 /* The fixtures the PHP evaluator is tested against (tests/Core/Authorization/PrecedenceFixturesTest.php):
  * every request with up to 6 matching elements, its authority, and the outcome the table gives it.
  * decisions/fixtures.mjs enumerates them into decisions/fixtures.json; check.sh fails if that file isn't

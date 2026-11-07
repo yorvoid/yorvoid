@@ -35,6 +35,7 @@ use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
 use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\OfflineDecider;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
@@ -220,6 +221,8 @@ return static function (ContainerConfigurator $container): void {
         null,
         service(ClockInterface::class),
         service('logger')->nullOnInvalid(),
+        // Off unless the application registers one: offline decisions are its own build-time choice.
+        service(OfflineDecider::class)->nullOnInvalid(),
     ]);
     $services->alias(Authorization::class, Evaluator::class);
     $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->public();

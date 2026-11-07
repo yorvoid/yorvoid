@@ -23,6 +23,7 @@ use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\NoSelfService;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\SelfServicePolicy;
+use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Storage\StoreUnreachable;
 
 /**
@@ -49,6 +50,7 @@ final readonly class Evaluator implements Authorization
 
     /**
      * @param iterable<PolicyElement> $elements The policy: permits and forbids
+     * @param OfflineDecider|null     $offline  Asked while a store is unreachable, for the operations that accept it
      *
      * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, or a
      *                         permit authorizes by Consequence, which only another operation's permit gives
@@ -58,6 +60,7 @@ final readonly class Evaluator implements Authorization
         private AuthorityCheck $authority,
         private ClockInterface $clock = new NativeClock(),
         private LoggerInterface $logger = new NullLogger(),
+        private ?OfflineDecider $offline = null,
     ) {
         $list = [];
 
@@ -91,6 +94,7 @@ final readonly class Evaluator implements Authorization
      * @param bool|null               $commandLine Whether PHP runs from the command line, as it does for console
      *                                             commands and workers: the host's operator acts only from there.
      *                                             Found out if not given
+     * @param OfflineDecider|null     $offline     Asked while a store is unreachable, for the operations that accept it
      */
     public static function builtIn(
         AuthorityCheck $authority,
@@ -100,6 +104,7 @@ final readonly class Evaluator implements Authorization
         ?bool $commandLine = null,
         ClockInterface $clock = new NativeClock(),
         ?LoggerInterface $logger = null,
+        ?OfflineDecider $offline = null,
     ): self {
         $builtIn = [
             new AuthenticationPermit(),
@@ -111,7 +116,7 @@ final readonly class Evaluator implements Authorization
             $builtIn[] = new AbilityPermit($abilities);
         }
 
-        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger());
+        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline);
     }
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
@@ -158,11 +163,64 @@ final readonly class Evaluator implements Authorization
         $reasons[] = new Reason('authority', 'authority', $authority);
         $decision = $this->precedence($operation, $forbids, $authority, $permits, $reasons);
 
-        if ([] !== $decision->indeterminate) {
-            $this->logger->warning('YorvoID couldn\'t decide whether to run "{operation}": {reason}', ['operation' => $operation->name, 'reason' => $decision->reason, 'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate)]);
+        if ([] === $decision->indeterminate) {
+            return $decision;
         }
 
-        return $decision;
+        $this->logger->warning('YorvoID couldn\'t decide whether to run "{operation}": {reason}', ['operation' => $operation->name, 'reason' => $decision->reason, 'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate)]);
+        $offline = $this->offline($request, $decision, $permits);
+
+        if (null === $offline) {
+            return $decision;
+        }
+
+        $this->logger->warning('YorvoID permitted "{operation}" offline: {reason}', ['operation' => $operation->name, 'reason' => $offline->reason]);
+
+        return $offline;
+    }
+
+    /**
+     * Whether an OfflineDecider is registered: Operations refuses to be built when that and the
+     * operations that accept Permit-offline don't go together.
+     */
+    public function decidesOffline(): bool
+    {
+        return null !== $this->offline;
+    }
+
+    /**
+     * Permit-offline (P1′): only for an Indeterminate whose every reason is store_unreachable, an
+     * operation that accepts it, a permit that could have applied, and the decider holding.
+     *
+     * @param array<string, list<array{PermitElement, Truth}>> $permits
+     */
+    private function offline(Request $request, Decision $decision, array $permits): ?Decision
+    {
+        if (null === $this->offline || !$request->operation->acceptsOffline || [IndeterminateReason::StoreUnreachable] !== $decision->indeterminate) {
+            return null;
+        }
+
+        $basis = null;
+
+        foreach ($request->operation->authorizedBy as $by) {
+            foreach ([...$permits['holds'], ...$permits['unknown']] as [$element]) {
+                if ($element->basis() === $by) {
+                    $basis ??= $by;
+                }
+            }
+        }
+
+        if (null === $basis) {
+            return null;
+        }
+
+        $truth = self::safely(fn (): Truth => $this->offline->decide($request));
+
+        if (TruthValue::Holds !== $truth->value) {
+            return null;
+        }
+
+        return new Decision(Verdict::PermitOffline, $basis, \sprintf('Permitted offline: %s', $truth->detail), [...$decision->reasons, new Reason('offline', 'offline', $truth)]);
     }
 
     /**

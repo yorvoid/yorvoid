@@ -6,6 +6,8 @@ Every operation runs through `Operations::run()` ([operations](operations-and-ev
 - **Deny:** YorvoID knows it isn't allowed now. When only evidence is missing, e.g. a recent step-up, the decision says what would satisfy it (a remedy).
 - **Indeterminate:** something the decision needs couldn't be established, e.g. a record is missing or a store is unreachable. It never permits, and it's logged as a warning: someone should look.
 
+A fourth, **Permit-offline**, exists only where you've set it up for a store that can't be reached ([offline](#offline)).
+
 A refusal throws `NotPermitted`, which carries the decision, and is recorded in the security log with its verdict, reason, remedies and what couldn't be established.
 
 ## How it decides
@@ -78,6 +80,15 @@ Every Indeterminate names what couldn't be established (`IndeterminateReason`): 
 A store that can't be reached makes the decision Indeterminate with the reason `store_unreachable`, never a Permit: the connection was refused or lost, a statement timed out, or the server is starting, failing over or shutting down. That's told apart from other failures (`evaluation_error`) and from records that aren't there (`missing_data`). Waiting for a lock is contention, not unreachability.
 
 YorvoID's DBAL stores report it through DBAL's exceptions, which `StoreUnreachable::of()` recognises; a store of your own throws `StoreUnreachable` itself ([stores of your own](storage.md#stores-of-your-own)).
+
+## Offline
+
+Some deployments must keep a few operations going while the store they decide from is out of reach, e.g. a door controller whose link home is down. That's off by default, and stays off unless both sides say so when YorvoID is built:
+
+- **An `OfflineDecider`**, given to the evaluator (`Evaluator::builtIn(..., offline: $decider)`; in Symfony, a service with that interface). It's asked only when a decision is Indeterminate and every reason is `store_unreachable`, never for a forbid that couldn't be ruled out, and only where a permit could have applied.
+- **The operations that accept it**, `#[Operation(..., acceptsOffline: true)]`: only these run on what the decider allows. There's no switch for all of them.
+
+What the decider allows is **Permit-offline**, a verdict of its own, not a Permit: `Decision::permits()` is false for it, and only an operation that accepts it runs. Its permit says so (`$permit->offline`, as do its consequences), the security log records `yorvoid.decision.offline`, and it's logged as a warning. A decider without such an operation, or such an operation without a decider, fails when `Operations` is built.
 
 ## Policy elements
 

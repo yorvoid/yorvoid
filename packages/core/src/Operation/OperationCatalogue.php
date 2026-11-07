@@ -122,6 +122,6 @@ final readonly class OperationCatalogue
             );
         }
 
-        return new OperationDescription($operation->name, $operation->description, $operation->authorizedBy, $operation->ability, $operation->inverse, $command, $parameters, $operation->causes);
+        return new OperationDescription($operation->name, $operation->description, $operation->authorizedBy, $operation->ability, $operation->inverse, $command, $parameters, $operation->causes, $operation->acceptsOffline);
     }
 }

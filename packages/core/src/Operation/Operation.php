@@ -30,13 +30,15 @@ final readonly class Operation
     public array $authorizedBy;
 
     /**
-     * @param string                          $name         Stable, dot-separated, starting with the owner, e.g. "yorvoid.session.end"
-     * @param string                          $description  What it does, for people, e.g. "End a session"
-     * @param AuthorizedBy|list<AuthorizedBy> $authorizedBy What lets an actor run it; the first that permits wins
-     * @param string|null                     $ability      The ability a principal needs to run it, for AuthorizedBy::Ability
-     * @param string|null                     $inverse      The operation that undoes it, if any
-     * @param list<string>                    $causes       The operations it may run as its consequences, e.g. ending sessions:
-     *                                                      a permit gives a consequence for these only
+     * @param string                          $name           Stable, dot-separated, starting with the owner, e.g. "yorvoid.session.end"
+     * @param string                          $description    What it does, for people, e.g. "End a session"
+     * @param AuthorizedBy|list<AuthorizedBy> $authorizedBy   What lets an actor run it; the first that permits wins
+     * @param string|null                     $ability        The ability a principal needs to run it, for AuthorizedBy::Ability
+     * @param string|null                     $inverse        The operation that undoes it, if any
+     * @param list<string>                    $causes         The operations it may run as its consequences, e.g. ending sessions:
+     *                                                        a permit gives a consequence for these only
+     * @param bool                            $acceptsOffline Whether it runs on Permit-offline, which an OfflineDecider may give
+     *                                                        while a store is unreachable (XP-03, P1′); no operation does by default
      */
     public function __construct(
         public string $name,
@@ -45,6 +47,7 @@ final readonly class Operation
         public ?string $ability = null,
         public ?string $inverse = null,
         public array $causes = [],
+        public bool $acceptsOffline = false,
     ) {
         foreach (['name' => $name, 'inverse' => $inverse] as $field => $value) {
             if (null !== $value && 1 !== preg_match(self::NAME, $value)) {
