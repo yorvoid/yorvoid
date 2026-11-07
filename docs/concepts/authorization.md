@@ -73,6 +73,12 @@ try {
 
 Every Indeterminate names what couldn't be established (`IndeterminateReason`): `store_unreachable`, `unknown_forbid`, `unverifiable_signature`, `missing_data`, `conflicting_records` or `evaluation_error`. New reasons can come in a minor release, so a `match` of yours on them needs a default arm.
 
+## When a store can't be reached
+
+A store that can't be reached makes the decision Indeterminate with the reason `store_unreachable`, never a Permit: the connection was refused or lost, a statement timed out, or the server is starting, failing over or shutting down. That's told apart from other failures (`evaluation_error`) and from records that aren't there (`missing_data`). Waiting for a lock is contention, not unreachability.
+
+YorvoID's DBAL stores report it through DBAL's exceptions, which `StoreUnreachable::of()` recognises; a store of your own throws `StoreUnreachable` itself ([stores of your own](storage.md#stores-of-your-own)).
+
 ## Policy elements
 
 Your own rules are elements: a class implementing `PermitElement` (with the way it authorizes by) or `ForbidElement`, with a stable name for reasons and the log.

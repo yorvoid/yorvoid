@@ -23,6 +23,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - The evaluator (`Evaluator`): Permit, Deny or Indeterminate by the precedence of forbids, the actor's authority and permits ([authorization](docs/concepts/authorization.md)). YorvoID's ways to authorize are its built-in permits, with `AbilityPolicy` and `SelfServicePolicy`; your own rules are `PermitElement`s and `ForbidElement`s, registered by themselves in Symfony. `PrincipalAuthority` refuses a principal that isn't active.
 - A decision carries its reasons, what couldn't be established (`IndeterminateReason`), and on a Deny for want of evidence its remedies (`StepUpRemedy`, `WaitRemedy`): a step-up asked by `StepUpSelfService` comes as a remedy on `NotPermitted`, not as `StepUpRequired`.
 - An Indeterminate decision is logged as a warning.
+- A store that can't be reached makes a decision Indeterminate with the reason `store_unreachable` (`StoreUnreachable`): a refused or lost connection, a statement's timeout, a failover. A store of your own throws `StoreUnreachable` itself.
 - A refused operation is recorded in the security log.
 - An operation declares what it causes (`#[Operation(causes: [...])]`), and its permit gives consequences for those only.
 - The host's operator acts from a console or job origin only when PHP runs from the command line.

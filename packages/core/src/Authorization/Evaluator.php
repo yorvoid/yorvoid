@@ -276,10 +276,12 @@ final readonly class Evaluator implements Authorization
         } catch (IntegratorError $error) {
             // A mistake in the setup: shown, not decided around. Nothing runs either way.
             throw $error;
-        } catch (StoreUnreachable $exception) {
-            return Truth::unknown(IndeterminateReason::StoreUnreachable, $exception->getMessage());
         } catch (\Throwable $exception) {
-            return Truth::unknown(IndeterminateReason::EvaluationError, \sprintf('%s: %s', $exception::class, $exception->getMessage()));
+            $unreachable = StoreUnreachable::of($exception);
+
+            return null !== $unreachable
+                ? Truth::unknown(IndeterminateReason::StoreUnreachable, $unreachable->getMessage())
+                : Truth::unknown(IndeterminateReason::EvaluationError, \sprintf('%s: %s', $exception::class, $exception->getMessage()));
         }
     }
 }
