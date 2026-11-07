@@ -65,6 +65,8 @@ jobs:
         run: docker compose exec -T php composer deptrac
       - name: Check that each package requires what it uses
         run: docker compose exec -T php composer dependencies
+      - name: Check the packages require each other at main's version
+        run: docker compose exec -T php composer versions
       - name: Check the compatibility promise against the last release
         run: docker compose exec -T php composer bc
       - name: Fuzzing

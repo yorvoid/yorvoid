@@ -32,12 +32,12 @@
         "psr/container": "^2.0",
         "symfony/clock": "^7.4 || ^8.1",
         "symfony/uid": "^7.4 || ^8.1",
-        "yorvoid/authn": "^0.1",
-        "yorvoid/core": "^0.1",
-        "yorvoid/flows": "^0.1",
-        "yorvoid/passkeys": "^0.1",
-        "yorvoid/throttle": "^0.1",
-        "yorvoid/virtual-authenticator": "^0.1"
+        "yorvoid/authn": "^0.4",
+        "yorvoid/core": "^0.4",
+        "yorvoid/flows": "^0.4",
+        "yorvoid/passkeys": "^0.4",
+        "yorvoid/throttle": "^0.4",
+        "yorvoid/virtual-authenticator": "^0.4"
     },
     "suggest": {
         "symfony/framework-bundle": "To sign in to Symfony functional tests with BrowserSignIn",
@@ -50,7 +50,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.1.x-dev"
+            "dev-main": "0.4.x-dev"
         }
     }
 }

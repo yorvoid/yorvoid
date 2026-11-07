@@ -31,6 +31,10 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - Signing keys for each realm (`KeyRings`, `SharedKeyRings`, `PerRealmKeyRings`): a realm's checkpoints are signed and verified with its own ring. In Symfony, `keys.per_realm` and `keys.directory`, `yorvoid:keys:rotate --realm`, and the doctor reports a realm without keys.
 - The stores' contracts in `yorvoid/testing` (`YorvoID\Testing\Contract`): the tests YorvoID's own stores pass, one trait for each store and one for `Transactions`, for a store of your own to pass too. `yorvoid/testing` requires PHPUnit 12 or 13, and `yorvoid/flows` for `FlowStoreContract`, the tests of a `FlowStore`.
 
+### Fixed
+
+- The packages require each other at the version they're released with (`^0.4` for 0.4), so a release installs as a set. 0.2.0 and 0.3.0 required `^0.1` of each other and don't install together from Packagist: stay on 0.1.0, or take 0.4.0. Every release now checks this before it's published, and installs from Packagist afterwards.
+
 ## 0.3.0 (2026-11-06)
 
 A setup code claims a realm under the security log's lock, and CI holds the packages to the compatibility promise: no `@internal` type in the API, no break the changelog doesn't list.

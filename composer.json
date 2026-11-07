@@ -12,19 +12,19 @@
             "url": "packages/*",
             "options": {
                 "versions": {
-                    "yorvoid/authn": "0.1.x-dev",
-                    "yorvoid/core": "0.1.x-dev",
-                    "yorvoid/flows": "0.1.x-dev",
-                    "yorvoid/intent-signing": "0.1.x-dev",
-                    "yorvoid/intent-verifier": "0.1.x-dev",
-                    "yorvoid/mail": "0.1.x-dev",
-                    "yorvoid/notifications": "0.1.x-dev",
-                    "yorvoid/passkeys": "0.1.x-dev",
-                    "yorvoid/symfony": "0.1.x-dev",
-                    "yorvoid/testing": "0.1.x-dev",
-                    "yorvoid/throttle": "0.1.x-dev",
-                    "yorvoid/translation": "0.1.x-dev",
-                    "yorvoid/virtual-authenticator": "0.1.x-dev"
+                    "yorvoid/authn": "0.4.x-dev",
+                    "yorvoid/core": "0.4.x-dev",
+                    "yorvoid/flows": "0.4.x-dev",
+                    "yorvoid/intent-signing": "0.4.x-dev",
+                    "yorvoid/intent-verifier": "0.4.x-dev",
+                    "yorvoid/mail": "0.4.x-dev",
+                    "yorvoid/notifications": "0.4.x-dev",
+                    "yorvoid/passkeys": "0.4.x-dev",
+                    "yorvoid/symfony": "0.4.x-dev",
+                    "yorvoid/testing": "0.4.x-dev",
+                    "yorvoid/throttle": "0.4.x-dev",
+                    "yorvoid/translation": "0.4.x-dev",
+                    "yorvoid/virtual-authenticator": "0.4.x-dev"
                 }
             }
         }
@@ -32,19 +32,19 @@
     "require": {
         "php": ">=8.4",
         "twig/twig": "^3.30",
-        "yorvoid/authn": "^0.1",
-        "yorvoid/core": "^0.1",
-        "yorvoid/flows": "^0.1",
-        "yorvoid/intent-signing": "^0.1",
-        "yorvoid/intent-verifier": "^0.1",
-        "yorvoid/mail": "^0.1",
-        "yorvoid/notifications": "^0.1",
-        "yorvoid/passkeys": "^0.1",
-        "yorvoid/symfony": "^0.1",
-        "yorvoid/testing": "^0.1",
-        "yorvoid/throttle": "^0.1",
-        "yorvoid/translation": "^0.1",
-        "yorvoid/virtual-authenticator": "^0.1"
+        "yorvoid/authn": "^0.4",
+        "yorvoid/core": "^0.4",
+        "yorvoid/flows": "^0.4",
+        "yorvoid/intent-signing": "^0.4",
+        "yorvoid/intent-verifier": "^0.4",
+        "yorvoid/mail": "^0.4",
+        "yorvoid/notifications": "^0.4",
+        "yorvoid/passkeys": "^0.4",
+        "yorvoid/symfony": "^0.4",
+        "yorvoid/testing": "^0.4",
+        "yorvoid/throttle": "^0.4",
+        "yorvoid/translation": "^0.4",
+        "yorvoid/virtual-authenticator": "^0.4"
     },
     "require-dev": {
         "deptrac/deptrac": "^4.7",
@@ -90,6 +90,7 @@
         "phpstan": "phpstan analyse --memory-limit=1G",
         "deptrac": "deptrac analyse --no-progress",
         "dependencies": "sh tools/dependencies/check.sh",
+        "versions": "@php tools/release/version.php check",
         "bc": [
             "@composer install -d tools/compat/bc --no-interaction --no-progress --quiet",
             "@php tools/compat/bc-check.php"
@@ -108,6 +109,7 @@
             "@phpstan",
             "@deptrac",
             "@dependencies",
+            "@versions",
             "@bc",
             "@test"
         ],
