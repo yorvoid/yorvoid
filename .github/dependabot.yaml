@@ -14,6 +14,11 @@ updates:
       prefix: "chore"
     cooldown:
       default-days: 7
+    # Each PHP stage stays on its version (the oldest supported is tested on 8.4): patches only. A new
+    # PHP version is a stage of its own, added by hand.
+    ignore:
+      - dependency-name: php
+        update-types: [version-update:semver-major, version-update:semver-minor]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -45,6 +50,10 @@ updates:
       prefix: "chore"
     cooldown:
       default-days: 7
+    # Playwright's image holds the browsers for one version of @playwright/test (e2e/package.json): the
+    # two move together, in the npm pull request for /e2e, which gets the image's tag and digest added.
+    ignore:
+      - dependency-name: playwright
     groups:
       minor-and-patch:
         update-types: [minor, patch]
