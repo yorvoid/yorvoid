@@ -39,7 +39,8 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
 use YorvoID\Core\Principal\Storage\DbalPrincipalStore;
 use YorvoID\Authn\StepUp\StepUpSelfService;
-use YorvoID\Core\Operation\BuiltInAuthorization;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Realm;
@@ -64,7 +65,8 @@ $transactions = new DbalTransactions($connection, $middleware);
 
 $realm = Realm::default();
 $log = new SecurityLog(new DbalSecurityLogStore($database), $transactions);
-$principals = new Principals(new DbalPrincipalStore($database), new DbalIdentifierStore($database), $log, $transactions);
+$principalStore = new DbalPrincipalStore($database);
+$principals = new Principals($principalStore, new DbalIdentifierStore($database), $log, $transactions);
 $sessions = new Sessions(new DbalSessionStore($database), $principals, $log, $transactions, SessionPolicy::aal2());
 $attempts = new Attempts(new Throttle(new DbalThrottleStore($database)));
 $setupCodes = new SetupCodes(new DbalSetupStore($database), $principals, $log, $transactions, $attempts, $sessions);
@@ -86,14 +88,14 @@ $passkeys = new Passkeys(
 $handlers = [$principals, $sessions, $credentials, $setupCodes, $passkeys];
 $operations = new Operations(
     OperationCatalogue::of($handlers),
-    new BuiltInAuthorization(selfService: new StepUpSelfService($stepUp)),
+    Evaluator::builtIn(new PrincipalAuthority($principalStore), selfService: new StepUpSelfService($stepUp)),
     $log,
     $handlers,
 );
 ```
 
 - **The passkey policy** names the domain passkeys belong to, and the origins of the pages that use them ([passkeys](../concepts/passkeys.md#configuration)).
-- **Operations** runs every change ([running an operation](../concepts/operations-and-events.md#running-an-operation)): the host's `Operator` from the console, a session on its own account with a recent proof (`StepUpSelfService`), and anyone signing in. For administrators, pass an `AbilityPolicy` that says who holds an ability, e.g. `yorvoid.principals.manage`; without one, nobody does.
+- **Operations** runs every change ([running an operation](../concepts/operations-and-events.md#running-an-operation)), as the evaluator decides ([authorization](../concepts/authorization.md)): the host's `Operator` from the console, a session on its own account with a recent proof (`StepUpSelfService`), and anyone signing in, each only while their principal is active. For administrators, pass an `AbilityPolicy` that says who holds an ability, e.g. `yorvoid.principals.manage`; without one, nobody does.
 - **PostgreSQL** in production: change the connection's parameters; the rest stays ([storage](../concepts/storage.md)).
 
 ## Create the tables

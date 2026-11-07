@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
+use YorvoID\Core\Authorization\IndeterminateReason;
+use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\IdGenerator;
@@ -68,10 +70,12 @@ final readonly class Operations
         $decision = $this->authorization->decide($operation, $command, $actor, $origin);
 
         if (!$decision->permits() || null === $decision->basis) {
-            $this->log->record($command->realm, $operation->name, Outcome::Denied, $origin, $actor->principalId, details: [
+            $this->log->record($command->realm, $operation->name, Outcome::Denied, $origin, $actor->principalId, details: array_filter([
                 'verdict' => $decision->verdict->value,
                 'reason' => $decision->reason,
-            ]);
+                'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate),
+                'remedies' => array_map(static fn (Remedy $remedy): string => $remedy->name(), $decision->remedies),
+            ], static fn (string|array $value): bool => [] !== $value));
 
             throw new NotPermitted($operation->name, $decision);
         }

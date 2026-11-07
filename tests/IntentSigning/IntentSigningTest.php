@@ -223,7 +223,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $translator = new Translator([NotificationsTranslations::DIRECTORY, Translations::DIRECTORY, __DIR__.'/catalogues']);
         $this->summaries = new IntentSummaries($translator, 'acme');
         $this->mailer = new InMemoryMailer();
-        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, null, new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock)), $this->mailer, $translator, new NotificationSettings('Acme', 'https://example.com/not-me?token={token}'), $this->clock);
+        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, $this->stack->principals, null, new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock)), $this->mailer, $translator, new NotificationSettings('Acme', 'https://example.com/not-me?token={token}'), $this->clock);
         $this->events->listen(SignedOperationRan::class, new SignedOperationNotification($notifications, $this->summaries)(...));
 
         return new IntentSigning($log, $this->stack->transactions, $throttle, $limit, $this->events, $this->clock);

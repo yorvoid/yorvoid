@@ -11,12 +11,15 @@ use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
+use YorvoID\Core\Authorization\AuthorityCheck;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\Anonymous;
-use YorvoID\Core\Operation\BuiltInAuthorization;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Operator;
@@ -57,7 +60,14 @@ final readonly class Scenario
         private Realm $realm = new Realm('default'),
     ) {
         $signIns = new TestSignIns($sessions, $clock);
-        $this->signIns = new Operations(OperationCatalogue::of([$signIns]), new BuiltInAuthorization(), $log, [$signIns]);
+        // It runs only the test sign-in, as someone not signed in: no principal's authority to check.
+        $noneClaimed = new class implements AuthorityCheck {
+            public function check(Request $request): Truth
+            {
+                return null === $request->actor->principalId ? Truth::holds('No principal acts.') : Truth::fails('Scenario signs in only.');
+            }
+        };
+        $this->signIns = new Operations(OperationCatalogue::of([$signIns]), Evaluator::builtIn($noneClaimed), $log, [$signIns]);
     }
 
     /**

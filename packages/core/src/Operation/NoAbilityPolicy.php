@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace YorvoID\Core\Operation;
 
 /**
- * Can't tell who holds an ability, so operations authorized by one are Indeterminate, and never run,
- * except for the host's operator where they allow it. The default without a policy.
+ * Can't tell who holds an ability: an operation authorized by one is Indeterminate unless another way
+ * permits it, and never runs on the ability. Without any ability policy, the evaluator has no ability
+ * permit at all, and such an operation is denied: no permit applies.
  *
  * @api
  */

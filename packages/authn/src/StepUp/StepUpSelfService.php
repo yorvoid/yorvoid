@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace YorvoID\Authn\StepUp;
 
 use YorvoID\Authn\Session\Session;
+use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Operation\Actor;
-use YorvoID\Core\Operation\AuthorizedBy;
-use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\SelfOperation;
 use YorvoID\Core\Operation\SelfServicePolicy;
@@ -56,24 +57,28 @@ final readonly class StepUpSelfService implements SelfServicePolicy
         ];
     }
 
-    /**
-     * @throws StepUpRequired    When the session hasn't proved who it is recently enough
-     * @throws HeldAfterRecovery When the account was recovered recently
-     */
-    public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Decision
+    public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Truth
     {
         if (!$actor instanceof Session) {
-            return Decision::deny(\sprintf('"%s" runs on one\'s own account from a session only.', $operation->name));
+            return Truth::fails(\sprintf('"%s" runs on one\'s own account from a session only.', $operation->name));
         }
 
         $requirement = \array_key_exists($operation->name, $this->requirements)
             ? $this->requirements[$operation->name]
             : new AuthenticationRequirement($this->window, operation: $operation->name);
 
-        if (null !== $requirement) {
-            $this->stepUp->require($actor, $requirement);
+        if (null === $requirement) {
+            return Truth::holds('The actor\'s own account, from its session.');
         }
 
-        return Decision::permit(AuthorizedBy::Self, 'The actor\'s own account, from its session.');
+        try {
+            $this->stepUp->require($actor, $requirement);
+        } catch (StepUpRequired) {
+            return Truth::fails('The session hasn\'t proved who it is recently enough.', new StepUpRemedy($requirement->within, $requirement->multiFactor, $requirement->phishingResistant, $requirement->operation));
+        } catch (HeldAfterRecovery $held) {
+            return Truth::fails('The account was recovered recently.', new WaitRemedy($held->until));
+        }
+
+        return Truth::holds('The actor\'s own account, from its session, proved recently.');
     }
 }

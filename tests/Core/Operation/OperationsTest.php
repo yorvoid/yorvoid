@@ -7,6 +7,8 @@ namespace YorvoID\Tests\Core\Operation;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\UuidV7;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
@@ -17,7 +19,6 @@ use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Operation\AbilityPolicy;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\AuthorizedBy;
-use YorvoID\Core\Operation\BuiltInAuthorization;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\NoAbilityPolicy;
@@ -38,6 +39,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\Policy;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\RecordBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ScanBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
 
 final class OperationsTest extends TestCase
 {
@@ -126,7 +128,7 @@ final class OperationsTest extends TestCase
         self::assertSame(Outcome::Denied, $entry->outcome);
         self::assertNull($entry->actor);
         self::assertSame('request-1', $entry->origin->correlationId);
-        self::assertSame(['reason' => 'Nothing lets the actor run "acme.badge.issue".', 'verdict' => 'deny'], $entry->details);
+        self::assertSame(['reason' => \sprintf('The host\'s operator acts from the command line or as the system, not from "%s".', $kind->value), 'verdict' => 'deny'], $entry->details);
     }
 
     public function testSomeoneRunsAnOperationOnTheirOwnAccount(): void
@@ -135,19 +137,20 @@ final class OperationsTest extends TestCase
         $this->operations($policy)->run(new IssueBadge($this->realm, $this->ana), new Member($this->realm, $this->ana), new Origin(OriginKind::Web));
 
         self::assertSame(AuthorizedBy::Self, $this->badges->permits[0]->basis);
-        self::assertSame(0, $policy->asked, 'The first that permits wins.');
+        self::assertSame(1, $policy->asked, 'Every element is asked, so reasons never depend on order (P2): the basis named first wins.');
     }
 
     public function testWithoutASelfServicePolicyNobodyRunsOperationsOnTheirOwnAccount(): void
     {
-        $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), new BuiltInAuthorization(), new SecurityLog($this->log, new InMemoryTransactions()), [$this->badges]);
+        $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new ValidAuthority()), new SecurityLog($this->log, new InMemoryTransactions()), [$this->badges]);
 
         try {
             $operations->run(new IssueBadge($this->realm, $this->ana), new Member($this->realm, $this->ana), new Origin(OriginKind::Web));
             self::fail('It was permitted.');
         } catch (NotPermitted $refused) {
             self::assertSame(Verdict::Indeterminate, $refused->decision->verdict);
-            self::assertSame('No self-service policy says what "acme.badge.issue" needs.', $refused->decision->reason);
+            self::assertSame('A permit couldn\'t be evaluated: No self-service policy says what "acme.badge.issue" needs.', $refused->decision->reason);
+            self::assertSame([IndeterminateReason::MissingData], $refused->decision->indeterminate);
         }
     }
 
@@ -157,8 +160,8 @@ final class OperationsTest extends TestCase
 
         self::assertSame(Verdict::Indeterminate, $decision->verdict);
         self::assertNull($decision->basis);
-        self::assertSame('No policy says who holds "acme.badges.issue".', $decision->reason);
-        self::assertSame(['reason' => 'No policy says who holds "acme.badges.issue".', 'verdict' => 'indeterminate'], $this->entries()[0]->details);
+        self::assertSame('A permit couldn\'t be evaluated: The ability policy can\'t tell who holds "acme.badges.issue".', $decision->reason);
+        self::assertSame(['indeterminate' => ['missing_data'], 'reason' => 'A permit couldn\'t be evaluated: The ability policy can\'t tell who holds "acme.badges.issue".', 'verdict' => 'indeterminate'], $this->entries()[0]->details);
     }
 
     public function testTheAbilityPolicyLetsSomeoneElseRunIt(): void
@@ -269,7 +272,7 @@ final class OperationsTest extends TestCase
     {
         $log = new SecurityLog($this->log, new InMemoryTransactions());
         $catalogue = new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]);
-        $served = new Operations($catalogue, new BuiltInAuthorization(commandLine: false), $log, [$this->badges]);
+        $served = new Operations($catalogue, Evaluator::builtIn(new ValidAuthority(), commandLine: false), $log, [$this->badges]);
 
         foreach ([OriginKind::Console, OriginKind::Job] as $kind) {
             try {
@@ -357,7 +360,7 @@ final class OperationsTest extends TestCase
     {
         $catalogue = new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]);
         $log = new SecurityLog($this->log, new InMemoryTransactions());
-        $authorization = new BuiltInAuthorization($policy ?? new NoAbilityPolicy(), new SelfService());
+        $authorization = Evaluator::builtIn(new ValidAuthority(), $policy ?? new NoAbilityPolicy(), new SelfService());
 
         return new Operations($catalogue, $authorization, $log, $handlers ?? [$this->badges]);
     }

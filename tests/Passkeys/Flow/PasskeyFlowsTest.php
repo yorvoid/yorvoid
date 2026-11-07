@@ -122,7 +122,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         $this->setupCodes = new SetupCodes($stack->setup, $this->principals, $log, $stack->transactions, $attempts, $this->sessions, $this->clock);
         $this->invitations = new Invitations($this->principals, $tokens, $stack->transactions, new Throttle($stack->throttle, $this->clock), $this->sessions, clock: $this->clock);
         $verification = new EmailVerification($this->principals, $tokens, new InMemoryMailer(), new Translator([Translations::DIRECTORY]), new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}'), $stack->transactions, static fn (string $token): string => 'https://acme.example/verify?token='.$token);
-        $this->operations = TestOperations::of($log, $stepUp, $this->principals, $this->sessions, $credentials, $this->passkeys, $this->recoveryCodes, $this->recoveryLinks, $tokens, $this->setupCodes, $this->invitations, $verification);
+        $this->operations = TestOperations::of($log, $stack->principals, $stepUp, $this->principals, $this->sessions, $credentials, $this->passkeys, $this->recoveryCodes, $this->recoveryLinks, $tokens, $this->setupCodes, $this->invitations, $verification);
         $this->journeys = $journeys = new PasskeyFlows($this->operations, $this->passkeys, $this->principals, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, Duration::minutes(5), $verification);
         $this->flows = new Flows($journeys->all(), new InMemoryFlowStore(), $this->sessions, clock: $this->clock);
         $this->context = new FlowContext(new Origin(OriginKind::Web), device: 'Firefox on Linux', address: '192.0.2.10');
