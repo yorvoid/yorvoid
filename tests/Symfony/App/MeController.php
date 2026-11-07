@@ -28,6 +28,8 @@ final readonly class MeController
             'class' => null === $this->security->getUser() ? null : $this->security->getUser()::class,
             'roles' => $this->security->getUser()?->getRoles() ?? [],
             'methods' => null === $session ? [] : array_map(static fn ($method): string => $method->value, $session->authentication->methods()),
+            // An application's own ability, decided by YorvoID's roles.
+            'publishes' => $this->security->isGranted('acme.pages.publish'),
         ]);
     }
 }

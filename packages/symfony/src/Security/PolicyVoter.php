@@ -17,8 +17,8 @@ use YorvoID\Policy\Policy;
 use YorvoID\Policy\PolicyCatalogue;
 
 /**
- * Symfony's isGranted() for every declared ability, decided by YorvoID's evaluator: the request's
- * session acts, or someone not signed in; the subject is the resource when it's a ResourceRef or says
+ * Symfony's isGranted() for every declared ability, decided by YorvoID's evaluator in the bundle's realm:
+ * the request's session acts, or someone not signed in; the subject is the resource when it's a ResourceRef or says
  * which one it concerns. Only a Permit grants.
  *
  * ```php
@@ -51,8 +51,7 @@ final class PolicyVoter extends Voter
             $subject instanceof ConcernsResource => $subject->resource(),
             default => null,
         };
-        $actor = $this->session->get();
-        $decision = $this->policy->decide($actor ?? new Anonymous(), $attribute, $actor->realm ?? $this->realm, $resource, new Origin(OriginKind::Web));
+        $decision = $this->policy->decide($this->session->get() ?? new Anonymous(), $attribute, $this->realm, $resource, new Origin(OriginKind::Web));
         $vote?->addReason($decision->reason);
 
         return $decision->permits();

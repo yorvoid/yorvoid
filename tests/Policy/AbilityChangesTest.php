@@ -64,4 +64,25 @@ final class AbilityChangesTest extends TestCase
         self::assertFalse($one->equals(new AbilityChanges($one->grant)));
         self::assertFalse($one->equals(new AbilityChanges([], $one->revoke)));
     }
+
+    public function testAChangeKeepsWhatOtherRolesHad(): void
+    {
+        $changes = new AbilityChanges(['a.x' => ['member', 'helper']], ['a.x' => ['editor', 'admin'], 'a.y' => ['editor', 'admin']]);
+        $defaults = ['editor', 'admin'];
+
+        self::assertSame(['admin'], $changes->change('a.x', 'editor', true, $defaults)->revoke['a.x'], 'Giving one default back keeps the other\'s revoke.');
+        self::assertSame(['helper'], $changes->change('a.x', 'member', false, $defaults)->grant['a.x'], 'Taking one grant keeps the other.');
+        self::assertSame(['helper', 'member'], $changes->change('a.x', 'admin', true, $defaults)->grant['a.x'], 'A default given back records no grant.');
+        self::assertSame(['admin', 'editor', 'owner'], $changes->change('a.y', 'owner', false, ['editor', 'admin', 'owner'])->revoke['a.y'], 'Another default taken joins the revokes.');
+        self::assertSame(['admin'], $changes->change('a.x', 'editor', false, [])->revoke['a.x'], 'A role taken what it doesn\'t have by default leaves the others.');
+        self::assertSame(['helper', 'member', 'reviewer'], $changes->change('a.x', 'reviewer', true, $defaults)->grant['a.x']);
+    }
+
+    public function testEmptyOnlyWithoutGrantsAndRevokes(): void
+    {
+        self::assertTrue(new AbilityChanges()->isEmpty());
+        self::assertFalse(new AbilityChanges(['a.x' => ['member']])->isEmpty());
+        self::assertFalse(new AbilityChanges([], ['a.x' => ['member']])->isEmpty());
+        self::assertSame(['a.x' => ['member'], 'a.y' => ['member']], new AbilityChanges(['a.x' => ['member', 'helper'], 'a.y' => ['member']])->withoutRole('helper')->grant);
+    }
 }

@@ -7457,12 +7457,14 @@
             "dist": {
                 "type": "path",
                 "url": "packages/policy",
-                "reference": "9bfcaff02a7283b91440fe347cd42637db367e69"
+                "reference": "2f28b99b4f6c66abeac2d51919f0e54ac3b2dd3f"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "ext-mbstring": "*",
                 "php": ">=8.4",
+                "psr/clock": "^1.0",
+                "symfony/clock": "^7.4 || ^8.1",
                 "yorvoid/core": "^0.4"
             },
             "type": "library",

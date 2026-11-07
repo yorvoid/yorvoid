@@ -67,7 +67,7 @@ final readonly class PolicyChanges implements OperationHandler
      * @throws InvalidRole When the name or label isn't valid, or a role has the name
      * @throws UnknownRole When the role to start from isn't one
      */
-    public function createRole(CreateRole $command, Permit $permit, Origin $origin): Role
+    private function createRole(CreateRole $command, Permit $permit, Origin $origin): Role
     {
         $permit->use($command);
         $role = new Role($command->name, $command->label);
@@ -101,7 +101,7 @@ final readonly class PolicyChanges implements OperationHandler
      * @throws InvalidRole When the label isn't valid, or the role is declared
      * @throws UnknownRole
      */
-    public function relabelRole(RelabelRole $command, Permit $permit, Origin $origin): Role
+    private function relabelRole(RelabelRole $command, Permit $permit, Origin $origin): Role
     {
         $permit->use($command);
         $this->created($command->realm, $command->name, 'relabelled');
@@ -122,7 +122,7 @@ final readonly class PolicyChanges implements OperationHandler
      * @throws InvalidRole When the role is declared
      * @throws UnknownRole
      */
-    public function deleteRole(DeleteRole $command, Permit $permit, Origin $origin): void
+    private function deleteRole(DeleteRole $command, Permit $permit, Origin $origin): void
     {
         $permit->use($command);
         $this->created($command->realm, $command->name, 'deleted');
@@ -141,7 +141,7 @@ final readonly class PolicyChanges implements OperationHandler
      * @throws InvalidRole      When it's "everyone", which nobody is given
      * @throws UnknownPrincipal
      */
-    public function assign(AssignRole $command, Permit $permit, Origin $origin): RoleAssignment
+    private function assign(AssignRole $command, Permit $permit, Origin $origin): RoleAssignment
     {
         $permit->use($command);
         $this->assignable($command->realm, $command->role);
@@ -167,7 +167,7 @@ final readonly class PolicyChanges implements OperationHandler
     /**
      * @return bool Whether the principal had it
      */
-    public function unassign(UnassignRole $command, Permit $permit, Origin $origin): bool
+    private function unassign(UnassignRole $command, Permit $permit, Origin $origin): bool
     {
         $permit->use($command);
 
@@ -189,7 +189,7 @@ final readonly class PolicyChanges implements OperationHandler
     /**
      * @throws UnknownRole|UnknownAbility
      */
-    public function grant(GrantAbilities $command, Permit $permit, Origin $origin): AbilityChanges
+    private function grant(GrantAbilities $command, Permit $permit, Origin $origin): AbilityChanges
     {
         $permit->use($command);
 
@@ -199,7 +199,7 @@ final readonly class PolicyChanges implements OperationHandler
     /**
      * @throws UnknownRole|UnknownAbility
      */
-    public function revoke(RevokeAbilities $command, Permit $permit, Origin $origin): AbilityChanges
+    private function revoke(RevokeAbilities $command, Permit $permit, Origin $origin): AbilityChanges
     {
         $permit->use($command);
 
@@ -211,15 +211,15 @@ final readonly class PolicyChanges implements OperationHandler
      *
      * @throws UnknownRole|UnknownAbility
      */
-    public function set(SetAbilities $command, Permit $permit, Origin $origin): AbilityChanges
+    private function set(SetAbilities $command, Permit $permit, Origin $origin): AbilityChanges
     {
         $permit->use($command);
         $this->known($command->realm, $command->role);
-        $this->declared($command->abilities);
 
+        // An ability that isn't declared has no defaults: UnknownAbility, and nothing changes.
         return $this->transactions->run(function () use ($command, $permit, $origin): AbilityChanges {
             $this->store->bump($command->realm);
-            $taken = array_values(array_diff($this->roles->abilitiesOf($command->realm, $command->role), $command->abilities));
+            $taken = array_diff($this->roles->abilitiesOf($command->realm, $command->role), $command->abilities);
             $changes = $this->store->changes($command->realm);
 
             foreach ($command->abilities as $ability) {
@@ -240,7 +240,7 @@ final readonly class PolicyChanges implements OperationHandler
     /**
      * @throws UnknownAbility
      */
-    public function reset(ResetAbilities $command, Permit $permit, Origin $origin): AbilityChanges
+    private function reset(ResetAbilities $command, Permit $permit, Origin $origin): AbilityChanges
     {
         $permit->use($command);
         $this->declared($command->abilities ?? []);
@@ -261,8 +261,8 @@ final readonly class PolicyChanges implements OperationHandler
     private function changeAbilities(Realm $realm, string $role, array $abilities, bool $grant, string $action, Permit $permit, Origin $origin): AbilityChanges
     {
         $this->known($realm, $role);
-        $this->declared($abilities);
 
+        // An ability that isn't declared has no defaults: UnknownAbility, and nothing changes.
         return $this->transactions->run(function () use ($realm, $role, $abilities, $grant, $action, $permit, $origin): AbilityChanges {
             $this->store->bump($realm);
             $changes = $this->store->changes($realm);

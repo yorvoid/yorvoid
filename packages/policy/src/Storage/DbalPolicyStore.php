@@ -110,9 +110,9 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function principalsWith(Realm $realm, string $role): array
     {
-        $ids = $this->database->connection->fetchFirstColumn(\sprintf('SELECT DISTINCT principal_id FROM %s WHERE realm = ? AND role = ? ORDER BY principal_id', $this->table(self::ASSIGNMENT_TABLE)), [$realm->name, $role]);
+        $rows = $this->database->connection->fetchAllAssociative(\sprintf('SELECT DISTINCT principal_id FROM %s WHERE realm = ? AND role = ? ORDER BY principal_id', $this->table(self::ASSIGNMENT_TABLE)), [$realm->name, $role]);
 
-        return array_map(static fn (mixed $id): PrincipalId => PrincipalId::fromString(\is_string($id) ? $id : throw new \UnexpectedValueException('A principal ID isn\'t a string.')), $ids);
+        return array_map(static fn (array $row): PrincipalId => PrincipalId::fromString(Row::string($row, 'principal_id')), $rows);
     }
 
     public function assign(RoleAssignment $assignment): void
@@ -145,9 +145,9 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function version(Realm $realm): int
     {
-        $version = $this->database->connection->fetchOne(\sprintf('SELECT version FROM %s WHERE realm = ?', $this->table(self::VERSION_TABLE)), [$realm->name]);
+        $row = $this->database->connection->fetchAssociative(\sprintf('SELECT version FROM %s WHERE realm = ?', $this->table(self::VERSION_TABLE)), [$realm->name]);
 
-        return false === $version ? 0 : (int) (is_numeric($version) ? $version : throw new \UnexpectedValueException('The policy version isn\'t a number.'));
+        return false === $row ? 0 : Row::int($row, 'version');
     }
 
     public function bump(Realm $realm): int
@@ -158,8 +158,6 @@ final readonly class DbalPolicyStore implements PolicyStore
         if (0 === $this->database->connection->executeStatement(\sprintf('UPDATE %s SET version = version + 1 WHERE realm = ?', $table), [$realm->name])) {
             try {
                 $this->database->connection->insert($table, ['realm' => $realm->name, 'version' => 1]);
-
-                return 1;
             } catch (UniqueConstraintViolationException) {
                 // Another change made the row first; wait for it like any other.
                 $this->database->connection->executeStatement(\sprintf('UPDATE %s SET version = version + 1 WHERE realm = ?', $table), [$realm->name]);

@@ -6,14 +6,21 @@ namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\UuidV7;
+use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Duration;
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\NotPermitted;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Verdict;
+use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalId;
+use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Policy\Change\AssignRole;
 use YorvoID\Policy\Change\CreateRole;
@@ -24,6 +31,8 @@ use YorvoID\Policy\Change\ResetAbilities;
 use YorvoID\Policy\Change\RevokeAbilities;
 use YorvoID\Policy\Change\SetAbilities;
 use YorvoID\Policy\Change\UnassignRole;
+use YorvoID\Policy\NoEscalation;
+use YorvoID\Policy\UnknownAbility;
 use YorvoID\Policy\UnknownRole;
 use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
@@ -44,28 +53,30 @@ final class PolicyChangesTest extends TestCase
         $until = new \DateTimeImmutable('2026-12-01 10:00:00.123456 UTC');
 
         $world->asOperator(new CreateRole($world->realm, 'reviewer', 'Reviewer', from: 'member'));
+        $world->asOperator(new CreateRole($world->realm, 'helper', 'Helper'));
         $world->asOperator(new RelabelRole($world->realm, 'reviewer', 'Senior'));
         $assignment = $world->asOperator(new AssignRole($world->realm, self::id($ada), 'reviewer', new ResourceRef('site', '1'), $until));
         self::assertTrue($world->asOperator(new UnassignRole($world->realm, self::id($ada), 'reviewer', new ResourceRef('site', '1'))));
         self::assertFalse($world->asOperator(new UnassignRole($world->realm, self::id($ada), 'reviewer')), 'There\'s none in the whole realm.');
-        $world->asOperator(new GrantAbilities($world->realm, 'reviewer', ['acme.pages.publish', 'acme.pages.publish']));
+        $world->asOperator(new GrantAbilities($world->realm, 'reviewer', ['acme.pages.publish', 'acme.pages.publish', 'acme.pages.view_drafts']));
         $world->asOperator(new RevokeAbilities($world->realm, 'reviewer', ['acme.pages.publish']));
-        $world->asOperator(new SetAbilities($world->realm, 'reviewer', ['acme.pages.view_drafts']));
+        $world->asOperator(new SetAbilities($world->realm, 'reviewer', ['acme.pages.view_drafts', 'acme.pages.view_drafts', 'acme.pages.publish']));
         $world->asOperator(new ResetAbilities($world->realm, ['acme.pages.view_drafts']));
         $world->asOperator(new ResetAbilities($world->realm));
         $world->asOperator(new DeleteRole($world->realm, 'reviewer'));
 
-        self::assertSame($start + 11, $world->memory->policy->version($world->realm), 'Every change counts, one that changed nothing too.');
+        self::assertSame($start + 12, $world->memory->policy->version($world->realm), 'Every change counts, one that changed nothing too.');
         self::assertEquals($world->clock->now(), $assignment->assignedAt);
         self::assertEquals(new \DateTimeImmutable('2026-12-01 10:00:00 UTC'), $assignment->expiresAt, 'Stored as every time is.');
         self::assertSame([
             ['yorvoid.role.create', 'role', 'reviewer', ['from' => 'member', 'label' => 'Reviewer']],
+            ['yorvoid.role.create', 'role', 'helper', ['label' => 'Helper']],
             ['yorvoid.role.relabel', 'role', 'reviewer', ['label' => 'Senior']],
             ['yorvoid.role.assign', 'principal', $id, ['expires_at' => '2026-12-01T10:00:00+00:00', 'role' => 'reviewer', 'scope' => 'site:1']],
             ['yorvoid.role.unassign', 'principal', $id, ['role' => 'reviewer', 'scope' => 'site:1']],
-            ['yorvoid.ability.grant', 'role', 'reviewer', ['abilities' => ['acme.pages.publish']]],
+            ['yorvoid.ability.grant', 'role', 'reviewer', ['abilities' => ['acme.pages.publish', 'acme.pages.view_drafts']]],
             ['yorvoid.ability.revoke', 'role', 'reviewer', ['abilities' => ['acme.pages.publish']]],
-            ['yorvoid.ability.set', 'role', 'reviewer', ['abilities' => ['acme.pages.view_drafts']]],
+            ['yorvoid.ability.set', 'role', 'reviewer', ['abilities' => ['acme.pages.view_drafts', 'acme.pages.publish']]],
             ['yorvoid.ability.reset', null, null, ['abilities' => ['acme.pages.view_drafts']]],
             ['yorvoid.ability.reset', null, null, ['abilities' => 'all']],
             ['yorvoid.role.delete', 'role', 'reviewer', []],
@@ -77,9 +88,20 @@ final class PolicyChangesTest extends TestCase
         }
     }
 
-    public function testRefusesUnknownRolesAndPrincipals(): void
+    public function testRefusesUnknownRolesAbilitiesAndPrincipals(): void
     {
         $world = new PolicyWorld();
+
+        foreach ([new GrantAbilities($world->realm, 'editor', ['acme.ghost']), new SetAbilities($world->realm, 'editor', ['acme.ghost']), new ResetAbilities($world->realm, ['acme.ghost'])] as $command) {
+            try {
+                $world->asOperator($command);
+                self::fail(\sprintf('%s ran for an unknown ability.', $command::class));
+            } catch (UnknownAbility $error) {
+                self::assertSame('acme.ghost', $error->ability);
+            }
+        }
+
+        self::assertTrue($world->roles->changes($world->realm)->isEmpty(), 'Nothing changed.');
 
         foreach ([new AssignRole($world->realm, self::id($world->principal()), 'ghost'), new GrantAbilities($world->realm, 'ghost', []), new RelabelRole($world->realm, 'ghost', 'G'), new DeleteRole($world->realm, 'ghost'), new SetAbilities($world->realm, 'ghost', [])] as $command) {
             try {
@@ -131,6 +153,15 @@ final class PolicyChangesTest extends TestCase
         self::assertTrue($world->allows($member, 'acme.pages.publish'));
     }
 
+    public function testTheProofsWindowCanBeLonger(): void
+    {
+        $stepUp = new StubStepUpCheck();
+        $world = new PolicyWorld(stepUp: $stepUp, window: Duration::minutes(15));
+        $world->as($world->principal('admin'), new AssignRole($world->realm, self::id($world->principal()), 'admin'));
+
+        self::assertSame(900, $stepUp->asked[0]->within->seconds);
+    }
+
     public function testWithoutAStepUpCheckOnlyTheOperatorGivesThem(): void
     {
         $world = new PolicyWorld();
@@ -160,8 +191,10 @@ final class PolicyChangesTest extends TestCase
         $refusals = [
             'They\'d change what they don\'t hold themselves: acme.pages.publish.' => new ResetAbilities($world->realm),
             'They\'d change what they don\'t hold themselves: acme.pages.delete.' => new ResetAbilities($world->realm, ['acme.pages.delete']),
-            'They\'d change what they don\'t hold themselves: acme.pages.view_drafts, acme.pages.publish, acme.pages.delete.' => new SetAbilities($world->realm, 'editor', []),
+            'They\'d change what they don\'t hold themselves: acme.pages.publish, acme.pages.view_drafts, acme.pages.delete.' => new SetAbilities($world->realm, 'editor', ['acme.pages.publish']),
             '"admin" is a super role: only someone with one gives it or takes it.' => new AssignRole($world->realm, self::id($manager), 'admin'),
+            'They\'d change what they don\'t hold themselves: acme.pages.purge, acme.pages.publish.' => new SetAbilities($world->realm, 'member', ['acme.pages.purge']),
+            'They\'d change what they don\'t hold themselves: acme.pages.delete, acme.pages.purge, acme.pages.publish.' => new SetAbilities($world->realm, 'member', ['acme.pages.delete', 'acme.pages.purge']),
         ];
 
         foreach ($refusals as $reason => $command) {
@@ -174,7 +207,21 @@ final class PolicyChangesTest extends TestCase
         }
 
         $world->as($manager, new SetAbilities($world->realm, 'manager', ['acme.sites.update', YorvoIDDeclarations::ROLES_MANAGE, YorvoIDDeclarations::PERMISSIONS_MANAGE]));
-        $this->addToAssertionCount(1);
+
+        try {
+            $world->as($manager, new AssignRole($world->realm, self::id($manager), 'ghost'));
+            self::fail('An unknown role was given.');
+        } catch (UnknownRole) {
+            // Not a refusal: there's nothing to escalate to.
+        }
+
+        $escalation = new NoEscalation($world->roles);
+        $unrelated = Request::forOperation($world->catalogue->get('yorvoid.principal.create'), new CreatePrincipal($world->realm, PrincipalKind::Human), $manager, new Origin(OriginKind::Web), new \DateTimeImmutable());
+        self::assertFalse($escalation->matches($unrelated));
+        self::assertSame('They hold everything they change.', $escalation->evaluate($unrelated)->detail);
+        self::assertFalse($escalation->matches(Request::forOperation($world->catalogue->get('yorvoid.role.create'), new CreateRole($world->realm, 'x', 'X'), $manager, new Origin(OriginKind::Web), new \DateTimeImmutable())), 'A new role without abilities gives nothing.');
+        self::assertFalse($escalation->matches(Request::forOperation($world->catalogue->get('yorvoid.role.assign'), new AssignRole($world->realm, self::id($manager), 'admin'), new Operator(), new Origin(OriginKind::Console), new \DateTimeImmutable())), 'The operator is the final authority.');
+        self::assertSame('yorvoid.policy.no_escalation', $escalation->name());
     }
 
     private static function id(Actor $actor): PrincipalId

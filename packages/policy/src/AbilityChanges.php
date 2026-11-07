@@ -21,8 +21,8 @@ final readonly class AbilityChanges
     public array $revoke;
 
     /**
-     * @param array<string, list<string>> $grant
-     * @param array<string, list<string>> $revoke
+     * @param array<string, array<int, string>> $grant
+     * @param array<string, array<int, string>> $revoke
      */
     public function __construct(array $grant = [], array $revoke = [])
     {
@@ -98,7 +98,7 @@ final readonly class AbilityChanges
         $abilities = array_keys($this->grant + $this->revoke);
         sort($abilities, \SORT_STRING);
 
-        return array_map(strval(...), $abilities);
+        return $abilities;
     }
 
     public function isEmpty(): bool
@@ -112,9 +112,9 @@ final readonly class AbilityChanges
     }
 
     /**
-     * @param array<string, list<string>> $lists
+     * @param array<string, array<int, string>> $lists
      *
-     * @return array<string, list<string>>
+     * @return array<string, array<int, string>>
      */
     private static function strip(array $lists, string $role): array
     {
@@ -128,17 +128,17 @@ final readonly class AbilityChanges
     }
 
     /**
-     * @param list<string> $roles
+     * @param array<int, string> $roles
      *
-     * @return list<string>
+     * @return array<int, string> Normalised by the constructor
      */
     private static function without(array $roles, string $role): array
     {
-        return array_values(array_filter($roles, static fn (string $other): bool => $other !== $role));
+        return array_filter($roles, static fn (string $other): bool => $other !== $role);
     }
 
     /**
-     * @param array<string, list<string>> $lists
+     * @param array<string, array<int, string>> $lists
      *
      * @return array<string, non-empty-list<string>>
      */
@@ -147,7 +147,7 @@ final readonly class AbilityChanges
         $normal = [];
 
         foreach ($lists as $ability => $roles) {
-            $roles = array_values(array_unique($roles));
+            $roles = array_unique($roles);
             sort($roles, \SORT_STRING);
 
             if ([] !== $roles) {

@@ -77,6 +77,26 @@ final class PrincipalAuthorityTest extends TestCase
         }
     }
 
+    public function testAPrincipalLoadedAlreadyIsntReadAgain(): void
+    {
+        $now = new \DateTimeImmutable('2026-11-07 18:00:00 UTC');
+        $id = new PrincipalId(new UuidV7());
+        $suspended = new Principal($id, new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Suspended, $now, $now, $now);
+        $store = new InMemoryPrincipalStore();
+        $store->add(new Principal($id, new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now));
+        $member = new Member(new Realm('acme'), $id);
+
+        // The loaded one says suspended, the store active: the loaded one is what counts.
+        $loaded = new PrincipalAuthority($store, static fn (Actor $actor): ?Principal => $actor === $member ? $suspended : null);
+        self::assertSame('The acting principal is suspended.', $loaded->check(self::request($member))->detail);
+        self::assertSame(TruthValue::Holds, $loaded->check(self::request(new Member(new Realm('acme'), $id)))->value, 'Another actor\'s isn\'t loaded.');
+
+        foreach ([new Principal(new PrincipalId(new UuidV7()), new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Suspended, $now, $now, $now), new Principal($id, new Realm('globex'), PrincipalKind::Human, PrincipalStatus::Suspended, $now, $now, $now)] as $other) {
+            $mismatched = new PrincipalAuthority($store, static fn (Actor $actor): Principal => $other);
+            self::assertSame(TruthValue::Holds, $mismatched->check(self::request($member))->value, 'A loaded principal that isn\'t the actor\'s is ignored.');
+        }
+    }
+
     /**
      * @return array{PrincipalAuthority, PrincipalId}
      */

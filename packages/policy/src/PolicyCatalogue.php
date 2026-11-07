@@ -33,7 +33,11 @@ final readonly class PolicyCatalogue
     {
         $abilities = [];
         $roles = [];
-        $all = iterator_to_array($declarations, false);
+        $all = [];
+
+        foreach ($declarations as $declaration) {
+            $all[] = $declaration;
+        }
 
         foreach ($all as $declaration) {
             foreach ($declaration->roles() as $role) {

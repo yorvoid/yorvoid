@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Authorization;
 
+use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\PrincipalStore;
 
@@ -16,8 +18,13 @@ use YorvoID\Core\Principal\PrincipalStore;
  */
 final readonly class PrincipalAuthority implements AuthorityCheck
 {
+    /**
+     * @param (\Closure(Actor): ?Principal)|null $loaded The actor's principal when it's loaded already, e.g. by
+     *                                                   the request's session check: read once per request (PERF-07)
+     */
     public function __construct(
         private PrincipalStore $principals,
+        private ?\Closure $loaded = null,
     ) {
     }
 
@@ -33,7 +40,8 @@ final readonly class PrincipalAuthority implements AuthorityCheck
             return Truth::fails('The actor acts in another realm than the request\'s.');
         }
 
-        $principal = $this->principals->get($actor->realm, $actor->principalId);
+        $known = null === $this->loaded ? null : ($this->loaded)($actor);
+        $principal = null !== $known && $known->id->equals($actor->principalId) && $known->realm->equals($actor->realm) ? $known : $this->principals->get($actor->realm, $actor->principalId);
 
         if (null === $principal) {
             return Truth::unknown(IndeterminateReason::MissingData, \sprintf('The acting principal %s isn\'t on record.', $actor->principalId));

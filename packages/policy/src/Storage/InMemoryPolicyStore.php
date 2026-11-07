@@ -13,7 +13,7 @@ use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\RoleAssignment;
 
 /**
- * @implements InMemoryStore<array{roles?: array<string, array<string, string>>, changes?: array<string, AbilityChanges>, assignments?: list<RoleAssignment>, versions?: array<string, int>}>
+ * @implements InMemoryStore<array{roles?: array<string, array<string, string>>, changes?: array<string, AbilityChanges>, assignments?: array<string, RoleAssignment>, versions?: array<string, int>}>
  *
  * @api
  */
@@ -25,7 +25,7 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
     /** @var array<string, AbilityChanges> By realm */
     private array $changes = [];
 
-    /** @var list<RoleAssignment> */
+    /** @var array<string, RoleAssignment> By realm, principal, role and scope */
     private array $assignments = [];
 
     /** @var array<string, int> By realm */
@@ -61,7 +61,7 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     public function assignments(Realm $realm, PrincipalId $principalId): array
     {
-        $assignments = array_values(array_filter($this->assignments, static fn (RoleAssignment $assignment): bool => $assignment->realm->equals($realm) && $assignment->principalId->equals($principalId)));
+        $assignments = array_filter($this->assignments, static fn (RoleAssignment $assignment): bool => $assignment->realm->equals($realm) && $assignment->principalId->equals($principalId));
         usort($assignments, static fn (RoleAssignment $a, RoleAssignment $b): int => [$a->role, (string) $a->scope] <=> [$b->role, (string) $b->scope]);
 
         return $assignments;
@@ -84,25 +84,34 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     public function assign(RoleAssignment $assignment): void
     {
-        $this->assignments = [...array_values(array_filter($this->assignments, static fn (RoleAssignment $other): bool => !$other->sameAs($assignment))), $assignment];
+        $this->assignments[self::key($assignment->realm, $assignment->principalId, $assignment->role, $assignment->scope)] = $assignment;
     }
 
     public function unassign(Realm $realm, PrincipalId $principalId, string $role, ?ResourceRef $scope): bool
     {
-        $before = \count($this->assignments);
-        $this->assignments = array_values(array_filter($this->assignments, static fn (RoleAssignment $other): bool => !($other->realm->equals($realm) && $other->principalId->equals($principalId) && $other->role === $role && (string) $other->scope === (string) $scope)));
+        $key = self::key($realm, $principalId, $role, $scope);
+        $had = isset($this->assignments[$key]);
+        unset($this->assignments[$key]);
 
-        return \count($this->assignments) < $before;
+        return $had;
     }
 
     public function unassignRole(Realm $realm, string $role): void
     {
-        $this->assignments = array_values(array_filter($this->assignments, static fn (RoleAssignment $other): bool => !($other->realm->equals($realm) && $other->role === $role)));
+        foreach ($this->assignments as $key => $assignment) {
+            if ($assignment->realm->equals($realm) && $assignment->role === $role) {
+                unset($this->assignments[$key]);
+            }
+        }
     }
 
     public function forgetPrincipal(Realm $realm, PrincipalId $principalId): void
     {
-        $this->assignments = array_values(array_filter($this->assignments, static fn (RoleAssignment $other): bool => !($other->realm->equals($realm) && $other->principalId->equals($principalId))));
+        foreach ($this->assignments as $key => $assignment) {
+            if ($assignment->realm->equals($realm) && $assignment->principalId->equals($principalId)) {
+                unset($this->assignments[$key]);
+            }
+        }
     }
 
     public function version(Realm $realm): int
@@ -126,5 +135,10 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
         $this->changes = $snapshot['changes'] ?? [];
         $this->assignments = $snapshot['assignments'] ?? [];
         $this->versions = $snapshot['versions'] ?? [];
+    }
+
+    private static function key(Realm $realm, PrincipalId $principalId, string $role, ?ResourceRef $scope): string
+    {
+        return implode("\n", [$realm->name, $principalId->uuid->toRfc4122(), $role, (string) $scope]);
     }
 }

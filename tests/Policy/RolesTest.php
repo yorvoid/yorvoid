@@ -146,6 +146,21 @@ final class RolesTest extends TestCase
         self::assertSame([], $this->store->assignments($this->realm, self::id($ada)), 'Nothing is stored.');
     }
 
+    public function testEachRoleCountsOnce(): void
+    {
+        $ada = $this->principal('editor');
+        $this->store->assign(new RoleAssignment($this->realm, self::id($ada), 'editor', $this->clock->now(), new ResourceRef('page', '1')));
+        $this->sourced = ['editor', 'member'];
+        $request = Request::forAbility('acme.pages.publish', $this->realm, new ResourceRef('page', '1'), $ada, new Origin(OriginKind::Web), $this->clock->now());
+
+        self::assertSame(['everyone', 'editor', 'member'], $this->roles()->rolesOf($request));
+    }
+
+    public function testAStrictAbilityIsSaidToBeOneOnlyToASuperRole(): void
+    {
+        self::assertSame('None of their roles has "acme.pages.purge".', $this->decide($this->principal('editor'), 'acme.pages.purge')->reason);
+    }
+
     public function testAnUndeclaredAbilityIsNobodys(): void
     {
         $decision = $this->decide($this->principal('admin'), 'acme.pages.edit');
@@ -223,6 +238,7 @@ final class RolesTest extends TestCase
         self::assertCount(1, $counting, 'One reading for the request.');
         self::assertSame([], $roles->missing($request, ['acme.pages.publish', 'acme.pages.view']));
         self::assertSame(['acme.pages.purge'], $roles->missing($request, ['acme.pages.purge', 'acme.pages.delete']));
+        self::assertSame(['acme.pages.purge'], $roles->missing($request, ['acme.pages.view', 'acme.pages.purge']), 'A list, in their order.');
         self::assertSame(['everyone', 'editor'], $roles->rolesOf(Request::forAbility('acme.pages.publish', $this->realm, null, $ada, new Origin(OriginKind::Web), $this->clock->now())));
         self::assertCount(2, $counting, 'Another request reads again.');
     }

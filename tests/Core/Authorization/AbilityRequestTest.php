@@ -17,7 +17,10 @@ use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Operation\AbilityPolicy;
+use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\AuthorizedBy;
+use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Verdict;
@@ -55,6 +58,22 @@ final class AbilityRequestTest extends TestCase
         self::assertSame(Verdict::Permit, $permitted->verdict);
         self::assertSame(AuthorizedBy::Ability, $permitted->basis);
         self::assertSame('has it', $permitted->reason);
+    }
+
+    public function testAnAbilityPolicyDecidesOperationsOnly(): void
+    {
+        $policy = new class implements AbilityPolicy {
+            public function holds(Actor $actor, string $ability, Command $command): bool
+            {
+                return true;
+            }
+        };
+        $evaluator = Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $policy, commandLine: false);
+
+        $decision = $evaluator->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
+
+        self::assertSame(Verdict::Deny, $decision->verdict, 'It\'s asked with a command, which an ability alone hasn\'t.');
+        self::assertSame('No permit applies to "acme.pages.edit".', $decision->reason);
     }
 
     public function testTheRequestCarriesTheAbilityTheResourceAndOneMoment(): void

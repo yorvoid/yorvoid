@@ -6,10 +6,13 @@ namespace YorvoID\Symfony;
 
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use YorvoID\Authn\Attempt\AttemptLimits;
+use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Principal\Principal;
 use YorvoID\Flows\Flow;
 use YorvoID\Notifications\NotificationSettings;
 use YorvoID\Passkeys\ClonePolicy;
@@ -21,6 +24,7 @@ use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Flow\FlowCustomizer;
 use YorvoID\Symfony\Flow\FlowSource;
+use YorvoID\Symfony\Security\CurrentSession;
 
 /**
  * YorvoID's typed configuration from the bundle's: the container calls these.
@@ -58,6 +62,26 @@ final class Factories
     }
 
     /**
+     * The principal of the request's own session, as its check loaded it, for that session as the actor.
+     *
+     * @param \Closure(): CurrentSession $current
+     *
+     * @return \Closure(Actor): ?Principal
+     */
+    public static function loadedPrincipal(\Closure $current): \Closure
+    {
+        return static function (Actor $actor) use ($current): ?Principal {
+            if (!$actor instanceof Session) {
+                return null;
+            }
+
+            $session = $current()->get();
+
+            return null !== $session && $session->id->equals($actor->id) ? $current()->principal() : null;
+        };
+    }
+
+    /**
      * Each rule as its two elements, a permit and a forbid.
      *
      * @param iterable<Rule> $rules
@@ -83,7 +107,13 @@ final class Factories
      */
     public static function elements(iterable $elements, array $rules): array
     {
-        return [...iterator_to_array($elements, false), ...$rules];
+        $all = [];
+
+        foreach ($elements as $element) {
+            $all[] = $element;
+        }
+
+        return [...$all, ...$rules];
     }
 
     /**

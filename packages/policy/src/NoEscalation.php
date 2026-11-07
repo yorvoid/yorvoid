@@ -60,7 +60,7 @@ final readonly class NoEscalation implements ForbidElement
             return Truth::holds(\sprintf('"%s" is a super role: only someone with one gives it or takes it.', $role));
         }
 
-        $missing = $this->roles->missing($request, array_values(array_unique($abilities)));
+        $missing = $this->roles->missing($request, array_unique($abilities));
 
         return [] === $missing
             ? Truth::fails('They hold everything they change.')

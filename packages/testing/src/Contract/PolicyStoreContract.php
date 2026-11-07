@@ -54,13 +54,17 @@ trait PolicyStoreContract
         $store->saveRole($acme, 'reviewer', 'Reviewer');
         $store->saveRole($acme, 'helper', 'Helper');
         $store->saveRole(new Realm('other'), 'guide', 'Guide');
+        $store->saveRole(new Realm('other'), 'helper', 'Other helper');
         $store->saveRole($acme, 'reviewer', 'Senior reviewer');
 
         self::assertSame(['helper' => 'Helper', 'reviewer' => 'Senior reviewer'], $store->roles($acme), 'By name; saving again relabels.');
 
+        $store->saveRole($acme, 'helper', 'Acme helper');
+        $store->deleteRole($acme, 'reviewer');
+        self::assertSame(['helper' => 'Acme helper'], $store->roles($acme));
+        self::assertSame(['guide' => 'Guide', 'helper' => 'Other helper'], $store->roles(new Realm('other')), 'Another realm\'s role of the same name stays as it was.');
         $store->deleteRole($acme, 'helper');
-        self::assertSame(['reviewer' => 'Senior reviewer'], $store->roles($acme));
-        self::assertSame(['guide' => 'Guide'], $store->roles(new Realm('other')));
+        self::assertSame(['guide' => 'Guide', 'helper' => 'Other helper'], $store->roles(new Realm('other')));
     }
 
     #[DataProvider('implementations')]
@@ -97,11 +101,13 @@ trait PolicyStoreContract
 
         self::assertSame([], $store->assignments($acme, $ada));
 
+        // Out of order: they come back by role, then scope.
+        $store->assign(new RoleAssignment($acme, $bob, 'editor', $at));
+        $store->assign(new RoleAssignment($acme, $ada, 'manager', $at, new ResourceRef('site', '43')));
         $store->assign(new RoleAssignment($acme, $ada, 'editor', $at));
         $store->assign(new RoleAssignment($acme, $ada, 'manager', $at, $site, $until));
-        $store->assign(new RoleAssignment($acme, $ada, 'manager', $at, new ResourceRef('site', '43')));
-        $store->assign(new RoleAssignment($acme, $bob, 'editor', $at));
         $store->assign(new RoleAssignment(new Realm('other'), $ada, 'admin', $at));
+        $store->assign(new RoleAssignment(new Realm('other'), $ada, 'editor', $at));
 
         $assignments = $store->assignments($acme, $ada);
         self::assertSame(['editor', 'manager', 'manager'], array_map(static fn (RoleAssignment $assignment): string => $assignment->role, $assignments));
@@ -115,16 +121,28 @@ trait PolicyStoreContract
         self::assertNull($store->assignments($acme, $ada)[1]->expiresAt, 'Assigning again replaces the one with its principal, role and scope.');
         self::assertCount(3, $store->assignments($acme, $ada));
 
-        self::assertEquals([$ada, $bob], self::sorted($store->principalsWith($acme, 'editor')));
+        self::assertEquals(self::sorted([$ada, $bob]), $store->principalsWith($acme, 'editor'), 'Sorted.');
         self::assertEquals([$ada], $store->principalsWith($acme, 'manager'), 'Each principal once.');
 
         self::assertTrue($store->unassign($acme, $ada, 'manager', $site));
         self::assertFalse($store->unassign($acme, $ada, 'manager', $site));
+        self::assertTrue($store->unassign(new Realm('other'), $ada, 'editor', null), 'One in the whole realm.');
+        self::assertCount(1, $store->assignments(new Realm('other'), $ada));
+        self::assertEquals([$ada, $bob], self::sorted($store->principalsWith($acme, 'editor')), 'Only that realm\'s.');
         self::assertFalse($store->unassign($acme, $ada, 'manager', null), 'A role on a resource isn\'t one in the whole realm.');
         self::assertSame(['site:43'], array_map(static fn (RoleAssignment $assignment): string => (string) $assignment->scope, array_values(array_filter($store->assignments($acme, $ada), static fn (RoleAssignment $assignment): bool => 'manager' === $assignment->role))));
 
+        $store->assign(new RoleAssignment(new Realm('other'), $bob, 'manager', $at));
+        self::assertTrue($store->unassign($acme, $bob, 'editor', null));
+        self::assertEquals([$ada], $store->principalsWith($acme, 'editor'), 'Another principal\'s role stays.');
+        $store->assign(new RoleAssignment($acme, $bob, 'editor', $at));
+
+        $store->assign(new RoleAssignment(new Realm('other'), $bob, 'editor', $at));
         $store->unassignRole($acme, 'editor');
+        self::assertEquals([$bob], $store->principalsWith(new Realm('other'), 'editor'), 'Another realm keeps the role.');
         self::assertSame([], $store->principalsWith($acme, 'editor'));
+        self::assertEquals([$ada], $store->principalsWith($acme, 'manager'), 'The realm\'s other roles stay.');
+        self::assertEquals([$bob], $store->principalsWith(new Realm('other'), 'manager'));
         self::assertCount(1, $store->assignments(new Realm('other'), $ada), 'Another realm\'s roles stay.');
 
         $store->forgetPrincipal($acme, $ada);

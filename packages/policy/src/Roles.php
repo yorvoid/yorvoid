@@ -31,7 +31,13 @@ final readonly class Roles
         private PolicyStore $store,
         iterable $sources = [],
     ) {
-        $this->sources = iterator_to_array($sources, false);
+        $list = [];
+
+        foreach ($sources as $source) {
+            $list[] = $source;
+        }
+
+        $this->sources = $list;
         $this->memo = new \WeakMap();
     }
 
@@ -202,9 +208,9 @@ final readonly class Roles
     /**
      * The abilities of these the request's actor doesn't hold.
      *
-     * @param list<string> $abilities
+     * @param array<int, string> $abilities
      *
-     * @return list<string>
+     * @return list<string> In their order
      */
     public function missing(Request $request, array $abilities): array
     {

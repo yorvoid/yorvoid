@@ -132,6 +132,8 @@ final class TestKernel extends Kernel implements CompilerPassInterface
 
             // An application's own abilities, decided by YorvoID's evaluator through isGranted().
             $container->register(AcmeDeclarations::class)->setAutoconfigured(true);
+            $container->register(LockedPages::class)->setAutoconfigured(true);
+            $container->register(HelpersModerate::class)->setAutoconfigured(true);
             $container->register(MeController::class)->setPublic(true)->setAutowired(true)->addTag('controller.service_arguments');
             $container->register(SignOutController::class)->setPublic(true)->setAutowired(true)->addTag('controller.service_arguments');
             $container->register('test.users', OwnUsers::class);

@@ -235,7 +235,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(PolicyChanges::class);
     $services->set('yorvoid.rule_elements', 'array')->factory([Factories::class, 'ruleElements'])->args([tagged_iterator('yorvoid.rule')]);
     $services->set(StepUpSelfService::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
-    $services->set(PrincipalAuthority::class);
+    // The request's own principal is read once, by its session's check (PERF-07); the evaluator reuses it.
+    $services->set(PrincipalAuthority::class)->arg('$loaded', inline_service(Closure::class)->factory([Factories::class, 'loadedPrincipal'])->args([service_closure(CurrentSession::class)]));
     $services->set(Evaluator::class)->factory([Evaluator::class, 'builtIn'])->args([
         service(PrincipalAuthority::class),
         null,

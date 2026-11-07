@@ -27,6 +27,7 @@ final readonly class Request
      * @param Command<mixed>|null       $command   The operation's command
      */
     private function __construct(
+        private string $subject,
         public Realm $realm,
         public ?string $ability,
         public ?ResourceRef $resource,
@@ -43,12 +44,12 @@ final readonly class Request
      */
     public static function forOperation(OperationDescription $operation, Command $command, Actor $actor, Origin $origin, \DateTimeImmutable $at): self
     {
-        return new self($command->realm, $operation->ability, $command instanceof ConcernsResource ? $command->resource() : null, $operation, $command, $actor, $origin, $at);
+        return new self($operation->name, $command->realm, $operation->ability, $command instanceof ConcernsResource ? $command->resource() : null, $operation, $command, $actor, $origin, $at);
     }
 
     public static function forAbility(string $ability, Realm $realm, ?ResourceRef $resource, Actor $actor, Origin $origin, \DateTimeImmutable $at): self
     {
-        return new self($realm, $ability, $resource, null, null, $actor, $origin, $at);
+        return new self($ability, $realm, $ability, $resource, null, null, $actor, $origin, $at);
     }
 
     /**
@@ -56,7 +57,7 @@ final readonly class Request
      */
     public function subject(): string
     {
-        return $this->operation->name ?? (string) $this->ability;
+        return $this->subject;
     }
 
     /**

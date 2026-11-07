@@ -9,6 +9,7 @@ use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\StepUpCheck;
+use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\SecurityLog;
@@ -53,6 +54,8 @@ final class PolicyWorld
 
     public readonly Operations $operations;
 
+    public readonly OperationCatalogue $catalogue;
+
     public readonly Policy $policy;
 
     /**
@@ -60,7 +63,7 @@ final class PolicyWorld
      * @param list<Rule>               $rules
      * @param list<RoleSource>         $sources
      */
-    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null)
+    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null)
     {
         $this->memory = new InMemoryStorage();
         $this->clock = new MockClock('2026-11-07 20:00:00');
@@ -68,7 +71,7 @@ final class PolicyWorld
         $catalogue = PolicyCatalogue::of([new YorvoIDDeclarations(), new AcmeDeclarations(), ...$declarations]);
         $this->roles = new Roles($catalogue, $this->memory->policy, $sources);
         $log = new SecurityLog($this->memory->log, $this->memory->transactions, clock: $this->clock);
-        $elements = [new RolePermit($this->roles, $stepUp), new NoEscalation($this->roles)];
+        $elements = [new RolePermit($this->roles, $stepUp, $window), new NoEscalation($this->roles)];
 
         foreach ($rules as $rule) {
             array_push($elements, ...RuleElements::of($rule));
@@ -79,7 +82,8 @@ final class PolicyWorld
             new Principals($this->memory->principals, $this->memory->identifiers, $log, $this->memory->transactions, clock: $this->clock),
             new PolicyChanges($catalogue, $this->memory->policy, $this->memory->principals, $log, $this->memory->transactions, $this->clock),
         ];
-        $this->operations = new Operations(OperationCatalogue::of($handlers), $evaluator, $log, $handlers);
+        $this->catalogue = OperationCatalogue::of($handlers);
+        $this->operations = new Operations($this->catalogue, $evaluator, $log, $handlers);
         $this->policy = new Policy($evaluator);
     }
 
