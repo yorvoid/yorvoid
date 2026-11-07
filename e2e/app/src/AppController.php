@@ -13,12 +13,12 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\KernelInterface;
 use YorvoID\Authn\Recovery\IssueRecoveryLink;
-use YorvoID\Authn\Recovery\RecoveryLinks;
 use YorvoID\Authn\Setup\CreateSetupCode;
-use YorvoID\Authn\Setup\SetupCodes;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
@@ -38,8 +38,7 @@ final readonly class AppController
         private Connection $connection,
         private CurrentSession $current,
         private Principals $principals,
-        private SetupCodes $setupCodes,
-        private RecoveryLinks $recoveryLinks,
+        private Operations $operations,
         private Verifier $verifier,
         private IntentSigning $signing,
         private FlowContexts $contexts,
@@ -85,7 +84,8 @@ final readonly class AppController
 
     public function setupCode(): Response
     {
-        return new Response($this->setupCodes->create(new CreateSetupCode(Realm::default(), Duration::days(1)), new Origin(OriginKind::Console))->reveal());
+        // The test app stands in for the host's shell, from its web server: as YorvoID itself.
+        return new Response($this->operations->run(new CreateSetupCode(Realm::default(), Duration::days(1)), new Operator(), new Origin(OriginKind::System, 'e2e'))->reveal());
     }
 
     public function recoveryLink(Request $request): Response
@@ -93,7 +93,7 @@ final readonly class AppController
         $principal = $this->principals->findByIdentifier(Realm::default(), IdentifierKind::Email, $request->getPayload()->getString('email'));
         \assert(null !== $principal);
 
-        return new Response($this->recoveryLinks->issue(new IssueRecoveryLink(Realm::default(), $principal->id), new Origin(OriginKind::Console))->secret->reveal());
+        return new Response($this->operations->run(new IssueRecoveryLink(Realm::default(), $principal->id), new Operator(), new Origin(OriginKind::System, 'e2e'))->secret->reveal());
     }
 
     /**

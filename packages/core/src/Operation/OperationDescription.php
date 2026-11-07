@@ -12,16 +12,20 @@ namespace YorvoID\Core\Operation;
 final readonly class OperationDescription
 {
     /**
-     * @param class-string    $command
-     * @param list<Parameter> $parameters In the constructor's order
+     * @param non-empty-list<AuthorizedBy> $authorizedBy
+     * @param class-string                 $command
+     * @param list<Parameter>              $parameters   In the constructor's order
+     * @param list<string>                 $causes       The operations it may run as its consequences
      */
     public function __construct(
         public string $name,
         public string $description,
+        public array $authorizedBy,
         public ?string $ability,
         public ?string $inverse,
         public string $command,
         public array $parameters,
+        public array $causes = [],
     ) {
     }
 }

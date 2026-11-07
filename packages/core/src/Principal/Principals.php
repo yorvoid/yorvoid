@@ -15,6 +15,8 @@ use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\OperationCancelled;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\Event\IdentifierChanged;
 use YorvoID\Core\Principal\Event\IdentifierChanging;
 use YorvoID\Core\Principal\Event\PrincipalCreated;
@@ -28,14 +30,15 @@ use YorvoID\Core\Time;
 /**
  * The principal registry (IDN-001…004, IDN-016): creates principals, changes their status and
  * identifiers, and finds them. Each change is one transaction with its security log entry and its
- * "-ing" event; the "-ed" event follows the commit.
+ * "-ing" event; the "-ed" event follows the commit. Changes run through Operations::run(), which gives
+ * each a permit.
  *
  * The security log records which kind of identifier changed, never its value: the log can't forget, and
  * an email address is personal data that must go when its owner does.
  *
  * @api
  */
-final readonly class Principals
+final readonly class Principals implements OperationHandler
 {
     /** @var list<GuardRule> */
     private array $guardRules;
@@ -57,16 +60,30 @@ final readonly class Principals
         $this->guardRules = iterator_to_array($guardRules, false);
     }
 
+    public function operations(): array
+    {
+        return [
+            CreatePrincipal::class => $this->create(...),
+            ActivatePrincipal::class => $this->activate(...),
+            SuspendPrincipal::class => $this->suspend(...),
+            DeletePrincipal::class => $this->delete(...),
+            SetIdentifier::class => $this->setIdentifier(...),
+            RemoveIdentifier::class => $this->removeIdentifier(...),
+            VerifyIdentifier::class => $this->verifyIdentifier(...),
+        ];
+    }
+
     /**
-     * @param PrincipalId|null $actor Who asked, if a principal did (not, e.g., an installer on the command line)
-     *
      * @throws InvalidIdentifier  When the email address or username isn't valid
      * @throws IdentifierTaken    When another principal in the realm has it
      * @throws OperationCancelled When a listener of PrincipalCreating refuses it
      */
-    public function create(CreatePrincipal $command, Origin $origin, ?PrincipalId $actor = null): Principal
+    public function create(CreatePrincipal $command, Permit $permit, Origin $origin): Principal
     {
-        return $this->transactions->run(function () use ($command, $origin, $actor): Principal {
+        $permit->use($command);
+        $actor = $permit->actor->principalId;
+
+        return $this->transactions->run(function () use ($command, $permit, $origin, $actor): Principal {
             $now = Time::stored($this->clock->now());
             $principal = new Principal(new PrincipalId($this->ids->next()), $command->realm, $command->kind, $command->status, $now, $now, $now);
             $identifiers = [];
@@ -79,7 +96,7 @@ final readonly class Principals
                 $identifiers[] = new Identifier($principal->realm, $principal->id, IdentifierKind::Username, $command->username, $now);
             }
 
-            $this->refuseIfCancelled('yorvoid.principal.create', new PrincipalCreating($principal, $identifiers, $origin, $actor));
+            $this->refuseIfCancelled('yorvoid.principal.create', new PrincipalCreating($principal, $identifiers, $origin, $actor, $permit));
             $this->store->add($principal);
 
             foreach ($identifiers as $identifier) {
@@ -92,8 +109,8 @@ final readonly class Principals
                 'identifiers' => array_map(static fn (Identifier $identifier): string => $identifier->kind->value, $identifiers),
             ]);
 
-            $this->transactions->afterCommit(function () use ($principal, $identifiers, $origin, $actor): void {
-                $this->events->dispatch(new PrincipalCreated($principal, $identifiers, $origin, $actor));
+            $this->transactions->afterCommit(function () use ($principal, $identifiers, $origin, $actor, $permit): void {
+                $this->events->dispatch(new PrincipalCreated($principal, $identifiers, $origin, $actor, $permit));
             });
 
             return $principal;
@@ -105,9 +122,11 @@ final readonly class Principals
      *
      * @throws UnknownPrincipal|InvalidStatusChange|ConcurrentChange|OperationCancelled|GuardRuleViolated
      */
-    public function activate(ActivatePrincipal $command, Origin $origin, ?PrincipalId $actor = null): Principal
+    public function activate(ActivatePrincipal $command, Permit $permit, Origin $origin): Principal
     {
-        return $this->changeStatus('yorvoid.principal.activate', $command->realm, $command->principalId, PrincipalStatus::Active, $origin, $actor);
+        $permit->use($command);
+
+        return $this->changeStatus('yorvoid.principal.activate', $command->realm, $command->principalId, PrincipalStatus::Active, $origin, $permit);
     }
 
     /**
@@ -115,9 +134,11 @@ final readonly class Principals
      *
      * @throws UnknownPrincipal|InvalidStatusChange|ConcurrentChange|OperationCancelled|GuardRuleViolated
      */
-    public function suspend(SuspendPrincipal $command, Origin $origin, ?PrincipalId $actor = null): Principal
+    public function suspend(SuspendPrincipal $command, Permit $permit, Origin $origin): Principal
     {
-        return $this->changeStatus('yorvoid.principal.suspend', $command->realm, $command->principalId, PrincipalStatus::Suspended, $origin, $actor);
+        $permit->use($command);
+
+        return $this->changeStatus('yorvoid.principal.suspend', $command->realm, $command->principalId, PrincipalStatus::Suspended, $origin, $permit);
     }
 
     /**
@@ -126,9 +147,11 @@ final readonly class Principals
      *
      * @throws UnknownPrincipal|InvalidStatusChange|ConcurrentChange|OperationCancelled|GuardRuleViolated
      */
-    public function delete(DeletePrincipal $command, Origin $origin, ?PrincipalId $actor = null): Principal
+    public function delete(DeletePrincipal $command, Permit $permit, Origin $origin): Principal
     {
-        return $this->changeStatus('yorvoid.principal.delete', $command->realm, $command->principalId, PrincipalStatus::Deleted, $origin, $actor);
+        $permit->use($command);
+
+        return $this->changeStatus('yorvoid.principal.delete', $command->realm, $command->principalId, PrincipalStatus::Deleted, $origin, $permit);
     }
 
     /**
@@ -137,16 +160,18 @@ final readonly class Principals
      * @throws IdentifierTaken    When another principal in the realm has it
      * @throws OperationCancelled When a listener of IdentifierChanging refuses it
      */
-    public function setIdentifier(SetIdentifier $command, Origin $origin, ?PrincipalId $actor = null): Identifier
+    public function setIdentifier(SetIdentifier $command, Permit $permit, Origin $origin): Identifier
     {
-        return $this->transactions->run(function () use ($command, $origin, $actor): Identifier {
+        $permit->use($command);
+
+        return $this->transactions->run(function () use ($command, $permit, $origin): Identifier {
             $principal = $this->living($command->realm, $command->principalId);
             $before = $this->identifiers->of($principal->realm, $principal->id)[$command->kind->value] ?? null;
             $now = Time::stored($this->clock->now());
             $verifiedAt = $command->verified ? $now : ($before?->normalized === $command->kind->normalize($command->value) ? $before->verifiedAt : null);
             $after = new Identifier($principal->realm, $principal->id, $command->kind, $command->value, $before->createdAt ?? $now, $verifiedAt);
 
-            $this->changeIdentifier('yorvoid.identifier.set', $principal, $before, $after, $origin, $actor, ['kind' => $command->kind->value, 'verified' => $after->isVerified()]);
+            $this->changeIdentifier('yorvoid.identifier.set', $principal, $before, $after, $origin, $permit, ['kind' => $command->kind->value, 'verified' => $after->isVerified()]);
 
             return $after;
         });
@@ -156,14 +181,16 @@ final readonly class Principals
      * @throws UnknownPrincipal   When there's no such principal, or it's deleted
      * @throws OperationCancelled When a listener of IdentifierChanging refuses it
      */
-    public function removeIdentifier(RemoveIdentifier $command, Origin $origin, ?PrincipalId $actor = null): void
+    public function removeIdentifier(RemoveIdentifier $command, Permit $permit, Origin $origin): void
     {
-        $this->transactions->run(function () use ($command, $origin, $actor): void {
+        $permit->use($command);
+
+        $this->transactions->run(function () use ($command, $permit, $origin): void {
             $principal = $this->living($command->realm, $command->principalId);
             $before = $this->identifiers->of($principal->realm, $principal->id)[$command->kind->value] ?? null;
 
             if (null !== $before) {
-                $this->changeIdentifier('yorvoid.identifier.remove', $principal, $before, null, $origin, $actor, ['kind' => $command->kind->value]);
+                $this->changeIdentifier('yorvoid.identifier.remove', $principal, $before, null, $origin, $permit, ['kind' => $command->kind->value]);
             }
         });
     }
@@ -176,9 +203,11 @@ final readonly class Principals
      * @throws UnknownPrincipal   When there's no such principal, or it's deleted
      * @throws OperationCancelled When a listener of IdentifierChanging refuses it
      */
-    public function verifyIdentifier(VerifyIdentifier $command, Origin $origin, ?PrincipalId $actor = null): ?Identifier
+    public function verifyIdentifier(VerifyIdentifier $command, Permit $permit, Origin $origin): ?Identifier
     {
-        return $this->transactions->run(function () use ($command, $origin, $actor): ?Identifier {
+        $permit->use($command);
+
+        return $this->transactions->run(function () use ($command, $permit, $origin): ?Identifier {
             $principal = $this->living($command->realm, $command->principalId);
             $before = $this->identifiers->of($principal->realm, $principal->id)[$command->kind->value] ?? null;
 
@@ -197,7 +226,7 @@ final readonly class Principals
             }
 
             $after = new Identifier($principal->realm, $principal->id, $before->kind, $before->value, $before->createdAt, Time::stored($this->clock->now()));
-            $this->changeIdentifier('yorvoid.identifier.verify', $principal, $before, $after, $origin, $actor, ['kind' => $before->kind->value]);
+            $this->changeIdentifier('yorvoid.identifier.verify', $principal, $before, $after, $origin, $permit, ['kind' => $before->kind->value]);
 
             return $after;
         });
@@ -239,13 +268,15 @@ final readonly class Principals
         return $this->identifiers->of($realm, $id);
     }
 
-    private function changeStatus(string $operation, Realm $realm, PrincipalId $id, PrincipalStatus $status, Origin $origin, ?PrincipalId $actor): Principal
+    private function changeStatus(string $operation, Realm $realm, PrincipalId $id, PrincipalStatus $status, Origin $origin, Permit $permit): Principal
     {
-        return $this->transactions->run(function () use ($operation, $realm, $id, $status, $origin, $actor): Principal {
+        $actor = $permit->actor->principalId;
+
+        return $this->transactions->run(function () use ($operation, $realm, $id, $status, $origin, $actor, $permit): Principal {
             $before = $this->store->get($realm, $id) ?? throw new UnknownPrincipal($realm, $id);
             $after = $before->withStatus($status, $this->clock->now());
 
-            $this->refuseIfCancelled($operation, new PrincipalStatusChanging($before, $after, $origin, $actor));
+            $this->refuseIfCancelled($operation, new PrincipalStatusChanging($before, $after, $origin, $actor, $permit));
 
             if (!$this->store->changeStatus($before, $after)) {
                 throw new ConcurrentChange($before);
@@ -272,8 +303,8 @@ final readonly class Principals
                 }
             }
 
-            $this->transactions->afterCommit(function () use ($before, $after, $origin, $actor): void {
-                $this->events->dispatch(new PrincipalStatusChanged($before, $after, $origin, $actor));
+            $this->transactions->afterCommit(function () use ($before, $after, $origin, $actor, $permit): void {
+                $this->events->dispatch(new PrincipalStatusChanged($before, $after, $origin, $actor, $permit));
             });
 
             return $after;
@@ -283,9 +314,11 @@ final readonly class Principals
     /**
      * @param array<string, mixed> $details
      */
-    private function changeIdentifier(string $operation, Principal $principal, ?Identifier $before, ?Identifier $after, Origin $origin, ?PrincipalId $actor, array $details): void
+    private function changeIdentifier(string $operation, Principal $principal, ?Identifier $before, ?Identifier $after, Origin $origin, Permit $permit, array $details): void
     {
-        $this->refuseIfCancelled($operation, new IdentifierChanging($principal->id, $before, $after, $origin, $actor));
+        $actor = $permit->actor->principalId;
+
+        $this->refuseIfCancelled($operation, new IdentifierChanging($principal->id, $before, $after, $origin, $actor, $permit));
 
         if (null !== $before) {
             $this->identifiers->remove($principal->realm, $principal->id, $before->kind);
@@ -297,8 +330,8 @@ final readonly class Principals
 
         $this->log->record($principal->realm, $operation, Outcome::Success, $origin, $actor, 'principal', (string) $principal->id, $details);
 
-        $this->transactions->afterCommit(function () use ($principal, $before, $after, $origin, $actor): void {
-            $this->events->dispatch(new IdentifierChanged($principal->id, $before, $after, $origin, $actor));
+        $this->transactions->afterCommit(function () use ($principal, $before, $after, $origin, $actor, $permit): void {
+            $this->events->dispatch(new IdentifierChanged($principal->id, $before, $after, $origin, $actor, $permit));
         });
     }
 

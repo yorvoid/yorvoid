@@ -34,6 +34,7 @@ use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
 use YorvoID\Core\Storage\StorageLocation;
+use YorvoID\Tests\Support\Permits;
 
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 
@@ -87,7 +88,7 @@ while (!file_exists($start)) {
 }
 
 try {
-    $principals->suspend(new SuspendPrincipal(new Realm('acme'), PrincipalId::fromString($id)), new Origin(OriginKind::Job, 'process '.getmypid()));
+    Permits::call($principals->suspend(...), new SuspendPrincipal(new Realm('acme'), PrincipalId::fromString($id)), new Origin(OriginKind::Job, 'process '.getmypid()));
 } catch (GuardRuleViolated) {
     exit(3);
 }

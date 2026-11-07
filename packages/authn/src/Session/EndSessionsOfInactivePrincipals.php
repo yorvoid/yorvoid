@@ -23,7 +23,8 @@ final readonly class EndSessionsOfInactivePrincipals
     public function __invoke(PrincipalStatusChanging $event): void
     {
         if (!$event->after->isActive()) {
-            $this->sessions->endAll(new EndSessions($event->after->realm, $event->after->id, SessionEndReason::PrincipalDeactivated), $event->origin, $event->actor);
+            $command = new EndSessions($event->after->realm, $event->after->id, SessionEndReason::PrincipalDeactivated);
+            $this->sessions->endAll($command, $event->permit->consequence($command), $event->origin);
         }
     }
 }

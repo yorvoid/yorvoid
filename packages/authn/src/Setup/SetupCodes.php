@@ -8,11 +8,19 @@ use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
 use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\HumanCode;
+use YorvoID\Authn\Session\AuthenticationContext;
+use YorvoID\Authn\Session\AuthenticationFactor;
+use YorvoID\Authn\Session\AuthenticationMethod;
+use YorvoID\Authn\Session\Sessions;
+use YorvoID\Authn\Session\StartedSession;
+use YorvoID\Authn\Session\StartSession;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
-use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Operation\ActingPrincipal;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\PrincipalStatus;
@@ -34,7 +42,7 @@ use YorvoID\Throttle\Throttled;
  *
  * @api
  */
-final readonly class SetupCodes
+final readonly class SetupCodes implements OperationHandler
 {
     private const int LENGTH = 26;
 
@@ -44,8 +52,17 @@ final readonly class SetupCodes
         private SecurityLog $log,
         private Transactions $transactions,
         private Attempts $attempts,
+        private Sessions $sessions,
         private ClockInterface $clock = new NativeClock(),
     ) {
+    }
+
+    public function operations(): array
+    {
+        return [
+            CreateSetupCode::class => $this->create(...),
+            ClaimSetup::class => $this->claim(...),
+        ];
     }
 
     /**
@@ -53,8 +70,10 @@ final readonly class SetupCodes
      *
      * @throws RealmAlreadyClaimed
      */
-    public function create(CreateSetupCode $command, Origin $origin): Secret
+    public function create(CreateSetupCode $command, Permit $permit, Origin $origin): Secret
     {
+        $permit->use($command);
+
         return $this->transactions->run(function () use ($command, $origin): Secret {
             // Only while no owner exists (ATN-034): people who came another way, e.g. invited, count.
             if ($this->principals->hasActive($command->realm)) {
@@ -75,17 +94,20 @@ final readonly class SetupCodes
     }
 
     /**
-     * Claims the realm with the code, creating its first principal, active, in the same transaction.
-     * Give it its authority (e.g. the owner's role) in the same transaction too, by running this inside
-     * your own: if that fails, the realm stays unclaimed.
+     * Claims the realm with the code, creating its first principal, active, and signing it in, in the same
+     * transaction. Give it its authority (e.g. the owner's role) in the same transaction too, by running
+     * this inside your own: if that fails, the realm stays unclaimed.
      *
-     * @param string|null $address The client's IP address; pass it, so attempts from one address are limited
+     * @return StartedSession The owner's session; its principal is the owner
      *
      * @throws InvalidSetupCode Whatever the reason
      * @throws Throttled        When there were too many attempts from the address; nothing was checked
      */
-    public function claim(Realm $realm, #[\SensitiveParameter] Secret $code, CreatePrincipal $owner, Origin $origin, ?string $address = null): Principal
+    public function claim(ClaimSetup $command, Permit $permit, Origin $origin): StartedSession
     {
+        $permit->use($command);
+        [$realm, $owner, $address] = [$command->realm, $command->owner, $command->address];
+
         if (!$owner->realm->equals($realm) || PrincipalStatus::Active !== $owner->status) {
             throw new IntegratorError('The setup code\'s principal must be created active, in the realm being claimed.', 'Pass new CreatePrincipal($realm, PrincipalKind::Human) with the realm you claim.', 'concepts/setup-codes.md#claiming-a-realm');
         }
@@ -93,7 +115,7 @@ final readonly class SetupCodes
         $this->attempts->count('setup_code', $realm, null, $address);
 
         try {
-            return $this->claimWith($realm, $code, $owner, $origin);
+            return $this->claimWith($command, $permit, $origin);
         } catch (InvalidSetupCode $invalid) {
             // After the rollback: a failed attempt is recorded, without what was typed.
             $this->log->record($realm, 'yorvoid.setup.claim', Outcome::Failed, $origin);
@@ -110,21 +132,22 @@ final readonly class SetupCodes
     /**
      * @throws InvalidSetupCode
      */
-    private function claimWith(Realm $realm, #[\SensitiveParameter] Secret $code, CreatePrincipal $owner, Origin $origin): Principal
+    private function claimWith(ClaimSetup $command, Permit $permit, Origin $origin): StartedSession
     {
-        return $this->transactions->run(function () use ($realm, $code, $owner, $origin): Principal {
+        return $this->transactions->run(function () use ($command, $permit, $origin): StartedSession {
+            $realm = $command->realm;
             // Before asking whether the realm has an active principal: a principal created at the same
             // moment, e.g. by an invitation accepted, records it in the log, so it waits for this claim
             // or this claim waits for it, and sees it.
             $this->log->lock($realm);
             $state = $this->store->get($realm);
-            $hash = self::hash(HumanCode::normalize($code->reveal()));
+            $hash = self::hash(HumanCode::normalize($command->code->reveal()));
 
             if (null === $state || $state->isClaimed() || $this->clock->now() >= $state->expiresAt || !hash_equals($state->codeHash, $hash) || $this->principals->hasActive($realm)) {
                 throw new InvalidSetupCode();
             }
 
-            $principal = $this->principals->create($owner, $origin);
+            $principal = $permit->cause($this->principals->create(...), $command->owner, $origin);
 
             if (!$this->store->claim($realm, $hash, $principal->id, Time::stored($this->clock->now()))) {
                 throw new InvalidSetupCode();
@@ -132,7 +155,7 @@ final readonly class SetupCodes
 
             $this->log->record($realm, 'yorvoid.setup.claim', Outcome::Success, $origin, $principal->id, 'principal', (string) $principal->id);
 
-            return $principal;
+            return $permit->cause($this->sessions->start(...), new StartSession($realm, $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now())), $command->device, $command->address, $command->deviceCookie), $origin, new ActingPrincipal($realm, $principal->id));
         });
     }
 

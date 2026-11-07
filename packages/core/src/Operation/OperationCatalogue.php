@@ -18,6 +18,9 @@ final readonly class OperationCatalogue
     /** @var array<string, OperationDescription> By name, sorted */
     private array $operations;
 
+    /** @var array<class-string, OperationDescription> */
+    private array $byCommand;
+
     /**
      * @param iterable<class-string> $commands
      */
@@ -43,6 +46,23 @@ final readonly class OperationCatalogue
 
         ksort($operations);
         $this->operations = $operations;
+        $this->byCommand = array_column(array_map(static fn (OperationDescription $operation): array => [$operation->command, $operation], $operations), 1, 0);
+    }
+
+    /**
+     * The catalogue of the operations these handlers run.
+     *
+     * @param iterable<OperationHandler> $handlers
+     */
+    public static function of(iterable $handlers): self
+    {
+        $commands = [];
+
+        foreach ($handlers as $handler) {
+            $commands = [...$commands, ...array_keys($handler->operations())];
+        }
+
+        return new self($commands);
     }
 
     /**
@@ -64,18 +84,31 @@ final readonly class OperationCatalogue
     }
 
     /**
+     * The operation a command class runs.
+     *
+     * @param class-string $command
+     */
+    public function forCommand(string $command): OperationDescription
+    {
+        return $this->byCommand[$command] ?? throw new IntegratorError(\sprintf('The command %s isn\'t in the operation catalogue.', $command), 'Add its class to the catalogue\'s commands.', 'concepts/operations-and-events.md#operations');
+    }
+
+    /**
      * @param class-string $command
      */
     private static function describe(string $command): OperationDescription
     {
         $class = new \ReflectionClass($command);
-        $attributes = $class->getAttributes(Operation::class);
+        $operation = Operation::of($command);
 
-        if ([] === $attributes) {
-            throw new IntegratorError(\sprintf('The class %s has no #[Operation] attribute.', $command), 'Add #[Operation(name, description)] to the command class, or leave it out of the catalogue.', 'concepts/operations-and-events.md#operations');
+        if (!$class->implementsInterface(Command::class)) {
+            throw new IntegratorError(\sprintf('The class %s has #[Operation] but isn\'t a Command.', $command), 'Implement YorvoID\\Core\\Operation\\Command.', 'concepts/operations-and-events.md#operations');
         }
 
-        $operation = $attributes[0]->newInstance();
+        if (\in_array(AuthorizedBy::Self, $operation->authorizedBy, true) && !$class->implementsInterface(SelfOperation::class)) {
+            throw new IntegratorError(\sprintf('The operation "%s" may be run on one\'s own account, but %s doesn\'t say whose it concerns.', $operation->name, $command), 'Implement YorvoID\\Core\\Operation\\SelfOperation.', 'concepts/operations-and-events.md#operations');
+        }
+
         $parameters = [];
 
         foreach ($class->getConstructor()?->getParameters() ?? [] as $parameter) {
@@ -89,6 +122,6 @@ final readonly class OperationCatalogue
             );
         }
 
-        return new OperationDescription($operation->name, $operation->description, $operation->ability, $operation->inverse, $command, $parameters);
+        return new OperationDescription($operation->name, $operation->description, $operation->authorizedBy, $operation->ability, $operation->inverse, $command, $parameters, $operation->causes);
     }
 }

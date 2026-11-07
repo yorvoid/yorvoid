@@ -46,6 +46,7 @@ use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
 use YorvoID\Core\Storage\StorageLocation;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Throttle\Storage\DbalThrottleStore;
 use YorvoID\Throttle\Throttle;
 
@@ -72,12 +73,12 @@ $replace = match ($kind) {
         $codes = new RecoveryCodes(new DbalRecoveryCodeStore($database), new Credentials(new DbalCredentialStore($database), $sessions, $stepUp, $log, $transactions), $sessions, $stepUp, new Attempts(new Throttle(new DbalThrottleStore($database))), $log, $transactions, $principals);
         $session = $sessions->get(new Realm('acme'), SessionId::fromString($id)) ?? throw new LogicException('No such session.');
 
-        return array_map(static fn (Secret $code): string => $code->reveal(), $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, $origin));
+        return array_map(static fn (Secret $code): string => $code->reveal(), Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), $origin, $session));
     },
     'link' => static function () use ($database, $sessions, $stepUp, $log, $transactions, $principals, $id, $origin): array {
         $links = new RecoveryLinks(new OneTimeTokens(new DbalOneTimeTokenStore($database), $principals, $log, $transactions), $sessions, $principals, $stepUp, $transactions);
 
-        return [$links->issue(new IssueRecoveryLink(new Realm('acme'), PrincipalId::fromString($id)), $origin)->secret->reveal()];
+        return [Permits::call($links->issue(...), new IssueRecoveryLink(new Realm('acme'), PrincipalId::fromString($id)), $origin)->secret->reveal()];
     },
     default => throw new LogicException(sprintf('Nothing to replace called "%s".', $kind)),
 };

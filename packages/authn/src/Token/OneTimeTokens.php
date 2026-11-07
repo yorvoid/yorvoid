@@ -15,10 +15,11 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\InvalidIdentifier;
 use YorvoID\Core\Principal\Principal;
-use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\UnknownPrincipal;
@@ -42,7 +43,7 @@ use YorvoID\Core\Time;
  *
  * @api
  */
-final readonly class OneTimeTokens
+final readonly class OneTimeTokens implements OperationHandler
 {
     private const string PURPOSE = '/^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/D';
 
@@ -58,12 +59,23 @@ final readonly class OneTimeTokens
     ) {
     }
 
+    public function operations(): array
+    {
+        return [
+            IssueToken::class => $this->issue(...),
+            RevokeTokens::class => $this->revoke(...),
+        ];
+    }
+
     /**
      * @throws UnknownPrincipal  When there's no such principal
      * @throws InactivePrincipal When it's suspended or deleted
      */
-    public function issue(IssueToken $command, Origin $origin, ?PrincipalId $actor = null): IssuedToken
+    public function issue(IssueToken $command, Permit $permit, Origin $origin): IssuedToken
     {
+        $permit->use($command);
+        $actor = $permit->actor->principalId;
+
         if (1 !== preg_match(self::PURPOSE, $command->purpose) || \strlen($command->purpose) > 64) {
             throw new IntegratorError(\sprintf('The token purpose "%s" is invalid.', $command->purpose), 'Use up to 64 lowercase letters, digits, dots and underscores, starting with a letter, e.g. "acme.password_reset".', 'concepts/one-time-tokens.md#issuing-a-token');
         }
@@ -147,8 +159,11 @@ final readonly class OneTimeTokens
     /**
      * @return int How many tokens stopped working
      */
-    public function revoke(RevokeTokens $command, Origin $origin, ?PrincipalId $actor = null): int
+    public function revoke(RevokeTokens $command, Permit $permit, Origin $origin): int
     {
+        $permit->use($command);
+        $actor = $permit->actor->principalId;
+
         return $this->transactions->run(function () use ($command, $origin, $actor): int {
             $revoked = $this->store->deleteFor($command->realm, $command->principalId, $command->purpose);
 

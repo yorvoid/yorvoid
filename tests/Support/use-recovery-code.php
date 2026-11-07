@@ -22,6 +22,7 @@ use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
 use YorvoID\Authn\Recovery\RecoveryCodes;
+use YorvoID\Authn\Recovery\RedeemRecoveryCode;
 use YorvoID\Authn\Recovery\Storage\DbalRecoveryCodeStore;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\Storage\DbalSessionStore;
@@ -41,6 +42,7 @@ use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
 use YorvoID\Core\Storage\StorageLocation;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Throttle\Storage\DbalThrottleStore;
 use YorvoID\Throttle\Throttle;
 
@@ -108,4 +110,4 @@ while (!file_exists($start)) {
     usleep(1_000);
 }
 
-exit(null === $codes->redeem(new Realm('acme'), PrincipalId::fromString($principalId), Secret::fromString($code), new Origin(OriginKind::Web, 'process '.getmypid())) ? 3 : 0);
+exit(null === Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), PrincipalId::fromString($principalId), Secret::fromString($code)), new Origin(OriginKind::Web, 'process '.getmypid())) ? 3 : 0);

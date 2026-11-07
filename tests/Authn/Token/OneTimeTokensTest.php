@@ -36,6 +36,7 @@ use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 
@@ -60,7 +61,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
         $principal = $this->principal(email: 'ana@example.com');
         $actor = new PrincipalId(new UuidV7Generator()->next());
 
-        $issued = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.password_reset', Duration::hours(1), 'Ana@Example.com'), new Origin(OriginKind::Web), $actor);
+        $issued = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.password_reset', Duration::hours(1), 'Ana@Example.com'), new Origin(OriginKind::Web), $actor);
 
         self::assertMatchesRegularExpression('/^[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/D', $issued->secret->reveal(), 'A 128-bit selector and a 256-bit verifier, as Quire\'s.');
         self::assertSame(substr($issued->secret->reveal(), 0, 32), $issued->token->selector);
@@ -86,7 +87,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
     public function testStoresOnlyTheVerifiersHash(string $implementation): void
     {
         $tokens = $this->tokens($implementation);
-        $issued = $tokens->issue(new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        $issued = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
         [$selector, $verifier] = explode('.', $issued->secret->reveal());
 
         self::assertSame(hash('sha256', $verifier), $this->stack->tokens->find(new Realm('acme'), $selector, 'acme.test')[1] ?? null);
@@ -109,7 +110,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
     public function testAWrongVerifierNeitherWorksNorUsesTheToken(string $implementation): void
     {
         $tokens = $this->tokens($implementation);
-        $issued = $tokens->issue(new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        $issued = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
         $selector = $issued->token->selector;
 
         foreach ([$selector.'.'.str_repeat('A', 43), $selector.'.', $selector, strtoupper($issued->secret->reveal()), $issued->secret->reveal().'x', ' '.$issued->secret->reveal(), $issued->secret->reveal()."\n", 'x'] as $wrong) {
@@ -123,7 +124,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
     public function testATokenWorksOnlyInItsRealmAndForItsPurpose(string $implementation): void
     {
         $tokens = $this->tokens($implementation);
-        $issued = $tokens->issue(new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.invitation', Duration::hours(1)), new Origin(OriginKind::Web));
+        $issued = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.invitation', Duration::hours(1)), new Origin(OriginKind::Web));
 
         self::assertNull($tokens->consume(new Realm('globex'), 'acme.invitation', $issued->secret, new Origin(OriginKind::Web)));
         self::assertNull($tokens->consume(new Realm('acme'), 'acme.password_reset', $issued->secret, new Origin(OriginKind::Web)), 'An invitation reset a password.');
@@ -134,7 +135,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
     public function testATokenExpires(string $implementation): void
     {
         $tokens = $this->tokens($implementation);
-        $issued = $tokens->issue(new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        $issued = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
 
         $this->clock->sleep(3599);
         self::assertNotNull($tokens->peek(new Realm('acme'), 'acme.test', $issued->secret));
@@ -150,10 +151,10 @@ final class OneTimeTokensTest extends DatabaseTestCase
     {
         $tokens = $this->tokens($implementation);
         $principal = $this->principal();
-        $first = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
-        $second = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
-        $alongside = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1), newestOnly: false), new Origin(OriginKind::Web));
-        $otherPurpose = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.other', Duration::hours(1)), new Origin(OriginKind::Web));
+        $first = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        $second = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        $alongside = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1), newestOnly: false), new Origin(OriginKind::Web));
+        $otherPurpose = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.other', Duration::hours(1)), new Origin(OriginKind::Web));
 
         self::assertNull($tokens->peek(new Realm('acme'), 'acme.test', $first->secret));
         self::assertNotNull($tokens->peek(new Realm('acme'), 'acme.test', $second->secret));
@@ -170,18 +171,18 @@ final class OneTimeTokensTest extends DatabaseTestCase
     {
         $tokens = $this->tokens($implementation);
         $principal = $this->principal(email: 'ana@example.com');
-        $issued = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1), 'ana@example.com'), new Origin(OriginKind::Web));
-        $unbound = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.other', Duration::hours(1)), new Origin(OriginKind::Web));
+        $issued = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1), 'ana@example.com'), new Origin(OriginKind::Web));
+        $unbound = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.other', Duration::hours(1)), new Origin(OriginKind::Web));
 
-        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $principal->id, IdentifierKind::Email, 'ANA@example.com'), new Origin(OriginKind::Web));
+        Permits::call($this->principals->setIdentifier(...), new SetIdentifier(new Realm('acme'), $principal->id, IdentifierKind::Email, 'ANA@example.com'), new Origin(OriginKind::Web));
         self::assertNotNull($tokens->peek(new Realm('acme'), 'acme.test', $issued->secret), 'The same address in other letters is the same address.');
 
-        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $principal->id, IdentifierKind::Email, 'ana@example.org'), new Origin(OriginKind::Web));
+        Permits::call($this->principals->setIdentifier(...), new SetIdentifier(new Realm('acme'), $principal->id, IdentifierKind::Email, 'ana@example.org'), new Origin(OriginKind::Web));
         self::assertNull($tokens->consume(new Realm('acme'), 'acme.test', $issued->secret, new Origin(OriginKind::Web)), 'A link sent to an old address worked.');
         self::assertNotNull($tokens->peek(new Realm('acme'), 'acme.other', $unbound->secret));
 
-        $again = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1), 'ana@example.org'), new Origin(OriginKind::Web));
-        $this->principals->removeIdentifier(new RemoveIdentifier(new Realm('acme'), $principal->id, IdentifierKind::Email), new Origin(OriginKind::Web));
+        $again = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1), 'ana@example.org'), new Origin(OriginKind::Web));
+        Permits::call($this->principals->removeIdentifier(...), new RemoveIdentifier(new Realm('acme'), $principal->id, IdentifierKind::Email), new Origin(OriginKind::Web));
         self::assertNull($tokens->peek(new Realm('acme'), 'acme.test', $again->secret), 'A link sent to a removed address worked.');
     }
 
@@ -192,12 +193,12 @@ final class OneTimeTokensTest extends DatabaseTestCase
         $invited = $this->principal(PrincipalStatus::Invited);
         $suspended = $this->principal();
         $deleted = $this->principal();
-        $forInvited = $tokens->issue(new IssueToken(new Realm('acme'), $invited->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
-        $forSuspended = $tokens->issue(new IssueToken(new Realm('acme'), $suspended->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
-        $forDeleted = $tokens->issue(new IssueToken(new Realm('acme'), $deleted->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        $forInvited = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $invited->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        $forSuspended = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $suspended->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        $forDeleted = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $deleted->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
 
-        $this->principals->suspend(new SuspendPrincipal(new Realm('acme'), $suspended->id), new Origin(OriginKind::Web));
-        $this->principals->delete(new DeletePrincipal(new Realm('acme'), $deleted->id), new Origin(OriginKind::Web));
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $suspended->id), new Origin(OriginKind::Web));
+        Permits::call($this->principals->delete(...), new DeletePrincipal(new Realm('acme'), $deleted->id), new Origin(OriginKind::Web));
 
         self::assertNotNull($tokens->peek(new Realm('acme'), 'acme.test', $forInvited->secret), 'Invited principals get tokens: their invitations.');
         self::assertNull($tokens->consume(new Realm('acme'), 'acme.test', $forSuspended->secret, new Origin(OriginKind::Web)));
@@ -206,7 +207,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
         $this->expectException(InactivePrincipal::class);
         $this->expectExceptionMessage(\sprintf('The principal %s is suspended, and can\'t be sent a token.', $suspended->id));
 
-        $tokens->issue(new IssueToken(new Realm('acme'), $suspended->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $suspended->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
     }
 
     #[DataProvider('implementations')]
@@ -214,10 +215,10 @@ final class OneTimeTokensTest extends DatabaseTestCase
     {
         $tokens = $this->tokens($implementation);
         $principal = $this->principal();
-        $issued = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        $issued = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
 
-        self::assertSame(1, $tokens->revoke(new RevokeTokens(new Realm('acme'), $principal->id, 'acme.test'), new Origin(OriginKind::Web)));
-        self::assertSame(0, $tokens->revoke(new RevokeTokens(new Realm('acme'), $principal->id, 'acme.test'), new Origin(OriginKind::Web)));
+        self::assertSame(1, Permits::call($tokens->revoke(...), new RevokeTokens(new Realm('acme'), $principal->id, 'acme.test'), new Origin(OriginKind::Web)));
+        self::assertSame(0, Permits::call($tokens->revoke(...), new RevokeTokens(new Realm('acme'), $principal->id, 'acme.test'), new Origin(OriginKind::Web)));
         self::assertNull($tokens->peek(new Realm('acme'), 'acme.test', $issued->secret));
 
         $entries = iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false);
@@ -231,14 +232,14 @@ final class OneTimeTokensTest extends DatabaseTestCase
 
         foreach (['', 'Acme.test', 'acme..test', 'acme.test.', '1acme', 'acme test', str_repeat('a', 65)] as $purpose) {
             try {
-                $tokens->issue(new IssueToken(new Realm('acme'), $this->principal()->id, $purpose, Duration::hours(1)), new Origin(OriginKind::Web));
+                Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $this->principal()->id, $purpose, Duration::hours(1)), new Origin(OriginKind::Web));
                 self::fail(\sprintf('The purpose "%s" was accepted.', $purpose));
             } catch (IntegratorError $error) {
                 self::assertStringContainsString('is invalid', $error->getMessage());
             }
         }
 
-        self::assertSame(str_repeat('a', 64), $tokens->issue(new IssueToken(new Realm('acme'), $this->principal()->id, str_repeat('a', 64), Duration::hours(1)), new Origin(OriginKind::Web))->token->purpose);
+        self::assertSame(str_repeat('a', 64), Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $this->principal()->id, str_repeat('a', 64), Duration::hours(1)), new Origin(OriginKind::Web))->token->purpose);
     }
 
     public function testATokenIsSentOnlyToItsPrincipalsAddress(): void
@@ -248,7 +249,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
 
         foreach (['bob@example.com', 'not an address'] as $address) {
             try {
-                $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1), $address), new Origin(OriginKind::Web));
+                Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1), $address), new Origin(OriginKind::Web));
                 self::fail(\sprintf('A token was sent to "%s".', $address));
             } catch (IntegratorError $error) {
                 self::assertStringStartsWith('A token can be sent only to its principal\'s email address.', $error->getMessage());
@@ -257,7 +258,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
 
         $this->expectException(IntegratorError::class);
 
-        $tokens->issue(new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.test', Duration::hours(1), 'ana@example.com'), new Origin(OriginKind::Web));
+        Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $this->principal()->id, 'acme.test', Duration::hours(1), 'ana@example.com'), new Origin(OriginKind::Web));
     }
 
     public function testRefusesUnknownPrincipals(): void
@@ -266,7 +267,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
 
         $this->expectException(UnknownPrincipal::class);
 
-        $tokens->issue(new IssueToken(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
+        Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), 'acme.test', Duration::hours(1)), new Origin(OriginKind::Web));
     }
 
     public function testTokenCommandsAreOperations(): void
@@ -291,7 +292,7 @@ final class OneTimeTokensTest extends DatabaseTestCase
 
     private function principal(PrincipalStatus $status = PrincipalStatus::Active, ?string $email = null): Principal
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, $status, $email), new Origin(OriginKind::Console));
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, $status, $email), new Origin(OriginKind::Console));
         $this->events->dispatched = [];
 
         return $principal;

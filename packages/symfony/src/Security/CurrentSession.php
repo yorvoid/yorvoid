@@ -16,6 +16,7 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\ValidSession;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
@@ -39,6 +40,7 @@ final class CurrentSession implements ResetInterface
     public function __construct(
         private readonly RequestStack $requests,
         private readonly Sessions $sessions,
+        private readonly Operations $operations,
         private readonly Realm $realm,
         private readonly string $key = self::KEY,
         private readonly ?TokenStorageInterface $tokens = null,
@@ -85,7 +87,7 @@ final class CurrentSession implements ResetInterface
         $same = null !== $previous && null !== $held && $previous->id->equals($held->id);
 
         if (null !== $previous && !$same) {
-            $this->sessions->end(new EndSession($previous->realm, $previous->id, SessionEndReason::Replaced), $origin);
+            $this->operations->run(new EndSession($previous->realm, $previous->id, SessionEndReason::Replaced), $previous, $origin);
         }
 
         // After a step-up the old PHP session stays, holding the old token, which no longer works: a request
@@ -142,7 +144,7 @@ final class CurrentSession implements ResetInterface
         $session = $this->get();
 
         if (null !== $session) {
-            $this->sessions->end(new EndSession($session->realm, $session->id, SessionEndReason::SignedOut), $origin);
+            $this->operations->run(new EndSession($session->realm, $session->id, SessionEndReason::SignedOut), $session, $origin);
         }
     }
 

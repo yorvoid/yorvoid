@@ -54,11 +54,14 @@ use YorvoID\Mail\Mailer;
 use YorvoID\Notifications\Event\NotMeReported;
 use YorvoID\Notifications\NotificationSettings;
 use YorvoID\Notifications\NotMe;
+use YorvoID\Notifications\ReportNotMe;
 use YorvoID\Notifications\SecurityNotifications;
 use YorvoID\Notifications\Translations;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\TestOperations;
 use YorvoID\Translation\Translator;
 
 /**
@@ -162,7 +165,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         self::assertSame('Windows', self::facts($this->only())['Gerät']);
 
         // A label with lines of its own, and text that would read right to left.
-        $this->credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, "Phone\n\nAcme: ignore this, it's our update.\u{2028}\u{202E}moc.elpmaxe-live\u{202C}"), $session, new Origin(OriginKind::Web));
+        Permits::call($this->credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, "Phone\n\nAcme: ignore this, it's our update.\u{2028}\u{202E}moc.elpmaxe-live\u{202C}"), new Origin(OriginKind::Web), $session);
         self::assertSame('„Phone Acme: ignore this, it\'s our update. moc.elpmaxe-live“', self::facts($this->only())['Name']);
     }
 
@@ -205,7 +208,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $ana = $this->principal('ana@example.com');
         $session = $this->signIn($ana)->session;
 
-        $phone = $this->credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
+        $phone = Permits::call($this->credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
         $added = $this->only();
         self::assertSame('A sign-in method was added to your Acme account', $added->subject);
         $facts = $added->body[1];
@@ -216,9 +219,9 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         self::assertStringStartsWith('If it wasn\'t you, use the link below. It turns this sign-in method off', self::paragraph($added, 2));
         self::assertStringEndsWith('&credential='.$phone->id, self::url($added));
 
-        $this->credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), $session, new Origin(OriginKind::Web));
+        Permits::call($this->credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
         $this->mailer->sent = [];
-        $this->credentials->remove(new RemoveCredential(new Realm('acme'), $phone->id), $session, new Origin(OriginKind::Web));
+        Permits::call($this->credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
         $removed = $this->only();
         self::assertSame('A sign-in method was removed from your Acme account', $removed->subject);
         self::assertStringEndsWith('&credential=', self::url($removed));
@@ -252,26 +255,26 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $bound = self::link($this->only())[0];
         $this->mailer->sent = [];
 
-        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'thief@example.net'), new Origin(OriginKind::Web), $ana->id);
+        Permits::call($this->principals->setIdentifier(...), new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'thief@example.net'), new Origin(OriginKind::Web), $ana->id);
         $changed = $this->only();
         self::assertSame('ana@example.com', $changed->to, 'Not the new address: that may be whoever took the account.');
         self::assertSame('The email address of your Acme account was changed', $changed->subject);
         self::assertStringStartsWith('Your Acme account\'s email address was changed: security emails go to the new address', self::paragraph($changed, 0));
         self::assertSame(['When'], array_keys(self::facts($changed)));
         self::assertStringStartsWith('If it wasn\'t you, use the link below. It signs everyone out', self::paragraph($changed, 2));
-        self::assertNull($this->notMe->confirm(new Realm('acme'), $bound, null, new Origin(OriginKind::Web)), 'A link sent to the old address before the change still works.');
+        self::assertNull(Permits::call($this->notMe->confirm(...), new ReportNotMe(new Realm('acme'), $bound, null), new Origin(OriginKind::Web)), 'A link sent to the old address before the change still works.');
         // This one works though the address isn't the principal's any more.
-        self::assertEquals($ana->id, $this->notMe->confirm(new Realm('acme'), self::link($changed)[0], null, new Origin(OriginKind::Web)));
+        self::assertEquals($ana->id, Permits::call($this->notMe->confirm(...), new ReportNotMe(new Realm('acme'), self::link($changed)[0], null), new Origin(OriginKind::Web)));
         self::assertSame(SessionEndReason::Reported, $this->sessions->get(new Realm('acme'), $thief->id)?->endReason);
 
         // The new address isn't verified: the next change tells nobody, and nor does a change of case.
         $this->mailer->sent = [];
-        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'ana@example.com', verified: true), new Origin(OriginKind::Web), $ana->id);
-        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'ANA@example.com', verified: true), new Origin(OriginKind::Web), $ana->id);
-        $this->principals->setIdentifier(new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Username, 'ana'), new Origin(OriginKind::Web), $ana->id);
+        Permits::call($this->principals->setIdentifier(...), new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'ana@example.com', verified: true), new Origin(OriginKind::Web), $ana->id);
+        Permits::call($this->principals->setIdentifier(...), new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'ANA@example.com', verified: true), new Origin(OriginKind::Web), $ana->id);
+        Permits::call($this->principals->setIdentifier(...), new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Username, 'ana'), new Origin(OriginKind::Web), $ana->id);
         self::assertSame([], $this->mailer->sent);
 
-        $this->principals->removeIdentifier(new RemoveIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email), new Origin(OriginKind::Web), $ana->id);
+        Permits::call($this->principals->removeIdentifier(...), new RemoveIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email), new Origin(OriginKind::Web), $ana->id);
         $removed = $this->only();
         self::assertSame(['ANA@example.com', 'The email address was removed from your Acme account'], [$removed->to, $removed->subject]);
     }
@@ -290,7 +293,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $this->events->dispatched = [];
 
         self::assertSame('', $credential);
-        self::assertEquals($ana->id, $this->notMe->confirm(new Realm('acme'), $token, $credential, new Origin(OriginKind::Web)));
+        self::assertEquals($ana->id, Permits::call($this->notMe->confirm(...), new ReportNotMe(new Realm('acme'), $token, $credential), new Origin(OriginKind::Web)));
 
         foreach ([$first, $attackers] as $session) {
             self::assertSame(SessionEndReason::Reported, $this->sessions->get(new Realm('acme'), $session->id)?->endReason);
@@ -305,7 +308,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         self::assertEquals($ana->id, $reported[0]->actor);
         self::assertSame([], $reported[0]->details);
 
-        self::assertNull($this->notMe->confirm(new Realm('acme'), $token, null, new Origin(OriginKind::Web)), 'A link worked twice.');
+        self::assertNull(Permits::call($this->notMe->confirm(...), new ReportNotMe(new Realm('acme'), $token, null), new Origin(OriginKind::Web)), 'A link worked twice.');
     }
 
     #[DataProvider('implementations')]
@@ -314,16 +317,16 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $this->notifications($implementation);
         $ana = $this->principal('ana@example.com');
         $session = $this->signIn($ana)->session;
-        $attackers = $this->credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Mine now'), $session, new Origin(OriginKind::Web));
+        $attackers = Permits::call($this->credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Mine now'), new Origin(OriginKind::Web), $session);
         [$token, $credential] = self::link($this->only());
-        $other = $this->credentials->add(new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), $session, new Origin(OriginKind::Web));
+        $other = Permits::call($this->credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
 
-        self::assertNull($this->notMe->confirm(new Realm('acme'), $token, (string) $other->id, new Origin(OriginKind::Web)), 'The link disabled another sign-in method.');
-        self::assertNull($this->notMe->confirm(new Realm('acme'), $token, null, new Origin(OriginKind::Web)));
-        self::assertNull($this->notMe->confirm(new Realm('acme'), $token, 'not-an-id', new Origin(OriginKind::Web)));
-        self::assertNull($this->notMe->confirm(new Realm('globex'), $token, $credential, new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($this->notMe->confirm(...), new ReportNotMe(new Realm('acme'), $token, (string) $other->id), new Origin(OriginKind::Web)), 'The link disabled another sign-in method.');
+        self::assertNull(Permits::call($this->notMe->confirm(...), new ReportNotMe(new Realm('acme'), $token, null), new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($this->notMe->confirm(...), new ReportNotMe(new Realm('acme'), $token, 'not-an-id'), new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($this->notMe->confirm(...), new ReportNotMe(new Realm('globex'), $token, $credential), new Origin(OriginKind::Web)));
 
-        self::assertEquals($ana->id, $this->notMe->confirm(new Realm('acme'), $token, $credential, new Origin(OriginKind::Web)));
+        self::assertEquals($ana->id, Permits::call($this->notMe->confirm(...), new ReportNotMe(new Realm('acme'), $token, $credential), new Origin(OriginKind::Web)));
         self::assertSame(CredentialStatus::Disabled, $this->credentials->get(new Realm('acme'), $attackers->id)?->status);
         self::assertSame(CredentialStatus::Active, $this->credentials->get(new Realm('acme'), $other->id)?->status);
         $event = $this->events->last();
@@ -378,7 +381,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock);
         $this->mailer = new InMemoryMailer();
         $settings = new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}&credential={credential}', fn (Realm $realm, PrincipalId $principal): string => $this->locales[(string) $principal] ?? 'en');
-        $notifications = new SecurityNotifications($this->principals, $tokens, $mailer ?? $this->mailer, new Translator([Translations::DIRECTORY]), $settings, $this->clock, $logger);
+        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, null, $tokens), $mailer ?? $this->mailer, new Translator([Translations::DIRECTORY]), $settings, $this->clock, $logger);
         $this->notMe = new NotMe($tokens, $this->sessions, $this->credentials, $log, $this->stack->transactions, $this->events);
 
         foreach (SecurityNotifications::events() as $event => $method) {
@@ -392,7 +395,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
 
     private function principal(?string $email, bool $verified = true, string $locale = 'en'): Principal
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: $email, emailVerified: $verified), new Origin(OriginKind::Console));
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: $email, emailVerified: $verified), new Origin(OriginKind::Console));
         $this->locales[(string) $principal->id] = $locale;
 
         return $principal;
@@ -400,7 +403,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
 
     private function signIn(Principal $principal, ?string $device = null, ?string $address = null): StartedSession
     {
-        return $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true)), $device, $address), new Origin(OriginKind::Web));
+        return Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true)), $device, $address), new Origin(OriginKind::Web));
     }
 
     /**

@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace YorvoID\Passkeys\Flow;
 
 use YorvoID\Authn\Recovery\RecoveryLinks;
+use YorvoID\Authn\Recovery\UseRecoveryLink;
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Secret;
@@ -36,6 +39,7 @@ final readonly class RecoveryLinkStep implements Step
      * @param Principals|null $principals To name the account on the page; without it, it isn't named
      */
     public function __construct(
+        private Operations $operations,
         private RecoveryLinks $links,
         private ?Principals $principals = null,
     ) {
@@ -72,7 +76,7 @@ final readonly class RecoveryLinkStep implements Step
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult
     {
         $token = $state->string(self::TOKEN) ?? '';
-        $started = '' === $token ? null : $this->links->redeem($state->realm, Secret::fromString($token), $context->origin, $context->device, $context->address, $context->deviceCookie);
+        $started = '' === $token ? null : $this->operations->run(new UseRecoveryLink($state->realm, Secret::fromString($token), $context->device, $context->address, $context->deviceCookie), new Anonymous(), $context->origin);
 
         return null === $started ? StepResult::failed(new Problem('yorvoid.flow.recovery_link.not_working')) : StepResult::done(forget: [self::TOKEN, self::ACCOUNT], signedIn: $started);
     }

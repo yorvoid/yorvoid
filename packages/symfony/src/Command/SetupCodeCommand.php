@@ -13,10 +13,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Authn\Setup\RealmAlreadyClaimed;
-use YorvoID\Authn\Setup\SetupCodes;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Realm;
 
 /**
@@ -28,7 +29,7 @@ use YorvoID\Core\Realm;
 final class SetupCodeCommand extends Command
 {
     public function __construct(
-        private readonly SetupCodes $setupCodes,
+        private readonly Operations $operations,
     ) {
         parent::__construct();
     }
@@ -44,7 +45,7 @@ final class SetupCodeCommand extends Command
         $io = new SymfonyStyle($input, $output);
 
         try {
-            $code = $this->setupCodes->create(new CreateSetupCode(new Realm(Options::string($input->getArgument('realm'))), Duration::parse(Options::string($input->getOption('lifetime')))), new Origin(OriginKind::Console, 'yorvoid:setup-code'));
+            $code = $this->operations->run(new CreateSetupCode(new Realm(Options::string($input->getArgument('realm'))), Duration::parse(Options::string($input->getOption('lifetime')))), new Operator(), new Origin(OriginKind::Console, 'yorvoid:setup-code'));
         } catch (RealmAlreadyClaimed $exception) {
             $io->error($exception->getMessage());
 

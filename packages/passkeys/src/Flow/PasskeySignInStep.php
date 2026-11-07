@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
 use YorvoID\Flows\Input;
@@ -14,6 +16,7 @@ use YorvoID\Passkeys\Flow\View\PasskeySignInView;
 use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\Refusal;
+use YorvoID\Passkeys\SignInWithPasskey;
 
 /**
  * Signs in with a passkey (ATN-002): input "response", the browser's answer.
@@ -25,6 +28,7 @@ final readonly class PasskeySignInStep implements Step
     public const string NAME = 'passkey';
 
     public function __construct(
+        private Operations $operations,
         private Passkeys $passkeys,
     ) {
     }
@@ -52,7 +56,7 @@ final readonly class PasskeySignInStep implements Step
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult
     {
         try {
-            return StepResult::done(signedIn: $this->passkeys->finishSignIn($state->realm, Ceremonies::id($state, self::NAME), $input->json('response') ?? '', $context->origin, $context->device, $context->address, $context->deviceCookie));
+            return StepResult::done(signedIn: $this->operations->run(new SignInWithPasskey($state->realm, Ceremonies::id($state, self::NAME), $input->json('response') ?? '', $context->device, $context->address, $context->deviceCookie), new Anonymous(), $context->origin));
         } catch (PasskeyRefused $refused) {
             // Only an unknown passkey is told apart: the browser then tells its provider (ATN-008).
             return StepResult::refused(Ceremonies::problem($refused, Refusal::UnknownPasskey === $refused->refusal));

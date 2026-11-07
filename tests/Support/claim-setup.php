@@ -16,6 +16,9 @@ use Doctrine\DBAL\Configuration;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Tools\DsnParser;
 use YorvoID\Authn\Attempt\Attempts;
+use YorvoID\Authn\Session\Sessions;
+use YorvoID\Authn\Session\Storage\DbalSessionStore;
+use YorvoID\Authn\Setup\ClaimSetup;
 use YorvoID\Authn\Setup\InvalidSetupCode;
 use YorvoID\Authn\Setup\SetupCodes;
 use YorvoID\Authn\Setup\Storage\DbalSetupStore;
@@ -37,6 +40,7 @@ use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
 use YorvoID\Core\Storage\StorageLocation;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Throttle\Storage\DbalThrottleStore;
 use YorvoID\Throttle\Throttle;
 
@@ -84,7 +88,8 @@ $slow = new readonly class(new DbalPrincipalStore($database)) implements Princip
 };
 
 $log = new SecurityLog(new DbalSecurityLogStore($database), $transactions);
-$codes = new SetupCodes(new DbalSetupStore($database), new Principals($slow, new DbalIdentifierStore($database), $log, $transactions), $log, $transactions, new Attempts(new Throttle(new DbalThrottleStore($database))));
+$principals = new Principals($slow, new DbalIdentifierStore($database), $log, $transactions);
+$codes = new SetupCodes(new DbalSetupStore($database), $principals, $log, $transactions, new Attempts(new Throttle(new DbalThrottleStore($database))), new Sessions(new DbalSessionStore($database), $principals, $log, $transactions));
 $deadline = microtime(true) + 10;
 
 while (!file_exists($start)) {
@@ -98,7 +103,7 @@ while (!file_exists($start)) {
 }
 
 try {
-    $codes->claim(new Realm('acme'), Secret::fromString($code), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Web, 'process '.getmypid()));
+    Permits::call($codes->claim(...), new ClaimSetup(new Realm('acme'), Secret::fromString($code), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human)), new Origin(OriginKind::Web, 'process '.getmypid()));
 } catch (InvalidSetupCode) {
     exit(3);
 }

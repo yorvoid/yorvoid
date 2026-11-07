@@ -12,6 +12,7 @@ use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Filesystem\Filesystem;
 use YorvoID\Authn\Recovery\RecoveryCodes;
+use YorvoID\Authn\Recovery\RedeemRecoveryCode;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\EndSession;
 use YorvoID\Authn\Session\SessionEndReason;
@@ -19,14 +20,18 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\IdentifierStore;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Passkeys\SignInWithPasskey;
 use YorvoID\Testing\Scenario;
 use YorvoID\Testing\Symfony\BrowserSignIn;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Symfony\App\TestKernel;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
@@ -96,7 +101,7 @@ final class ScenarioTest extends TestCase
 
         $passkeys = $this->service(Passkeys::class);
         $ceremony = $passkeys->beginSignIn(new Realm('acme'));
-        $signedIn = $passkeys->finishSignIn(new Realm('acme'), $ceremony->id, $authenticator->signIn($ceremony->options), new Origin(OriginKind::Web));
+        $signedIn = Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $ceremony->id, $authenticator->signIn($ceremony->options)), new Origin(OriginKind::Web));
         self::assertEquals($ana->id, $signedIn->session->principalId);
     }
 
@@ -108,7 +113,7 @@ final class ScenarioTest extends TestCase
         $codes = $scenario->recoveryCodes($ana);
 
         self::assertCount(10, $codes);
-        self::assertNotNull($this->service(RecoveryCodes::class)->redeem(new Realm('acme'), $ana->id, $codes[3], new Origin(OriginKind::Web)));
+        self::assertNotNull(Permits::call($this->service(RecoveryCodes::class)->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $ana->id, $codes[3]), new Origin(OriginKind::Web)));
     }
 
     public function testMovesYorvoIDsClock(): void
@@ -120,7 +125,7 @@ final class ScenarioTest extends TestCase
 
         self::assertNull($this->service(Sessions::class)->validate(new Realm('acme'), $started->token), 'A session outlived its idle timeout.');
 
-        $native = new Scenario($this->service(Principals::class), $this->service(Sessions::class), $this->service(Passkeys::class), $this->service(RecoveryCodes::class), $this->service(PasskeyPolicy::class), new NativeClock());
+        $native = new Scenario($this->service(Operations::class), $this->service(Sessions::class), $this->service(SecurityLog::class), $this->service(Passkeys::class), $this->service(PasskeyPolicy::class), new NativeClock());
         $this->expectException(IntegratorError::class);
         $this->expectExceptionMessage('YorvoID\'s clock is a Symfony\Component\Clock\NativeClock, which tests can\'t move.');
         $native->clock();
@@ -142,7 +147,7 @@ final class ScenarioTest extends TestCase
         self::assertSame([$ana->id->uuid->toRfc4122(), ['passkey']], [$me['user'], $me['methods']]);
 
         // Through YorvoID: ending the session signs out.
-        $this->service(Sessions::class)->end(new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        Permits::call($this->service(Sessions::class)->end(...), new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         $this->browser->request('GET', '/me');
         self::assertSame(401, $this->browser->getResponse()->getStatusCode());
     }

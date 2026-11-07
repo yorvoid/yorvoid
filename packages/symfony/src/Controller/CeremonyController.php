@@ -13,10 +13,12 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Realm;
 use YorvoID\Passkeys\BegunCeremony;
 use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Passkeys\RegisterPasskey;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\Json;
 use YorvoID\Throttle\Throttled;
@@ -34,6 +36,7 @@ final readonly class CeremonyController
 {
     public function __construct(
         private Passkeys $passkeys,
+        private Operations $operations,
         private CurrentSession $current,
         private Realm $realm,
         private Duration $window,
@@ -69,7 +72,7 @@ final readonly class CeremonyController
     public function register(Request $request): JsonResponse
     {
         return $this->signedIn($request, function (Session $session, array $body): JsonResponse {
-            $credential = $this->passkeys->finishRegistration($session, (string) Json::string($body, 'ceremony'), json_encode($body['response'] ?? null, \JSON_THROW_ON_ERROR), (string) Json::string($body, 'label'), new Origin(OriginKind::Web, 'yorvoid_passkey_register'));
+            $credential = $this->operations->run(new RegisterPasskey($session->realm, (string) Json::string($body, 'ceremony'), json_encode($body['response'] ?? null, \JSON_THROW_ON_ERROR), (string) Json::string($body, 'label')), $session, new Origin(OriginKind::Web, 'yorvoid_passkey_register'));
 
             return new JsonResponse(['credential' => (string) $credential->id, 'label' => $credential->label], 201);
         });

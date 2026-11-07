@@ -33,8 +33,10 @@ use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Passkeys\RegisterPasskey;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Flow\SessionFlowStore;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Symfony\App\TestKernel;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
@@ -68,7 +70,7 @@ final class FlowPagesTest extends TestCase
         $this->boot();
         $setupCodes = $this->container->get(SetupCodes::class);
         \assert($setupCodes instanceof SetupCodes);
-        $code = $setupCodes->create(new CreateSetupCode(Realm::default(), Duration::days(1)), new Origin(OriginKind::Console));
+        $code = Permits::call($setupCodes->create(...), new CreateSetupCode(Realm::default(), Duration::days(1)), new Origin(OriginKind::Console));
 
         $this->browser->request('GET', '/yorvoid/flows/yorvoid.setup');
         self::assertSame(303, $this->statusCode());
@@ -465,13 +467,13 @@ final class FlowPagesTest extends TestCase
         $passkeys = $this->container->get(Passkeys::class);
         $codes = $this->container->get(RecoveryCodes::class);
         \assert($principals instanceof Principals && $sessions instanceof Sessions && $passkeys instanceof Passkeys && $codes instanceof RecoveryCodes);
-        $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: $email), new Origin(OriginKind::Console));
-        $session = $sessions->start(new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, new \DateTimeImmutable()))), new Origin(OriginKind::Web))->session;
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: $email), new Origin(OriginKind::Console));
+        $session = Permits::call($sessions->start(...), new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, new \DateTimeImmutable()))), new Origin(OriginKind::Web))->session;
         $authenticator = new VirtualAuthenticator();
         $ceremony = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Phone'), new Origin(OriginKind::Web), $session);
 
-        return [$principal, $authenticator, array_map(static fn (\YorvoID\Core\Secret $code): string => $code->reveal(), $codes->generate(new GenerateRecoveryCodes(Realm::default()), $session, new Origin(OriginKind::Web)))];
+        return [$principal, $authenticator, array_map(static fn (\YorvoID\Core\Secret $code): string => $code->reveal(), Permits::call($codes->generate(...), new GenerateRecoveryCodes(Realm::default()), new Origin(OriginKind::Web), $session))];
     }
 
     private function signIn(VirtualAuthenticator $authenticator): void

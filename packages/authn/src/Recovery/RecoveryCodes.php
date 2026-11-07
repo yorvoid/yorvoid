@@ -35,7 +35,9 @@ use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
-use YorvoID\Core\Principal\IdentifierKind;
+use YorvoID\Core\Operation\ActingPrincipal;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\InvalidIdentifier;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
@@ -63,7 +65,7 @@ use YorvoID\Throttle\Throttled;
  *
  * @api
  */
-final readonly class RecoveryCodes
+final readonly class RecoveryCodes implements OperationHandler
 {
     public const string GENERATE = 'yorvoid.recovery_codes.generate';
 
@@ -93,6 +95,15 @@ final readonly class RecoveryCodes
         }
     }
 
+    public function operations(): array
+    {
+        return [
+            GenerateRecoveryCodes::class => $this->generate(...),
+            RecoverWithCode::class => $this->recover(...),
+            RedeemRecoveryCode::class => $this->redeem(...),
+        ];
+    }
+
     /**
      * Generates the session's principal a new set of codes, replacing any earlier ones.
      *
@@ -101,17 +112,16 @@ final readonly class RecoveryCodes
      * @throws StepUpRequired    When the session didn't prove who it is recently enough
      * @throws HeldAfterRecovery When the account was recovered recently, and it has codes
      */
-    public function generate(GenerateRecoveryCodes $command, Session $session, Origin $origin): array
+    public function generate(GenerateRecoveryCodes $command, Permit $permit, Origin $origin): array
     {
-        if (!$command->realm->equals($session->realm)) {
-            throw new IntegratorError('The session is in another realm than the recovery codes.', 'Generate codes in the realm of the signed-in session.', 'concepts/recovery-codes.md#generating-codes');
-        }
+        $permit->use($command);
+        $session = Credentials::session($permit, 'concepts/recovery-codes.md#generating-codes');
 
-        return $this->transactions->run(function () use ($session, $origin): array {
+        return $this->transactions->run(function () use ($session, $permit, $origin): array {
             $credential = $this->credential($session->realm, $session->principalId);
 
             if (null === $credential) {
-                $credential = $this->credentials->add(new AddCredential($session->realm, CredentialKind::RecoveryCodes, ''), $session, $origin);
+                $credential = $permit->cause($this->credentials->add(...), new AddCredential($session->realm, CredentialKind::RecoveryCodes, ''), $origin);
             } else {
                 // A new set makes the owner's saved codes useless: it waits out a recovery's cool-down, and
                 // needs a passkey's proof, not a code's.
@@ -150,19 +160,16 @@ final readonly class RecoveryCodes
      * The answer, the attempts counted and the work done are the same whether there's no such account, it
      * has no codes, or the code is wrong; attempts are counted for the identifier typed, not the account.
      *
-     * @param string      $identifier   As typed; one that isn't valid for its kind matches no account
-     * @param string      $code         As typed; case, hyphens and spaces don't matter
-     * @param string|null $device       As for StartSession
-     * @param string|null $address      As for StartSession; pass it, so attempts from one address are limited
-     * @param Secret|null $deviceCookie The device cookie the browser sent, if any; the session's result says which to set
-     *
      * @return StartedSession|null The new session; null if there's no such account or the code doesn't work
      *
      * @throws InactivePrincipal When the account isn't active and the code is right; the code still works afterwards
      * @throws Throttled         When there were too many attempts; nothing was checked
      */
-    public function recover(Realm $realm, IdentifierKind $kind, string $identifier, #[\SensitiveParameter] string $code, Origin $origin, ?string $device = null, ?string $address = null, #[\SensitiveParameter] ?Secret $deviceCookie = null): ?StartedSession
+    public function recover(RecoverWithCode $command, Permit $permit, Origin $origin): ?StartedSession
     {
+        $permit->use($command);
+        [$realm, $kind, $identifier, $address, $deviceCookie] = [$command->realm, $command->kind, $command->identifier, $command->address, $command->deviceCookie];
+
         try {
             $account = \sprintf('%s:%s', $kind->value, $kind->normalize($identifier));
         } catch (InvalidIdentifier) {
@@ -181,7 +188,7 @@ final readonly class RecoveryCodes
         // The owner's own browser isn't kept out by attempts at the account from elsewhere.
         $this->attempts->count('recovery_code', $realm, $account, $address, $this->sessions->isKnownDevice($realm, $principalId, $deviceCookie));
 
-        $started = $this->check($realm, $principalId, self::hash($code), $origin, $device, $address, $deviceCookie);
+        $started = $this->check($realm, $principalId, self::hash($command->code), $permit, $origin, $command->device, $address, $deviceCookie);
 
         if (null !== $started) {
             \assert(null !== $account, 'Only an account that exists has codes.');
@@ -196,19 +203,17 @@ final readonly class RecoveryCodes
      * When the person types who they are, use recover() instead, which answers the same for accounts that
      * don't exist.
      *
-     * @param string|null $device       As for StartSession
-     * @param string|null $address      As for StartSession; pass it, so attempts from one address are limited
-     * @param Secret|null $deviceCookie The device cookie the browser sent, if any; the session's result says which to set
-     *
      * @return StartedSession|null The new session; null if the code doesn't work
      *
      * @throws InactivePrincipal When the principal isn't active; the code still works afterwards
      * @throws Throttled         When there were too many attempts; nothing was checked
      */
-    public function redeem(Realm $realm, PrincipalId $principalId, #[\SensitiveParameter] Secret $code, Origin $origin, ?string $device = null, ?string $address = null, #[\SensitiveParameter] ?Secret $deviceCookie = null): ?StartedSession
+    public function redeem(RedeemRecoveryCode $command, Permit $permit, Origin $origin): ?StartedSession
     {
-        $this->attempts->count('recovery_code', $realm, $principalId, $address, $this->sessions->isKnownDevice($realm, $principalId, $deviceCookie));
-        $started = $this->check($realm, $principalId, self::hash($code->reveal()), $origin, $device, $address, $deviceCookie);
+        $permit->use($command);
+        [$realm, $principalId, $address] = [$command->realm, $command->principalId, $command->address];
+        $this->attempts->count('recovery_code', $realm, $principalId, $address, $this->sessions->isKnownDevice($realm, $principalId, $command->deviceCookie));
+        $started = $this->check($realm, $principalId, self::hash($command->code->reveal()), $permit, $origin, $command->device, $address, $command->deviceCookie);
 
         if (null !== $started) {
             $this->attempts->succeeded('recovery_code', $realm, $principalId, $address);
@@ -229,9 +234,9 @@ final readonly class RecoveryCodes
      * Uses the code if it's one of the principal's, in the same statements whether the principal has no
      * codes or the code is wrong: a refusal is recorded either way.
      */
-    private function check(Realm $realm, PrincipalId $principalId, string $hash, Origin $origin, ?string $device, ?string $address, ?Secret $deviceCookie): ?StartedSession
+    private function check(Realm $realm, PrincipalId $principalId, string $hash, Permit $permit, Origin $origin, ?string $device, ?string $address, ?Secret $deviceCookie): ?StartedSession
     {
-        return $this->transactions->run(function () use ($realm, $principalId, $hash, $origin, $device, $address, $deviceCookie): ?StartedSession {
+        return $this->transactions->run(function () use ($realm, $principalId, $hash, $permit, $origin, $device, $address, $deviceCookie): ?StartedSession {
             $credential = $this->credential($realm, $principalId);
             $usable = null !== $credential && $credential->isActive();
 
@@ -252,9 +257,10 @@ final readonly class RecoveryCodes
             $remaining = $this->store->count($realm, $principalId);
             $this->credentials->markUsed($credential);
             $this->log->record($realm, self::USE, Outcome::Success, $origin, $principalId, 'credential', (string) $credential->id, ['principal' => (string) $principalId, 'remaining' => $remaining]);
-            $this->sessions->endAll(new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $principalId);
+            $recovered = new ActingPrincipal($realm, $principalId);
+            $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $recovered);
             $this->stepUp->startCoolDown($realm, $principalId, $origin);
-            $started = $this->sessions->start(new StartSession($realm, $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now())), $device, $address, $deviceCookie), $origin);
+            $started = $permit->cause($this->sessions->start(...), new StartSession($realm, $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now())), $device, $address, $deviceCookie), $origin, $recovered);
 
             $this->transactions->afterCommit(function () use ($realm, $principalId, $remaining, $origin): void {
                 $this->events->dispatch(new RecoveryCodeUsed($realm, $principalId, $remaining, $origin));

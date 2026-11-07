@@ -29,8 +29,11 @@ use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Passkeys\RegisterPasskey;
+use YorvoID\Passkeys\SignInWithPasskey;
 use YorvoID\Passkeys\Storage\InMemoryCeremonyStore;
 use YorvoID\Passkeys\Storage\InMemoryPasskeyStore;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Throttle\Storage\InMemoryThrottleStore;
 use YorvoID\Throttle\Throttle;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
@@ -47,11 +50,11 @@ $principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifie
 $sessions = new Sessions(new InMemorySessionStore(), $principals, $log, $transactions);
 $credentials = new Credentials(new InMemoryCredentialStore(), $sessions, new StepUp($sessions, new InMemoryCoolDownStore(), $log), $log, $transactions);
 $passkeys = new Passkeys(new InMemoryPasskeyStore(), new InMemoryCeremonyStore(), $credentials, $sessions, $principals, $log, $transactions, new PasskeyPolicy('example.com', ['https://example.com']), new Attempts(new Throttle(new InMemoryThrottleStore())));
-$principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
-$session = $sessions->start(new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, new DateTimeImmutable()))), new Origin(OriginKind::System))->session;
+$principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
+$session = Permits::call($sessions->start(...), new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, new DateTimeImmutable()))), new Origin(OriginKind::System))->session;
 $authenticator = new VirtualAuthenticator();
 $registration = $passkeys->beginRegistration($session);
-$passkeys->finishRegistration($session, $registration->id, $authenticator->register($registration->options), 'Fuzz', new Origin(OriginKind::System));
+Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Fuzz'), new Origin(OriginKind::System), $session);
 
 if (is_dir('corpus')) {
     file_put_contents('corpus/genuine-answer.json', $authenticator->signIn($passkeys->beginSignIn(Realm::default())->options));
@@ -62,7 +65,7 @@ $config->setTarget(onlyRefusals(static function (string $input) use ($passkeys):
     $ceremony = $passkeys->beginSignIn(Realm::default());
 
     try {
-        $passkeys->finishSignIn(Realm::default(), $ceremony->id, $input, new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(Realm::default(), $ceremony->id, $input), new Origin(OriginKind::Web));
     } catch (PasskeyRefused) {
         return;
     }

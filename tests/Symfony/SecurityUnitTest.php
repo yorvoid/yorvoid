@@ -21,6 +21,7 @@ use Symfony\Component\VarDumper\Dumper\CliDumper;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
@@ -52,7 +53,7 @@ final class SecurityUnitTest extends TestCase
 
     public function testWithoutARequestThereIsNoSession(): void
     {
-        $current = new CurrentSession(new RequestStack(), $this->sessions(), Realm::default());
+        $current = new CurrentSession(new RequestStack(), $this->sessions(), $this->service(Operations::class), Realm::default());
 
         self::assertNull($current->get());
         self::assertFalse($current->isHeld());
@@ -121,7 +122,7 @@ final class SecurityUnitTest extends TestCase
         $requests = new RequestStack();
         $requests->push($request);
 
-        new CurrentSession($requests, $this->sessions(), Realm::default())->hold(Secret::fromString('token'));
+        new CurrentSession($requests, $this->sessions(), $this->service(Operations::class), Realm::default())->hold(Secret::fromString('token'));
 
         self::assertNotSame($before, $session->getId());
         self::assertFileDoesNotExist(\sprintf('%s/%s.mocksess', $this->directory, $before), 'The old PHP session can still be used (SES-002).');
@@ -134,7 +135,7 @@ final class SecurityUnitTest extends TestCase
         $tokens = new TokenStorage();
         $tokens->setToken(new UsernamePasswordToken(new InMemoryUser('ana', null), 'main'));
 
-        new CurrentSession($requests, $this->sessions(), Realm::default(), tokens: $tokens)->signOut();
+        new CurrentSession($requests, $this->sessions(), $this->service(Operations::class), Realm::default(), tokens: $tokens)->signOut();
 
         self::assertSame([], $session->all());
         self::assertNotSame($before, $session->getId());
@@ -146,7 +147,7 @@ final class SecurityUnitTest extends TestCase
     {
         [$requests, $session, $before] = $this->signedIn();
 
-        new CurrentSession($requests, $this->sessions(), Realm::default())->signOutKeepingData(new Origin(OriginKind::Web));
+        new CurrentSession($requests, $this->sessions(), $this->service(Operations::class), Realm::default())->signOutKeepingData(new Origin(OriginKind::Web));
 
         self::assertSame(['cart' => 3], $session->all());
         self::assertNotSame($before, $session->getId());
@@ -154,8 +155,8 @@ final class SecurityUnitTest extends TestCase
 
         $requests->pop();
         $requests->push(new Request());
-        new CurrentSession($requests, $this->sessions(), Realm::default())->signOut();
-        new CurrentSession($requests, $this->sessions(), Realm::default())->signOutKeepingData(new Origin(OriginKind::Web));
+        new CurrentSession($requests, $this->sessions(), $this->service(Operations::class), Realm::default())->signOut();
+        new CurrentSession($requests, $this->sessions(), $this->service(Operations::class), Realm::default())->signOutKeepingData(new Origin(OriginKind::Web));
         self::assertFalse($requests->getMainRequest()?->hasSession(), 'Signing out started a PHP session.');
     }
 

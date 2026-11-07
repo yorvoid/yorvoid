@@ -45,12 +45,14 @@ use YorvoID\Core\Principal\SuspendPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Passkeys\RegisterPasskey;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\EndSessionOnSignOut;
 use YorvoID\Symfony\Security\PrincipalUser;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\StatementLog;
 use YorvoID\Tests\Symfony\App\TestKernel;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
@@ -202,7 +204,7 @@ final class SecurityTest extends TestCase
         $this->boot();
         $sessions = $this->container->get(Sessions::class);
         \assert($sessions instanceof Sessions);
-        $started = $sessions->start(new StartSession(Realm::default(), $this->principal()->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web));
+        $started = Permits::call($sessions->start(...), new StartSession(Realm::default(), $this->principal()->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web));
         $request = Request::create('/sign-out');
         $request->setSession(new PhpSession(new MockArraySessionStorage()));
         $request->getSession()->set(CurrentSession::KEY, $started->token->reveal());
@@ -256,7 +258,7 @@ final class SecurityTest extends TestCase
 
         $sessions = $this->container->get(Sessions::class);
         \assert($sessions instanceof Sessions);
-        $sessions->endAll(new EndSessions(Realm::default(), $ana->id, SessionEndReason::EndedByAdministrator), new Origin(OriginKind::Console));
+        Permits::call($sessions->endAll(...), new EndSessions(Realm::default(), $ana->id, SessionEndReason::EndedByAdministrator), new Origin(OriginKind::Console));
 
         $this->browser->request('GET', '/me');
         self::assertSame(401, $this->statusCode());
@@ -273,11 +275,11 @@ final class SecurityTest extends TestCase
         $credentials = $this->container->get(\YorvoID\Authn\Credential\Credentials::class);
         $passkeys = $this->container->get(Passkeys::class);
         \assert($codes instanceof RecoveryCodes && $principals instanceof Principals && $credentials instanceof \YorvoID\Authn\Credential\Credentials && $passkeys instanceof Passkeys);
-        $codes->generate(new GenerateRecoveryCodes(Realm::default()), $this->session($ana), new Origin(OriginKind::Web));
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(Realm::default()), new Origin(OriginKind::Web), $this->session($ana));
         self::assertCount(2, $credentials->of(Realm::default(), $ana->id));
         self::assertCount(1, $passkeys->of(Realm::default(), $ana->id));
 
-        $principals->delete(new \YorvoID\Core\Principal\DeletePrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
+        Permits::call($principals->delete(...), new \YorvoID\Core\Principal\DeletePrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
 
         self::assertSame([], $credentials->of(Realm::default(), $ana->id));
         self::assertSame([], $passkeys->of(Realm::default(), $ana->id), 'A deleted principal\'s public key stayed.');
@@ -294,7 +296,7 @@ final class SecurityTest extends TestCase
         $principals = $this->container->get(Principals::class);
         \assert($principals instanceof Principals);
 
-        $principals->suspend(new SuspendPrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
+        Permits::call($principals->suspend(...), new SuspendPrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
 
         $this->browser->request('GET', '/me');
         self::assertSame(401, $this->statusCode());
@@ -345,7 +347,7 @@ final class SecurityTest extends TestCase
         $this->boot();
         $codes = $this->container->get(RecoveryCodes::class);
         \assert($codes instanceof RecoveryCodes);
-        $code = $codes->generate(new GenerateRecoveryCodes(Realm::default()), $this->session($this->principal()), new Origin(OriginKind::Web))[0];
+        $code = Permits::call($codes->generate(...), new GenerateRecoveryCodes(Realm::default()), new Origin(OriginKind::Web), $this->session($this->principal()))[0];
         $this->principal('bo@example.com');
         $answers = [];
 
@@ -370,7 +372,7 @@ final class SecurityTest extends TestCase
         $codes = $this->container->get(RecoveryCodes::class);
         $links = $this->container->get(RecoveryLinks::class);
         \assert($codes instanceof RecoveryCodes && $links instanceof RecoveryLinks);
-        $code = $codes->generate(new GenerateRecoveryCodes(Realm::default()), $session, new Origin(OriginKind::Web))[0];
+        $code = Permits::call($codes->generate(...), new GenerateRecoveryCodes(Realm::default()), new Origin(OriginKind::Web), $session)[0];
 
         self::assertSame(['error' => 'That code didn\'t work. Check it, or use another one.'], $this->post('/yorvoid/recover/code', ['email' => 'ana@example.com', 'code' => 'wrong']));
         self::assertSame(['error' => 'That code didn\'t work. Check it, or use another one.'], $this->post('/yorvoid/recover/code', ['email' => 'nobody@example.com', 'code' => $code->reveal()]), 'The answer told whether an account exists.');
@@ -378,7 +380,7 @@ final class SecurityTest extends TestCase
         self::assertSame(['signed_in' => true], $this->post('/yorvoid/recover/code', ['email' => 'ANA@example.com', 'code' => $code->reveal()]));
         self::assertSame(['recovery_code'], $this->get('/me')['methods']);
 
-        $link = $links->issue(new IssueRecoveryLink(Realm::default(), $ana->id), new Origin(OriginKind::Console));
+        $link = Permits::call($links->issue(...), new IssueRecoveryLink(Realm::default(), $ana->id), new Origin(OriginKind::Console));
         self::assertSame(['signed_in' => true], $this->post('/yorvoid/recover/link', ['token' => $link->secret->reveal()]));
         self::assertSame(['recovery_link'], $this->get('/me')['methods']);
         self::assertSame(['error' => 'This link doesn\'t work any more. Ask for a new one.'], $this->post('/yorvoid/recover/link', ['token' => $link->secret->reveal()]));
@@ -392,8 +394,8 @@ final class SecurityTest extends TestCase
         \assert($clock instanceof \Symfony\Component\Clock\MockClock);
         $clock->sleep(86400);
         // After the recovery's cool-down, replacing the codes takes a passkey's proof.
-        $codeAgain = $codes->generate(new GenerateRecoveryCodes(Realm::default()), $this->session($ana, AuthenticationMethod::Passkey), new Origin(OriginKind::Web))[0];
-        $principals->suspend(new SuspendPrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
+        $codeAgain = Permits::call($codes->generate(...), new GenerateRecoveryCodes(Realm::default()), new Origin(OriginKind::Web), $this->session($ana, AuthenticationMethod::Passkey))[0];
+        Permits::call($principals->suspend(...), new SuspendPrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
         self::assertSame(['error' => 'This account can\'t sign in.'], $this->post('/yorvoid/recover/code', ['email' => 'ana@example.com', 'code' => $codeAgain->reveal()]));
         self::assertSame(401, $this->statusCode());
     }
@@ -466,7 +468,7 @@ final class SecurityTest extends TestCase
         $ana = $this->principal();
         $codes = $this->container->get(RecoveryCodes::class);
         \assert($codes instanceof RecoveryCodes);
-        $code = $codes->generate(new GenerateRecoveryCodes(Realm::default()), $this->session($ana), new Origin(OriginKind::Web))[0];
+        $code = Permits::call($codes->generate(...), new GenerateRecoveryCodes(Realm::default()), new Origin(OriginKind::Web), $this->session($ana))[0];
         $this->post('/yorvoid/recover/code', ['email' => 'ana@example.com', 'code' => $code->reveal()]);
 
         $this->browser->request('POST', '/yorvoid/passkeys/signals', [], [], ['CONTENT_TYPE' => 'application/json'], '{}');
@@ -547,7 +549,7 @@ final class SecurityTest extends TestCase
             self::assertSame(\sprintf('The user %s gave for principal %s is identified as "ana@example.com".', PrincipalUsers::class.'@anonymous', $ana->id), $error->problem);
         }
 
-        $principals->suspend(new SuspendPrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
+        Permits::call($principals->suspend(...), new SuspendPrincipal(Realm::default(), $ana->id), new Origin(OriginKind::Console));
 
         try {
             $provider->refreshUser($user);
@@ -584,7 +586,7 @@ final class SecurityTest extends TestCase
         $principals = $this->container->get(Principals::class);
         \assert($principals instanceof Principals);
 
-        return $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: $email, emailVerified: true), new Origin(OriginKind::Console));
+        return Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: $email, emailVerified: true), new Origin(OriginKind::Console));
     }
 
     private function session(Principal $principal, AuthenticationMethod $method = AuthenticationMethod::SetupCode): Session
@@ -594,7 +596,7 @@ final class SecurityTest extends TestCase
         \assert($sessions instanceof Sessions && $clock instanceof \Psr\Clock\ClockInterface);
         $passkey = AuthenticationMethod::Passkey === $method;
 
-        return $sessions->start(new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor($method, $clock->now(), $passkey, $passkey))), new Origin(OriginKind::Web))->session;
+        return Permits::call($sessions->start(...), new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor($method, $clock->now(), $passkey, $passkey))), new Origin(OriginKind::Web))->session;
     }
 
     private function passkey(Principal $principal): VirtualAuthenticator
@@ -604,7 +606,7 @@ final class SecurityTest extends TestCase
         $session = $this->session($principal);
         $authenticator = new VirtualAuthenticator();
         $ceremony = $passkeys->beginRegistration($session);
-        $passkeys->finishRegistration($session, $ceremony->id, $authenticator->register($ceremony->options), 'Phone', new Origin(OriginKind::Web));
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Phone'), new Origin(OriginKind::Web), $session);
 
         return $this->authenticators[(string) $principal->id] = $authenticator;
     }

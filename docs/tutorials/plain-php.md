@@ -38,6 +38,10 @@ use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
 use YorvoID\Core\Principal\Storage\DbalPrincipalStore;
+use YorvoID\Authn\StepUp\StepUpSelfService;
+use YorvoID\Core\Operation\BuiltInAuthorization;
+use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
@@ -63,7 +67,7 @@ $log = new SecurityLog(new DbalSecurityLogStore($database), $transactions);
 $principals = new Principals(new DbalPrincipalStore($database), new DbalIdentifierStore($database), $log, $transactions);
 $sessions = new Sessions(new DbalSessionStore($database), $principals, $log, $transactions, SessionPolicy::aal2());
 $attempts = new Attempts(new Throttle(new DbalThrottleStore($database)));
-$setupCodes = new SetupCodes(new DbalSetupStore($database), $principals, $log, $transactions, $attempts);
+$setupCodes = new SetupCodes(new DbalSetupStore($database), $principals, $log, $transactions, $attempts, $sessions);
 $stepUp = new StepUp($sessions, new DbalCoolDownStore($database), $log);
 $credentials = new Credentials(new DbalCredentialStore($database), $sessions, $stepUp, $log, $transactions);
 $passkeys = new Passkeys(
@@ -77,9 +81,19 @@ $passkeys = new Passkeys(
     new PasskeyPolicy('example.com', ['https://example.com']),
     $attempts,
 );
+
+// The way into every change: it decides who may, and gives the service a permit.
+$handlers = [$principals, $sessions, $credentials, $setupCodes, $passkeys];
+$operations = new Operations(
+    OperationCatalogue::of($handlers),
+    new BuiltInAuthorization(selfService: new StepUpSelfService($stepUp)),
+    $log,
+    $handlers,
+);
 ```
 
 - **The passkey policy** names the domain passkeys belong to, and the origins of the pages that use them ([passkeys](../concepts/passkeys.md#configuration)).
+- **Operations** runs every change ([running an operation](../concepts/operations-and-events.md#running-an-operation)): the host's `Operator` from the console, a session on its own account with a recent proof (`StepUpSelfService`), and anyone signing in. For administrators, pass an `AbilityPolicy` that says who holds an ability, e.g. `yorvoid.principals.manage`; without one, nobody does.
 - **PostgreSQL** in production: change the connection's parameters; the rest stays ([storage](../concepts/storage.md)).
 
 ## Create the tables
@@ -105,8 +119,9 @@ use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Operator;
 
-$code = $setupCodes->create(new CreateSetupCode($realm, Duration::days(1)), new Origin(OriginKind::Console));
+$code = $operations->run(new CreateSetupCode($realm, Duration::days(1)), new Operator(), new Origin(OriginKind::Console));
 echo $code->reveal(), "\n";
 ```
 
@@ -117,25 +132,19 @@ $_POST = ['code' => $code->reveal(), 'email' => 'ana@example.com'];
 Your setup page takes the code and an email address, claims the installation, and signs the owner in:
 
 ```php
-use YorvoID\Authn\Session\AuthenticationContext;
-use YorvoID\Authn\Session\AuthenticationFactor;
-use YorvoID\Authn\Session\AuthenticationMethod;
-use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Setup\ClaimSetup;
+use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Secret;
 
-$owner = $setupCodes->claim(
+$started = $operations->run(new ClaimSetup(
     $realm,
     Secret::fromString($_POST['code']),
     new CreatePrincipal($realm, PrincipalKind::Human, email: $_POST['email'], emailVerified: true),
-    new Origin(OriginKind::Web),
-    $_SERVER['REMOTE_ADDR'] ?? null,
-);
-$started = $sessions->start(
-    new StartSession($realm, $owner->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, new DateTimeImmutable()))),
-    new Origin(OriginKind::Web),
-);
+    address: $_SERVER['REMOTE_ADDR'] ?? null,
+), new Anonymous(), new Origin(OriginKind::Web));
+$owner = $started->session->principalId;
 setcookie('__Host-session', $started->token->reveal(), ['secure' => true, 'httponly' => true, 'samesite' => 'Lax', 'path' => '/']);
 ```
 
@@ -226,6 +235,8 @@ TutorialInput::send(json_encode(['ceremony' => $ceremony->id, 'response' => json
 Your server takes JSON only. A form on another site can't send that, and a script on another site can't without the browser asking first, so these requests can't be forged (CSRF):
 
 ```php
+use YorvoID\Passkeys\RegisterPasskey;
+
 /** @return array<string, mixed> What the browser sent */
 function json_request(): array
 {
@@ -240,7 +251,7 @@ function json_request(): array
 }
 
 $request = json_request();
-$passkeys->finishRegistration($session, (string) ($request['ceremony'] ?? ''), json_encode($request['response'] ?? null), 'Laptop', new Origin(OriginKind::Web));
+$operations->run(new RegisterPasskey($realm, (string) ($request['ceremony'] ?? ''), (string) json_encode($request['response'] ?? null), 'Laptop'), $session, new Origin(OriginKind::Web));
 ```
 
 YorvoID checks the answer against the ceremony: the challenge, the origin, the relying party, user verification. A refused answer throws `PasskeyRefused` with the reason.
@@ -251,7 +262,7 @@ YorvoID checks the answer against the ceremony: the challenge, the origin, the r
 use YorvoID\Authn\Session\EndSession;
 use YorvoID\Authn\Session\SessionEndReason;
 
-$sessions->end(new EndSession($realm, $session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+$operations->run(new EndSession($realm, $session->id, SessionEndReason::SignedOut), $session, new Origin(OriginKind::Web));
 setcookie('__Host-session', '', ['expires' => 1, 'secure' => true, 'httponly' => true, 'samesite' => 'Lax', 'path' => '/']);
 ```
 
@@ -277,15 +288,17 @@ TutorialInput::send(json_encode(['ceremony' => $ceremony->id, 'response' => json
 -->
 
 ```php
+use YorvoID\Passkeys\SignInWithPasskey;
+
 $request = json_request();
-$started = $passkeys->finishSignIn($realm, (string) ($request['ceremony'] ?? ''), json_encode($request['response'] ?? null), new Origin(OriginKind::Web), address: $_SERVER['REMOTE_ADDR'] ?? null);
+$started = $operations->run(new SignInWithPasskey($realm, (string) ($request['ceremony'] ?? ''), (string) json_encode($request['response'] ?? null), address: $_SERVER['REMOTE_ADDR'] ?? null), new Anonymous(), new Origin(OriginKind::Web));
 setcookie('__Host-session', $started->token->reveal(), ['secure' => true, 'httponly' => true, 'samesite' => 'Lax', 'path' => '/']);
 ```
 
 A passkey sign-in starts a multi-factor, phishing-resistant session. One that doesn't work throws `PasskeyRefused` with the reason, e.g. a passkey that isn't registered here, so the browser can tell its provider; too many attempts from the address throw `Throttled`.
 
 <!-- test
-assert($started->session->principalId->equals($owner->id), 'Someone else signed in.');
+assert($started->session->principalId->equals($owner), 'Someone else signed in.');
 echo "The tutorial works.\n";
 -->
 

@@ -15,7 +15,9 @@ use YorvoID\Authn\Credential\RemoveCredential;
 use YorvoID\Authn\Recovery\Event\RecoveryCodesGenerated;
 use YorvoID\Authn\Recovery\Event\RecoveryCodeUsed;
 use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
+use YorvoID\Authn\Recovery\RecoverWithCode;
 use YorvoID\Authn\Recovery\RecoveryCodes;
+use YorvoID\Authn\Recovery\RedeemRecoveryCode;
 use YorvoID\Authn\Recovery\Storage\DbalRecoveryCodeStore;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
@@ -53,6 +55,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 use YorvoID\Tests\Support\StatementLog;
@@ -87,7 +90,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
         $session = $this->session();
         $origin = new Origin(OriginKind::Web);
 
-        $generated = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, $origin);
+        $generated = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), $origin, $session);
 
         self::assertCount(10, $generated);
         self::assertCount(10, array_unique(array_map(static fn (Secret $code): string => $code->reveal(), $generated)));
@@ -112,7 +115,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
     public function testStoresOnlyTheCodesHashes(string $platform): void
     {
         $codes = $this->codes($platform);
-        $generated = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $this->session(), new Origin(OriginKind::Web));
+        $generated = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $this->session());
         $database = $this->stack->database;
         \assert($database instanceof Database);
 
@@ -128,14 +131,14 @@ final class RecoveryCodesTest extends DatabaseTestCase
     {
         $codes = $this->codes($implementation);
         $session = $this->session();
-        $code = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web))[4];
+        $code = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session)[4];
         $this->clock->sleep(60);
         $this->events->dispatched = [];
 
         // As someone types it from paper: lower case, spaces for hyphens, an O for a zero.
         $typed = strtolower(str_replace(['-', '0'], [' ', 'O'], $code->reveal()));
         $origin = new Origin(OriginKind::Web);
-        $started = $codes->redeem(new Realm('acme'), $session->principalId, Secret::fromString($typed), $origin, 'Firefox on Linux', '192.0.2.10');
+        $started = Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, Secret::fromString($typed), 'Firefox on Linux', '192.0.2.10'), $origin);
 
         self::assertNotNull($started);
         self::assertSame([AuthenticationMethod::RecoveryCode], $started->session->authentication->methods());
@@ -155,7 +158,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
         self::assertSame([SessionStarting::class, SessionEnded::class, SessionStarted::class, RecoveryCodeUsed::class], array_values(array_filter($this->events->classes(), static fn (string $class): bool => SecurityLogEntryRecorded::class !== $class)));
         self::assertEquals(new RecoveryCodeUsed(new Realm('acme'), $session->principalId, 9, $origin), $this->events->last());
 
-        self::assertNull($codes->redeem(new Realm('acme'), $session->principalId, $code, new Origin(OriginKind::Web)), 'A code worked twice.');
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $code), new Origin(OriginKind::Web)), 'A code worked twice.');
         $failed = $this->entries()[\count($this->entries()) - 1];
         self::assertSame(['yorvoid.recovery_code.use', Outcome::Failed, null], [$failed->action, $failed->outcome, $failed->actor]);
         self::assertSame(['principal' => (string) $session->principalId], $failed->details);
@@ -166,15 +169,15 @@ final class RecoveryCodesTest extends DatabaseTestCase
     {
         $codes = $this->codes($implementation);
         $session = $this->session();
-        $old = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+        $old = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
         $entries = \count($this->entries());
 
-        $new = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+        $new = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
 
         self::assertCount(1, $this->credentials->of(new Realm('acme'), $session->principalId));
         self::assertSame(['yorvoid.recovery_codes.generate'], array_map(static fn (LogEntry $entry): string => $entry->action, \array_slice($this->entries(), $entries)), 'A new set added another credential.');
-        self::assertNull($codes->redeem(new Realm('acme'), $session->principalId, $old[0], new Origin(OriginKind::Web)), 'An old code still works.');
-        self::assertNotNull($codes->redeem(new Realm('acme'), $session->principalId, $new[0], new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $old[0]), new Origin(OriginKind::Web)), 'An old code still works.');
+        self::assertNotNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $new[0]), new Origin(OriginKind::Web)));
     }
 
     #[DataProvider('implementations')]
@@ -185,25 +188,25 @@ final class RecoveryCodesTest extends DatabaseTestCase
         $this->clock->sleep(300);
 
         try {
-            $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+            Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
             self::fail('A session that proved nothing recently got recovery codes.');
         } catch (StepUpRequired $exception) {
             self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), operation: 'yorvoid.credential.add'), $exception->requirement, 'The first set is a new credential.');
         }
 
         $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.add'), new Origin(OriginKind::Web));
-        $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
         $this->clock->sleep(300);
 
         try {
-            $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+            Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
             self::fail('A session that proved nothing recently replaced the recovery codes.');
         } catch (StepUpRequired $exception) {
             self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), phishingResistant: true, operation: RecoveryCodes::GENERATE, heldAfterRecovery: true), $exception->requirement);
         }
 
         $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, RecoveryCodes::GENERATE), new Origin(OriginKind::Web));
-        self::assertCount(10, $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web)));
+        self::assertCount(10, Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session));
     }
 
     #[DataProvider('implementations')]
@@ -214,14 +217,14 @@ final class RecoveryCodesTest extends DatabaseTestCase
         $this->stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
 
         // Someone who recovered with a link saves codes at once.
-        $code = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web))[0];
+        $code = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session)[0];
         $this->clock->sleep(86_400);
-        $recovered = $codes->redeem(new Realm('acme'), $session->principalId, $code, new Origin(OriginKind::Web));
+        $recovered = Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $code), new Origin(OriginKind::Web));
         self::assertNotNull($recovered);
 
         $this->expectException(HeldAfterRecovery::class);
 
-        $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $recovered->session, new Origin(OriginKind::Web));
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $recovered->session);
     }
 
     #[DataProvider('implementations')]
@@ -229,19 +232,19 @@ final class RecoveryCodesTest extends DatabaseTestCase
     {
         $codes = $this->codes($implementation);
         $session = $this->session();
-        $generated = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+        $generated = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
         $someoneElse = $this->session();
         $entries = \count($this->entries());
 
-        self::assertNull($codes->redeem(new Realm('acme'), $someoneElse->principalId, $generated[0], new Origin(OriginKind::Web)), 'Someone else\'s code worked.');
-        self::assertNull($codes->redeem(new Realm('globex'), $session->principalId, $generated[0], new Origin(OriginKind::Web)), 'A code worked in another realm.');
-        self::assertNull($codes->redeem(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), $generated[0], new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $someoneElse->principalId, $generated[0]), new Origin(OriginKind::Web)), 'Someone else\'s code worked.');
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('globex'), $session->principalId, $generated[0]), new Origin(OriginKind::Web)), 'A code worked in another realm.');
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), $generated[0]), new Origin(OriginKind::Web)));
         $failed = array_map(static fn (LogEntry $entry): array => [$entry->action, $entry->outcome, $entry->actor, $entry->subjectType, $entry->details], \array_slice($this->entries(), $entries));
         self::assertSame(array_fill(0, 2, [RecoveryCodes::USE, Outcome::Failed, null, null, []]), $failed, 'An attempt on a principal without codes wasn\'t recorded as one on no account.');
 
         $credential = $this->credentials->of(new Realm('acme'), $session->principalId)[0];
         $this->credentials->disable($credential, 'testing', new Origin(OriginKind::Console));
-        self::assertNull($codes->redeem(new Realm('acme'), $session->principalId, $generated[0], new Origin(OriginKind::Web)), 'A disabled set worked.');
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $generated[0]), new Origin(OriginKind::Web)), 'A disabled set worked.');
         self::assertSame(10, $this->stack->recoveryCodes->count(new Realm('acme'), $session->principalId), 'A disabled set lost a code.');
     }
 
@@ -250,16 +253,16 @@ final class RecoveryCodesTest extends DatabaseTestCase
     {
         $codes = $this->codes($implementation);
         $session = $this->session();
-        $generated = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+        $generated = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
         $credential = $this->credentials->of(new Realm('acme'), $session->principalId)[0];
 
-        $this->credentials->remove(new RemoveCredential(new Realm('acme'), $credential->id), $session, new Origin(OriginKind::Web));
+        Permits::call($this->credentials->remove(...), new RemoveCredential(new Realm('acme'), $credential->id), new Origin(OriginKind::Web), $session);
 
         self::assertSame(0, $codes->remaining(new Realm('acme'), $session->principalId));
-        self::assertNull($codes->redeem(new Realm('acme'), $session->principalId, $generated[0], new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $generated[0]), new Origin(OriginKind::Web)));
 
-        $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
-        self::assertNull($codes->redeem(new Realm('acme'), $session->principalId, $generated[1], new Origin(OriginKind::Web)), 'A code of a removed set came back.');
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $generated[1]), new Origin(OriginKind::Web)), 'A code of a removed set came back.');
         self::assertSame([CredentialKind::RecoveryCodes], array_map(static fn (Credential $credential): CredentialKind => $credential->kind, $this->credentials->of(new Realm('acme'), $session->principalId)));
     }
 
@@ -268,17 +271,17 @@ final class RecoveryCodesTest extends DatabaseTestCase
     {
         $codes = $this->codes($implementation);
         $session = $this->session();
-        $code = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web))[0];
-        $this->principals->suspend(new SuspendPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
+        $code = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session)[0];
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
 
         try {
-            $codes->redeem(new Realm('acme'), $session->principalId, $code, new Origin(OriginKind::Web));
+            Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $code), new Origin(OriginKind::Web));
             self::fail('A suspended principal recovered.');
         } catch (InactivePrincipal) {
         }
 
-        $this->principals->activate(new ActivatePrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
-        self::assertNotNull($codes->redeem(new Realm('acme'), $session->principalId, $code, new Origin(OriginKind::Web)));
+        Permits::call($this->principals->activate(...), new ActivatePrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
+        self::assertNotNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $code), new Origin(OriginKind::Web)));
     }
 
     #[DataProvider('implementations')]
@@ -286,35 +289,35 @@ final class RecoveryCodesTest extends DatabaseTestCase
     {
         $codes = $this->codes($implementation);
         $session = $this->session();
-        $generated = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+        $generated = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
         $wrong = Secret::fromString('0000-0000-0000-0000-0000-0000');
 
         for ($i = 0; $i < 9; ++$i) {
-            self::assertNull($codes->redeem(new Realm('acme'), $session->principalId, $wrong, new Origin(OriginKind::Web), address: '192.0.2.1'));
+            self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $wrong, address: '192.0.2.1'), new Origin(OriginKind::Web)));
         }
 
-        self::assertNotNull($codes->redeem(new Realm('acme'), $session->principalId, $generated[0], new Origin(OriginKind::Web), address: '192.0.2.1'));
+        self::assertNotNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $generated[0], address: '192.0.2.1'), new Origin(OriginKind::Web)));
 
         for ($i = 0; $i < 10; ++$i) {
-            self::assertNull($codes->redeem(new Realm('acme'), $session->principalId, $wrong, new Origin(OriginKind::Web), address: '192.0.2.1'), 'A success didn\'t forget the attempts before it.');
+            self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $wrong, address: '192.0.2.1'), new Origin(OriginKind::Web)), 'A success didn\'t forget the attempts before it.');
         }
 
         try {
-            $codes->redeem(new Realm('acme'), $session->principalId, $generated[1], new Origin(OriginKind::Web), address: '192.0.2.1');
+            Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $generated[1], address: '192.0.2.1'), new Origin(OriginKind::Web));
             self::fail('The eleventh attempt in 15 minutes was checked.');
         } catch (Throttled $exception) {
             self::assertSame(90, $exception->seconds);
         }
 
         self::assertSame(9, $codes->remaining(new Realm('acme'), $session->principalId), 'A throttled attempt used a code up.');
-        self::assertNotNull($codes->redeem(new Realm('acme'), $session->principalId, $generated[1], new Origin(OriginKind::Web), address: '192.0.2.2'));
+        self::assertNotNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $generated[1], address: '192.0.2.2'), new Origin(OriginKind::Web)));
     }
 
     #[DataProvider('implementations')]
     public function testRecoveringAnswersCountsAndRecordsTheSameForEveryAccount(string $implementation): void
     {
         $codes = $this->codes($implementation);
-        $generated = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $this->session('ana@example.com'), new Origin(OriginKind::Web));
+        $generated = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $this->session('ana@example.com'));
         $this->session('bo@example.com');
         $observed = [];
 
@@ -324,11 +327,11 @@ final class RecoveryCodesTest extends DatabaseTestCase
 
             // Wrong codes, an empty one, and one that isn't a code at all.
             foreach (['', '0000-0000-0000-0000-0000-0000', str_repeat('x', 1000), ...array_fill(0, 7, 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ')] as $wrong) {
-                $answers[] = $codes->recover(new Realm('acme'), IdentifierKind::Email, $email, $wrong, new Origin(OriginKind::Web), address: '192.0.2.1');
+                $answers[] = Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, $email, $wrong, address: '192.0.2.1'), new Origin(OriginKind::Web));
             }
 
             try {
-                $codes->recover(new Realm('acme'), IdentifierKind::Email, $email, $generated[0]->reveal(), new Origin(OriginKind::Web), address: '192.0.2.1');
+                Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, $email, $generated[0]->reveal(), address: '192.0.2.1'), new Origin(OriginKind::Web));
                 $answers[] = 'checked';
             } catch (Throttled $exception) {
                 $answers[] = $exception->seconds;
@@ -347,13 +350,13 @@ final class RecoveryCodesTest extends DatabaseTestCase
 
         // From another address the code works, and a success forgets the attempts before it from there.
         for ($i = 0; $i < 9; ++$i) {
-            self::assertNull($codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.2'));
+            self::assertNull(Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', address: '192.0.2.2'), new Origin(OriginKind::Web)));
         }
 
-        self::assertNotNull($codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', $generated[0]->reveal(), new Origin(OriginKind::Web), address: '192.0.2.2'));
+        self::assertNotNull(Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', $generated[0]->reveal(), address: '192.0.2.2'), new Origin(OriginKind::Web)));
 
         for ($i = 0; $i < 10; ++$i) {
-            self::assertNull($codes->recover(new Realm('acme'), IdentifierKind::Email, 'ANA@example.com', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.2'), 'A success didn\'t forget the attempts before it.');
+            self::assertNull(Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, 'ANA@example.com', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', address: '192.0.2.2'), new Origin(OriginKind::Web)), 'A success didn\'t forget the attempts before it.');
         }
     }
 
@@ -362,14 +365,14 @@ final class RecoveryCodesTest extends DatabaseTestCase
     {
         $statements = new StatementLog();
         $codes = $this->codes($platform, statements: $statements, devices: true);
-        $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $this->session('ana@example.com'), new Origin(OriginKind::Web));
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $this->session('ana@example.com'));
         $this->session('bo@example.com');
         $counted = [];
 
         foreach (['has codes' => 'ana@example.com', 'has none' => 'bo@example.com', 'doesn\'t exist' => 'cy@example.com'] as $account => $email) {
             foreach ([null, Secret::fromString('a-browser')] as $i => $cookie) {
                 $statements->take();
-                $codes->recover(new Realm('acme'), IdentifierKind::Email, $email, 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.1', deviceCookie: $cookie);
+                Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, $email, 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', address: '192.0.2.1', deviceCookie: $cookie), new Origin(OriginKind::Web));
                 $counted[$account.' '.$i] = \count($statements->take());
             }
         }
@@ -385,23 +388,23 @@ final class RecoveryCodesTest extends DatabaseTestCase
     {
         $codes = $this->codes($implementation, devices: true);
         $owner = $this->session('ana@example.com');
-        $generated = $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $owner, new Origin(OriginKind::Web));
+        $generated = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $owner);
         // The owner signed in on this browser before.
         $browser = Secret::fromString('anas-browser');
-        $this->sessions->start(new StartSession(new Realm('acme'), $owner->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true)), deviceCookie: $browser), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $owner->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true)), deviceCookie: $browser), new Origin(OriginKind::Web));
 
         // Someone fills the account's limit (100 an hour) from addresses of their own.
         for ($i = 0; $i < 100; ++$i) {
-            $codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: \sprintf('2001:db8:%x::1', $i));
+            Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', address: \sprintf('2001:db8:%x::1', $i)), new Origin(OriginKind::Web));
         }
 
         try {
-            $codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', $generated[0]->reveal(), new Origin(OriginKind::Web), address: '192.0.2.50', deviceCookie: Secret::fromString('someone-elses'));
+            Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', $generated[0]->reveal(), address: '192.0.2.50', deviceCookie: Secret::fromString('someone-elses')), new Origin(OriginKind::Web));
             self::fail('The account\'s limit didn\'t apply to another browser.');
         } catch (Throttled) {
         }
 
-        $recovered = $codes->recover(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', $generated[0]->reveal(), new Origin(OriginKind::Web), address: '192.0.2.50', deviceCookie: $browser);
+        $recovered = Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, 'ana@example.com', $generated[0]->reveal(), address: '192.0.2.50', deviceCookie: $browser), new Origin(OriginKind::Web));
         self::assertTrue($recovered?->session->principalId->equals($owner->principalId), 'The owner\'s own browser was kept out.');
     }
 
@@ -411,7 +414,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
         $codes = $this->codes($implementation);
 
         for ($i = 0; $i < 20; ++$i) {
-            self::assertNull($codes->recover(new Realm('acme'), IdentifierKind::Email, 0 === $i % 2 ? 'not an email' : '', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', new Origin(OriginKind::Web), address: '192.0.2.1'));
+            self::assertNull(Permits::call($codes->recover(...), new RecoverWithCode(new Realm('acme'), IdentifierKind::Email, 0 === $i % 2 ? 'not an email' : '', 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ', address: '192.0.2.1'), new Origin(OriginKind::Web)));
         }
     }
 
@@ -420,11 +423,11 @@ final class RecoveryCodesTest extends DatabaseTestCase
     {
         $codes = $this->codes($implementation);
         $session = $this->session();
-        $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
-        $recovered = $this->sessions->start(new StartSession(new Realm('acme'), $session->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
+        $recovered = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $session->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
 
         try {
-            $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $recovered, new Origin(OriginKind::Web));
+            Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $recovered);
             self::fail('A recovery code\'s proof replaced the codes.');
         } catch (StepUpRequired $exception) {
             self::assertTrue($exception->requirement->phishingResistant);
@@ -439,7 +442,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
 
         foreach ([1, 100] as $count) {
             $codes = new RecoveryCodes($this->stack->recoveryCodes, $this->credentials, $this->sessions, $this->stepUp, $this->attempts, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, $this->principals, clock: $this->clock, count: $count);
-            self::assertCount($count, $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $this->session(), new Origin(OriginKind::Web)));
+            self::assertCount($count, Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $this->session()));
         }
     }
 
@@ -462,9 +465,9 @@ final class RecoveryCodesTest extends DatabaseTestCase
         $codes = $this->codes('memory');
 
         $this->expectException(IntegratorError::class);
-        $this->expectExceptionMessage('The session is in another realm than the recovery codes.');
+        $this->expectExceptionMessage('"yorvoid.recovery_codes.generate" runs from the signed-in session, in its realm.');
 
-        $codes->generate(new GenerateRecoveryCodes(new Realm('globex')), $this->session(), new Origin(OriginKind::Web));
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('globex')), new Origin(OriginKind::Web), $this->session());
     }
 
     public function testGeneratingIsAnOperation(): void
@@ -493,8 +496,8 @@ final class RecoveryCodesTest extends DatabaseTestCase
 
     private function session(?string $email = null): Session
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: $email), new Origin(OriginKind::Console));
-        $session = $this->sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true))), new Origin(OriginKind::Web))->session;
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, email: $email), new Origin(OriginKind::Console));
+        $session = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true))), new Origin(OriginKind::Web))->session;
         $this->events->dispatched = [];
 
         return $session;

@@ -21,17 +21,19 @@ YorvoID keeps the security state of a principal: its status, credentials, sessio
 ```php
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Realm;
 
-$principal = $principals->create(
+$principal = $operations->run(
     new CreatePrincipal(Realm::default(), PrincipalKind::Human),
+    new Operator(),
     new Origin(OriginKind::Console, 'app:install'),
 );
 ```
 
-Creating a principal is one transaction, joining yours if one is open: the principal, its [security log](security-log.md) entry, and the `PrincipalCreating` event, which a listener can cancel to refuse it. `PrincipalCreated` follows once the transaction committed.
+Every change runs through [`Operations`](operations-and-events.md#running-an-operation), which decides whether the actor may: here the host's operator, from the console. Creating a principal is one transaction, joining yours if one is open: the principal, its [security log](security-log.md) entry, and the `PrincipalCreating` event, which a listener can cancel to refuse it. `PrincipalCreated` follows once the transaction committed.
 
 A person can have an email address and a username, given when they're created or later:
 
@@ -40,8 +42,9 @@ use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Realm;
 
-$principal = $principals->create(
+$principal = $operations->run(
     new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', username: 'ana'),
+    $actor,
     $origin,
 );
 ```
@@ -63,10 +66,13 @@ use YorvoID\Core\Principal\ActivatePrincipal;
 use YorvoID\Core\Principal\DeletePrincipal;
 use YorvoID\Core\Principal\SuspendPrincipal;
 
-$principals->activate(new ActivatePrincipal($realm, $id), $origin, $actor);  // invited, or suspended
-$principals->suspend(new SuspendPrincipal($realm, $id), $origin, $actor);    // can't sign in or act
-$principals->delete(new DeletePrincipal($realm, $id), $origin, $actor);
+// The actor: the administrator's session, or new Operator() on the host.
+$operations->run(new ActivatePrincipal($realm, $id), $actor, $origin);  // invited, or suspended
+$operations->run(new SuspendPrincipal($realm, $id), $actor, $origin);   // can't sign in or act
+$operations->run(new DeletePrincipal($realm, $id), $actor, $origin);
 ```
+
+Each runs only if the actor may: one holding `yorvoid.principals.manage`, or the host's operator ([running an operation](operations-and-events.md#running-an-operation)).
 
 - Any other change throws `InvalidStatusChange`: a deleted principal never comes back.
 - Each change is one transaction with its log entry. `PrincipalStatusChanging` comes before (a listener can cancel it, or remove a deleted person's profile in the same transaction), `PrincipalStatusChanged` after the commit.
@@ -91,31 +97,28 @@ Usernames are ASCII only, so that no two usernames look alike (a Cyrillic `а` a
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\RemoveIdentifier;
 use YorvoID\Core\Principal\SetIdentifier;
-use YorvoID\Core\Principal\VerifyIdentifier;
 
-$principals->setIdentifier(new SetIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.org'), $origin, $actor);
-$principals->verifyIdentifier(new VerifyIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.org'), $origin);
-$principals->removeIdentifier(new RemoveIdentifier($realm, $id, IdentifierKind::Email), $origin, $actor);
+$operations->run(new SetIdentifier($realm, $id, IdentifierKind::Email, 'ana@example.org'), $actor, $origin);
+$operations->run(new RemoveIdentifier($realm, $id, IdentifierKind::Email), $actor, $origin);
 
 $principal = $principals->findByIdentifier($realm, IdentifierKind::Email, 'ANA@example.org');
 ```
 
-When people change **their own** email address or username, use `OwnIdentifiers` from yorvoid/authn with their session instead. The email address is where security notifications and recovery go, so it requires a recent [step-up](step-up.md) (`yorvoid.identifier.set`, `yorvoid.identifier.remove`), waits out a recovery's cool-down, and the old address is told (if it was verified):
+People change **their own** email address or username the same way, with their session as the actor. The email address is where security notifications and recovery go, so `StepUpSelfService` requires a recent [step-up](step-up.md) (`yorvoid.identifier.set`, `yorvoid.identifier.remove`), it waits out a recovery's cool-down, and the old address is told (if it was verified). Nobody marks their own address verified:
 
 ```php
-use YorvoID\Authn\Identifier\OwnIdentifiers;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\SetIdentifier;
 
-$ownIdentifiers->set(new SetIdentifier($realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session, $origin);
+$operations->run(new SetIdentifier($realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session, $origin);
 // StepUpRequired: send them through a step-up, then try again.
 ```
 
 A new email address isn't verified, so it gets no security notifications until its owner confirms it: [`EmailVerification`](notifications.md#verifying-the-email-address) sends them a link.
 
-`Principals::setIdentifier()` checks none of that: it's for administrators and the console, after your application checked they may (`yorvoid.principals.manage`).
+For someone else's identifiers, the actor needs `yorvoid.principals.manage`, or is the host's operator.
 
-- **Verified** means the owner showed it's theirs, e.g. by opening a link sent to the address. Only the code that saw them do so marks it; `verifyIdentifier()` checks the address is still the one that was verified. Setting a different address makes it unverified again.
+- **Verified** means the owner showed it's theirs, e.g. by opening a link sent to the address. Only the code that saw them do so marks it, e.g. `EmailVerification` with `VerifyIdentifier`, which runs only as a consequence of such a check and makes sure the address is still the one that was verified. Setting a different address makes it unverified again.
 - `IdentifierTaken` says another principal has it. Telling a stranger that tells them the address has an account: flows anyone can reach answer the same either way, and send an email instead.
 - The security log records which kind of identifier changed, never its value: the log can't forget, and an email address is personal data that must go when its owner does.
 

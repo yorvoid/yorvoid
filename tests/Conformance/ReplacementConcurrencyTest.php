@@ -9,6 +9,7 @@ use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryLinks;
+use YorvoID\Authn\Recovery\RedeemRecoveryCode;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -26,6 +27,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\Stack;
 use YorvoID\Throttle\Throttle;
 
@@ -42,15 +44,15 @@ final class ReplacementConcurrencyTest extends DatabaseTestCase
         $stack = $this->stack('postgresql');
         [$principals, $sessions, $stepUp, $log] = $this->services($stack);
         $codes = new RecoveryCodes($stack->recoveryCodes, new Credentials($stack->credentials, $sessions, $stepUp, $log, $stack->transactions), $sessions, $stepUp, new Attempts(new Throttle($stack->throttle)), $log, $stack->transactions, $principals);
-        $principal = $principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
-        $session = $sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable(), true, true))), new Origin(OriginKind::Web))->session;
-        $codes->generate(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $session = Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable(), true, true))), new Origin(OriginKind::Web))->session;
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
 
         [$first, $second] = $this->race($stack, 'codes', (string) $session->id);
 
         self::assertSame(10, $codes->remaining(new Realm('acme'), $principal->id), 'Both sets were kept.');
-        self::assertNull($codes->redeem(new Realm('acme'), $principal->id, Secret::fromString($first[0]), new Origin(OriginKind::Web)), 'The replaced set still works.');
-        self::assertNotNull($codes->redeem(new Realm('acme'), $principal->id, Secret::fromString($second[0]), new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $principal->id, Secret::fromString($first[0])), new Origin(OriginKind::Web)), 'The replaced set still works.');
+        self::assertNotNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $principal->id, Secret::fromString($second[0])), new Origin(OriginKind::Web)));
     }
 
     public function testTwoRecoveryLinksAtOnceLeaveTheSecond(): void
@@ -58,7 +60,7 @@ final class ReplacementConcurrencyTest extends DatabaseTestCase
         $stack = $this->stack('postgresql');
         [$principals, , , $log] = $this->services($stack);
         $tokens = new OneTimeTokens($stack->tokens, $principals, $log, $stack->transactions);
-        $principal = $principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
 
         [$first, $second] = $this->race($stack, 'link', (string) $principal->id);
 

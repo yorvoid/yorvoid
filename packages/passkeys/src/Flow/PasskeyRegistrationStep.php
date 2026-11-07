@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Passkeys\Flow;
 
 use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
 use YorvoID\Flows\Input;
@@ -15,6 +16,7 @@ use YorvoID\Flows\StepView;
 use YorvoID\Passkeys\Flow\View\PasskeyRegistrationView;
 use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Passkeys\RegisterPasskey;
 
 /**
  * Adds a passkey to the signed-in person's account: inputs "response", the browser's answer, and
@@ -30,6 +32,7 @@ final readonly class PasskeyRegistrationStep implements Step
      * @param bool $skippable Whether the person may add one later (Input::SKIP), e.g. after recovering on a borrowed device
      */
     public function __construct(
+        private Operations $operations,
         private Passkeys $passkeys,
         private bool $skippable = false,
     ) {
@@ -66,7 +69,7 @@ final readonly class PasskeyRegistrationStep implements Step
         }
 
         try {
-            $credential = $this->passkeys->finishRegistration($context->session, Ceremonies::id($state, self::NAME), $input->json('response') ?? '', $input->string('label') ?? '', $context->origin);
+            $credential = $this->operations->run(new RegisterPasskey($context->session->realm, Ceremonies::id($state, self::NAME), $input->json('response') ?? '', $input->string('label') ?? ''), $context->session, $context->origin);
         } catch (PasskeyRefused $refused) {
             return StepResult::refused(Ceremonies::problem($refused));
         } catch (StepUpRequired) {

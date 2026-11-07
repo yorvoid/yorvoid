@@ -5,6 +5,9 @@ declare(strict_types=1);
 /** @var PhpFuzzer\Config $config */
 
 use YorvoID\Authn\Attempt\Attempts;
+use YorvoID\Authn\Session\Sessions;
+use YorvoID\Authn\Session\Storage\InMemorySessionStore;
+use YorvoID\Authn\Setup\ClaimSetup;
 use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Authn\Setup\InvalidSetupCode;
 use YorvoID\Authn\Setup\SetupCodes;
@@ -25,6 +28,7 @@ use YorvoID\Core\Principal\Storage\InMemoryPrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Throttle\Storage\InMemoryThrottleStore;
 use YorvoID\Throttle\Throttle;
 
@@ -40,12 +44,12 @@ $fresh = static function (): array {
     $log = new SecurityLog(new InMemorySecurityLogStore(), $transactions);
     $principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifierStore(), $log, $transactions);
     $tokens = new OneTimeTokens(new InMemoryOneTimeTokenStore(), $principals, $log, $transactions);
-    $setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())));
-    $principal = $principals->create(new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
-    $tokens->issue(new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), new Origin(OriginKind::System));
+    $setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())), new Sessions(new InMemorySessionStore(), $principals, $log, $transactions));
+    $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
+    Permits::call($tokens->issue(...), new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), new Origin(OriginKind::System));
     // A realm of its own: a realm with an active principal gets no setup code.
     $unclaimed = new Realm('unclaimed');
-    $setup->create(new CreateSetupCode($unclaimed, Duration::days(1)), new Origin(OriginKind::System));
+    Permits::call($setup->create(...), new CreateSetupCode($unclaimed, Duration::days(1)), new Origin(OriginKind::System));
 
     return [$tokens, $setup, $unclaimed];
 };
@@ -69,7 +73,7 @@ $config->setTarget(onlyRefusals(static function (string $input) use ($fresh, &$f
     }
 
     try {
-        $setup->claim($unclaimed, Secret::fromString($input), new CreatePrincipal($unclaimed, PrincipalKind::Human), new Origin(OriginKind::Web));
+        Permits::call($setup->claim(...), new ClaimSetup($unclaimed, Secret::fromString($input), new CreatePrincipal($unclaimed, PrincipalKind::Human)), new Origin(OriginKind::Web));
     } catch (InvalidSetupCode) {
         return;
     }

@@ -54,6 +54,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 
@@ -77,7 +78,7 @@ final class SessionsTest extends DatabaseTestCase
         $principal = $this->principal();
         $passkey = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now());
 
-        $started = $sessions->start(new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext($passkey), 'Firefox on Linux', '192.0.2.10'), new Origin(OriginKind::Web, 'sign-in', 'req-1'));
+        $started = Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext($passkey), 'Firefox on Linux', '192.0.2.10'), new Origin(OriginKind::Web, 'sign-in', 'req-1'));
         $session = $started->session;
 
         self::assertTrue($session->principalId->equals($principal->id));
@@ -237,10 +238,10 @@ final class SessionsTest extends DatabaseTestCase
         $principal = $this->principal();
         $started = $this->start($sessions, $principal);
 
-        $this->principals->suspend(new SuspendPrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
         self::assertNull($sessions->validate(new Realm('acme'), $started->token), 'A suspended principal\'s session was valid.');
 
-        $this->principals->activate(new ActivatePrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
+        Permits::call($this->principals->activate(...), new ActivatePrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
         self::assertNull($sessions->validate(new Realm('acme'), $started->token), 'A session came back with its principal.');
 
         self::assertNotNull($sessions->validate(new Realm('acme'), $this->start($sessions, $principal)->token), 'A new session after activation isn\'t valid.');
@@ -261,7 +262,7 @@ final class SessionsTest extends DatabaseTestCase
 
         $this->expectException(UnknownPrincipal::class);
 
-        $sessions->start(new StartSession(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), self::passkey($this->clock)), new Origin(OriginKind::Web));
+        Permits::call($sessions->start(...), new StartSession(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), self::passkey($this->clock)), new Origin(OriginKind::Web));
     }
 
     #[DataProvider('implementations')]
@@ -298,7 +299,7 @@ final class SessionsTest extends DatabaseTestCase
         self::assertEquals($started->session, $sessions->validate(new Realm('acme'), $token));
         self::assertSame([SessionRefreshed::class], $this->events->classes());
 
-        $sessions->end(new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        Permits::call($sessions->end(...), new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         self::assertNull($sessions->refresh(new Realm('acme'), $started->session->id, new Origin(OriginKind::Web)), 'An ended session got a new token.');
         self::assertNull($sessions->refresh(new Realm('globex'), $started->session->id, new Origin(OriginKind::Web)));
     }
@@ -344,7 +345,7 @@ final class SessionsTest extends DatabaseTestCase
         $principal = $this->principal();
         $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true);
         $ended = $this->start($sessions, $principal)->session;
-        $sessions->end(new EndSession(new Realm('acme'), $ended->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        Permits::call($sessions->end(...), new EndSession(new Realm('acme'), $ended->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         $current = $this->start($sessions, $principal)->session;
 
         self::assertNull($sessions->stepUp(new Realm('acme'), $ended->id, $factor, new Origin(OriginKind::Web)));
@@ -354,9 +355,9 @@ final class SessionsTest extends DatabaseTestCase
         $this->stack->sessions->add($orphan, hash('sha256', 'orphan'));
         self::assertNull($sessions->stepUp(new Realm('acme'), $orphan->id, $factor, new Origin(OriginKind::Web)), 'A session whose principal is gone stepped up.');
 
-        $this->principals->suspend(new SuspendPrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
         self::assertNull($sessions->stepUp(new Realm('acme'), $current->id, $factor, new Origin(OriginKind::Web)), 'A suspended principal stepped up.');
-        $this->principals->activate(new ActivatePrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
+        Permits::call($this->principals->activate(...), new ActivatePrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
         self::assertNull($sessions->stepUp(new Realm('acme'), $current->id, $factor, new Origin(OriginKind::Web)), 'A session came back with its principal.');
 
         $idle = $this->start($sessions, $principal)->session;
@@ -452,8 +453,8 @@ final class SessionsTest extends DatabaseTestCase
         });
         $this->events->dispatched = [];
 
-        self::assertTrue($sessions->end(new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::EndedByAdministrator), new Origin(OriginKind::Web, 'admin.sessions'), $administrator));
-        self::assertFalse($sessions->end(new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web)), 'An ended session ended again.');
+        self::assertTrue(Permits::call($sessions->end(...), new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::EndedByAdministrator), new Origin(OriginKind::Web, 'admin.sessions'), $administrator));
+        self::assertFalse(Permits::call($sessions->end(...), new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web)), 'An ended session ended again.');
         self::assertNull($sessions->validate(new Realm('acme'), $started->token));
 
         $ended = $sessions->get(new Realm('acme'), $started->session->id);
@@ -486,12 +487,12 @@ final class SessionsTest extends DatabaseTestCase
 
         self::assertSame([(string) $tablet->session->id, (string) $phone->session->id, (string) $laptop->session->id], array_map(static fn ($session): string => (string) $session->id, $sessions->current(new Realm('acme'), $principal->id)));
 
-        self::assertSame(2, $sessions->endAll(new EndSessions(new Realm('acme'), $principal->id, SessionEndReason::EndedByPrincipal, except: $phone->session->id), new Origin(OriginKind::Web)));
+        self::assertSame(2, Permits::call($sessions->endAll(...), new EndSessions(new Realm('acme'), $principal->id, SessionEndReason::EndedByPrincipal, except: $phone->session->id), new Origin(OriginKind::Web)));
 
         self::assertSame([(string) $phone->session->id], array_map(static fn ($session): string => (string) $session->id, $sessions->current(new Realm('acme'), $principal->id)));
         self::assertNull($sessions->validate(new Realm('acme'), $laptop->token));
         self::assertNotNull($sessions->validate(new Realm('acme'), $someoneElses->token));
-        self::assertSame(1, $sessions->endAll(new EndSessions(new Realm('acme'), $principal->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web)));
+        self::assertSame(1, Permits::call($sessions->endAll(...), new EndSessions(new Realm('acme'), $principal->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web)));
     }
 
     #[DataProvider('implementations')]
@@ -503,7 +504,7 @@ final class SessionsTest extends DatabaseTestCase
         $started = $this->start($sessions, $principal);
         $actor = new PrincipalId(new UuidV7Generator()->next());
 
-        $this->principals->suspend(new SuspendPrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Web), $actor);
+        Permits::call($this->principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Web), $actor);
 
         $ended = $sessions->get(new Realm('acme'), $started->session->id);
         self::assertSame(SessionEndReason::PrincipalDeactivated, $ended?->endReason);
@@ -513,7 +514,7 @@ final class SessionsTest extends DatabaseTestCase
         self::assertSame(['principal', (string) $principal->id, ['count' => 1, 'reason' => 'principal_deactivated']], [$entries[2]->subjectType, $entries[2]->subjectId, $entries[2]->details]);
 
         // Deleting a suspended principal has no sessions left to end.
-        $this->principals->delete(new DeletePrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Web));
+        Permits::call($this->principals->delete(...), new DeletePrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Web));
         self::assertCount(5, iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false));
     }
 
@@ -532,7 +533,7 @@ final class SessionsTest extends DatabaseTestCase
         $started = $this->start($sessions, $principal);
 
         try {
-            $this->principals->suspend(new SuspendPrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Web));
+            Permits::call($this->principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Web));
             self::fail('The guard rule didn\'t refuse.');
         } catch (GuardRuleViolated) {
         }
@@ -545,10 +546,10 @@ final class SessionsTest extends DatabaseTestCase
     {
         $sessions = $this->sessions($implementation);
         $old = $this->start($sessions, $this->principal());
-        $sessions->end(new EndSession(new Realm('acme'), $old->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        Permits::call($sessions->end(...), new EndSession(new Realm('acme'), $old->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         $this->clock->sleep(86_400);
         $recent = $this->start($sessions, $this->principal());
-        $sessions->end(new EndSession(new Realm('acme'), $recent->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        Permits::call($sessions->end(...), new EndSession(new Realm('acme'), $recent->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
 
         self::assertSame(1, $sessions->purge(Duration::hours(12)));
         self::assertNull($sessions->get(new Realm('acme'), $old->session->id));
@@ -561,7 +562,7 @@ final class SessionsTest extends DatabaseTestCase
         $sessions = $this->sessions($implementation);
         $principal = $this->principal();
 
-        $started = $sessions->start(new StartSession(new Realm('acme'), $principal->id, self::passkey($this->clock), "Fire\xC3fox ".str_repeat('ü', 300)), new Origin(OriginKind::Web));
+        $started = Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $principal->id, self::passkey($this->clock), "Fire\xC3fox ".str_repeat('ü', 300)), new Origin(OriginKind::Web));
 
         self::assertSame(255, mb_strlen((string) $started->session->device));
         self::assertStringStartsWith("Fire\u{FFFD}fox üü", (string) $started->session->device);
@@ -575,7 +576,7 @@ final class SessionsTest extends DatabaseTestCase
         $this->expectException(IntegratorError::class);
         $this->expectExceptionMessage('The session\'s address isn\'t an IP address.');
 
-        $sessions->start(new StartSession(new Realm('acme'), $this->principal()->id, self::passkey($this->clock), address: 'example.com'), new Origin(OriginKind::Web));
+        Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $this->principal()->id, self::passkey($this->clock), address: 'example.com'), new Origin(OriginKind::Web));
     }
 
     public function testSessionCommandsAreOperations(): void
@@ -605,7 +606,7 @@ final class SessionsTest extends DatabaseTestCase
 
     private function principal(PrincipalStatus $status = PrincipalStatus::Active): Principal
     {
-        $principal = $this->principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, $status), new Origin(OriginKind::Console));
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, $status), new Origin(OriginKind::Console));
         $this->events->dispatched = [];
 
         return $principal;
@@ -613,7 +614,7 @@ final class SessionsTest extends DatabaseTestCase
 
     private function start(Sessions $sessions, Principal $principal, ?Secret $deviceCookie = null): StartedSession
     {
-        return $sessions->start(new StartSession(new Realm('acme'), $principal->id, self::passkey($this->clock), deviceCookie: $deviceCookie), new Origin(OriginKind::Web));
+        return Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $principal->id, self::passkey($this->clock), deviceCookie: $deviceCookie), new Origin(OriginKind::Web));
     }
 
     private static function passkey(MockClock $clock): AuthenticationContext

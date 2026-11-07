@@ -1,0 +1,23 @@
+<?php
+
+declare(strict_types=1);
+
+namespace YorvoID\Tests\Core\Operation\Fixtures\Badges;
+
+use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Operation\AuthorizedBy;
+use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\OperationDescription;
+use YorvoID\Core\Operation\SelfOperation;
+use YorvoID\Core\Operation\SelfServicePolicy;
+
+/**
+ * Lets anyone change their own account: what to show for it isn't what these tests are about.
+ */
+final readonly class SelfService implements SelfServicePolicy
+{
+    public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Decision
+    {
+        return Decision::permit(AuthorizedBy::Self, 'Their own.');
+    }
+}

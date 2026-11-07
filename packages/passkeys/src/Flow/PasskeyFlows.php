@@ -4,15 +4,12 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
-use Psr\Clock\ClockInterface;
-use Symfony\Component\Clock\NativeClock;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryLinks;
-use YorvoID\Authn\Session\Sessions;
-use YorvoID\Authn\Setup\SetupCodes;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Core\Duration;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Flows\Flow;
 use YorvoID\Notifications\EmailVerification;
@@ -56,16 +53,14 @@ final readonly class PasskeyFlows
      * @param Duration $window How recent a step-up must be, as for the credentials (5 minutes by default)
      */
     public function __construct(
+        private Operations $operations,
         private Passkeys $passkeys,
-        private Sessions $sessions,
         private Principals $principals,
-        private SetupCodes $setupCodes,
         private Invitations $invitations,
         private RecoveryCodes $recoveryCodes,
         private RecoveryLinks $recoveryLinks,
         private StepUp $stepUp,
         private Duration $window,
-        private ClockInterface $clock = new NativeClock(),
         private ?EmailVerification $emailVerification = null,
     ) {
     }
@@ -77,19 +72,19 @@ final readonly class PasskeyFlows
      */
     public function all(): array
     {
-        $passkey = new PasskeyRegistrationStep($this->passkeys);
-        $later = new PasskeyRegistrationStep($this->passkeys, skippable: true);
-        $codes = new RecoveryCodesStep($this->recoveryCodes, $this->stepUp);
+        $passkey = new PasskeyRegistrationStep($this->operations, $this->passkeys);
+        $later = new PasskeyRegistrationStep($this->operations, $this->passkeys, skippable: true);
+        $codes = new RecoveryCodesStep($this->operations, $this->recoveryCodes, $this->stepUp);
 
         return [
-            new Flow(self::SIGN_IN, [new PasskeySignInStep($this->passkeys)], [PasskeySignInStep::NAME]),
-            new Flow(self::SETUP, [new SetupCodeStep($this->setupCodes, $this->sessions, $this->clock, $this->emailVerification), $passkey, $codes], [SetupCodeStep::NAME, PasskeyRegistrationStep::NAME]),
-            new Flow(self::INVITATION, [new InvitationStep($this->invitations, $this->principals, $this->sessions, $this->clock), $passkey, $codes], [InvitationStep::NAME, PasskeyRegistrationStep::NAME]),
-            new Flow(self::RECOVER_WITH_CODE, [new RecoveryCodeStep($this->recoveryCodes), $later, $codes], [RecoveryCodeStep::NAME]),
-            new Flow(self::RECOVER_WITH_LINK, [new RecoveryLinkStep($this->recoveryLinks, $this->principals), $later, $codes], [RecoveryLinkStep::NAME]),
+            new Flow(self::SIGN_IN, [new PasskeySignInStep($this->operations, $this->passkeys)], [PasskeySignInStep::NAME]),
+            new Flow(self::SETUP, [new SetupCodeStep($this->operations), $passkey, $codes], [SetupCodeStep::NAME, PasskeyRegistrationStep::NAME]),
+            new Flow(self::INVITATION, [new InvitationStep($this->operations, $this->invitations, $this->principals), $passkey, $codes], [InvitationStep::NAME, PasskeyRegistrationStep::NAME]),
+            new Flow(self::RECOVER_WITH_CODE, [new RecoveryCodeStep($this->operations), $later, $codes], [RecoveryCodeStep::NAME]),
+            new Flow(self::RECOVER_WITH_LINK, [new RecoveryLinkStep($this->operations, $this->recoveryLinks, $this->principals), $later, $codes], [RecoveryLinkStep::NAME]),
             new Flow(self::ADD_PASSKEY, [new StepUpStep($this->passkeys, $this->stepUp, $this->window, 'yorvoid.credential.add'), $passkey], [StepUpStep::NAME, PasskeyRegistrationStep::NAME]),
             new Flow(self::STEP_UP, [new StepUpStep($this->passkeys, $this->stepUp, $this->window)], [StepUpStep::NAME]),
-            ...(null === $this->emailVerification ? [] : [new Flow(self::VERIFY_EMAIL, [new EmailVerificationStep($this->emailVerification)], [EmailVerificationStep::NAME])]),
+            ...(null === $this->emailVerification ? [] : [new Flow(self::VERIFY_EMAIL, [new EmailVerificationStep($this->operations, $this->emailVerification)], [EmailVerificationStep::NAME])]),
         ];
     }
 }

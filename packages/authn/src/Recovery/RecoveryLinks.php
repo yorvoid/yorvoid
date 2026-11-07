@@ -24,8 +24,10 @@ use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Operation\ActingPrincipal;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\Principal;
-use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Core\Realm;
@@ -43,7 +45,7 @@ use YorvoID\Core\Storage\Transactions;
  *
  * @api
  */
-final readonly class RecoveryLinks
+final readonly class RecoveryLinks implements OperationHandler
 {
     public const string PURPOSE = 'yorvoid.recovery_link';
 
@@ -58,19 +60,28 @@ final readonly class RecoveryLinks
     ) {
     }
 
+    public function operations(): array
+    {
+        return [
+            IssueRecoveryLink::class => $this->issue(...),
+            UseRecoveryLink::class => $this->redeem(...),
+        ];
+    }
+
     /**
      * @throws UnknownPrincipal  When there's no such principal
      * @throws InactivePrincipal When it isn't active
      */
-    public function issue(IssueRecoveryLink $command, Origin $origin, ?PrincipalId $actor = null): IssuedToken
+    public function issue(IssueRecoveryLink $command, Permit $permit, Origin $origin): IssuedToken
     {
+        $permit->use($command);
         $principal = $this->principals->get($command->realm, $command->principalId) ?? throw new UnknownPrincipal($command->realm, $command->principalId);
 
         if (!$principal->isActive()) {
             throw new InactivePrincipal($principal, 'recover access; activate it first');
         }
 
-        return $this->tokens->issue(new IssueToken($command->realm, $command->principalId, self::PURPOSE, $command->lifetime ?? Duration::minutes(15)), $origin, $actor);
+        return $permit->cause($this->tokens->issue(...), new IssueToken($command->realm, $command->principalId, self::PURPOSE, $command->lifetime ?? Duration::minutes(15)), $origin);
     }
 
     /**
@@ -88,31 +99,32 @@ final readonly class RecoveryLinks
     }
 
     /**
-     * Uses the link: ends all of the principal's sessions, starts the cool-down, and starts a new session.
-     *
-     * @param string|null $device       As for StartSession
-     * @param string|null $address      As for StartSession
-     * @param Secret|null $deviceCookie The device cookie the browser sent, if any; the session's result says which to set
+     * Uses the link: ends all of the principal's sessions, starts the cool-down, and starts a new session,
+     * acting as the principal.
      *
      * @return StartedSession|null The new session; null if the link doesn't work
      */
-    public function redeem(Realm $realm, #[\SensitiveParameter] Secret $token, Origin $origin, ?string $device = null, ?string $address = null, #[\SensitiveParameter] ?Secret $deviceCookie = null): ?StartedSession
+    public function redeem(UseRecoveryLink $command, Permit $permit, Origin $origin): ?StartedSession
     {
-        return $this->transactions->run(function () use ($realm, $token, $origin, $device, $address, $deviceCookie): ?StartedSession {
-            $used = $this->tokens->consume($realm, self::PURPOSE, $token, $origin);
+        $permit->use($command);
+
+        return $this->transactions->run(function () use ($command, $permit, $origin): ?StartedSession {
+            $realm = $command->realm;
+            $used = $this->tokens->consume($realm, self::PURPOSE, $command->token, $origin);
 
             if (null === $used) {
                 return null;
             }
 
-            $this->sessions->endAll(new EndSessions($realm, $used->principalId, SessionEndReason::Recovered), $origin, $used->principalId);
+            $recovered = new ActingPrincipal($realm, $used->principalId);
+            $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Recovered), $origin, $recovered);
             $this->stepUp->startCoolDown($realm, $used->principalId, $origin);
 
             $this->transactions->afterCommit(function () use ($realm, $used, $origin): void {
                 $this->events->dispatch(new RecoveryLinkUsed($realm, $used->principalId, $origin));
             });
 
-            return $this->sessions->start(new StartSession($realm, $used->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryLink, $this->clock->now())), $device, $address, $deviceCookie), $origin);
+            return $permit->cause($this->sessions->start(...), new StartSession($realm, $used->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryLink, $this->clock->now())), $command->device, $command->address, $command->deviceCookie), $origin, $recovered);
         });
     }
 }

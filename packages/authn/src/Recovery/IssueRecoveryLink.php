@@ -6,6 +6,8 @@ namespace YorvoID\Authn\Recovery;
 
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Operation\AuthorizedBy;
+use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -14,10 +16,12 @@ use YorvoID\Core\Realm;
  * Issues a recovery link for a principal who lost access (ATN-033), e.g. Quire Server's
  * "owner:recover". Run by an operator with access to the server, never from a web page.
  *
+ * @implements Command<\YorvoID\Authn\Token\IssuedToken>
+ *
  * @api
  */
-#[Operation('yorvoid.recovery_link.issue', 'Issue a recovery link', ability: 'yorvoid.principals.recover')]
-final readonly class IssueRecoveryLink
+#[Operation('yorvoid.recovery_link.issue', 'Issue a recovery link', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.recover', causes: ['yorvoid.token.issue'])]
+final readonly class IssueRecoveryLink implements Command
 {
     /**
      * @param Duration|null $lifetime How long the link works; 15 minutes if not given

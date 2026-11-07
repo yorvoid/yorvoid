@@ -6,11 +6,13 @@ namespace YorvoID\Symfony\Security\Authenticator;
 
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Passkeys\PasskeyRefused;
-use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\Refusal;
+use YorvoID\Passkeys\SignInWithPasskey;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\Json;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
@@ -29,7 +31,7 @@ final class PasskeyAuthenticator extends YorvoIDAuthenticator
         PrincipalUserProvider $users,
         Realm $realm,
         string $deviceCookie,
-        private readonly Passkeys $passkeys,
+        private readonly Operations $operations,
     ) {
         parent::__construct($current, $users, $realm, $deviceCookie);
     }
@@ -44,7 +46,7 @@ final class PasskeyAuthenticator extends YorvoIDAuthenticator
         $response = json_encode($body['response'] ?? null, \JSON_THROW_ON_ERROR);
 
         try {
-            return $this->passkeys->finishSignIn($this->realm, Json::string($body, 'ceremony') ?? '', $response, $origin, $device, $address, $deviceCookie);
+            return $this->operations->run(new SignInWithPasskey($this->realm, Json::string($body, 'ceremony') ?? '', $response, $device, $address, $deviceCookie), new Anonymous(), $origin);
         } catch (PasskeyRefused $exception) {
             // The browser then tells the passkey provider, which can stop offering it (ATN-008). The ID
             // came from the browser, and is random: saying it isn't registered here tells no one more.

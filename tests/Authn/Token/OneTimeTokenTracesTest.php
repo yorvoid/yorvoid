@@ -18,6 +18,7 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 
 /**
  * Replays executions of the formal model of one-time tokens (spec/tokens/one_time_token.qnt, generated
@@ -45,7 +46,7 @@ final class OneTimeTokenTracesTest extends DatabaseTestCase
             \assert(\is_array($trace));
             // Each execution in a realm of its own, starting at the model's time 0.
             $realm = new Realm('trace-'.$number);
-            $principal = $principals->create(new CreatePrincipal($realm, PrincipalKind::Human), new Origin(OriginKind::System));
+            $principal = Permits::call($principals->create(...), new CreatePrincipal($realm, PrincipalKind::Human), new Origin(OriginKind::System));
             $start = $clock->now();
             /** @var array<string, Secret> $issued */
             $issued = [];
@@ -56,7 +57,7 @@ final class OneTimeTokenTracesTest extends DatabaseTestCase
                 $where = \sprintf('Execution %d, step %d (%s %s)', $number, $i + 1, $step['action'], $token);
 
                 match ($step['action']) {
-                    'issue' => $issued[$token] = $tokens->issue(new IssueToken($realm, $principal->id, 'acme.test', Duration::minutes($file['lifetime'])), new Origin(OriginKind::System))->secret,
+                    'issue' => $issued[$token] = Permits::call($tokens->issue(...), new IssueToken($realm, $principal->id, 'acme.test', Duration::minutes($file['lifetime'])), new Origin(OriginKind::System))->secret,
                     'tick' => $clock->sleep(60),
                     'consumeAtomically' => self::assertNotNull($tokens->consume($realm, 'acme.test', $issued[$token], new Origin(OriginKind::Web)), $where.': the model used the token, the implementation refused.'),
                     'nothingHappens' => null,

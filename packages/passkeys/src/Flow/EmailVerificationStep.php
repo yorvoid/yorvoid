@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Secret;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
@@ -13,6 +15,7 @@ use YorvoID\Flows\Step;
 use YorvoID\Flows\StepResult;
 use YorvoID\Flows\StepView;
 use YorvoID\Notifications\EmailVerification;
+use YorvoID\Notifications\VerifyEmail;
 use YorvoID\Passkeys\Flow\View\EmailVerificationView;
 
 /**
@@ -31,6 +34,7 @@ final readonly class EmailVerificationStep implements Step
     private const string EMAIL = self::NAME.'.email';
 
     public function __construct(
+        private Operations $operations,
         private EmailVerification $verification,
     ) {
     }
@@ -61,7 +65,7 @@ final readonly class EmailVerificationStep implements Step
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult
     {
         $token = $state->string(self::TOKEN) ?? '';
-        $verified = '' === $token ? null : $this->verification->confirm($state->realm, Secret::fromString($token), $context->origin);
+        $verified = '' === $token ? null : $this->operations->run(new VerifyEmail($state->realm, Secret::fromString($token)), new Anonymous(), $context->origin);
 
         if (null === $verified) {
             return StepResult::failed(new Problem('yorvoid.flow.verify_email.not_working'));

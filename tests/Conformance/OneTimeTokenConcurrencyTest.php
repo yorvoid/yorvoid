@@ -16,6 +16,7 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 
 /**
  * Four requests present the same one-time token at the same moment, each in its own process: exactly
@@ -35,8 +36,8 @@ final class OneTimeTokenConcurrencyTest extends DatabaseTestCase
         $log = new SecurityLog($stack->log, $stack->transactions);
         $principals = new Principals($stack->principals, $stack->identifiers, $log, $stack->transactions);
         $tokens = new OneTimeTokens($stack->tokens, $principals, $log, $stack->transactions);
-        $principal = $principals->create(new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
-        $issued = $tokens->issue(new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Console));
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $issued = Permits::call($tokens->issue(...), new IssueToken(new Realm('acme'), $principal->id, 'acme.test', Duration::hours(1)), new Origin(OriginKind::Console));
         $start = \sprintf('%s/yorvoid-start-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
         $processes = [];
 

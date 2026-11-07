@@ -12,7 +12,6 @@ use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
 use YorvoID\Authn\Credential\ForgetCredentialsOfDeletedPrincipals;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
-use YorvoID\Authn\Identifier\OwnIdentifiers;
 use YorvoID\Authn\Invitation\Invitations;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryCodeStore;
@@ -30,6 +29,7 @@ use YorvoID\Authn\Setup\SetupStore;
 use YorvoID\Authn\Setup\Storage\DbalSetupStore;
 use YorvoID\Authn\StepUp\CoolDownStore;
 use YorvoID\Authn\StepUp\StepUp;
+use YorvoID\Authn\StepUp\StepUpSelfService;
 use YorvoID\Authn\StepUp\Storage\DbalCoolDownStore;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Token\OneTimeTokenStore;
@@ -39,6 +39,11 @@ use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
+use YorvoID\Core\Operation\Authorization;
+use YorvoID\Core\Operation\BuiltInAuthorization;
+use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\Event\PrincipalStatusChanging;
 use YorvoID\Core\Principal\IdentifierStore;
 use YorvoID\Core\Principal\Principals;
@@ -110,6 +115,7 @@ use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
 use YorvoID\Symfony\Security\SignInEntryPoint;
+use YorvoID\Symfony\Security\SymfonyAbilityPolicy;
 use YorvoID\Symfony\Security\ValidateSessionListener;
 use YorvoID\Symfony\Templates\FlowPages;
 use YorvoID\Symfony\Templates\TemplateLint;
@@ -134,6 +140,8 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\tagged_lo
  */
 return static function (ContainerConfigurator $container): void {
     $services = $container->services()->defaults()->autowire()->private();
+    // Every service that runs operations is one of Operations' handlers.
+    $services->instanceof(OperationHandler::class)->tag('yorvoid.operation_handler');
 
     // Storage: the application's DBAL connection (set by YorvoIDBundle), YorvoID's tables.
     $services->set('yorvoid.transaction_middleware', TransactionMiddleware::class);
@@ -180,7 +188,6 @@ return static function (ContainerConfigurator $container): void {
     $services->set(Sessions::class)->arg('$devices', service(KnownDeviceStore::class)->nullOnInvalid());
     $services->set(StepUp::class)->arg('$coolDown', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.cool_down')]));
     $services->set(Credentials::class)->arg('$reauthenticationWindow', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
-    $services->set(OwnIdentifiers::class)->arg('$reauthenticationWindow', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
     $services->set(OneTimeTokens::class);
     $services->set(Throttle::class);
     $services->set(Attempts::class);
@@ -192,6 +199,15 @@ return static function (ContainerConfigurator $container): void {
     $services->set(Passkeys::class);
     $services->set(IntentSummaries::class)->args([service('yorvoid.translator.used'), param('yorvoid.intents.summaries_domain')]);
     $services->set(IntentSigning::class)->arg('$limit', inline_service()->factory([Limits::class, 'parse'])->args([param('yorvoid.limits.signature_requests')]));
+
+    // The decision point: every operation runs through Operations, which decides and gives its handler a
+    // permit. Abilities are the application's Symfony security's to decide, until YorvoID's evaluator.
+    $services->set(OperationCatalogue::class)->factory([OperationCatalogue::class, 'of'])->args([tagged_iterator('yorvoid.operation_handler')])->public();
+    $services->set(StepUpSelfService::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
+    $services->set(SymfonyAbilityPolicy::class)->args([service('security.authorization_checker'), inline_service(Closure::class)->factory([Factories::class, 'currentSession'])->args([service_closure(CurrentSession::class)])]);
+    $services->set(BuiltInAuthorization::class)->args([service(SymfonyAbilityPolicy::class), service(StepUpSelfService::class)]);
+    $services->alias(Authorization::class, BuiltInAuthorization::class);
+    $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->public();
 
     // Listeners of YorvoID's events, through Symfony's dispatcher.
     $services->set(EndSessionsOfInactivePrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
@@ -269,7 +285,7 @@ return static function (ContainerConfigurator $container): void {
     }
 
     // The application uses these.
-    foreach ([Principals::class, Sessions::class, StepUp::class, Credentials::class, OwnIdentifiers::class, OneTimeTokens::class, Throttle::class, Attempts::class, SetupCodes::class, Invitations::class, RecoveryLinks::class, RecoveryCodes::class, NotMe::class, Passkeys::class, IntentSummaries::class, IntentSigning::class, SecurityLog::class] as $public) {
+    foreach ([Principals::class, Sessions::class, StepUp::class, Credentials::class, OneTimeTokens::class, Throttle::class, Attempts::class, SetupCodes::class, Invitations::class, RecoveryLinks::class, RecoveryCodes::class, NotMe::class, Passkeys::class, IntentSummaries::class, IntentSigning::class, SecurityLog::class] as $public) {
         $services->get($public)->public();
     }
 };

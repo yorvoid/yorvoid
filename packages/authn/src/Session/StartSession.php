@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\Session;
 
+use YorvoID\Core\Operation\AuthorizedBy;
+use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -13,10 +15,12 @@ use YorvoID\Core\Secret;
  * Starts a session for a principal who just proved who they are. Run by the code that checked the proof
  * (a passkey ceremony, a setup code), never on a request's say-so.
  *
+ * @implements Command<StartedSession>
+ *
  * @api
  */
-#[Operation('yorvoid.session.start', 'Start a session', inverse: 'yorvoid.session.end')]
-final readonly class StartSession
+#[Operation('yorvoid.session.start', 'Start a session', AuthorizedBy::Consequence, inverse: 'yorvoid.session.end')]
+final readonly class StartSession implements Command
 {
     /**
      * @param string|null $device       What the person would recognise, e.g. "Firefox on Linux"; at most 255 characters are kept

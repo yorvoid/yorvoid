@@ -22,6 +22,8 @@ use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\OperationCancelled;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
@@ -48,7 +50,7 @@ use YorvoID\Core\Time;
  *
  * @api
  */
-final readonly class Sessions
+final readonly class Sessions implements OperationHandler
 {
     /** How long a session's last use may be off, to save a write on every request */
     public const int TOUCH_INTERVAL = 60;
@@ -73,15 +75,27 @@ final readonly class Sessions
         $this->policy = $policy ?? SessionPolicy::aal2();
     }
 
+    public function operations(): array
+    {
+        return [
+            StartSession::class => $this->start(...),
+            EndSession::class => $this->end(...),
+            EndSessions::class => $this->endAll(...),
+        ];
+    }
+
     /**
-     * Starts a session and gives its token, which is shown only now.
+     * Starts a session and gives its token, which is shown only now: only as a consequence of
+     * authentication, e.g. a passkey sign-in.
      *
      * @throws UnknownPrincipal   When there's no such principal
      * @throws InactivePrincipal  When the principal isn't active
      * @throws OperationCancelled When a listener of SessionStarting refuses it
      */
-    public function start(StartSession $command, Origin $origin): StartedSession
+    public function start(StartSession $command, Permit $permit, Origin $origin): StartedSession
     {
+        $permit->use($command);
+
         if (null !== $command->address && false === filter_var($command->address, \FILTER_VALIDATE_IP)) {
             throw new IntegratorError('The session\'s address isn\'t an IP address.', 'Pass the IP address of the request, e.g. from Request::getClientIp() in Symfony, or null.', 'concepts/sessions.md#starting-a-session');
         }
@@ -233,15 +247,15 @@ final readonly class Sessions
     }
 
     /**
-     * Ends a session; nothing happens if it already ended. It doesn't check who asks: check that they may
-     * (their own session, or yorvoid.sessions.manage) and that they proved who they are recently.
-     *
-     * @param PrincipalId|null $actor Who ended it, if not the session's own principal signing out
+     * Ends a session; nothing happens if it already ended.
      *
      * @return bool Whether it ended now
      */
-    public function end(EndSession $command, Origin $origin, ?PrincipalId $actor = null): bool
+    public function end(EndSession $command, Permit $permit, Origin $origin): bool
     {
+        $permit->use($command);
+        $actor = $permit->actor->principalId;
+
         return $this->transactions->run(function () use ($command, $origin, $actor): bool {
             $session = $this->store->get($command->realm, $command->sessionId);
 
@@ -250,12 +264,15 @@ final readonly class Sessions
     }
 
     /**
-     * Ends all of a principal's current sessions, or all but one. Like end(), it doesn't check who asks.
+     * Ends all of a principal's current sessions, or all but one.
      *
      * @return int How many ended
      */
-    public function endAll(EndSessions $command, Origin $origin, ?PrincipalId $actor = null): int
+    public function endAll(EndSessions $command, Permit $permit, Origin $origin): int
     {
+        $permit->use($command);
+        $actor = $permit->actor->principalId;
+
         return $this->transactions->run(function () use ($command, $origin, $actor): int {
             $ended = $this->store->endCurrent($command->realm, $command->principalId, Time::stored($this->clock->now()), $command->reason, $command->except);
 
