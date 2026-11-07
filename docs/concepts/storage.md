@@ -75,6 +75,34 @@ $principals = new Principals($memory->principals, $memory->identifiers, new Secu
 
 A store built on its own and not registered with `InMemoryTransactions::register()` keeps half of a failed change.
 
+## Stores of your own
+
+Each kind of record is kept by a store behind an interface: `PrincipalStore`, `SessionStore`, `SecurityLogStore` and the others. YorvoID has one on DBAL and one in memory; you can write your own, e.g. for another database, as long as it keeps the same promises. `yorvoid/testing` has them as tests, one trait for each store, which YorvoID's own stores pass. Run the store's in your test suite, and keep it passing:
+
+```php
+use App\Storage\RedisSessionStore;
+use PHPUnit\Framework\TestCase;
+use YorvoID\Authn\Session\SessionStore;
+use YorvoID\Testing\Contract\SessionStoreContract;
+
+final class RedisSessionStoreTest extends TestCase
+{
+    use SessionStoreContract;
+
+    public static function implementations(): iterable
+    {
+        yield 'Redis' => ['redis'];
+    }
+
+    protected function sessionStore(string $implementation): SessionStore
+    {
+        return new RedisSessionStore(new \Redis(), prefix: uniqid('test-'));  // empty, new for each test
+    }
+}
+```
+
+There's one for each store (`CeremonyStoreContract`, `CoolDownStoreContract`, `CredentialStoreContract`, `IdentifierStoreContract`, `KnownDeviceStoreContract`, `OneTimeTokenStoreContract`, `PasskeyStoreContract`, `PrincipalStoreContract`, `RecoveryCodeStoreContract`, `SecurityLogStoreContract`, `SessionStoreContract`, `SetupStoreContract`, `ThrottleStoreContract`), and `TransactionsContract` for your own `Transactions`. `SecurityLogStoreContract` and `TransactionsContract` also ask for what the store takes part in: the same instances within a test. A store that doesn't pass them isn't one YorvoID can rely on: what YorvoID promises, e.g. one use of a token among requests at the same moment, rests on what the store does.
+
 ## Migrations
 
 YorvoID's tables are created and changed by its own migrations, separately from your application's. Their history is kept in YorvoID's location (`yorvoid_migration`).

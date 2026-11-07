@@ -50,6 +50,9 @@ abstract class DatabaseTestCase extends TestCase
     /** @var array<string, string> Platform => where this test's database is */
     private array $locations = [];
 
+    /** @var array<string, Stack> One stack per implementation for the test, for the stores' contracts */
+    private array $stacks = [];
+
     /**
      * @return iterable<string, array{string}>
      */
@@ -91,8 +94,18 @@ abstract class DatabaseTestCase extends TestCase
         return new Stack($implementation, new DbalTransactions($database->connection, $middleware), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), $database);
     }
 
+    /**
+     * The test's stack on the implementation: the same one each time, so a contract's stores share it.
+     */
+    protected function stackOf(string $implementation): Stack
+    {
+        return $this->stacks[$implementation] ??= $this->stack($implementation);
+    }
+
     protected function tearDown(): void
     {
+        $this->stacks = [];
+
         foreach (array_reverse($this->cleanups) as $cleanup) {
             $cleanup();
         }

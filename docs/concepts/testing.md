@@ -65,6 +65,10 @@ $response = $authenticator->signIn($requestOptionsJson);
 
 It can be told to misbehave, to test refusals: skip user verification, report a counter, answer for another origin, challenge or relying party. Pass `synced: true` for a synced passkey, `edwards: true` for Ed25519 keys. For tests in real browsers, use the browser's own virtual authenticator.
 
+## Stores of your own
+
+A store you wrote yourself runs YorvoID's tests for its kind, from `YorvoID\Testing\Contract`: see [stores of your own](storage.md#stores-of-your-own).
+
 ## Decisions
 
 Assertions on authorization decisions (Permit, Deny and Indeterminate, with their reasons) arrive with authorization in milestone M2.

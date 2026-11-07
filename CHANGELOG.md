@@ -24,6 +24,7 @@ Every operation runs through one decision point: `Operations::run()` decides, an
 - An operation declares what it causes (`#[Operation(causes: [...])]`), and its permit gives consequences for those only.
 - The host's operator acts from a console or job origin only when PHP runs from the command line.
 - Signing keys for each realm (`KeyRings`, `SharedKeyRings`, `PerRealmKeyRings`): a realm's checkpoints are signed and verified with its own ring. In Symfony, `keys.per_realm` and `keys.directory`, `yorvoid:keys:rotate --realm`, and the doctor reports a realm without keys.
+- The stores' contracts in `yorvoid/testing` (`YorvoID\Testing\Contract`): the tests YorvoID's own stores pass, one trait for each store and one for `Transactions`, for a store of your own to pass too. `yorvoid/testing` requires PHPUnit 12 or 13.
 
 ## 0.3.0 (2026-11-06)
 

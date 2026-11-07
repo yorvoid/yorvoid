@@ -26,9 +26,12 @@
     },
     "require": {
         "php": ">=8.4",
+        "ext-mbstring": "*",
+        "phpunit/phpunit": "^12.0 || ^13.0",
         "psr/clock": "^1.0",
         "psr/container": "^2.0",
         "symfony/clock": "^7.4 || ^8.1",
+        "symfony/uid": "^7.4 || ^8.1",
         "yorvoid/authn": "^0.1",
         "yorvoid/core": "^0.1",
         "yorvoid/passkeys": "^0.1",
