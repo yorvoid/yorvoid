@@ -5,6 +5,8 @@ declare(strict_types=1);
 /** @var PhpFuzzer\Config $config */
 
 use YorvoID\Authn\Attempt\Attempts;
+use YorvoID\Authn\Session\Sessions;
+use YorvoID\Authn\Session\Storage\InMemorySessionStore;
 use YorvoID\Authn\Setup\ClaimSetup;
 use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Authn\Setup\InvalidSetupCode;
@@ -42,7 +44,7 @@ $fresh = static function (): array {
     $log = new SecurityLog(new InMemorySecurityLogStore(), $transactions);
     $principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifierStore(), $log, $transactions);
     $tokens = new OneTimeTokens(new InMemoryOneTimeTokenStore(), $principals, $log, $transactions);
-    $setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())));
+    $setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())), new Sessions(new InMemorySessionStore(), $principals, $log, $transactions));
     $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
     Permits::call($tokens->issue(...), new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), new Origin(OriginKind::System));
     // A realm of its own: a realm with an active principal gets no setup code.

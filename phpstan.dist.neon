@@ -9,6 +9,7 @@ parameters:
         - tests/
         - tools/
         - e2e/app/
+        - fuzz/
     excludePaths:
         - packages/*/vendor/*
         - packages/*/node_modules/*
