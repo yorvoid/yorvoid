@@ -27,6 +27,8 @@ final readonly class YorvoIDDeclarations implements PolicyDeclarations
 
     public const string RELATIONS_MANAGE = RelationChanges::ABILITY;
 
+    public const string POLICY_EXPLAIN = 'yorvoid.policy.explain';
+
     public function abilities(): iterable
     {
         yield new Ability(self::PRINCIPALS_MANAGE, 'Create, suspend and delete accounts, and change their identifiers', 'yorvoid', group: 'yorvoid');
@@ -35,6 +37,7 @@ final readonly class YorvoIDDeclarations implements PolicyDeclarations
         yield new Ability(self::ROLES_MANAGE, 'Create roles and give them to people', 'yorvoid', group: 'yorvoid');
         yield new Ability(self::PERMISSIONS_MANAGE, 'Change which roles have which abilities', 'yorvoid', group: 'yorvoid');
         yield new Ability(self::RELATIONS_MANAGE, 'Relate people and resources, e.g. make someone a page\'s editor', 'yorvoid', group: 'yorvoid');
+        yield new Ability(self::POLICY_EXPLAIN, 'See why someone else may or may not do something', 'yorvoid', group: 'yorvoid', recordsPermits: true);
     }
 
     public function roles(): iterable

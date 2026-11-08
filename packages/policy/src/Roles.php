@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy;
 
+use YorvoID\Core\Authorization\Ground;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\RoleGrant;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -25,7 +27,7 @@ final readonly class Roles
     /** @var list<RoleSource> */
     private array $sources;
 
-    /** @var \WeakMap<Request, list<string>> One reading per decision, or per batch */
+    /** @var \WeakMap<Request, list<array{string, ResourceRef|null, string|null, string|null}>> One reading per decision, or per batch: each role, the resource and group it's had on and through, and its source */
     private \WeakMap $memo;
 
     /** @var \WeakMap<Request, AbilityChanges> The realm's changes, read once for a batch */
@@ -163,6 +165,18 @@ final readonly class Roles
      */
     public function rolesOf(Request $request): array
     {
+        return array_values(array_unique(array_column($this->held($request), 0)));
+    }
+
+    /**
+     * Each role the request's actor has, as it has it.
+     *
+     * @return list<array{string, ResourceRef|null, string|null, string|null}> The role, the resource it's on, the group it's through, its source
+     *
+     * @throws TooDeep
+     */
+    private function held(Request $request): array
+    {
         if (isset($this->memo[$request])) {
             return $this->memo[$request];
         }
@@ -244,25 +258,25 @@ final readonly class Roles
      * @param list<RoleAssignment|GroupRoleAssignment> $assignments
      * @param list<ResourceRef>                        $resources   The request's resource and what it's within
      *
-     * @return list<string>
+     * @return list<array{string, ResourceRef|null, string|null, string|null}>
      */
     private function compose(Request $request, array $assignments, array $resources): array
     {
-        $roles = [Role::EVERYONE];
+        $held = [[Role::EVERYONE, null, null, null]];
 
         foreach ($assignments as $assignment) {
             if ($assignment->counts($request->at, ...$resources)) {
-                $roles[] = $assignment->role;
+                $held[] = [$assignment->role, $assignment->scope, $assignment instanceof GroupRoleAssignment ? $assignment->group : null, null];
             }
         }
 
         foreach ($this->sources as $source) {
             foreach ($source->roles($request) as $role) {
-                $roles[] = $role;
+                $held[] = [$role, null, null, get_debug_type($source)];
             }
         }
 
-        return array_values(array_unique($roles));
+        return $held;
     }
 
     /**
@@ -343,11 +357,13 @@ final readonly class Roles
             return Truth::fails(\sprintf('There\'s no ability "%s".', $ability));
         }
 
+        $held = $this->held($request);
         $roles = $this->rolesOf($request);
-        $why = $this->why($request->realm, $roles, $ability, $this->changes[$request] ?? null);
+        $changes = $this->changes[$request] ?? $this->store->changes($request->realm);
+        $why = $this->why($request->realm, $roles, $ability, $changes);
 
         if (null !== $why) {
-            return Truth::holds($why);
+            return Truth::holds($why, ...$this->grounds($held, $declared, $changes));
         }
 
         $super = array_filter($roles, fn (string $role): bool => true === $this->catalogue->role($role)?->super);
@@ -355,6 +371,39 @@ final readonly class Roles
         return Truth::fails($declared->strict && [] !== $super
             ? \sprintf('None of their roles has "%s": it\'s strict, so a super role has it only when it\'s granted to it.', $ability)
             : \sprintf('None of their roles has "%s".', $ability));
+    }
+
+    /**
+     * Every role held that has the ability, and how: by its default, granted in the realm, or as a
+     * super role (G5).
+     *
+     * @param list<array{string, ResourceRef|null, string|null, string|null}> $held
+     *
+     * @return list<Ground>
+     */
+    private function grounds(array $held, Ability $ability, AbilityChanges $changes): array
+    {
+        $with = $changes->rolesWith($ability->name, $ability->defaultRoles);
+        $grounds = [];
+        $seen = [];
+
+        foreach ($held as [$role, $on, $group, $source]) {
+            $grant = match (true) {
+                \in_array($role, $with, true) => \in_array($role, $ability->defaultRoles, true) ? RoleGrant::Default : RoleGrant::Granted,
+                !$ability->strict && true === $this->catalogue->role($role)?->super => RoleGrant::Super,
+                default => null,
+            };
+
+            // Each way once: the role decides how it has the ability.
+            $way = json_encode([$role, $on, $group, $source], \JSON_THROW_ON_ERROR);
+
+            if (null !== $grant && !($seen[$way] ?? false)) {
+                $seen[$way] = true;
+                $grounds[] = Ground::role($role, $grant, $on, $group, $source);
+            }
+        }
+
+        return $grounds;
     }
 
     /**

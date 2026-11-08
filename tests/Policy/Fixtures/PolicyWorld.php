@@ -126,7 +126,7 @@ final class PolicyWorld
         ];
         $this->catalogue = OperationCatalogue::of($handlers);
         $this->operations = new Operations($this->catalogue, $evaluator, $log, $handlers);
-        $this->policy = new Policy($evaluator);
+        $this->policy = new Policy($evaluator, $this->roles);
     }
 
     /**

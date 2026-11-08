@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace YorvoID\Policy;
 
 use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\Explanation;
+use YorvoID\Core\Authorization\Reason;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\ConcernsResource;
 use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Realm;
 
 /**
@@ -29,8 +33,12 @@ use YorvoID\Core\Realm;
  */
 final readonly class Policy
 {
+    /**
+     * @param Roles|null $roles What why-not reads the roles and relations that would permit from
+     */
     public function __construct(
         private Evaluator $evaluator,
+        private ?Roles $roles = null,
     ) {
     }
 
@@ -66,6 +74,51 @@ final readonly class Policy
         $decisions = $this->evaluator->decideAbilities($actor, $ability, $realm, $asked, $origin);
 
         return new Decisions(array_map(static fn (array $one, Decision $decision): array => [$one[0], $decision], $asked, $decisions));
+    }
+
+    /**
+     * Why the actor may not do it, or may (AUZ-021): the decision, its explanation, and what would permit
+     * it. Actors ask about themselves; asking about someone else takes "yorvoid.policy.explain", and
+     * that decision is recorded whatever it is.
+     *
+     * ```php
+     * $why = $policy->whyNot($session, $member, 'acme.pages.publish', $realm, new ResourceRef('page', $id), $origin);
+     * ```
+     *
+     * @param Actor $asking Who asks
+     * @param Actor $about  Who it's about: the same, or another in the realm
+     *
+     * @throws NotPermitted    When asking about someone else without "yorvoid.policy.explain"
+     * @throws IntegratorError When the policy has no roles to answer from, or the subject concerns another resource
+     */
+    public function whyNot(Actor $asking, Actor $about, string $ability, Realm $realm, ?ResourceRef $resource, Origin $origin, ?object $subject = null): WhyNot
+    {
+        $roles = $this->roles ?? throw new IntegratorError('Why-not reads the roles, and the policy has none.', 'Give Policy the Roles it decides with.', 'concepts/authorization.md#why-not');
+        $self = $asking === $about || (null !== $asking->principalId && null !== $about->principalId && $asking->principalId->equals($about->principalId) && null !== $asking->realm && null !== $about->realm && $asking->realm->equals($about->realm));
+
+        if (!$self) {
+            $explain = $this->decide($asking, YorvoIDDeclarations::POLICY_EXPLAIN, $realm, null, $origin);
+
+            if (!$explain->permits()) {
+                throw new NotPermitted(YorvoIDDeclarations::POLICY_EXPLAIN, $explain);
+            }
+        }
+
+        $decision = $this->decide($about, $ability, $realm, $resource, $origin, $subject);
+        $declared = $roles->ability($ability) ?? throw new UnknownAbility($ability);
+        // A subject that concerns a resource concerns the one given, if one is: decide() refused it otherwise.
+        $type = ($subject instanceof ConcernsResource ? $subject->resource() : $resource)?->type;
+        $super = $declared->strict ? [] : array_keys(array_filter($roles->roles($realm), static fn (string $label, string $name): bool => true === $roles->role($realm, $name)?->super, \ARRAY_FILTER_USE_BOTH));
+
+        return new WhyNot(
+            $decision,
+            Explanation::of($decision),
+            $decision->remedies,
+            $roles->rolesWith($realm, $ability),
+            $super,
+            null === $type ? [] : $roles->relations()?->schema()->granting($type, $ability) ?? [],
+            array_values(array_map(static fn (Reason $reason): string => $reason->source, array_filter($decision->reasons, static fn (Reason $reason): bool => 'forbid' === $reason->effect && TruthValue::Holds === $reason->truth->value))),
+        );
     }
 
     /**

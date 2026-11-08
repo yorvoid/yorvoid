@@ -75,7 +75,7 @@ final readonly class AcmeDeclarations implements PolicyDeclarations
 }
 ```
 
-Names start with the owner's namespace (`acme.`). Every ability an operation needs (`#[Operation(ability: ...)]`) must be declared; YorvoID declares its own (`YorvoIDDeclarations`): managing principals, issuing recovery links (strict: it hands an account over), signing others out, managing roles, and changing which roles have which abilities. A declaration that doesn't fit (a name twice, a default role that isn't declared, an operation's undeclared ability) fails when YorvoID is built. In Symfony, a service implementing `PolicyDeclarations` is collected by itself.
+Names start with the owner's namespace (`acme.`). Every ability an operation needs (`#[Operation(ability: ...)]`) must be declared; YorvoID declares its own (`YorvoIDDeclarations`): managing principals, issuing recovery links (strict: it hands an account over), signing others out, managing roles, changing which roles have which abilities, and seeing why someone else may or may not do something (`yorvoid.policy.explain`). A declaration that doesn't fit (a name twice, a default role that isn't declared, an operation's undeclared ability) fails when YorvoID is built. In Symfony, a service implementing `PolicyDeclarations` is collected by itself.
 
 Ask about one of your own abilities with `Policy::decide()` or `allows()`, or in Symfony with `isGranted()`, which YorvoID decides for every declared ability:
 
@@ -280,6 +280,43 @@ try {
     }
 }
 ```
+
+## Explanations
+
+Every element's truth says what it rests on (`Truth::$grounds`, a list of `Ground`), and a decision says which row of the precedence decided (`Decision::$precedence`). `Explanation::of($decision)` puts them together for an explainer of yours to build its own text from: the row, the elements behind it (the forbids that held, the permits that held, the authority check...), their grounds, the remedies and the versions it read. It has no text for people. Both are experimental.
+
+```php
+use YorvoID\Core\Authorization\Explanation;
+use YorvoID\Core\Authorization\GroundKind;
+
+$explanation = Explanation::of($policy->decide($session, 'acme.pages.publish', $realm, $page, $origin));
+
+foreach ($explanation->grounds as $ground) {
+    if (GroundKind::Role === $ground->kind) {
+        // $ground->name: "editor"; $ground->grant: how it has the ability; $ground->on: site:1; $ground->group: "writers"
+    }
+}
+```
+
+What each element names:
+
+- **The role permit:** every role the actor has that has the ability (`Ground::role()`), and how (`RoleGrant`): by its declared default, granted in the realm, or as a super role. With the resource it's assigned on, the request's or one it's within (null for the whole realm), the group the actor has it through, and the role source it comes from. Each way the actor has a role is named: in the realm and on the site is twice.
+- **A sensitive change:** the proof of who they are too (`Ground::evidence('step_up')`).
+- **The relation permit:** the relation to the resource that gave the ability (`Ground::relation()`).
+- **A rule:** itself (`Ground::rule()`), and what its answer names, e.g. the attributes it read, by name and never their value: `RuleAnswer::permit('R&D publishes.', Ground::attribute('acme.department'))`.
+- **The authority check:** the acting principal's status (`Ground::authority('active')`), or `none`, `other_realm`, `missing`.
+
+### Why not
+
+`Policy::whyNot()` answers why an actor may not do something (AUZ-021): the decision and its explanation, the remedies, and what would permit it: the roles that have the ability in the realm, the super roles when it isn't strict, the relations to the resource that give it, and the forbids that held, which would refuse it whatever else changed. It never names who has those roles.
+
+```php
+use YorvoID\Core\Authorization\ResourceRef;
+
+$why = $policy->whyNot($session, $member, 'acme.pages.publish', $realm, new ResourceRef('page', $id), $origin);
+```
+
+An actor asks about themselves. Asking about someone else in the realm takes `yorvoid.policy.explain`, decided as any ability and, permitted or not, always recorded in the decision log; without it, `whyNot()` throws `NotPermitted`. `Policy` needs the `Roles` it decides with; in Symfony it has them.
 
 ## Why it couldn't decide
 

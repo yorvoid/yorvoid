@@ -8,9 +8,11 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\Explanation;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\OfflineDecider;
 use YorvoID\Core\Authorization\PolicyElement;
+use YorvoID\Core\Authorization\Precedence;
 use YorvoID\Core\Authorization\Reason;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Event\Origin;
@@ -63,6 +65,9 @@ final class OfflineTest extends TestCase
         self::assertSame('Permitted offline: The node\'s reserved budget covers it.', $decision->reason);
         self::assertSame(['door', 'authority', 'offline'], array_map(static fn (Reason $reason): string => $reason->source, $decision->reasons));
         self::assertSame(1, $decider->asked);
+        $explanation = Explanation::of($decision);
+        self::assertSame([Precedence::Offline, null], [$explanation->precedence, $explanation->precedence->row()]);
+        self::assertSame(['offline'], array_map(static fn (Reason $reason): string => $reason->source, $explanation->elements), 'The decider is behind it.');
 
         // The authority unreachable, a permit that holds: the same.
         $decision = self::decide([new StubPermit('door', Truth::holds('yes'))], $decider, Truth::unknown(IndeterminateReason::StoreUnreachable, 'down'));

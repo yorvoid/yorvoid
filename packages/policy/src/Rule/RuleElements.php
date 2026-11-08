@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Policy\Rule;
 
 use YorvoID\Core\Authorization\ForbidElement;
+use YorvoID\Core\Authorization\Ground;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\Request;
@@ -64,7 +65,7 @@ final readonly class RuleElements
             {
                 $answer = ($this->answer)($request);
 
-                return RuleOutcome::Permit === $answer->outcome ? Truth::holds($answer->detail) : Truth::fails(\sprintf('The rule doesn\'t permit it (%s).', $answer->outcome->value));
+                return RuleOutcome::Permit === $answer->outcome ? Truth::holds($answer->detail, Ground::rule($this->rule->name()), ...$answer->grounds) : Truth::fails(\sprintf('The rule doesn\'t permit it (%s).', $answer->outcome->value));
             }
         };
 
@@ -93,8 +94,8 @@ final readonly class RuleElements
                 $answer = ($this->answer)($request);
 
                 return match ($answer->outcome) {
-                    RuleOutcome::Forbid => Truth::holds($answer->detail),
-                    RuleOutcome::Unknown => Truth::unknown($answer->reason ?? IndeterminateReason::EvaluationError, $answer->detail),
+                    RuleOutcome::Forbid => Truth::holds($answer->detail, Ground::rule($this->rule->name()), ...$answer->grounds),
+                    RuleOutcome::Unknown => Truth::unknown($answer->reason ?? IndeterminateReason::EvaluationError, $answer->detail)->grounded(Ground::rule($this->rule->name()), ...$answer->grounds),
                     RuleOutcome::Permit, RuleOutcome::Abstain => Truth::fails(\sprintf('The rule doesn\'t refuse it (%s).', $answer->outcome->value)),
                 };
             }

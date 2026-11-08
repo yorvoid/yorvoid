@@ -18,6 +18,9 @@ use Symfony\Component\Security\Core\Authorization\Voter\VoterInterface;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Migration\Migrator;
@@ -70,7 +73,10 @@ final class PolicyVoterTest extends TestCase
         self::assertFalse($checker->isGranted('acme.pages.publish', new ResourceRef('page', '1')));
         self::assertFalse($checker->isGranted('acme.sites.update', new UpdateSite(new Realm('default'), '7')));
         self::assertFalse($checker->isGranted('yorvoid.principals.manage'));
-        self::assertInstanceOf(Policy::class, $container->get(Policy::class));
+        $policy = $container->get(Policy::class);
+        \assert($policy instanceof Policy);
+        $anonymous = new Anonymous();
+        self::assertSame(['editor'], $policy->whyNot($anonymous, $anonymous, 'acme.pages.publish', new Realm('default'), null, new Origin(OriginKind::Web))->roles, 'Why-not reads the roles.');
 
         // The application's own forbid and rule are the evaluator's too.
         self::assertFalse($checker->isGranted('acme.pages.view', new ResourceRef('page', 'locked')));
@@ -87,7 +93,7 @@ final class PolicyVoterTest extends TestCase
         \assert($dispatcher instanceof EventDispatcherInterface);
         $dispatcher->dispatch(new TerminateEvent($this->kernel ?? throw new \LogicException('Not booted.'), new Request(), new Response()), KernelEvents::TERMINATE);
         $recorded = array_map(static fn (array $row): array => [Row::string($row, 'name'), Row::string($row, 'verdict'), DecisionRecord::fromJson(Row::string($row, 'content'))], $database->connection->fetchAllAssociative(\sprintf('SELECT name, verdict, content FROM %s ORDER BY name', $table)));
-        self::assertSame(['acme.pages.publish', 'acme.pages.view', 'acme.pages.view', 'acme.pages.view_drafts', 'acme.pages.view_drafts', 'acme.sites.update', 'yorvoid.principals.manage'], array_column($recorded, 0));
+        self::assertSame(['acme.pages.publish', 'acme.pages.publish', 'acme.pages.view', 'acme.pages.view', 'acme.pages.view_drafts', 'acme.pages.view_drafts', 'acme.sites.update', 'yorvoid.principals.manage'], array_column($recorded, 0));
         self::assertSame(['deny'], array_values(array_unique(array_column($recorded, 1))));
         self::assertSame(['policy', 'relations'], array_keys($recorded[0][2]->versions), 'Each records the versions it read.');
 
