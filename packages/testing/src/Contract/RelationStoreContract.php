@@ -41,6 +41,34 @@ trait RelationStoreContract
      */
     abstract protected function relationStore(string $implementation): RelationStore;
 
+    /**
+     * The same store as another process has it: a new instance over the same data, e.g. on a second
+     * connection. Override it for a store that processes share; one that lives in a single process,
+     * as the in-memory one does, gives itself.
+     */
+    protected function sameRelationStore(string $implementation, RelationStore $store): RelationStore
+    {
+        return $store;
+    }
+
+    /**
+     * Every process reads the version from what the store holds, never from a counter of its own.
+     */
+    #[DataProvider('implementations')]
+    public function testEveryProcessReadsTheSameVersion(string $implementation): void
+    {
+        $store = $this->relationStore($implementation);
+        $acme = new Realm('acme');
+        $page = new ResourceRef('page', '1');
+        $store->add(new RelationTuple($acme, $page, 'editor', new Subject(new ResourceRef('principal', 'ada'))));
+        $other = $this->sameRelationStore($implementation, $store);
+
+        self::assertSame(1, $other->version($acme), 'Another process reads the version the store holds.');
+        self::assertCount(1, $other->of($acme, $page));
+        $other->forget($acme, $page);
+        self::assertSame(2, $store->version($acme), 'And this one reads its change.');
+    }
+
     #[DataProvider('implementations')]
     public function testFindsTuplesByObjectAndBySubject(string $implementation): void
     {

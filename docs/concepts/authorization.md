@@ -232,6 +232,19 @@ try {
 
 Every Indeterminate names what couldn't be established (`IndeterminateReason`): `store_unreachable`, `unknown_forbid`, `unverifiable_signature`, `missing_data`, `conflicting_records` or `evaluation_error`. New reasons can come in a minor release, so a `match` of yours on them needs a default arm.
 
+## What a request reads
+
+A request reads the realm's versions once, and the policy and relations once at those versions, however many decisions it makes: `CachedPolicyStore` and `CachedRelationStore` keep what they read in a `VersionedCache`. The whole request decides by one state of the policy. A change it makes itself counts at once; one made elsewhere counts from its next request.
+
+Given a shared PSR-6 pool, the cache keeps what was read for the other servers too, against the version it was read at. A change increments the version, so what was read before it is never read again, on any server; nothing waits for an entry to expire (D-10). Only data is kept, never decisions: those depend on the moment, the session's evidence and the attributes.
+
+- **Keys** start with the installation's ID, then the realm: `yorvoid.v1.{installation}.{realm}.policy.{version}.assignments.{principal}`. The ID is random, made by the migration and kept in the database (`Installation`), so installations sharing a pool never read each other's entries, though each has a realm "default" at version 1.
+- **A pool that fails** is passed over until the request ends, with a warning: the stores are read instead, slower and as correct.
+- **The pool is trusted as the database is**: what's in it decides who holds which role. Give it a store only YorvoID's servers reach.
+- **Between requests**, and between a worker's messages, the cache and the stores forget (`reset()`; in Symfony, `kernel.reset` does it). A long console command decides by the state it started with, apart from its own changes.
+
+In Symfony, the stores are the cached ones, with the pool `yorvoid.cache`, which the bundle defines on `cache.app`. `cache.pool` names another, or with `null` keeps reads for the request only.
+
 ## When a store can't be reached
 
 A store that can't be reached makes the decision Indeterminate with the reason `store_unreachable`, never a Permit: the connection was refused or lost, a statement timed out, or the server is starting, failing over or shutting down. That's told apart from other failures (`evaluation_error`) and from records that aren't there (`missing_data`). Waiting for a lock is contention, not unreachability.

@@ -82,7 +82,10 @@ interface PolicyStore
      */
     public function unassignGroup(Realm $realm, string $group, string $role, ?ResourceRef $scope): bool;
 
-    /** 0 before the first change */
+    /**
+     * 0 before the first change. Read from what the store holds, so every process reads the same one:
+     * never a counter of the process's own. What's cached against it depends on that (AUZ-031).
+     */
     public function version(Realm $realm): int;
 
     /**

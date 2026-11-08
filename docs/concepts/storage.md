@@ -27,7 +27,7 @@ A `StorageLocation` says where YorvoID's tables are:
 
 YorvoID creates and uses only tables of its location. It never reads or changes your tables.
 
-Its tables are named for what one row is, in the singular, starting with the concept they belong to: `principal`, `principal_identifier`, `authentication_session`, `one_time_token`, `realm_setup`, `security_log`. The names stand on their own without the prefix, and none is a word that SQL or your framework's own tables use (such as `session`).
+Its tables are named for what one row is, in the singular, starting with the concept they belong to: `principal`, `principal_identifier`, `authentication_session`, `one_time_token`, `realm_setup`, `security_log`. One table holds a single row: `installation`, the installation's random ID, which a shared cache tells installations apart by ([what a request reads](authorization.md#what-a-request-reads)). The names stand on their own without the prefix, and none is a word that SQL or your framework's own tables use (such as `session`).
 
 Your own schema tools (e.g. Doctrine Migrations' diff) should leave YorvoID's tables alone. Give them `StorageLocation::owns()` as the schema assets filter:
 

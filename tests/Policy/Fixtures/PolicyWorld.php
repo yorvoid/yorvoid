@@ -24,6 +24,7 @@ use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\VersionedCache;
 use YorvoID\Policy\Attribute\AttributeChanges;
 use YorvoID\Policy\Attribute\AttributeResolver;
 use YorvoID\Policy\Attribute\Attributes;
@@ -35,22 +36,29 @@ use YorvoID\Policy\Policy;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\PolicyChanges;
 use YorvoID\Policy\PolicyDeclarations;
+use YorvoID\Policy\PolicyStore;
+use YorvoID\Policy\PolicyVersion;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Roles;
 use YorvoID\Policy\RoleSource;
 use YorvoID\Policy\Rule\Rule;
 use YorvoID\Policy\Rule\RuleElements;
+use YorvoID\Policy\Storage\CachedPolicyStore;
 use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\Relations\RelationChanges;
 use YorvoID\Relations\RelationPermit;
 use YorvoID\Relations\Relations;
 use YorvoID\Relations\RelationSchema;
+use YorvoID\Relations\RelationStore;
+use YorvoID\Relations\RelationsVersion;
+use YorvoID\Relations\Storage\CachedRelationStore;
 use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Tests\Relations\Fixtures\AcmeRelations;
+use YorvoID\Tests\Support\Stack;
 
 /**
- * YorvoID with the policy, in memory: operations run as they do in an application, the host's operator
- * from the console, principals as themselves.
+ * YorvoID with the policy, in memory or on a stack's stores, cached if given a cache: operations run as
+ * they do in an application, the host's operator from the console, principals as themselves.
  */
 final class PolicyWorld
 {
@@ -72,40 +80,67 @@ final class PolicyWorld
 
     public readonly Policy $policy;
 
+    public readonly PolicyStore $policyStore;
+
+    public readonly RelationStore $relationStore;
+
     /**
      * @param list<PolicyDeclarations>                $declarations
      * @param list<Rule>                              $rules
      * @param list<RoleSource>                        $sources
      * @param list<AttributeResolver>                 $resolvers
      * @param (\Closure(Attributes): list<Rule>)|null $rulesOf      Rules that read attributes
+     * @param Stack|null                              $stack        Its stores instead of in-memory ones
      */
-    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null)
+    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null, ?Stack $stack = null, private readonly ?VersionedCache $cache = null)
     {
         $this->memory = new InMemoryStorage();
+        $principals = $stack->principals ?? $this->memory->principals;
+        $identifiers = $stack->identifiers ?? $this->memory->identifiers;
+        $transactions = $stack->transactions ?? $this->memory->transactions;
+        $attributes = $stack->attributes ?? $this->memory->attributes;
+        $policyStore = $stack->policy ?? $this->memory->policy;
+        $relationStore = $stack->relations ?? $this->memory->relations;
+        $this->policyStore = null === $cache ? $policyStore : new CachedPolicyStore($policyStore, $cache);
+        $this->relationStore = null === $cache ? $relationStore : new CachedRelationStore($relationStore, $cache);
         $this->clock = new MockClock('2026-11-07 20:00:00');
         $this->realm = new Realm('acme');
         $catalogue = PolicyCatalogue::of([new YorvoIDDeclarations(), new AcmeDeclarations(), ...$declarations]);
-        $this->relations = new Relations(RelationSchema::of([new AcmeRelations(), new GroupRelations()]), $this->memory->relations, $maxDepth);
-        $this->roles = new Roles($catalogue, $this->memory->policy, $sources, $this->relations);
-        $this->attributes = new Attributes([new AcmeAttributes()], $this->memory->attributes, $resolvers);
-        $log = new SecurityLog($this->memory->log, $this->memory->transactions, clock: $this->clock);
+        $this->relations = new Relations(RelationSchema::of([new AcmeRelations(), new GroupRelations()]), $this->relationStore, $maxDepth);
+        $this->roles = new Roles($catalogue, $this->policyStore, $sources, $this->relations);
+        $this->attributes = new Attributes([new AcmeAttributes()], $attributes, $resolvers);
+        $log = new SecurityLog($stack->log ?? $this->memory->log, $transactions, clock: $this->clock);
         $elements = [new RolePermit($this->roles, $stepUp, $window), new NoEscalation($this->roles), new RelationPermit($this->relations)];
 
         foreach ([...$rules, ...(null === $rulesOf ? [] : $rulesOf($this->attributes))] as $rule) {
             array_push($elements, ...RuleElements::of($rule));
         }
 
-        $evaluator = Evaluator::builtIn(new PrincipalAuthority($this->memory->principals), elements: $elements, commandLine: true, clock: $this->clock);
+        $evaluator = Evaluator::builtIn(new PrincipalAuthority($principals), elements: $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)]);
         $handlers = [
-            new Principals($this->memory->principals, $this->memory->identifiers, $log, $this->memory->transactions, clock: $this->clock),
-            new PolicyChanges($catalogue, $this->memory->policy, $this->memory->principals, $log, $this->memory->transactions, $this->clock),
-            new GroupChanges($catalogue, $this->memory->policy, $this->memory->relations, $this->memory->principals, $log, $this->memory->transactions, $this->clock),
-            new RelationChanges($this->relations->schema(), $this->memory->relations, $log, $this->memory->transactions),
-            new AttributeChanges($this->attributes, $this->memory->attributes, $this->memory->principals, $log, $this->memory->transactions),
+            new Principals($principals, $identifiers, $log, $transactions, clock: $this->clock),
+            new PolicyChanges($catalogue, $this->policyStore, $principals, $log, $transactions, $this->clock),
+            new GroupChanges($catalogue, $this->policyStore, $this->relationStore, $principals, $log, $transactions, $this->clock),
+            new RelationChanges($this->relations->schema(), $this->relationStore, $log, $transactions),
+            new AttributeChanges($this->attributes, $attributes, $principals, $log, $transactions),
         ];
         $this->catalogue = OperationCatalogue::of($handlers);
         $this->operations = new Operations($this->catalogue, $evaluator, $log, $handlers);
         $this->policy = new Policy($evaluator);
+    }
+
+    /**
+     * What the container's reset does between requests: the cache and the cached stores forget.
+     */
+    public function newRequest(): void
+    {
+        $this->cache?->reset();
+
+        foreach ([$this->policyStore, $this->relationStore] as $store) {
+            if ($store instanceof CachedPolicyStore || $store instanceof CachedRelationStore) {
+                $store->reset();
+            }
+        }
     }
 
     /**

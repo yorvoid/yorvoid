@@ -7,6 +7,7 @@ namespace YorvoID\Symfony;
 use Symfony\Component\Config\Definition\Builder\NodeBuilder;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\DependencyInjection\Reference;
@@ -23,6 +24,7 @@ use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\StorageLocation;
+use YorvoID\Core\Storage\VersionedCache;
 use YorvoID\Flows\Translations as FlowsTranslations;
 use YorvoID\IntentSigning\SignedOperationNotification;
 use YorvoID\IntentSigning\Translations as IntentSigningTranslations;
@@ -58,6 +60,9 @@ final class YorvoIDBundle extends AbstractBundle
 {
     protected string $extensionAlias = 'yorvoid';
 
+    /** The pool YorvoID keeps what decisions read in, unless the configuration names another */
+    public const string CACHE_POOL = 'yorvoid.cache';
+
     /**
      * The catalogues of YorvoID's packages, and the bridge's own: its pages' copy.
      */
@@ -88,6 +93,8 @@ final class YorvoIDBundle extends AbstractBundle
         $children->arrayNode('decision_log')->addDefaultsIfNotSet()->children()
             ->enumNode('permits')->values(['none', 'sampled', 'all'])->defaultValue('none')->info('Which permits of abilities are recorded: refusals, Indeterminate and every operation\'s decision always are')->end()
             ->floatNode('sample_rate')->min(0.0)->max(1.0)->defaultValue(0.01)->info('With permits: sampled, the share of requests whose permits are recorded')->end();
+        $children->arrayNode('cache')->addDefaultsIfNotSet()->children()
+            ->scalarNode('pool')->defaultValue(self::CACHE_POOL)->info('The PSR-6 pool that servers share for what decisions read: roles, assignments, relations. yorvoid.cache is on cache.app; null keeps them for the request only')->end();
         $children->arrayNode('cookies')->addDefaultsIfNotSet()->children()
             ->scalarNode('device')->defaultValue('__Host-yorvoid_device')->info('The cookie that recognises devices')->end();
         $children->arrayNode('storage')->addDefaultsIfNotSet()->children()
@@ -142,6 +149,11 @@ final class YorvoIDBundle extends AbstractBundle
         if ($builder->hasExtension('framework') && class_exists(Translator::class)) {
             $builder->prependExtensionConfig('framework', ['translator' => ['paths' => self::TRANSLATIONS]]);
         }
+
+        // A pool of its own, not cache.app: what's in it decides who holds which role.
+        if ($builder->hasExtension('framework')) {
+            $builder->prependExtensionConfig('framework', ['cache' => ['pools' => [self::CACHE_POOL => ['adapter' => 'cache.app']]]]);
+        }
     }
 
     /**
@@ -193,6 +205,10 @@ final class YorvoIDBundle extends AbstractBundle
         if (\is_string($users)) {
             $builder->setAlias(PrincipalUsers::class, $users);
         }
+
+        // The default pool needs FrameworkBundle; one the application names must exist.
+        $pool = $settings['cache.pool'];
+        $builder->getDefinition(VersionedCache::class)->setArgument(0, \is_string($pool) ? new Reference($pool, self::CACHE_POOL === $pool ? ContainerInterface::NULL_ON_INVALID_REFERENCE : ContainerInterface::EXCEPTION_ON_INVALID_REFERENCE) : null);
 
         if (true !== $settings['sessions.recognise_devices']) {
             $builder->getDefinition(Sessions::class)->setArgument('$devices', null);

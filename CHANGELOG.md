@@ -17,6 +17,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - `SecurityNotifications` takes `Operations` instead of `OneTimeTokens`; `PasskeyFlows`, its steps (`PasskeySignInStep`, `PasskeyRegistrationStep`, `SetupCodeStep`, `InvitationStep`, `RecoveryCodeStep`, `RecoveryCodesStep`, `RecoveryLinkStep`, `EmailVerificationStep`), `CurrentSession`, the authenticators (`PasskeyAuthenticator`, `RecoveryCodeAuthenticator`, `RecoveryLinkAuthenticator`) and `Scenario` take `Operations`.
 - `Checkpoints` takes `KeyRings`, each realm's signing keys, instead of one `KeyRing`: pass `new SharedKeyRings($ring)` for what it did before.
 - `RelationStore::version()` is new, and every change to relations increments the realm's relations version: a store of your own keeps one (`RelationStoreContract`).
+- `PolicyStore::version()` and `RelationStore::version()` must be read from what the store holds, so every process reads the same: never a counter of the process's own. The contracts check it with a second instance over the same data (`samePolicyStore()`, `sameRelationStore()`; override them for a store processes share).
 
 ### Added
 
@@ -44,6 +45,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - Groups (IDN-056): nested, with roles given to them (`yorvoid.group.*`, `GroupChanges`, `GroupRelations`).
 - Security attributes of principals (IDN-055) and attributes of the request through resolvers (AUZ-013): `SecurityAttribute`, `AttributeDeclarations`, `Attributes`, `AttributeResolver`, `yorvoid.attribute.set`. What isn't known is Indeterminate (`missing_data`), as is any exception implementing `MissingData` ([attributes](docs/concepts/authorization.md#attributes)).
 - The decision log (AUZ-040), apart from the security log and without a lock (`DecisionLog`, `DecisionLogStore`, `DecisionRecord`, `PermitRecording`): every operation's decision before it runs, abilities' refusals and Indeterminate, and their permits as configured (`yorvoid.decision_log.permits`, `sample_rate`; `Ability::$recordsPermits`). Security-log entries cite the decision that let their operation run, by ID and hash. `yorvoid:purge --keep-decisions` prunes it ([decision log](docs/concepts/security-log.md#the-decision-log)).
+- What decisions read is read once a request, at the realm's versions, and kept in a shared pool if one is given (`VersionedCache`, `CachedPolicyStore`, `CachedRelationStore`): keys start with the installation's ID (`Installation`, the `installation` table) and the realm; a pool that fails is passed over. In Symfony, the pool `yorvoid.cache`, on `cache.app`, or the one `cache.pool` names ([what a request reads](docs/concepts/authorization.md#what-a-request-reads)).
 - Each decision has an ID, a time and the versions it read (`Decision::$id`, `$at`, `$versions`, `VersionSource`, `PolicyVersion`, `RelationsVersion`); the permit of an operation carries its decision's ID.
 
 ## 0.3.0 (2026-11-06)
