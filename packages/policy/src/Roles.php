@@ -25,8 +25,11 @@ final readonly class Roles
     /** @var list<RoleSource> */
     private array $sources;
 
-    /** @var \WeakMap<Request, list<string>> One reading per decision */
+    /** @var \WeakMap<Request, list<string>> One reading per decision, or per batch */
     private \WeakMap $memo;
+
+    /** @var \WeakMap<Request, AbilityChanges> The realm's changes, read once for a batch */
+    private \WeakMap $changes;
 
     /**
      * @param iterable<RoleSource> $sources   Roles an actor has without their being stored
@@ -46,6 +49,7 @@ final readonly class Roles
 
         $this->sources = $list;
         $this->memo = new \WeakMap();
+        $this->changes = new \WeakMap();
     }
 
     /**
@@ -163,22 +167,92 @@ final readonly class Roles
             return $this->memo[$request];
         }
 
-        $roles = [Role::EVERYONE];
+        if (!$request->actorInRealm()) {
+            return $this->memo[$request] = $this->compose($request, [], []);
+        }
 
-        if ($request->actorInRealm()) {
-            \assert(null !== $request->actor->principalId);
-            $resources = $this->within($request);
+        \assert(null !== $request->actor->principalId);
+        $resources = $this->within($request);
+        $assignments = [
+            ...$this->store->assignments($request->realm, $request->actor->principalId),
+            ...$this->store->groupAssignments($request->realm, $this->groupsOf($request->realm, $request->actor->principalId)),
+        ];
 
-            foreach ($this->store->assignments($request->realm, $request->actor->principalId) as $assignment) {
-                if ($assignment->counts($request->at, ...$resources)) {
-                    $roles[] = $assignment->role;
+        return $this->memo[$request] = $this->compose($request, $assignments, $resources);
+    }
+
+    /**
+     * Reads the roles of many requests at once (AUZ-032): each actor's assignments and groups once, and
+     * the parents of every resource a level at a time. What can't be read is left for rolesOf() to
+     * read, and report, request by request.
+     *
+     * @param list<Request> $requests
+     */
+    public function preload(array $requests): void
+    {
+        /** @var array<string, array<string, list<Request>>> $actors By realm, then principal */
+        $actors = [];
+        /** @var array<string, AbilityChanges> $changes By realm */
+        $changes = [];
+
+        foreach ($requests as $request) {
+            $this->changes[$request] = $changes[$request->realm->name] ??= $this->store->changes($request->realm);
+
+            if ($request->actorInRealm() && !isset($this->memo[$request])) {
+                $actors[$request->realm->name][(string) $request->actor->principalId][] = $request;
+            }
+        }
+
+        foreach ($actors as $principals) {
+            foreach ($principals as $batch) {
+                $realm = $batch[0]->realm;
+                $principal = $batch[0]->actor->principalId;
+                \assert(null !== $principal);
+                $assignments = [
+                    ...$this->store->assignments($realm, $principal),
+                    ...$this->store->groupAssignments($realm, $this->groupsOf($realm, $principal)),
+                ];
+                $resources = [];
+
+                foreach ($batch as $request) {
+                    if (null !== $request->resource) {
+                        $resources[] = $request->resource;
+                    }
+                }
+
+                $ancestors = null === $this->relations ? [] : $this->relations->ancestorsOfMany($realm, $resources);
+
+                foreach ($batch as $request) {
+                    $resource = $request->resource;
+
+                    if (null === $resource) {
+                        $this->memo[$request] = $this->compose($request, $assignments, []);
+                    } elseif (null === $this->relations) {
+                        $this->memo[$request] = $this->compose($request, $assignments, [$resource]);
+                    } elseif (null !== $ancestors[(string) $resource]) {
+                        $this->memo[$request] = $this->compose($request, $assignments, [$resource, ...$ancestors[(string) $resource]]);
+                    }
                 }
             }
+        }
+    }
 
-            foreach ($this->store->groupAssignments($request->realm, $this->groupsOf($request->realm, $request->actor->principalId)) as $assignment) {
-                if ($assignment->counts($request->at, ...$resources)) {
-                    $roles[] = $assignment->role;
-                }
+    /**
+     * "Everyone", the assignments that count for the request's moment and resources, and what the role
+     * sources add.
+     *
+     * @param list<RoleAssignment|GroupRoleAssignment> $assignments
+     * @param list<ResourceRef>                        $resources   The request's resource and what it's within
+     *
+     * @return list<string>
+     */
+    private function compose(Request $request, array $assignments, array $resources): array
+    {
+        $roles = [Role::EVERYONE];
+
+        foreach ($assignments as $assignment) {
+            if ($assignment->counts($request->at, ...$resources)) {
+                $roles[] = $assignment->role;
             }
         }
 
@@ -188,7 +262,7 @@ final readonly class Roles
             }
         }
 
-        return $this->memo[$request] = array_values(array_unique($roles));
+        return array_values(array_unique($roles));
     }
 
     /**
@@ -270,7 +344,7 @@ final readonly class Roles
         }
 
         $roles = $this->rolesOf($request);
-        $why = $this->why($request->realm, $roles, $ability);
+        $why = $this->why($request->realm, $roles, $ability, $this->changes[$request] ?? null);
 
         if (null !== $why) {
             return Truth::holds($why);
@@ -298,9 +372,10 @@ final readonly class Roles
     }
 
     /**
-     * @param list<string> $roles
+     * @param list<string>        $roles
+     * @param AbilityChanges|null $changes The realm's, if read already
      */
-    private function why(Realm $realm, array $roles, string $ability): ?string
+    private function why(Realm $realm, array $roles, string $ability, ?AbilityChanges $changes = null): ?string
     {
         $declared = $this->catalogue->ability($ability);
 
@@ -316,7 +391,7 @@ final readonly class Roles
             }
         }
 
-        foreach ($this->store->changes($realm)->rolesWith($ability, $declared->defaultRoles) as $role) {
+        foreach (($changes ?? $this->store->changes($realm))->rolesWith($ability, $declared->defaultRoles) as $role) {
             if (\in_array($role, $roles, true)) {
                 return Role::EVERYONE === $role ? \sprintf('Everyone has "%s".', $ability) : \sprintf('Their role "%s" has "%s".', $role, $ability);
             }

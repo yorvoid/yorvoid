@@ -30,62 +30,87 @@ final readonly class Relations
      */
     public function check(Realm $realm, ResourceRef $object, string $relation, Subject $subject): ?bool
     {
-        /** @var list<array{ResourceRef, string}> $frontier */
-        $frontier = [[$object, $relation]];
+        return $this->checkMany($realm, [$object], $relation, $subject)[(string) $object];
+    }
+
+    /**
+     * Whether the subject has the relation to each of the objects: as check() for each, with one
+     * store call per level for all of them (AUZ-032).
+     *
+     * @param list<ResourceRef> $objects
+     *
+     * @return array<string, bool|null> By object, as "type:id"
+     */
+    public function checkMany(Realm $realm, array $objects, string $relation, Subject $subject): array
+    {
+        /** @var array<string, list<array{ResourceRef, string}>> $frontiers By object */
+        $frontiers = [];
+        /** @var array<string, array<string, true>> $seen By object: the object#relation pairs it has reached */
         $seen = [];
+        $results = [];
 
-        for ($depth = 0; $depth < $this->maxDepth; ++$depth) {
-            if ([] === $frontier) {
-                return false;
-            }
+        foreach ($objects as $object) {
+            $frontiers[(string) $object] = [[$object, $relation]];
+            $seen[(string) $object] = [];
+        }
 
-            // The relations implied on the same object need no reading.
-            $pairs = [];
-            /** @var array<string, list<string>> $parents Tuple key => the parents' relations they lead to */
-            $parents = [];
+        for ($depth = 0; $depth < $this->maxDepth && [] !== $frontiers; ++$depth) {
+            $asked = [];
+            /** @var array<string, array{array<string, array{ResourceRef, string}>, array<string, list<string>>}> $levels */
+            $levels = [];
 
-            while ([] !== $frontier) {
-                [$current, $name] = array_shift($frontier);
-                $key = $current.'#'.$name;
-                $definition = $this->schema->relation($current->type, $name);
+            foreach ($frontiers as $key => $frontier) {
+                if ([] === $frontier) {
+                    $results[$key] = false;
+                    unset($frontiers[$key]);
 
-                if (isset($seen[$key]) || null === $definition) {
                     continue;
                 }
 
-                $seen[$key] = $definition;
-                $pairs[$key] = [$current, $name];
-
-                foreach ($definition->impliedBy as $implied) {
-                    $frontier[] = [$current, $implied];
-                }
-
-                foreach ($definition->fromParents as $via => $parentRelation) {
-                    $pairs[$current.'#'.$via] = [$current, $via];
-                    $parents[$current.'#'.$via][] = $parentRelation;
-                }
+                $levels[$key] = $this->level($frontier, $seen[$key]);
+                $asked += $levels[$key][0];
             }
 
-            foreach ($this->store->subjects($realm, array_values($pairs)) as $tuple) {
-                $key = $tuple->object.'#'.$tuple->relation;
+            /** @var array<string, list<RelationTuple>> $tuples By object#relation */
+            $tuples = [];
 
-                if (isset($seen[$key])) {
-                    if ($tuple->subject->equals($subject)) {
-                        return true;
-                    }
+            foreach ([] === $asked ? [] : $this->store->subjects($realm, array_values($asked)) as $tuple) {
+                $tuples[$tuple->object.'#'.$tuple->relation][] = $tuple;
+            }
 
-                    if (null !== $tuple->subject->relation) {
-                        $frontier[] = [$tuple->subject->resource, $tuple->subject->relation];
+            foreach ($levels as $key => [$pairs, $parents]) {
+                $next = [];
+
+                foreach (array_keys($pairs) as $pair) {
+                    foreach ($tuples[$pair] ?? [] as $tuple) {
+                        if ($seen[$key][$pair] ?? false) {
+                            if ($tuple->subject->equals($subject)) {
+                                $results[$key] = true;
+                                unset($frontiers[$key]);
+
+                                continue 3;
+                            }
+
+                            if (null !== $tuple->subject->relation) {
+                                $next[] = [$tuple->subject->resource, $tuple->subject->relation];
+                            }
+                        }
+
+                        foreach ($parents[$pair] ?? [] as $parentRelation) {
+                            $next[] = [$tuple->subject->resource, $parentRelation];
+                        }
                     }
                 }
 
-                foreach ($parents[$key] ?? [] as $parentRelation) {
-                    $frontier[] = [$tuple->subject->resource, $parentRelation];
-                }
+                $frontiers[$key] = $next;
             }
         }
 
-        return [] === $frontier ? false : null;
+        foreach ($frontiers as $key => $frontier) {
+            $results[$key] = [] === $frontier ? false : null;
+        }
+
+        return $results;
     }
 
     /**
@@ -95,31 +120,76 @@ final readonly class Relations
      */
     public function ancestors(Realm $realm, ResourceRef $resource, string $via = 'parent'): ?array
     {
-        $ancestors = [];
-        $seen = [(string) $resource => $resource];
-        $frontier = [$resource];
+        return $this->ancestorsOfMany($realm, [$resource], $via)[(string) $resource];
+    }
 
-        for ($depth = 0; $depth < $this->maxDepth; ++$depth) {
-            $next = [];
+    /**
+     * The ancestors of each of the resources: as ancestors() for each, with one store call per level
+     * for all of them.
+     *
+     * @param list<ResourceRef> $resources
+     *
+     * @return array<string, list<ResourceRef>|null> By resource, as "type:id"
+     */
+    public function ancestorsOfMany(Realm $realm, array $resources, string $via = 'parent'): array
+    {
+        /** @var array<string, list<ResourceRef>> $frontiers */
+        $frontiers = [];
+        /** @var array<string, list<ResourceRef>> $found */
+        $found = [];
+        /** @var array<string, array<string, true>> $seen */
+        $seen = [];
+        $results = [];
 
-            foreach ($this->store->subjects($realm, array_map(static fn (ResourceRef $child): array => [$child, $via], $frontier)) as $tuple) {
-                $parent = $tuple->subject->resource;
+        foreach ($resources as $resource) {
+            $frontiers[(string) $resource] = [$resource];
+            $found[(string) $resource] = [];
+            $seen[(string) $resource] = [(string) $resource => true];
+        }
 
-                if (!isset($seen[(string) $parent])) {
-                    $seen[(string) $parent] = $parent;
-                    $ancestors[] = $parent;
-                    $next[] = $parent;
+        for ($depth = 0; $depth < $this->maxDepth && [] !== $frontiers; ++$depth) {
+            $children = [];
+
+            foreach ($frontiers as $frontier) {
+                foreach ($frontier as $child) {
+                    $children[(string) $child] = [$child, $via];
                 }
             }
 
-            if ([] === $next) {
-                return $ancestors;
+            /** @var array<string, list<ResourceRef>> $parents By child */
+            $parents = [];
+
+            foreach ($this->store->subjects($realm, array_values($children)) as $tuple) {
+                $parents[(string) $tuple->object][] = $tuple->subject->resource;
             }
 
-            $frontier = $next;
+            foreach ($frontiers as $key => $frontier) {
+                $next = [];
+
+                foreach ($frontier as $child) {
+                    foreach ($parents[(string) $child] ?? [] as $parent) {
+                        if (!($seen[$key][(string) $parent] ?? false)) {
+                            $seen[$key][(string) $parent] = true;
+                            $found[$key][] = $parent;
+                            $next[] = $parent;
+                        }
+                    }
+                }
+
+                if ([] === $next) {
+                    $results[$key] = $found[$key];
+                    unset($frontiers[$key]);
+                } else {
+                    $frontiers[$key] = $next;
+                }
+            }
         }
 
-        return null;
+        foreach (array_keys($frontiers) as $key) {
+            $results[$key] = null;
+        }
+
+        return $results;
     }
 
     /**
@@ -151,6 +221,45 @@ final readonly class Relations
         }
 
         return null;
+    }
+
+    /**
+     * One level of a check: the pairs to read, with the relations implied on the same object, which
+     * need no reading, and the parents' relations that each pair leads to.
+     *
+     * @param list<array{ResourceRef, string}> $frontier
+     * @param array<string, true>              $seen     The pairs reached, this level's added
+     *
+     * @return array{array<string, array{ResourceRef, string}>, array<string, list<string>>}
+     */
+    private function level(array $frontier, array &$seen): array
+    {
+        $pairs = [];
+        $parents = [];
+
+        while ([] !== $frontier) {
+            [$current, $name] = array_shift($frontier);
+            $key = $current.'#'.$name;
+            $definition = $this->schema->relation($current->type, $name);
+
+            if (($seen[$key] ?? false) || null === $definition) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $pairs[$key] = [$current, $name];
+
+            foreach ($definition->impliedBy as $implied) {
+                $frontier[] = [$current, $implied];
+            }
+
+            foreach ($definition->fromParents as $via => $parentRelation) {
+                $pairs[$current.'#'.$via] = [$current, $via];
+                $parents[$current.'#'.$via][] = $parentRelation;
+            }
+        }
+
+        return [$pairs, $parents];
     }
 
     public function schema(): RelationSchema

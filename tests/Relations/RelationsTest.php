@@ -18,6 +18,7 @@ use YorvoID\Relations\ResourceType;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
 use YorvoID\Tests\Relations\Fixtures\AcmeRelations;
+use YorvoID\Tests\Relations\Fixtures\CountingRelationStore;
 
 /**
  * Relations (AUZ-011): direct, implied, through subject sets and inherited from parents, a level at a
@@ -87,6 +88,75 @@ final class RelationsTest extends TestCase
         self::assertEquals([GroupRelations::group('b'), GroupRelations::group('a')], $relations->memberships($this->realm, GroupRelations::members('a'), 'group', 'member'));
         self::assertEquals([new ResourceRef('site', 'y')], $relations->ancestors($this->realm, new ResourceRef('site', 'x')));
         self::assertFalse($relations->check($this->realm, new ResourceRef('site', 'x'), 'viewer', self::principal('ada')));
+    }
+
+    public function testManyAtOnceAsOneByOne(): void
+    {
+        $this->relate(new ResourceRef('page', '1'), 'editor', self::principal('ada'));
+        $this->relate(new ResourceRef('page', '2'), 'parent', new Subject(new ResourceRef('site', 'a')));
+        $this->relate(new ResourceRef('site', 'a'), 'parent', new Subject(new ResourceRef('server', 's')));
+        $this->relate(new ResourceRef('server', 's'), 'admin', self::principal('bob'));
+        $this->relate(new ResourceRef('page', '3'), 'editor', GroupRelations::members('writers'));
+        $this->relate(GroupRelations::group('writers'), 'member', self::principal('ada'));
+        $this->relate(new ResourceRef('page', '4'), 'parent', new Subject(new ResourceRef('site', 'x')));
+        $this->relate(new ResourceRef('site', 'x'), 'parent', new Subject(new ResourceRef('site', 'y')));
+        $this->relate(new ResourceRef('site', 'y'), 'parent', new Subject(new ResourceRef('site', 'x')));
+
+        for ($i = 0; $i < 4; ++$i) {
+            $this->relate(new ResourceRef('site', 's'.$i), 'parent', new Subject(new ResourceRef('site', 's'.($i + 1))));
+        }
+
+        $this->relate(new ResourceRef('page', '5'), 'parent', new Subject(new ResourceRef('site', 's0')));
+        $objects = [...array_map(static fn (int $i): ResourceRef => new ResourceRef('page', (string) $i), range(1, 6)), new ResourceRef('site', 'a'), new ResourceRef('photo', '1'), new ResourceRef('page', '1')];
+
+        foreach ([Relations::MAX_DEPTH, 3] as $depth) {
+            $store = new CountingRelationStore($this->store);
+            $relations = new Relations(RelationSchema::of([new AcmeRelations(), new GroupRelations()]), $store, $depth);
+
+            foreach (['ada', 'bob', 'carl'] as $who) {
+                foreach (['editor', 'viewer'] as $relation) {
+                    $store->reads = 0;
+                    $many = $relations->checkMany($this->realm, $objects, $relation, self::principal($who));
+                    self::assertLessThanOrEqual($depth, $store->reads, 'One read per level, for all of them.');
+
+                    foreach ($objects as $object) {
+                        self::assertSame($relations->check($this->realm, $object, $relation, self::principal($who)), $many[(string) $object], \sprintf('%s %s of %s, %d deep', $who, $relation, $object, $depth));
+                    }
+
+                    self::assertCount(8, $many);
+                }
+            }
+
+            $store->reads = 0;
+            $ancestors = $relations->ancestorsOfMany($this->realm, $objects);
+            self::assertLessThanOrEqual($depth, $store->reads);
+            self::assertCount(8, $ancestors);
+
+            foreach ($objects as $object) {
+                self::assertEquals($relations->ancestors($this->realm, $object), $ancestors[(string) $object], (string) $object);
+            }
+        }
+
+        self::assertSame([], $this->relations()->checkMany($this->realm, [], 'editor', self::principal('ada')));
+        self::assertSame(['page:1' => false], $this->relations(maxDepth: 1)->checkMany($this->realm, [new ResourceRef('page', '1')], 'editor', self::principal('bob')), 'Told within the last level.');
+        self::assertEquals([new ResourceRef('site', 'y')], $this->relations()->ancestorsOfMany($this->realm, [new ResourceRef('site', 'x')])['site:x'], 'A cycle ends.');
+
+        // A subject set of an undeclared type is passed over, and the rest of its level read.
+        $this->relate(new ResourceRef('page', '7'), 'editor', new Subject(new ResourceRef('album', '1'), 'viewer'));
+        $this->relate(new ResourceRef('page', '7'), 'editor', GroupRelations::members('writers'));
+        self::assertTrue($this->relations()->checkMany($this->realm, [new ResourceRef('page', '7')], 'editor', self::principal('ada'))['page:7']);
+
+        // A parent isn't a subject of the relation it leads to.
+        self::assertFalse($this->relations()->check($this->realm, new ResourceRef('page', '2'), 'viewer', new Subject(new ResourceRef('site', 'a'))));
+
+        // A cycle further up ends too, each ancestor once.
+        $this->relate(new ResourceRef('site', 'c1'), 'parent', new Subject(new ResourceRef('site', 'c2')));
+        $this->relate(new ResourceRef('site', 'c2'), 'parent', new Subject(new ResourceRef('site', 'c3')));
+        $this->relate(new ResourceRef('site', 'c3'), 'parent', new Subject(new ResourceRef('site', 'c2')));
+        self::assertEquals([new ResourceRef('site', 'c2'), new ResourceRef('site', 'c3')], $this->relations()->ancestors($this->realm, new ResourceRef('site', 'c1')));
+        self::assertSame([], $this->relations()->ancestorsOfMany($this->realm, []));
+        self::assertNull($this->relations(maxDepth: 3)->checkMany($this->realm, $objects, 'viewer', self::principal('ada'))['page:5'], 'Deeper than the bound.');
+        self::assertTrue($this->relations()->checkMany($this->realm, $objects, 'viewer', self::principal('bob'))['page:2']);
     }
 
     public function testDeeperThanTheBoundCantBeTold(): void

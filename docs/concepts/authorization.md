@@ -85,6 +85,22 @@ use YorvoID\Core\Authorization\ResourceRef;
 $this->denyAccessUnlessGranted('acme.pages.publish', new ResourceRef('page', $page->id));
 ```
 
+### Many at once
+
+A list that shows what each row allows, e.g. an "Edit" link on every page, asks for all of them at once with `Policy::decideMany()`. Each resource is decided as `decide()` would decide it, at one moment, and what the roles and relations need is read for all of them together: the queries don't grow with the number of resources (AUZ-032).
+
+```php
+$decisions = $policy->decideMany($session, 'acme.pages.edit', $realm, $pages, $origin);
+
+foreach ($decisions as $page => $decision) {
+    // $page is the ResourceRef asked about, in the order asked.
+}
+
+$editable = $decisions->permitted();
+```
+
+An element of your own can read for a batch too: it implements `Preloads` (experimental), and is given the batch's requests it matches before they're decided. It keeps what it read by request, and if it fails, each request is decided as on its own.
+
 ## Roles
 
 The `everyone` role is every actor's, signed in or not, and is never assigned. The other roles are declared, or created in a realm while it runs (they can be relabelled and deleted; declared ones can't). A **super role** has every ability that isn't strict; a strict one reaches it only when it's granted to it.

@@ -23,6 +23,7 @@ use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Policy\AbilityChanges;
+use YorvoID\Policy\GroupRelations;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\Role;
 use YorvoID\Policy\RoleAssignment;
@@ -31,10 +32,16 @@ use YorvoID\Policy\Roles;
 use YorvoID\Policy\RoleSource;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\Policy\UnknownAbility;
+use YorvoID\Relations\Relations;
+use YorvoID\Relations\RelationSchema;
+use YorvoID\Relations\RelationTuple;
+use YorvoID\Relations\Storage\InMemoryRelationStore;
+use YorvoID\Relations\Subject;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
+use YorvoID\Tests\Relations\Fixtures\AcmeRelations;
 
 /**
  * The permit by roles: defaults with the realm's changes, super roles and strict abilities, the
@@ -271,6 +278,42 @@ final class RolesTest extends TestCase
         \assert(null !== $member->principalId);
 
         return $member->principalId;
+    }
+
+    public function testABatchsRolesAreThoseOfEachRequestAlone(): void
+    {
+        $ada = new Member($this->realm, new PrincipalId(new UuidV7()));
+        $at = $this->clock->now();
+        $this->store->assign(new RoleAssignment($this->realm, self::id($ada), 'member', $at));
+        $this->store->assign(new RoleAssignment($this->realm, self::id($ada), 'editor', $at, new ResourceRef('page', '1')));
+        $this->store->assign(new RoleAssignment($this->realm, self::id($ada), 'manager', $at, new ResourceRef('site', 'a')));
+        $relationStore = new InMemoryRelationStore();
+        $relationStore->add(new RelationTuple($this->realm, new ResourceRef('page', '2'), 'parent', new Subject(new ResourceRef('site', 'a'))));
+        $relations = new Relations(RelationSchema::of([new AcmeRelations(), new GroupRelations()]), $relationStore);
+        $request = fn (Actor $actor, ?ResourceRef $resource, ?Realm $realm = null): Request => Request::forAbility('acme.pages.publish', $realm ?? $this->realm, $resource, $actor, new Origin(OriginKind::Web), $at);
+
+        foreach ([null, $relations] as $with) {
+            $requests = [
+                $request($ada, new ResourceRef('page', '1')),
+                $request($ada, new ResourceRef('page', '2')),
+                $request($ada, null),
+                $request(new Anonymous(), new ResourceRef('page', '1')),
+                $request($ada, new ResourceRef('page', '1'), new Realm('other')),
+            ];
+            $batched = new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $this->store, relations: $with);
+            $memoised = $batched->rolesOf($requests[2]);
+            $batched->preload($requests);
+
+            foreach ($requests as $i => $one) {
+                $alone = new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $this->store, relations: $with)->rolesOf($one);
+                self::assertSame($alone, $batched->rolesOf($one), \sprintf('Request %d, %s relations', $i, null === $with ? 'without' : 'with'));
+            }
+
+            self::assertSame($memoised, $batched->rolesOf($requests[2]));
+        }
+
+        self::assertSame(['everyone', 'editor', 'member'], new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $this->store, relations: $relations)->rolesOf($request($ada, new ResourceRef('page', '1'))), 'Its own resource\'s roles count.');
+        self::assertSame(['everyone', 'manager', 'member'], new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $this->store, relations: $relations)->rolesOf($request($ada, new ResourceRef('page', '2'))), 'And those of what it\'s within.');
     }
 
     private function roles(): Roles
