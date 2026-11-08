@@ -18,6 +18,6 @@ final class RelationsMigrations
      */
     public static function all(): array
     {
-        return [new CreateRelations()];
+        return [new CreateRelations(), new CreateRelationVersion()];
     }
 }

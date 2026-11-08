@@ -76,6 +76,35 @@ trait RelationStoreContract
     }
 
     #[DataProvider('implementations')]
+    public function testEveryChangeIncrementsTheRealmsVersion(string $implementation): void
+    {
+        $store = $this->relationStore($implementation);
+        $acme = new Realm('acme');
+        $page = new ResourceRef('page', '1');
+        $ada = new Subject(new ResourceRef('principal', 'ada'));
+        $editor = new RelationTuple($acme, $page, 'editor', $ada);
+
+        self::assertSame(0, $store->version($acme));
+
+        $store->add($editor);
+        self::assertSame(1, $store->version($acme));
+        $store->add($editor);
+        self::assertSame(1, $store->version($acme), 'Adding one again changes nothing.');
+
+        $store->add(new RelationTuple($acme, $page, 'viewer', $ada));
+        self::assertTrue($store->remove($editor));
+        self::assertSame(3, $store->version($acme));
+        self::assertFalse($store->remove($editor));
+        self::assertSame(3, $store->version($acme), 'Removing what isn\'t there changes nothing.');
+
+        $store->forget($acme, new ResourceRef('page', '2'));
+        self::assertSame(3, $store->version($acme), 'Forgetting what has no tuples changes nothing.');
+        $store->forget($acme, $ada->resource);
+        self::assertSame(4, $store->version($acme));
+        self::assertSame(0, $store->version(new Realm('other')), 'Each realm has its own.');
+    }
+
+    #[DataProvider('implementations')]
     public function testFindsManyPairsAtOnce(string $implementation): void
     {
         $store = $this->relationStore($implementation);
