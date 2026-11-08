@@ -12,7 +12,8 @@ use YorvoID\Core\Operation\AbilityPolicy;
 use YorvoID\Core\Operation\AuthorizedBy;
 
 /**
- * A principal of the command's realm holding the operation's ability, as the ability policy says.
+ * A principal of the command's realm holding the operation's ability, as the ability policy says: for
+ * operations only, since an AbilityPolicy is asked with the command.
  *
  * @internal
  */
@@ -35,15 +36,16 @@ final readonly class AbilityPermit implements PermitElement
 
     public function matches(Request $request): bool
     {
-        return null !== $request->operation->ability && $request->actorInRealm();
+        return null !== $request->command && null !== $request->ability && $request->actorInRealm();
     }
 
     public function evaluate(Request $request): Truth
     {
-        $ability = $request->operation->ability;
-        \assert(null !== $ability);
+        $ability = $request->ability;
+        $command = $request->command;
+        \assert(null !== $ability && null !== $command);
 
-        return match ($this->policy->holds($request->actor, $ability, $request->command)) {
+        return match ($this->policy->holds($request->actor, $ability, $command)) {
             true => Truth::holds(\sprintf('The actor holds "%s".', $ability)),
             false => Truth::fails(\sprintf('The actor doesn\'t hold "%s".', $ability)),
             null => Truth::unknown(IndeterminateReason::MissingData, \sprintf('The ability policy can\'t tell who holds "%s".', $ability)),

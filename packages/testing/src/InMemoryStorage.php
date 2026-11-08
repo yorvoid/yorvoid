@@ -17,6 +17,7 @@ use YorvoID\Core\Principal\Storage\InMemoryPrincipalStore;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Passkeys\Storage\InMemoryCeremonyStore;
 use YorvoID\Passkeys\Storage\InMemoryPasskeyStore;
+use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\Throttle\Storage\InMemoryThrottleStore;
 
 /**
@@ -57,6 +58,8 @@ final readonly class InMemoryStorage
 
     public InMemoryCeremonyStore $ceremonies;
 
+    public InMemoryPolicyStore $policy;
+
     public InMemoryThrottleStore $throttle;
 
     public function __construct()
@@ -87,6 +90,7 @@ final readonly class InMemoryStorage
         $this->transactions->register($this->coolDowns);
         $this->transactions->register($this->passkeys);
         $this->transactions->register($this->ceremonies);
+        $this->transactions->register($this->policy = new InMemoryPolicyStore());
         $this->throttle = new InMemoryThrottleStore();
     }
 }

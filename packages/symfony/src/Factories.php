@@ -8,14 +8,19 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use YorvoID\Authn\Attempt\AttemptLimits;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionPolicy;
+use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Principal\Principal;
 use YorvoID\Flows\Flow;
 use YorvoID\Notifications\NotificationSettings;
 use YorvoID\Passkeys\ClonePolicy;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\UserVerification;
+use YorvoID\Policy\Rule\Rule;
+use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Flow\FlowCustomizer;
 use YorvoID\Symfony\Flow\FlowSource;
@@ -57,15 +62,58 @@ final class Factories
     }
 
     /**
-     * The request's YorvoID session, asked for when it's needed.
+     * The principal of the request's own session, as its check loaded it, for that session as the actor.
      *
      * @param \Closure(): CurrentSession $current
      *
-     * @return \Closure(): ?Session
+     * @return \Closure(Actor): ?Principal
      */
-    public static function currentSession(\Closure $current): \Closure
+    public static function loadedPrincipal(\Closure $current): \Closure
     {
-        return static fn (): ?Session => $current()->get();
+        return static function (Actor $actor) use ($current): ?Principal {
+            if (!$actor instanceof Session) {
+                return null;
+            }
+
+            $session = $current()->get();
+
+            return null !== $session && $session->id->equals($actor->id) ? $current()->principal() : null;
+        };
+    }
+
+    /**
+     * Each rule as its two elements, a permit and a forbid.
+     *
+     * @param iterable<Rule> $rules
+     *
+     * @return list<PolicyElement>
+     */
+    public static function ruleElements(iterable $rules): array
+    {
+        $elements = [];
+
+        foreach ($rules as $rule) {
+            array_push($elements, ...RuleElements::of($rule));
+        }
+
+        return $elements;
+    }
+
+    /**
+     * @param iterable<PolicyElement> $elements
+     * @param list<PolicyElement>     $rules
+     *
+     * @return list<PolicyElement>
+     */
+    public static function elements(iterable $elements, array $rules): array
+    {
+        $all = [];
+
+        foreach ($elements as $element) {
+            $all[] = $element;
+        }
+
+        return [...$all, ...$rules];
     }
 
     /**

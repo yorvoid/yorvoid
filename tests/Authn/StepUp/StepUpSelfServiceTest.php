@@ -12,11 +12,13 @@ use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\StepUp\SessionStepUpCheck;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpSelfService;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
@@ -28,6 +30,7 @@ use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -204,6 +207,31 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
         }
 
         self::assertSame([], array_values(array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn ($entry): bool => 'yorvoid.identifier.set' === $entry->action && Outcome::Success === $entry->outcome)));
+    }
+
+    #[DataProvider('implementations')]
+    public function testAPermitAsksTheSessionForARecentProof(string $implementation): void
+    {
+        $this->identifiers($implementation, Duration::hours(24));
+        $session = $this->session();
+        $check = new SessionStepUpCheck($this->stepUp);
+        $required = new StepUpRemedy(Duration::minutes(5), operation: 'yorvoid.role.assign');
+
+        self::assertSame([TruthValue::Holds, 'The session proved who it is recently.'], [$check->check($session, $required)->value, $check->check($session, $required)->detail]);
+
+        $this->clock->sleep(301);
+        $old = $check->check($session, $required);
+        self::assertSame(TruthValue::Fails, $old->value);
+        self::assertSame([$required], $old->remedies);
+        self::assertSame('Only a session proves who it is.', $check->check(new Operator(), $required)->detail);
+
+        $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true), new Origin(OriginKind::Web));
+        self::assertSame(TruthValue::Holds, $check->check($session, $required)->value);
+
+        $this->stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
+        $held = $check->check($session, $required);
+        self::assertSame('The account was recovered recently.', $held->detail);
+        self::assertEquals([new WaitRemedy($this->clock->now()->modify('+24 hours'))], $held->remedies, 'Held while a recovery cools down.');
     }
 
     private function identifiers(string $implementation, ?Duration $coolDown = null): Operations

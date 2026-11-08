@@ -95,7 +95,7 @@ $operations = new Operations(
 ```
 
 - **The passkey policy** names the domain passkeys belong to, and the origins of the pages that use them ([passkeys](../concepts/passkeys.md#configuration)).
-- **Operations** runs every change ([running an operation](../concepts/operations-and-events.md#running-an-operation)), as the evaluator decides ([authorization](../concepts/authorization.md)): the host's `Operator` from the console, a session on its own account with a recent proof (`StepUpSelfService`), and anyone signing in, each only while their principal is active. For administrators, pass an `AbilityPolicy` that says who holds an ability, e.g. `yorvoid.principals.manage`; without one, nobody does.
+- **Operations** runs every change ([running an operation](../concepts/operations-and-events.md#running-an-operation)), as the evaluator decides ([authorization](../concepts/authorization.md)): the host's `Operator` from the console, a session on its own account with a recent proof (`StepUpSelfService`), and anyone signing in, each only while their principal is active. For administrators, give the evaluator the role permit (`new RolePermit($roles)` in `elements:`) and assign roles ([roles](../concepts/authorization.md#roles)); without it, nobody holds an ability, e.g. `yorvoid.principals.manage`.
 - **PostgreSQL** in production: change the connection's parameters; the rest stays ([storage](../concepts/storage.md)).
 
 ## Create the tables

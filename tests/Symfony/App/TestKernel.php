@@ -25,6 +25,7 @@ use YorvoID\Symfony\Security\Authenticator\SessionAuthenticator;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\YorvoIDBundle;
+use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
 use YorvoID\Tests\Support\StatementLog;
 
 /**
@@ -129,6 +130,10 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                 $container->register(TermsCustomizer::class)->setAutoconfigured(true);
             }
 
+            // An application's own abilities, decided by YorvoID's evaluator through isGranted().
+            $container->register(AcmeDeclarations::class)->setAutoconfigured(true);
+            $container->register(LockedPages::class)->setAutoconfigured(true);
+            $container->register(HelpersModerate::class)->setAutoconfigured(true);
             $container->register(MeController::class)->setPublic(true)->setAutowired(true)->addTag('controller.service_arguments');
             $container->register(SignOutController::class)->setPublic(true)->setAutowired(true)->addTag('controller.service_arguments');
             $container->register('test.users', OwnUsers::class);

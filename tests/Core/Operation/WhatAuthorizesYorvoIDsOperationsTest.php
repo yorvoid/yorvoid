@@ -29,6 +29,10 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
 {
     private const array EXPECTED = [
+        'yorvoid.ability.grant' => ['ability', 'operator'],
+        'yorvoid.ability.reset' => ['ability', 'operator'],
+        'yorvoid.ability.revoke' => ['ability', 'operator'],
+        'yorvoid.ability.set' => ['ability', 'operator'],
         'yorvoid.credential.add' => ['consequence'],
         'yorvoid.credential.remove' => ['self'],
         'yorvoid.credential.rename' => ['self'],
@@ -52,6 +56,11 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.recovery_codes.generate' => ['self'],
         'yorvoid.recovery_link.issue' => ['ability', 'operator'],
         'yorvoid.recovery_link.use' => ['authentication'],
+        'yorvoid.role.assign' => ['ability', 'operator'],
+        'yorvoid.role.create' => ['ability', 'operator'],
+        'yorvoid.role.delete' => ['ability', 'operator'],
+        'yorvoid.role.relabel' => ['ability', 'operator'],
+        'yorvoid.role.unassign' => ['ability', 'operator'],
         'yorvoid.session.end' => ['self', 'ability', 'operator'],
         'yorvoid.session.end_all' => ['self', 'ability', 'operator'],
         'yorvoid.session.start' => ['consequence'],
@@ -138,7 +147,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
             }
         }
 
-        self::assertCount(31, $commands, 'The operations moved.');
+        self::assertCount(40, $commands, 'The operations moved.');
 
         return $commands;
     }

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "c8b948ffdb3e088b0d9a01f6b4898826",
+    "content-hash": "188c5653199a473f485e2d579a78cfc0",
     "packages": [
         {
             "name": "brick/math",
@@ -6969,7 +6969,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "10fe190104e2aafb4df7c1d11ae3be5b0cfaf481"
+                "reference": "bdc84ba9ff19b019ad938bb74250e7f957449ecd"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7028,7 +7028,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "0959a0bd67da30d719981fb50a07b348ee3f8b36"
+                "reference": "067a92bfe8e5e6da0994fe10acc1b6adcd6ffcaf"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7089,7 +7089,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/flows",
-                "reference": "c4b5bd7c9932e124d3b9b9c06d456f30391d9a78"
+                "reference": "ebea91e35c3b38b896b8b5630c3a321f3a039097"
             },
             "require": {
                 "php": ">=8.4",
@@ -7145,7 +7145,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-signing",
-                "reference": "704fcd59729fc54d13d282cc50e8707b02b15aa8"
+                "reference": "196538799353069ac364973159f0d81237da3499"
             },
             "require": {
                 "ext-intl": "*",
@@ -7210,7 +7210,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "3ca0c69c2d903d157a153d95767267e12a1619c4"
+                "reference": "fe847a34a5d4310715458b39c6fb068173892ad4"
             },
             "require": {
                 "ext-dom": "*",
@@ -7274,7 +7274,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/mail",
-                "reference": "b3bd85b30230d0d37688fc0ede17e73dc28f1f54"
+                "reference": "8c31490023c294ff438b6477a9e819aef79e6fc4"
             },
             "require": {
                 "ext-filter": "*",
@@ -7328,7 +7328,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/notifications",
-                "reference": "6465fa7eb34c4a59f1b82defc071f7d7cb30af8f"
+                "reference": "9c98c9e9c3ce9e71889bd8ce981eca618ffedd0e"
             },
             "require": {
                 "ext-intl": "*",
@@ -7389,7 +7389,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/passkeys",
-                "reference": "0b68415c2565fbb3e0420341b5f388f6d4c491d9"
+                "reference": "2c3f4936709b448fc0f75c7f438e3130d5d6c8d4"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7452,12 +7452,69 @@
             }
         },
         {
+            "name": "yorvoid/policy",
+            "version": "0.4.x-dev",
+            "dist": {
+                "type": "path",
+                "url": "packages/policy",
+                "reference": "2f28b99b4f6c66abeac2d51919f0e54ac3b2dd3f"
+            },
+            "require": {
+                "doctrine/dbal": "^4.3",
+                "ext-mbstring": "*",
+                "php": ">=8.4",
+                "psr/clock": "^1.0",
+                "symfony/clock": "^7.4 || ^8.1",
+                "yorvoid/core": "^0.4"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-main": "0.4.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "YorvoID\\Policy\\": "src/"
+                }
+            },
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Darko Poposki",
+                    "email": "contact@yorvolabs.com"
+                }
+            ],
+            "description": "YorvoID's policy: declared abilities, roles with super roles and strict abilities, a realm's changes to the defaults, roles on resources, and rules, as the evaluator's elements.",
+            "homepage": "https://github.com/yorvoid/yorvoid",
+            "keywords": [
+                "access-control",
+                "authorization",
+                "permissions",
+                "rbac",
+                "roles",
+                "security"
+            ],
+            "support": {
+                "email": "contact@yorvolabs.com",
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/policy",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
             "name": "yorvoid/symfony",
             "version": "0.4.x-dev",
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "eca2cdcbc850ae93fb9edfe402e166749cad4247"
+                "reference": "79d4fff491028444fb18f61168da300ff09e45dc"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7489,6 +7546,7 @@
                 "yorvoid/mail": "^0.4",
                 "yorvoid/notifications": "^0.4",
                 "yorvoid/passkeys": "^0.4",
+                "yorvoid/policy": "^0.4",
                 "yorvoid/throttle": "^0.4",
                 "yorvoid/translation": "^0.4"
             },
@@ -7545,7 +7603,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/testing",
-                "reference": "5708c71f3175386803953472aa8a3c3cfa6b1ab2"
+                "reference": "5206141e66ece3ec188a3cc9c85f42fe35c099df"
             },
             "require": {
                 "ext-mbstring": "*",
@@ -7559,6 +7617,7 @@
                 "yorvoid/core": "^0.4",
                 "yorvoid/flows": "^0.4",
                 "yorvoid/passkeys": "^0.4",
+                "yorvoid/policy": "^0.4",
                 "yorvoid/throttle": "^0.4",
                 "yorvoid/virtual-authenticator": "^0.4"
             },
@@ -7612,7 +7671,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/throttle",
-                "reference": "f75def63d3cfc6c1ff729905ef888bfb3f1b12b2"
+                "reference": "a8673e87b8f0b983bd67de00ad4bb890c76fc00b"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7668,7 +7727,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/translation",
-                "reference": "9edf15f9df83dca9f08f27c4bc44d8a19f61e1ae"
+                "reference": "170ba26674e6c386e9794d14e2da512bb767e1b2"
             },
             "require": {
                 "ext-intl": "*",
@@ -7721,7 +7780,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/virtual-authenticator",
-                "reference": "b426eb34c0f86102f7bba7a1a3c18faa47e1d9fb"
+                "reference": "457aec434dba810a23e93d328958f6807ae4d1bf"
             },
             "require": {
                 "ext-openssl": "*",

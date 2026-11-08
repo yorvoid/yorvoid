@@ -21,9 +21,11 @@ use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\NoSelfService;
+use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\SelfServicePolicy;
 use YorvoID\Core\Operation\Verdict;
+use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StoreUnreachable;
 
 /**
@@ -121,7 +123,22 @@ final readonly class Evaluator implements Authorization
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
     {
-        $request = new Request($operation, $command, $actor, $origin, $this->clock->now());
+        return $this->evaluate(Request::forOperation($operation, $command, $actor, $origin, $this->clock->now()));
+    }
+
+    /**
+     * Whether the actor holds an ability, on a resource or in the whole realm, for what isn't one of
+     * YorvoID's operations, e.g. an application's "edit this page". Only permits that authorize by an
+     * ability speak for it; the precedence and the reasons are the operations'.
+     */
+    public function decideAbility(Actor $actor, string $ability, Realm $realm, ?ResourceRef $resource, Origin $origin): Decision
+    {
+        return $this->evaluate(Request::forAbility($ability, $realm, $resource, $actor, $origin, $this->clock->now()));
+    }
+
+    private function evaluate(Request $request): Decision
+    {
+        $authorizedBy = $request->authorizedBy();
         $reasons = [];
         /** @var array<string, list<Truth>> $forbids */
         $forbids = ['holds' => [], 'unknown' => []];
@@ -129,7 +146,7 @@ final readonly class Evaluator implements Authorization
         $permits = ['holds' => [], 'unknown' => [], 'fails' => []];
 
         foreach ($this->elements as $element) {
-            if ($element instanceof PermitElement && !\in_array($element->basis(), $operation->authorizedBy, true)) {
+            if ($element instanceof PermitElement && !\in_array($element->basis(), $authorizedBy, true)) {
                 continue;
             }
 
@@ -161,22 +178,36 @@ final readonly class Evaluator implements Authorization
 
         $authority = self::safely(fn (): Truth => $this->authority->check($request));
         $reasons[] = new Reason('authority', 'authority', $authority);
-        $decision = $this->precedence($operation, $forbids, $authority, $permits, $reasons);
+        $decision = $this->precedence($request, $forbids, $authority, $permits, $reasons);
 
         if ([] === $decision->indeterminate) {
             return $decision;
         }
 
-        $this->logger->warning('YorvoID couldn\'t decide whether to run "{operation}": {reason}', ['operation' => $operation->name, 'reason' => $decision->reason, 'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate)]);
+        $this->logger->warning('YorvoID couldn\'t decide whether to run "{operation}": {reason}', ['operation' => $request->subject(), 'reason' => $decision->reason, 'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate)]);
         $offline = $this->offline($request, $decision, $permits);
 
         if (null === $offline) {
             return $decision;
         }
 
-        $this->logger->warning('YorvoID permitted "{operation}" offline: {reason}', ['operation' => $operation->name, 'reason' => $offline->reason]);
+        $this->logger->warning('YorvoID permitted "{operation}" offline: {reason}', ['operation' => $request->subject(), 'reason' => $offline->reason]);
 
         return $offline;
+    }
+
+    /**
+     * Has every element that checks the operations check them: Operations asks when it's built.
+     *
+     * @throws IntegratorError
+     */
+    public function checkCatalogue(OperationCatalogue $catalogue): void
+    {
+        foreach ($this->elements as $element) {
+            if ($element instanceof ChecksCatalogue) {
+                $element->checkCatalogue($catalogue);
+            }
+        }
     }
 
     /**
@@ -196,13 +227,13 @@ final readonly class Evaluator implements Authorization
      */
     private function offline(Request $request, Decision $decision, array $permits): ?Decision
     {
-        if (null === $this->offline || !$request->operation->acceptsOffline || [IndeterminateReason::StoreUnreachable] !== $decision->indeterminate) {
+        if (null === $this->offline || true !== $request->operation?->acceptsOffline || [IndeterminateReason::StoreUnreachable] !== $decision->indeterminate) {
             return null;
         }
 
         $basis = null;
 
-        foreach ($request->operation->authorizedBy as $by) {
+        foreach ($request->authorizedBy() as $by) {
             foreach ([...$permits['holds'], ...$permits['unknown']] as [$element]) {
                 if ($element->basis() === $by) {
                     $basis ??= $by;
@@ -228,7 +259,7 @@ final readonly class Evaluator implements Authorization
      * @param array<string, list<array{PermitElement, Truth}>> $permits
      * @param list<Reason>                                     $reasons
      */
-    private function precedence(OperationDescription $operation, array $forbids, Truth $authority, array $permits, array $reasons): Decision
+    private function precedence(Request $request, array $forbids, Truth $authority, array $permits, array $reasons): Decision
     {
         // 1.
         if ([] !== $forbids['holds']) {
@@ -259,7 +290,7 @@ final readonly class Evaluator implements Authorization
         if ([] !== $permits['holds']) {
             $chosen = null;
 
-            foreach ($operation->authorizedBy as $basis) {
+            foreach ($request->authorizedBy() as $basis) {
                 foreach ($permits['holds'] as [$element, $truth]) {
                     if ($element->basis() === $basis) {
                         $chosen ??= [$element, $truth];
@@ -291,7 +322,7 @@ final readonly class Evaluator implements Authorization
         }
 
         return Decision::deny(
-            [] === $permits['fails'] ? \sprintf('No permit applies to "%s".', $operation->name) : $permits['fails'][0][1]->detail,
+            [] === $permits['fails'] ? \sprintf('No permit applies to "%s".', $request->subject()) : $permits['fails'][0][1]->detail,
             $reasons,
             array_values($remedies),
         );

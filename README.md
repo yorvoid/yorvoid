@@ -26,6 +26,7 @@ This repository is a monorepo. Each directory of `packages/` is published as its
 | [`yorvoid/core`](packages/core) | Principals, realms, the security log, keys, storage |
 | [`yorvoid/authn`](packages/authn) | Authentication: sessions, step-up, credentials, one-time tokens, setup codes, invitations, recovery links and codes |
 | [`yorvoid/passkeys`](packages/passkeys) | Passkeys: registration, sign-in, user-verification policy, and the passkey-first journeys |
+| [`yorvoid/policy`](packages/policy) | Abilities and roles: super roles, strict abilities, a realm's changes to the defaults, roles on resources, rules |
 | [`yorvoid/notifications`](packages/notifications) | Security notifications: emails about new devices and changed sign-in methods, "This wasn't me", verifying an email address |
 | [`yorvoid/intent-signing`](packages/intent-signing) | Signed intents in the application: asking for a signature, limits, the security log, summaries of what is signed |
 | [`yorvoid/flows`](packages/flows) | Flows: journeys as server-side steps that applications insert into, replace or remove |

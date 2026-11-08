@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+# Left out of archives, e.g. those that Composer installs
+/.gitattributes export-ignore
+/.github export-ignore

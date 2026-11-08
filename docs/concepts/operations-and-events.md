@@ -46,7 +46,7 @@ $principal = $operations->run(new SuspendPrincipal($realm, $principalId), $sessi
 
 - **The actor** is a signed-in `Session`, or the host's `Operator`. The operator acts from a console command or a job only when PHP runs from the command line, so a web request that says it's the console is refused; YorvoID itself (`OriginKind::System`) acts from anywhere. Your code says who the actor is: never take it from the request.
 - **The decision** is the evaluator's ([authorization](authorization.md)): Permit, Deny or Indeterminate. Only Permit runs anything; otherwise `run()` throws `NotPermitted`, with the decision: its reasons, and on a Deny what could change it, e.g. a step-up. Indeterminate means something the decision needs couldn't be established, and never permits.
-- **Abilities** are decided by an `AbilityPolicy`. The Symfony bundle's asks Symfony's security (`isGranted()`), so your voters and role hierarchy decide. Without one, no ability permits anything.
+- **Abilities** are decided by roles ([roles](authorization.md#roles)): give the evaluator the role permit (`RolePermit`); the Symfony bundle does. An `AbilityPolicy` of your own can decide them too. Without either, no ability permits anything.
 
 ## Permits
 

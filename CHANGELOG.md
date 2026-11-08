@@ -19,8 +19,8 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 
 ### Added
 
-- `Operations`, `Permit`, `NotPermitted`, and the actors `Operator`, `Anonymous` and `ActingPrincipal`. In Symfony, abilities are decided by the application's security (`isGranted()`), and the application's own `OperationHandler`s are registered.
-- The evaluator (`Evaluator`): Permit, Deny or Indeterminate by the precedence of forbids, the actor's authority and permits ([authorization](docs/concepts/authorization.md)). YorvoID's ways to authorize are its built-in permits, with `AbilityPolicy` and `SelfServicePolicy`; your own rules are `PermitElement`s and `ForbidElement`s, registered by themselves in Symfony. `PrincipalAuthority` refuses a principal that isn't active.
+- `Operations`, `Permit`, `NotPermitted`, and the actors `Operator`, `Anonymous` and `ActingPrincipal`. In Symfony, the application's own `OperationHandler`s are registered.
+- The evaluator (`Evaluator`): Permit, Deny or Indeterminate by the precedence of forbids, the actor's authority and permits ([authorization](docs/concepts/authorization.md)). YorvoID's ways to authorize are its built-in permits, with `SelfServicePolicy` and optionally an `AbilityPolicy`; your own rules are `PermitElement`s and `ForbidElement`s, registered by themselves in Symfony. `PrincipalAuthority` refuses a principal that isn't active.
 - A decision carries its reasons, what couldn't be established (`IndeterminateReason`), and on a Deny for want of evidence its remedies (`StepUpRemedy`, `WaitRemedy`): a step-up asked by `StepUpSelfService` comes as a remedy on `NotPermitted`, not as `StepUpRequired`.
 - An Indeterminate decision is logged as a warning.
 - A store that can't be reached makes a decision Indeterminate with the reason `store_unreachable` (`StoreUnreachable`): a refused or lost connection, a statement's timeout, a failover. A store of your own throws `StoreUnreachable` itself.
@@ -30,6 +30,11 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - The host's operator acts from a console or job origin only when PHP runs from the command line.
 - Signing keys for each realm (`KeyRings`, `SharedKeyRings`, `PerRealmKeyRings`): a realm's checkpoints are signed and verified with its own ring. In Symfony, `keys.per_realm` and `keys.directory`, `yorvoid:keys:rotate --realm`, and the doctor reports a realm without keys.
 - The stores' contracts in `yorvoid/testing` (`YorvoID\Testing\Contract`): the tests YorvoID's own stores pass, one trait for each store and one for `Transactions`, for a store of your own to pass too. `yorvoid/testing` requires PHPUnit 12 or 13, and `yorvoid/flows` for `FlowStoreContract`, the tests of a `FlowStore`.
+- `yorvoid/policy`: declared abilities and roles (`PolicyDeclarations`, `Ability`, `Role`), super roles, strict abilities, the `everyone` role, a realm's changes to the defaults kept as differences (`AbilityChanges`), roles created in a realm, roles assigned in a realm or on one resource with an expiry (`RoleAssignment`), roles from a `RoleSource`, and rules in PHP that permit, forbid or can't tell (`Rule`). The role permit (`RolePermit`) decides operations that need an ability; `Policy` decides an application's own abilities, in Symfony also through `isGranted()` ([authorization](docs/concepts/authorization.md#abilities)).
+- A request can be about an ability on a resource (`ResourceRef`) instead of an operation: `Evaluator::decideAbility()`. A command about one resource implements `ConcernsResource`.
+- A deleted principal's roles are taken.
+- The policy changes through operations (`yorvoid.role.*`, `yorvoid.ability.*`, `PolicyChanges`), each in the security log and incrementing the realm's policy version. Nobody gives what they don't hold (`NoEscalation`), and giving a strict ability or a super role takes a recent proof (`StepUpCheck`, `SessionStepUpCheck`).
+- A policy element can check the operations when `Operations` is built (`ChecksCatalogue`): the role permit refuses an operation whose ability isn't declared.
 
 ### Fixed
 

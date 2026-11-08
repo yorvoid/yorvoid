@@ -55,6 +55,7 @@
         "yorvoid/mail": "^0.4",
         "yorvoid/notifications": "^0.4",
         "yorvoid/passkeys": "^0.4",
+        "yorvoid/policy": "^0.4",
         "yorvoid/throttle": "^0.4",
         "yorvoid/translation": "^0.4"
     },

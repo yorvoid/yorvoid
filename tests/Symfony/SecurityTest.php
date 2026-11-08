@@ -35,6 +35,8 @@ use YorvoID\Authn\Session\StartSession;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
@@ -46,6 +48,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\RegisterPasskey;
+use YorvoID\Policy\Change\AssignRole;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\EndSessionOnSignOut;
 use YorvoID\Symfony\Security\PrincipalUser;
@@ -111,6 +114,20 @@ final class SecurityTest extends TestCase
         $again = $this->browser->getResponse()->headers->getCookies()[0] ?? null;
         \assert($again instanceof Cookie);
         self::assertSame($cookie->getValue(), $again->getValue(), 'A known device got a new cookie.');
+    }
+
+    public function testTheSessionsRolesDecideTheApplicationsAbilities(): void
+    {
+        $this->boot();
+        $ana = $this->principal();
+        $this->signIn($ana);
+        self::assertFalse($this->get('/me')['publishes']);
+
+        $operations = $this->container->get(Operations::class);
+        \assert($operations instanceof Operations);
+        $operations->run(new AssignRole(Realm::default(), $ana->id, 'editor'), new Operator(), new Origin(OriginKind::Console));
+
+        self::assertTrue($this->get('/me')['publishes'], 'The role counts at the next request.');
     }
 
     public function testSigningInAgainEndsTheSessionTheBrowserHeld(): void

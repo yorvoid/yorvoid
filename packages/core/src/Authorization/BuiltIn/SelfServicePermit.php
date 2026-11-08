@@ -40,7 +40,7 @@ final readonly class SelfServicePermit implements PermitElement
 
     public function evaluate(Request $request): Truth
     {
-        \assert($request->command instanceof SelfOperation);
+        \assert($request->command instanceof SelfOperation && null !== $request->operation);
 
         return $this->policy->decide($request->operation, $request->command, $request->actor);
     }

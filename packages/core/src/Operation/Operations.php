@@ -33,8 +33,9 @@ final readonly class Operations
     /**
      * @param iterable<OperationHandler> $handlers
      *
-     * @throws IntegratorError When two handlers run one command, or an OfflineDecider and the operations that
-     *                         accept Permit-offline don't go together
+     * @throws IntegratorError When two handlers run one command, an OfflineDecider and the operations that
+     *                         accept Permit-offline don't go together, or a policy element refuses an operation,
+     *                         e.g. one whose ability isn't declared
      */
     public function __construct(
         private OperationCatalogue $catalogue,
@@ -56,6 +57,10 @@ final readonly class Operations
         }
 
         $this->handlers = $map;
+        if ($authorization instanceof Evaluator) {
+            $authorization->checkCatalogue($catalogue);
+        }
+
         $accepting = array_keys(array_filter($catalogue->all(), static fn (OperationDescription $operation): bool => $operation->acceptsOffline));
         $decidesOffline = $authorization instanceof Evaluator && $authorization->decidesOffline();
 
