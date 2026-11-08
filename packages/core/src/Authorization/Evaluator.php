@@ -154,24 +154,31 @@ final readonly class Evaluator implements Authorization
      * Whether the actor holds an ability, on a resource or in the whole realm, for what isn't one of
      * YorvoID's operations, e.g. an application's "edit this page". Only permits that authorize by an
      * ability speak for it; the precedence and the reasons are the operations'.
+     *
+     * @param object|null $subject The application's own object it's about, e.g. the page, for rules
+     *                             and attribute resolvers: the resource is the one it concerns, if not given
+     *
+     * @throws IntegratorError When the subject concerns another resource than the one given
      */
-    public function decideAbility(Actor $actor, string $ability, Realm $realm, ?ResourceRef $resource, Origin $origin): Decision
+    public function decideAbility(Actor $actor, string $ability, Realm $realm, ?ResourceRef $resource, Origin $origin, ?object $subject = null): Decision
     {
-        return $this->evaluate(Request::forAbility($ability, $realm, $resource, $actor, $origin, $this->clock->now()));
+        return $this->evaluate(Request::forAbility($ability, $realm, $resource, $actor, $origin, $this->clock->now(), $subject));
     }
 
     /**
      * Whether the actor holds an ability on each of these resources, decided as one by one, at one
      * moment: the elements that preload read what the batch needs at once (AUZ-030, AUZ-032).
      *
-     * @param list<ResourceRef|null> $resources
+     * @param list<array{ResourceRef|null, object|null}> $asked Each resource with its subject, as decideAbility() takes them
      *
-     * @return list<Decision> One for each resource, in their order
+     * @return list<Decision> One for each, in their order
+     *
+     * @throws IntegratorError When a subject concerns another resource than the one given with it
      */
-    public function decideAbilities(Actor $actor, string $ability, Realm $realm, array $resources, Origin $origin): array
+    public function decideAbilities(Actor $actor, string $ability, Realm $realm, array $asked, Origin $origin): array
     {
         $at = $this->clock->now();
-        $requests = array_map(static fn (?ResourceRef $resource): Request => Request::forAbility($ability, $realm, $resource, $actor, $origin, $at), $resources);
+        $requests = array_map(static fn (array $one): Request => Request::forAbility($ability, $realm, $one[0], $actor, $origin, $at, $one[1]), $asked);
 
         if ([] === $requests) {
             return [];
@@ -304,14 +311,14 @@ final readonly class Evaluator implements Authorization
             return $decision;
         }
 
-        $this->logger->warning('YorvoID couldn\'t decide whether to run "{operation}": {reason}', ['operation' => $request->subject(), 'reason' => $decision->reason, 'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate)]);
+        $this->logger->warning('YorvoID couldn\'t decide whether to run "{operation}": {reason}', ['operation' => $request->name(), 'reason' => $decision->reason, 'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate)]);
         $offline = $this->offline($request, $decision, $permits);
 
         if (null === $offline) {
             return $decision;
         }
 
-        $this->logger->warning('YorvoID permitted "{operation}" offline: {reason}', ['operation' => $request->subject(), 'reason' => $offline->reason]);
+        $this->logger->warning('YorvoID permitted "{operation}" offline: {reason}', ['operation' => $request->name(), 'reason' => $offline->reason]);
 
         return $offline;
     }
@@ -442,7 +449,7 @@ final readonly class Evaluator implements Authorization
         }
 
         return Decision::deny(
-            [] === $permits['fails'] ? \sprintf('No permit applies to "%s".', $request->subject()) : $permits['fails'][0][1]->detail,
+            [] === $permits['fails'] ? \sprintf('No permit applies to "%s".', $request->name()) : $permits['fails'][0][1]->detail,
             $reasons,
             array_values($remedies),
         );

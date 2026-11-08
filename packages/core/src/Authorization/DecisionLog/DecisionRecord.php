@@ -71,7 +71,7 @@ final readonly class DecisionRecord
             $request->realm,
             $decision->at,
             null === $request->operation ? 'ability' : 'operation',
-            $request->subject(),
+            $request->name(),
             null === $request->actor->principalId ? null : (string) $request->actor->principalId,
             $request->resource,
             $decision->verdict->value,

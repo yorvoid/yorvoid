@@ -94,7 +94,7 @@ final readonly class RolePermit implements PermitElement, ChecksCatalogue, Prelo
             return Truth::fails(\sprintf('%s takes a recent proof of who they are, and nothing checks one here.', $sensitive));
         }
 
-        $proof = $this->stepUp->check($request->actor, new StepUpRemedy($this->window, operation: $request->subject()));
+        $proof = $this->stepUp->check($request->actor, new StepUpRemedy($this->window, operation: $request->name()));
 
         return TruthValue::Holds === $proof->value ? Truth::holds(\sprintf('%s %s', $truth->detail, $proof->detail)) : $proof;
     }

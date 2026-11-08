@@ -52,7 +52,7 @@ final class BatchTest extends TestCase
         $evaluator = new Evaluator([$permit], new StubAuthority(Truth::holds('valid')), new MockClock('2026-11-08 20:00:00'), versions: [$versions], decisions: $log);
         $pages = [new ResourceRef('page', '1'), new ResourceRef('page', 'other'), new ResourceRef('page', '1'), null];
 
-        $decisions = $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), $pages, new Origin(OriginKind::Web));
+        $decisions = $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), array_map(static fn (?ResourceRef $page): array => [$page, null], $pages), new Origin(OriginKind::Web));
 
         self::assertSame([Verdict::Permit, Verdict::Deny, Verdict::Permit, Verdict::Permit], array_map(static fn (Decision $decision): Verdict => $decision->verdict, $decisions));
         self::assertSame('No permit applies to "acme.pages.edit".', $decisions[1]->reason, 'Not matched, so not preloaded either.');
@@ -74,11 +74,11 @@ final class BatchTest extends TestCase
         $authority = new PreloadingPermit();
         $evaluator = new Evaluator([new PreloadingPermit('permit')], $authority);
 
-        $decisions = $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [new ResourceRef('page', 'other'), new ResourceRef('page', '1')], new Origin(OriginKind::Web));
+        $decisions = $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [[new ResourceRef('page', 'other'), null], [new ResourceRef('page', '1'), null]], new Origin(OriginKind::Web));
 
         self::assertCount(2, $authority->batches[0], 'Every request: authority isn\'t matched.');
         self::assertSame(Verdict::Permit, $decisions[1]->verdict);
-        self::assertSame(Verdict::Permit, $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [new ResourceRef('page', '1')], new Origin(OriginKind::Web))[0]->verdict);
+        self::assertSame(Verdict::Permit, $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [[new ResourceRef('page', '1'), null]], new Origin(OriginKind::Web))[0]->verdict);
         self::assertSame(Verdict::Deny, $evaluator->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), new ResourceRef('page', '1'), new Origin(OriginKind::Web))->verdict, 'Alone, nothing is preloaded.');
     }
 
@@ -89,7 +89,7 @@ final class BatchTest extends TestCase
         $other = new PreloadingPermit('other', basis: AuthorizedBy::Operator);
         $evaluator = new Evaluator([$failing, $matching, $other], new PreloadingPermit('authority', new \RuntimeException('Down too.')));
 
-        $decisions = $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [new ResourceRef('page', '1')], new Origin(OriginKind::Web));
+        $decisions = $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [[new ResourceRef('page', '1'), null]], new Origin(OriginKind::Web));
 
         self::assertSame(Verdict::Deny, $decisions[0]->verdict);
         self::assertSame('The actor\'s authority is invalid: Read alone.', $decisions[0]->reason, 'Decided as without preloading.');
@@ -100,7 +100,7 @@ final class BatchTest extends TestCase
         $integrator = new Evaluator([new PreloadingPermit('wrong', new IntegratorError('Set up wrong.', 'Fix it.', 'concepts/authorization.md'))], new StubAuthority(Truth::holds('valid')));
 
         try {
-            $integrator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [new ResourceRef('page', '1')], new Origin(OriginKind::Web));
+            $integrator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [[new ResourceRef('page', '1'), null]], new Origin(OriginKind::Web));
             self::fail('A mistake in the setup was decided around.');
         } catch (IntegratorError $error) {
             self::assertStringStartsWith('Set up wrong.', $error->getMessage());
@@ -108,7 +108,7 @@ final class BatchTest extends TestCase
 
         $authority = new Evaluator([], new PreloadingPermit('wrong', new IntegratorError('Set up wrong.', 'Fix it.', 'concepts/authorization.md')));
         $this->expectException(IntegratorError::class);
-        $authority->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [new ResourceRef('page', '1')], new Origin(OriginKind::Web));
+        $authority->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [[new ResourceRef('page', '1'), null]], new Origin(OriginKind::Web));
     }
 
     private static function member(): Member

@@ -112,7 +112,7 @@ final class AbilityRequestTest extends TestCase
         $request = $seen->request;
         self::assertNotNull($request);
         self::assertSame('acme.pages.edit', $request->ability);
-        self::assertSame('acme.pages.edit', $request->subject());
+        self::assertSame('acme.pages.edit', $request->name());
         self::assertSame($page, $request->resource);
         self::assertSame('acme', $request->realm->name);
         self::assertNull($request->operation);
@@ -129,7 +129,7 @@ final class AbilityRequestTest extends TestCase
         $request = Request::forOperation($operation, new UpdateSite(new Realm('acme'), '7'), self::member(), new Origin(OriginKind::Web), new \DateTimeImmutable());
 
         self::assertSame('acme.sites.update', $request->ability);
-        self::assertSame('acme.site.update', $request->subject());
+        self::assertSame('acme.site.update', $request->name());
         self::assertSame('site:7', (string) $request->resource);
         self::assertSame([AuthorizedBy::Ability, AuthorizedBy::Operator], $request->authorizedBy());
 
