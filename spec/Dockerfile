@@ -20,14 +20,14 @@ ENV QUINT_HOME=/opt/quint
 
 RUN set -eux; \
 	mkdir -p /opt/alloy "$QUINT_HOME/apalache-dist-$APALACHE_VERSION" "$QUINT_HOME/rust-evaluator-$EVALUATOR_VERSION"; \
-	curl -fsSLo /tmp/alloy.tar.gz "https://github.com/AlloyTools/org.alloytools.alloy/releases/download/v$ALLOY_VERSION/alloy-$ALLOY_VERSION-linux-amd64.tar.gz"; \
+	curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/alloy.tar.gz "https://github.com/AlloyTools/org.alloytools.alloy/releases/download/v$ALLOY_VERSION/alloy-$ALLOY_VERSION-linux-amd64.tar.gz"; \
 	echo "$ALLOY_SHA256  /tmp/alloy.tar.gz" | sha256sum -c -; \
 	tar xzf /tmp/alloy.tar.gz -C /tmp "alloy-$ALLOY_VERSION/lib/app/org.alloytools.alloy.dist.jar"; \
 	mv "/tmp/alloy-$ALLOY_VERSION/lib/app/org.alloytools.alloy.dist.jar" /opt/alloy/alloy.jar; \
-	curl -fsSLo /tmp/apalache.tgz "https://github.com/apalache-mc/apalache/releases/download/v$APALACHE_VERSION/apalache.tgz"; \
+	curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/apalache.tgz "https://github.com/apalache-mc/apalache/releases/download/v$APALACHE_VERSION/apalache.tgz"; \
 	echo "$APALACHE_SHA256  /tmp/apalache.tgz" | sha256sum -c -; \
 	tar xzf /tmp/apalache.tgz -C "$QUINT_HOME/apalache-dist-$APALACHE_VERSION"; \
-	curl -fsSLo /tmp/evaluator.tgz "https://github.com/quint-co/quint/releases/download/evaluator/$EVALUATOR_VERSION/quint_evaluator-x86_64-unknown-linux-gnu.tar.gz"; \
+	curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/evaluator.tgz "https://github.com/quint-co/quint/releases/download/evaluator/$EVALUATOR_VERSION/quint_evaluator-x86_64-unknown-linux-gnu.tar.gz"; \
 	echo "$EVALUATOR_SHA256  /tmp/evaluator.tgz" | sha256sum -c -; \
 	tar xzf /tmp/evaluator.tgz -C "$QUINT_HOME/rust-evaluator-$EVALUATOR_VERSION"; \
 	npm install -g --no-fund --no-audit "@informalsystems/quint@$QUINT_VERSION"; \
