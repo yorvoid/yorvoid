@@ -15,6 +15,9 @@ use YorvoID\Core\Operation\AuthorizedBy;
  * relation to the resource that gives the ability, e.g. an editor of the page edits it.
  *
  * @api
+ *
+ * @experimental Outside the 1.0 promise until an application uses it directly: it may change in a
+ *               minor release ([compatibility](docs/compatibility.md)).
  */
 final readonly class RelationPermit implements PermitElement
 {
