@@ -18,6 +18,6 @@ final class PolicyMigrations
      */
     public static function all(): array
     {
-        return [new CreatePolicy(), new CreateGroups()];
+        return [new CreatePolicy(), new CreateGroups(), new CreateAttributes()];
     }
 }

@@ -75,6 +75,10 @@ use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
+use YorvoID\Policy\Attribute\AttributeChanges;
+use YorvoID\Policy\Attribute\Attributes;
+use YorvoID\Policy\Attribute\AttributeStore;
+use YorvoID\Policy\Attribute\ForgetAttributesOfDeletedPrincipals;
 use YorvoID\Policy\ForgetRolesOfDeletedPrincipals;
 use YorvoID\Policy\GroupChanges;
 use YorvoID\Policy\GroupRelations;
@@ -85,6 +89,7 @@ use YorvoID\Policy\PolicyChanges;
 use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Roles;
+use YorvoID\Policy\Storage\DbalAttributeStore;
 use YorvoID\Policy\Storage\DbalPolicyStore;
 use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\Relations\ForgetRelationsOfDeletedPrincipals;
@@ -192,6 +197,7 @@ return static function (ContainerConfigurator $container): void {
         ThrottleStore::class => DbalThrottleStore::class,
         PolicyStore::class => DbalPolicyStore::class,
         RelationStore::class => DbalRelationStore::class,
+        AttributeStore::class => DbalAttributeStore::class,
     ] as $interface => $implementation) {
         $services->set($implementation);
         $services->alias($interface, $implementation);
@@ -243,6 +249,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(RelationPermit::class)->tag('yorvoid.policy_element');
     $services->set(RelationChanges::class);
     $services->set(GroupChanges::class);
+    $services->set(Attributes::class)->args([tagged_iterator('yorvoid.attribute_declarations'), service(AttributeStore::class), tagged_iterator('yorvoid.attribute_resolver')])->public();
+    $services->set(AttributeChanges::class);
     $services->set(Roles::class)->arg('$sources', tagged_iterator('yorvoid.role_source'))->arg('$relations', service(Relations::class))->public();
     $services->set(SessionStepUpCheck::class);
     $services->alias(StepUpCheck::class, SessionStepUpCheck::class);
@@ -274,6 +282,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(ForgetCredentialsOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
     $services->set(ForgetRolesOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
     $services->set(ForgetRelationsOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
+    $services->set(ForgetAttributesOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
     $services->set(RemovePasskeyWithCredential::class)->tag('kernel.event_listener', ['event' => CredentialRemoving::class]);
 
     // Security: the user, the request's YorvoID session, the authenticators, the endpoints.

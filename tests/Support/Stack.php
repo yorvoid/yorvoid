@@ -18,6 +18,7 @@ use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Passkeys\CeremonyStore;
 use YorvoID\Passkeys\PasskeyStore;
+use YorvoID\Policy\Attribute\AttributeStore;
 use YorvoID\Policy\PolicyStore;
 use YorvoID\Relations\RelationStore;
 use YorvoID\Throttle\ThrottleStore;
@@ -45,6 +46,7 @@ final readonly class Stack
         public KnownDeviceStore $devices,
         public PolicyStore $policy,
         public RelationStore $relations,
+        public AttributeStore $attributes,
         public ?Database $database = null,
     ) {
     }

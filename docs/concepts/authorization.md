@@ -158,6 +158,42 @@ A group's members are principals, or another group's members, so groups nest. A 
 
 They need `yorvoid.roles.manage`. Adding someone to a group gives them its roles, so the same rules hold as for giving a role: nobody adds a member to a group with a role they don't hold, and a group with a super role takes a recent proof. Groups are relations of the type `group` (`GroupRelations`, which the Symfony bundle declares).
 
+## Attributes
+
+Security attributes are what decisions may read about a principal (IDN-055), e.g. a department or a clearance, kept apart from profile data, which decisions never read. Their owner declares them in a service implementing `AttributeDeclarations` (`SecurityAttribute`: a namespaced name, a label, a type: string, integer, boolean or a list of strings). `SetAttribute` (`yorvoid.attribute.set`, ability `yorvoid.principals.manage`) sets one or, with null, removes it; the security log names the attribute, never its value. A deleted principal's attributes go.
+
+A rule reads them through `Attributes`: the acting principal's (`principal()`), and the request's resource or environment (`resolve()`), which an `AttributeResolver` answers, e.g. whether a page is classified, or whether the request comes from the office. What isn't known throws `MissingAttribute`, and the decision is Indeterminate (`missing_data`), never a Permit. Any exception of yours implementing `MissingData` is read the same way.
+
+```php
+use YorvoID\Core\Authorization\Request;
+use YorvoID\Policy\Attribute\Attributes;
+use YorvoID\Policy\Rule\Rule;
+use YorvoID\Policy\Rule\RuleAnswer;
+
+final readonly class ResearchPublishes implements Rule
+{
+    public function __construct(
+        private Attributes $attributes,
+    ) {
+    }
+
+    public function name(): string
+    {
+        return 'acme.research_publishes';
+    }
+
+    public function matches(Request $request): bool
+    {
+        return 'acme.pages.publish' === $request->ability;
+    }
+
+    public function decide(Request $request): RuleAnswer
+    {
+        return 'R&D' === $this->attributes->principal($request, 'acme.department') ? RuleAnswer::permit('R&D publishes.') : RuleAnswer::abstain();
+    }
+}
+```
+
 ## Resources
 
 A request may be about one resource, by its type and ID (`ResourceRef`, e.g. `site:42`); YorvoID never loads it. A role assigned on that resource counts for the request. A command about one resource implements `ConcernsResource`, and isGranted()'s subject is the resource when it's a `ResourceRef` or a `ConcernsResource`.
