@@ -161,11 +161,76 @@ final readonly class Evaluator implements Authorization
     }
 
     /**
-     * Decides, identifies the decision and records it: an operation's before it runs.
+     * Whether the actor holds an ability on each of these resources, decided as one by one, at one
+     * moment: the elements that preload read what the batch needs at once (AUZ-030, AUZ-032).
+     *
+     * @param list<ResourceRef|null> $resources
+     *
+     * @return list<Decision> One for each resource, in their order
      */
-    private function evaluate(Request $request): Decision
+    public function decideAbilities(Actor $actor, string $ability, Realm $realm, array $resources, Origin $origin): array
     {
-        $decision = $this->judge($request)->identified((string) $this->ids->next(), $request->at, $this->versionsOf($request));
+        $at = $this->clock->now();
+        $requests = array_map(static fn (?ResourceRef $resource): Request => Request::forAbility($ability, $realm, $resource, $actor, $origin, $at), $resources);
+
+        if ([] === $requests) {
+            return [];
+        }
+
+        $this->preload($requests);
+        // One realm, one moment: the versions are read once.
+        $versions = $this->versionsOf($requests[0]);
+
+        return array_map(fn (Request $request): Decision => $this->evaluate($request, $versions), $requests);
+    }
+
+    /**
+     * Gives the authority check the requests, and each element the requests it matches, if they
+     * preload. One that fails has read nothing: each request then reads for itself, and reports what
+     * it can't.
+     *
+     * @param non-empty-list<Request> $requests
+     */
+    private function preload(array $requests): void
+    {
+        if ($this->authority instanceof Preloads) {
+            self::preloading($this->authority, $requests);
+        }
+
+        foreach ($this->elements as $element) {
+            if ($element instanceof Preloads && (!$element instanceof PermitElement || \in_array($element->basis(), $requests[0]->authorizedBy(), true))) {
+                self::preloading($element, $requests, $element->matches(...));
+            }
+        }
+    }
+
+    /**
+     * @param non-empty-list<Request>        $requests
+     * @param (\Closure(Request): bool)|null $matches  Which of them it's given, if not all
+     */
+    private static function preloading(Preloads $preloads, array $requests, ?\Closure $matches = null): void
+    {
+        try {
+            $matching = null === $matches ? $requests : array_values(array_filter($requests, $matches));
+
+            if ([] !== $matching) {
+                $preloads->preload($matching);
+            }
+        } catch (IntegratorError $error) {
+            throw $error;
+        } catch (\Throwable) {
+            // Each request reads for itself.
+        }
+    }
+
+    /**
+     * Decides, identifies the decision and records it: an operation's before it runs.
+     *
+     * @param array<string, int>|null $versions As read for the batch it's in
+     */
+    private function evaluate(Request $request, ?array $versions = null): Decision
+    {
+        $decision = $this->judge($request)->identified((string) $this->ids->next(), $request->at, $versions ?? $this->versionsOf($request));
 
         return null === $this->decisions ? $decision : $this->decisions->record($request, $decision);
     }

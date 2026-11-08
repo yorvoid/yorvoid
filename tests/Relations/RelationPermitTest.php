@@ -24,6 +24,7 @@ use YorvoID\Relations\ResourceType;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Relations\Fixtures\CountingRelationStore;
 
 /**
  * An ability two relations give: either one gives it, and one too deep to follow makes it unknown.
@@ -61,5 +62,19 @@ final class RelationPermitTest extends TestCase
         self::assertSame([TruthValue::Unknown, IndeterminateReason::EvaluationError, 'Their relations to doc:d0 go deeper than they\'re followed.'], [$deep->value, $deep->reason, $deep->detail]);
         self::assertSame(TruthValue::Fails, $permit->evaluate($request('2'))->value);
         self::assertSame('yorvoid.relations', $permit->name());
+
+        // A batch reads each relation for every resource at once; evaluating reads nothing more.
+        $counting = new CountingRelationStore($store);
+        $store->add(new RelationTuple($realm, new ResourceRef('doc', '3'), 'owner', Subject::principal($ada)));
+        $batched = new RelationPermit(new Relations($schema, $counting, 2));
+        $bob = new PrincipalId(new UuidV7());
+        $requests = [$request('1'), $request('2'), $request('3'), $request('d0'), Request::forAbility('acme.docs.read', $realm, new ResourceRef('doc', '3'), new Member($realm, $bob), new Origin(OriginKind::Web), new \DateTimeImmutable()), Request::forAbility('acme.docs.read', new Realm('other'), new ResourceRef('doc', '3'), new Member(new Realm('other'), $ada), new Origin(OriginKind::Web), new \DateTimeImmutable())];
+        $batched->preload($requests);
+        $reads = $counting->reads;
+
+        self::assertSame([TruthValue::Holds, TruthValue::Fails, TruthValue::Holds, TruthValue::Unknown, TruthValue::Fails, TruthValue::Fails], array_map(static fn (Request $request): TruthValue => $batched->evaluate($request)->value, $requests), 'Owner of 3, reader of 1; not Bob, not in another realm.');
+        self::assertSame($reads, $counting->reads, 'Nothing read again.');
+        self::assertSame(TruthValue::Holds, $batched->evaluate($request('3'))->value, 'A request not preloaded reads for itself.');
+        self::assertGreaterThan($reads, $counting->reads);
     }
 }

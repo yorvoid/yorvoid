@@ -52,6 +52,10 @@ interface RelationStore
     /** Removes every tuple of the resource, as object or as subject: it's gone */
     public function forget(Realm $realm, ResourceRef $resource): void;
 
-    /** 0 before the first change; incremented by every add, remove and forget that changes something */
+    /**
+     * 0 before the first change; incremented by every add, remove and forget that changes something.
+     * Read from what the store holds, so every process reads the same one: never a counter of the
+     * process's own.
+     */
     public function version(Realm $realm): int;
 }

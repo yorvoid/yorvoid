@@ -21,6 +21,13 @@
         "global-ignoreSourceCodeByRegex": [
             "\\\\assert\\(.*"
         ],
+        "UnwrapArrayValues": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: a store reads the pairs asked for whatever their keys; array_values only
+                // makes them the list the port promises.
+                ".*\\$this->store->subjects\\(\\$realm, array_values\\(\\$(asked|children)\\)\\).*"
+            ]
+        },
         "UnwrapFinally": {
             "ignore": [
                 // Equivalent: PHP closes the file, and so releases its lock, as soon as an exception

@@ -63,8 +63,10 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
+use YorvoID\Core\Storage\Installation;
 use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Core\Storage\VersionedCache;
 use YorvoID\Flows\Flows;
 use YorvoID\Flows\FlowStore;
 use YorvoID\IntentSigning\IntentSigning;
@@ -94,6 +96,7 @@ use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\PolicyVersion;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Roles;
+use YorvoID\Policy\Storage\CachedPolicyStore;
 use YorvoID\Policy\Storage\DbalAttributeStore;
 use YorvoID\Policy\Storage\DbalPolicyStore;
 use YorvoID\Policy\YorvoIDDeclarations;
@@ -104,6 +107,7 @@ use YorvoID\Relations\Relations;
 use YorvoID\Relations\RelationSchema;
 use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationsVersion;
+use YorvoID\Relations\Storage\CachedRelationStore;
 use YorvoID\Relations\Storage\DbalRelationStore;
 use YorvoID\Symfony\Command\DoctorCommand;
 use YorvoID\Symfony\Command\IdentifiersNormalizeCommand;
@@ -209,6 +213,15 @@ return static function (ContainerConfigurator $container): void {
         $services->set($implementation);
         $services->alias($interface, $implementation);
     }
+
+    // What decisions read, kept against the realm's versions: once a request, and in the shared pool
+    // the configuration names (cache.pool, set by the bundle).
+    $services->set(Installation::class)->factory([Installation::class, 'stored'])->args([service(Database::class)]);
+    $services->set(VersionedCache::class)->args([null, service(Installation::class), service('logger')->nullOnInvalid()])->tag('kernel.reset', ['method' => 'reset']);
+    $services->set(CachedPolicyStore::class)->args([service(DbalPolicyStore::class), service(VersionedCache::class)])->tag('kernel.reset', ['method' => 'reset']);
+    $services->alias(PolicyStore::class, CachedPolicyStore::class);
+    $services->set(CachedRelationStore::class)->args([service(DbalRelationStore::class), service(VersionedCache::class)])->tag('kernel.reset', ['method' => 'reset']);
+    $services->alias(RelationStore::class, CachedRelationStore::class);
 
     $services->set(UuidV7Generator::class)->args([service(ClockInterface::class)]);
     $services->alias(IdGenerator::class, UuidV7Generator::class);

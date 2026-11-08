@@ -44,6 +44,16 @@ trait PolicyStoreContract
      */
     abstract protected function policyStore(string $implementation): PolicyStore;
 
+    /**
+     * The same store as another process has it: a new instance over the same data, e.g. on a second
+     * connection. Override it for a store that processes share; one that lives in a single process,
+     * as the in-memory one does, gives itself.
+     */
+    protected function samePolicyStore(string $implementation, PolicyStore $store): PolicyStore
+    {
+        return $store;
+    }
+
     #[DataProvider('implementations')]
     public function testKeepsTheRolesCreatedInEachRealm(string $implementation): void
     {
@@ -215,6 +225,24 @@ trait PolicyStoreContract
         self::assertSame(2, $store->version($acme));
         self::assertSame(0, $store->version(new Realm('other')));
         self::assertSame(1, $store->bump(new Realm('other')));
+    }
+
+    /**
+     * Every process reads the version from what the store holds, never from a counter of its own: what
+     * one server caches against it, another must not read once the policy has changed (AUZ-031).
+     */
+    #[DataProvider('implementations')]
+    public function testEveryProcessReadsTheSameVersion(string $implementation): void
+    {
+        $store = $this->policyStore($implementation);
+        $acme = new Realm('acme');
+        $store->bump($acme);
+        $store->bump($acme);
+        $other = $this->samePolicyStore($implementation, $store);
+
+        self::assertSame(2, $other->version($acme), 'Another process reads the version the store holds.');
+        self::assertSame(3, $other->bump($acme));
+        self::assertSame(3, $store->version($acme), 'And this one reads its change.');
     }
 
     /**

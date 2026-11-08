@@ -6,6 +6,7 @@ namespace YorvoID\Policy;
 
 use YorvoID\Core\Authorization\ChecksCatalogue;
 use YorvoID\Core\Authorization\PermitElement;
+use YorvoID\Core\Authorization\Preloads;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\StepUpCheck;
 use YorvoID\Core\Authorization\StepUpRemedy;
@@ -30,7 +31,7 @@ use YorvoID\Policy\Change\SetAbilities;
  *
  * @api
  */
-final readonly class RolePermit implements PermitElement, ChecksCatalogue
+final readonly class RolePermit implements PermitElement, ChecksCatalogue, Preloads
 {
     private Duration $window;
 
@@ -70,6 +71,14 @@ final readonly class RolePermit implements PermitElement, ChecksCatalogue
     public function matches(Request $request): bool
     {
         return null !== $request->ability;
+    }
+
+    /**
+     * The roles of a batch's requests, read at once.
+     */
+    public function preload(array $requests): void
+    {
+        $this->roles->preload($requests);
     }
 
     public function evaluate(Request $request): Truth

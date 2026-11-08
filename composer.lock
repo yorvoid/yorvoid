@@ -1633,7 +1633,8 @@
             "support": {
                 "source": "https://github.com/php-fig/cache/tree/3.0.0"
             },
-            "time": "2021-02-03T23:26:27+00:00"
+            "time": "2021-02-03T23:26:27+00:00",
+            "published-time": "2021-02-03T23:27:34+00:00"
         },
         {
             "name": "psr/clock",
@@ -7028,7 +7029,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "61da3eaea29ee21e12ca5f614952b0d214a305b3"
+                "reference": "66c7abe76fc8e5854de8b385f5e435af0a0b1f29"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7036,6 +7037,7 @@
                 "ext-mbstring": "*",
                 "ext-sodium": "*",
                 "php": ">=8.4",
+                "psr/cache": "^2.0 || ^3.0",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
                 "psr/log": "^3.0",

@@ -40,6 +40,10 @@ yorvoid:
 
         # With permits: sampled, the share of requests whose permits are recorded
         sample_rate:          0.01
+    cache:
+
+        # The PSR-6 pool that servers share for what decisions read: roles, assignments, relations. yorvoid.cache is on cache.app; null keeps them for the request only
+        pool:                 yorvoid.cache
     cookies:
 
         # The cookie that recognises devices

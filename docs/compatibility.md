@@ -15,7 +15,7 @@ CI compares every package with its last release, and fails on a break of covered
 ## What isn't covered
 
 - Code marked `@internal`, and anything not marked `@api`. That includes `@internal` members of an `@api` class, such as a constructor only the container calls. A check in CI makes sure nothing covered names an `@internal` class.
-- Code marked `@experimental`, also when it's `@api`: it may change in a minor release, after 1.0 too, until applications have used it and the mark is removed. Its changes are listed in the changelog. Today: `RelationPermit` and `RelationChanges`; relations themselves, groups and roles within resources are covered.
+- Code marked `@experimental`, also when it's `@api`: it may change in a minor release, after 1.0 too, until applications have used it and the mark is removed. Its changes are listed in the changelog. Today: `RelationPermit`, `RelationChanges` and `Preloads`; relations themselves, groups and roles within resources are covered.
 - The exact wording of messages, which can improve in any release. Translations change with it.
 - New cases of an enum that lists reasons, e.g. `IndeterminateReason`: a minor release can add one. A `match` of yours on them needs a default arm. YorvoID's own code matches them, and a decision's `Verdict`, exhaustively.
 - Security fixes. When the only way to close a vulnerability is a breaking change, it ships in a patch release, and the advisory explains what to do.
