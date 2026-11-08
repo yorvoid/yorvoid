@@ -9,7 +9,8 @@ use YorvoID\Policy\Rule\Rule;
 use YorvoID\Policy\Rule\RuleAnswer;
 
 /**
- * An application's own rule, registered by itself: anyone may view drafts of the help pages.
+ * An application's own rule, registered by itself: anyone may view drafts of the help pages, given as
+ * the resource or as the subject.
  */
 final readonly class HelpersModerate implements Rule
 {
@@ -25,6 +26,6 @@ final readonly class HelpersModerate implements Rule
 
     public function decide(Request $request): RuleAnswer
     {
-        return 'help' === $request->resource?->id ? RuleAnswer::permit('Help drafts are public.') : RuleAnswer::abstain();
+        return 'help' === $request->resource?->id || $request->subject instanceof HelpDraft ? RuleAnswer::permit('Help drafts are public.') : RuleAnswer::abstain();
     }
 }

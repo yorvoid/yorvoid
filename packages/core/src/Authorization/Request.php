@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Core\Authorization;
 
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
@@ -15,7 +16,9 @@ use YorvoID\Core\Realm;
 /**
  * What a decision is about, asked by an actor from an origin, at one moment that every element of the
  * decision reads (P7): either an operation with its command, or an ability on a resource that isn't an
- * operation of YorvoID's, e.g. an application's "edit this page".
+ * operation of YorvoID's, e.g. an application's "edit this page". An ability's request may carry its
+ * subject, the application's own object (the page), for rules and attribute resolvers to read: it's
+ * never recorded, logged or part of a cache key, and nothing keeps it beyond the request.
  *
  * @api
  */
@@ -25,9 +28,10 @@ final readonly class Request
      * @param string|null               $ability   The ability it needs: the operation's, or the one asked about
      * @param OperationDescription|null $operation Null when it's about an ability only
      * @param Command<mixed>|null       $command   The operation's command
+     * @param object|null               $subject   The application's own object it's about, e.g. the page
      */
     private function __construct(
-        private string $subject,
+        private string $name,
         public Realm $realm,
         public ?string $ability,
         public ?ResourceRef $resource,
@@ -36,6 +40,7 @@ final readonly class Request
         public Actor $actor,
         public Origin $origin,
         public \DateTimeImmutable $at,
+        public ?object $subject = null,
     ) {
     }
 
@@ -47,17 +52,39 @@ final readonly class Request
         return new self($operation->name, $command->realm, $operation->ability, $command instanceof ConcernsResource ? $command->resource() : null, $operation, $command, $actor, $origin, $at);
     }
 
-    public static function forAbility(string $ability, Realm $realm, ?ResourceRef $resource, Actor $actor, Origin $origin, \DateTimeImmutable $at): self
+    /**
+     * The resource is the one given, or else the one the subject concerns. A subject with neither is
+     * about no resource: only roles on the whole realm count for it.
+     *
+     * @param object|null $subject The application's own object it's about, e.g. the page
+     *
+     * @throws IntegratorError When the subject concerns another resource than the one given, or is a ResourceRef
+     */
+    public static function forAbility(string $ability, Realm $realm, ?ResourceRef $resource, Actor $actor, Origin $origin, \DateTimeImmutable $at, ?object $subject = null): self
     {
-        return new self($ability, $realm, $ability, $resource, null, null, $actor, $origin, $at);
+        if ($subject instanceof ResourceRef) {
+            throw new IntegratorError(\sprintf('The subject of "%s" is the resource %s.', $ability, $subject), 'Give a ResourceRef as the resource; the subject is the application\'s own object.', 'concepts/authorization.md#the-subject');
+        }
+
+        if ($subject instanceof ConcernsResource) {
+            $concerns = $subject->resource();
+
+            if (null !== $resource && !$resource->equals($concerns)) {
+                throw new IntegratorError(\sprintf('The subject of "%s" concerns %s, not %s.', $ability, $concerns, $resource), 'Give the resource the subject concerns, or none.', 'concepts/authorization.md#the-subject');
+            }
+
+            $resource = $concerns;
+        }
+
+        return new self($ability, $realm, $ability, $resource, null, null, $actor, $origin, $at, $subject);
     }
 
     /**
      * What it's about, for reasons and the log: the operation's name, or the ability's.
      */
-    public function subject(): string
+    public function name(): string
     {
-        return $this->subject;
+        return $this->name;
     }
 
     /**

@@ -136,7 +136,7 @@ final class DecisionLog
             return true;
         }
 
-        if (isset($this->alwaysRecord[$request->subject()])) {
+        if (isset($this->alwaysRecord[$request->name()])) {
             return true;
         }
 

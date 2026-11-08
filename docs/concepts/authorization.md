@@ -99,6 +99,15 @@ foreach ($decisions as $page => $decision) {
 $editable = $decisions->permitted();
 ```
 
+Each is a `ResourceRef`, a subject that implements `ConcernsResource`, or a resource with its [subject](#the-subject), `[ResourceRef, $item]`, for rules that read the rows themselves:
+
+```php
+use App\Content\Item;
+use YorvoID\Core\Authorization\ResourceRef;
+
+$decisions = $policy->decideMany($session, 'acme.pages.edit', $realm, array_map(static fn (Item $item): array => [new ResourceRef('content', $item->id), $item], $items), $origin);
+```
+
 An element of your own can read for a batch too: it implements `Preloads` (experimental), and is given the batch's requests it matches before they're decided. It keeps what it read by request, and if it fails, each request is decided as on its own.
 
 ## Roles
@@ -214,7 +223,35 @@ final readonly class ResearchPublishes implements Rule
 
 ## Resources
 
-A request may be about one resource, by its type and ID (`ResourceRef`, e.g. `site:42`); YorvoID never loads it. A role assigned on that resource counts for the request. A command about one resource implements `ConcernsResource`, and isGranted()'s subject is the resource when it's a `ResourceRef` or a `ConcernsResource`.
+A request may be about one resource, by its type and ID (`ResourceRef`, e.g. `site:42`); YorvoID never loads it. A role assigned on that resource counts for the request. A command about one resource implements `ConcernsResource`.
+
+### The subject
+
+A request about an ability may carry its subject: the application's own object, e.g. the page being edited. Rules and attribute resolvers read it from `$request->subject`, so "edit your own" reads the page's author without loading the page again:
+
+```php
+$policy->allows($session, 'acme.pages.edit', $realm, null, $origin, $page);
+```
+
+```php
+use App\Pages\Page;
+use YorvoID\Core\Authorization\Request;
+use YorvoID\Policy\Rule\RuleAnswer;
+
+public function decide(Request $request): RuleAnswer
+{
+    $page = $request->subject;
+
+    return $page instanceof Page && $page->authorId === (string) $request->actor->principalId ? RuleAnswer::permit('Its author edits it.') : RuleAnswer::abstain();
+}
+```
+
+- **Its resource** is the one given, or else the one the subject concerns when it implements `ConcernsResource`. Any subject may come with a resource; one that implements `ConcernsResource` and concerns another is a mistake (`IntegratorError`).
+- **A subject with no resource** is about none, so only roles on the whole realm count for it: a role on a page doesn't. Give the resource if roles on it should count.
+- **It stays the application's:** it's never recorded in the decision log, written to the log or the security log, or part of a cache key, and nothing keeps it beyond the request. The decision records its resource.
+- **In Symfony**, `isGranted()`'s subject is the resource when it's a `ResourceRef`, and the request's subject when it's any other object: `isGranted('acme.pages.edit', $page)`, with `Page` implementing `ConcernsResource` so roles on it count.
+
+An element's detail texts are the decision's reason, which is recorded: don't put the subject's data in them.
 
 ## Rules
 
