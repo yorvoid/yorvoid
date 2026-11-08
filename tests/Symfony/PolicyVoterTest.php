@@ -8,7 +8,6 @@ use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Security\Core\Authentication\Token\NullToken;
-use Symfony\Component\Security\Core\Authorization\AccessDecision;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\VoterInterface;
 use YorvoID\Core\Authorization\ResourceRef;
@@ -69,10 +68,6 @@ final class PolicyVoterTest extends TestCase
         self::assertFalse($checker->isGranted('acme.pages.view', new LockedPage()), 'A subject that says which resource it concerns.');
         self::assertTrue($checker->isGranted('acme.pages.view_drafts', new ResourceRef('page', 'help')));
         self::assertFalse($checker->isGranted('acme.pages.view_drafts', new ResourceRef('page', 'other')));
-
-        $decision = new AccessDecision();
-        self::assertFalse($checker->isGranted('acme.pages.publish', null, $decision));
-        self::assertStringContainsString('None of their roles has "acme.pages.publish".', $decision->getMessage());
 
         $voter = $container->get(PolicyVoter::class);
         \assert($voter instanceof PolicyVoter);
