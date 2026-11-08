@@ -31,7 +31,10 @@ use YorvoID\Passkeys\Migrations\PasskeysMigrations;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
 use YorvoID\Policy\Migrations\PolicyMigrations;
+use YorvoID\Policy\Storage\DbalAttributeStore;
 use YorvoID\Policy\Storage\DbalPolicyStore;
+use YorvoID\Relations\Migrations\RelationsMigrations;
+use YorvoID\Relations\Storage\DbalRelationStore;
 use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Throttle\Migrations\ThrottleMigrations;
 use YorvoID\Throttle\Storage\DbalThrottleStore;
@@ -86,14 +89,14 @@ abstract class DatabaseTestCase extends TestCase
         if ('memory' === $implementation) {
             $memory = new InMemoryStorage();
 
-            return new Stack($implementation, $memory->transactions, $memory->principals, $memory->identifiers, $memory->log, $memory->sessions, $memory->tokens, $memory->setup, $memory->credentials, $memory->passkeys, $memory->ceremonies, $memory->recoveryCodes, $memory->coolDowns, $memory->throttle, $memory->devices, $memory->policy);
+            return new Stack($implementation, $memory->transactions, $memory->principals, $memory->identifiers, $memory->log, $memory->sessions, $memory->tokens, $memory->setup, $memory->credentials, $memory->passkeys, $memory->ceremonies, $memory->recoveryCodes, $memory->coolDowns, $memory->throttle, $memory->devices, $memory->policy, $memory->relations, $memory->attributes);
         }
 
         $middleware = new TransactionMiddleware();
         $database = new Database($this->connect($implementation, $middleware, $statements), new StorageLocation(StorageLocation::DEFAULT_PREFIX, 'postgresql' === $implementation ? $this->locations[$implementation] : null));
-        new Migrator($database, [...CoreMigrations::all(), ...AuthnMigrations::all(), ...PasskeysMigrations::all(), ...PolicyMigrations::all(), ...ThrottleMigrations::all()])->migrate();
+        new Migrator($database, [...CoreMigrations::all(), ...AuthnMigrations::all(), ...PasskeysMigrations::all(), ...PolicyMigrations::all(), ...RelationsMigrations::all(), ...ThrottleMigrations::all()])->migrate();
 
-        return new Stack($implementation, new DbalTransactions($database->connection, $middleware), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database), $database);
+        return new Stack($implementation, new DbalTransactions($database->connection, $middleware), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database), new DbalRelationStore($database), new DbalAttributeStore($database), $database);
     }
 
     /**

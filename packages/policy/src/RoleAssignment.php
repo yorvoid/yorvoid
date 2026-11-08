@@ -10,7 +10,7 @@ use YorvoID\Core\Realm;
 
 /**
  * A role given to a principal (AUZ-005, 010): in the whole realm, or on one resource, e.g. the manager of
- * site 42; until it expires, if it does.
+ * site 42, and then on what's within it (its children through "parent"); until it expires, if it does.
  *
  * @api
  */
@@ -31,16 +31,36 @@ final readonly class RoleAssignment
     }
 
     /**
-     * Whether it counts for a request at a moment about a resource: not expired, and in the whole realm
-     * or on that resource.
+     * Whether it counts at a moment for these resources, e.g. a request's and its ancestors: not expired,
+     * and in the whole realm or on one of them.
      */
-    public function counts(\DateTimeImmutable $at, ?ResourceRef $resource): bool
+    public function counts(\DateTimeImmutable $at, ResourceRef ...$resources): bool
     {
-        if (null !== $this->expiresAt && $this->expiresAt <= $at) {
+        return self::applies($this->scope, $this->expiresAt, $at, $resources);
+    }
+
+    /**
+     * @param array<array-key, ResourceRef> $resources
+     *
+     * @internal
+     */
+    public static function applies(?ResourceRef $scope, ?\DateTimeImmutable $expiresAt, \DateTimeImmutable $at, array $resources): bool
+    {
+        if (null !== $expiresAt && $expiresAt <= $at) {
             return false;
         }
 
-        return null === $this->scope || (null !== $resource && $this->scope->equals($resource));
+        if (null === $scope) {
+            return true;
+        }
+
+        foreach ($resources as $resource) {
+            if ($scope->equals($resource)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -1,0 +1,43 @@
+{
+    "name": "yorvoid/relations",
+    "type": "library",
+    "description": "YorvoID's relations between resources (ReBAC): who is an editor of which page, which site belongs to which server, nested groups; implied and inherited relations, checked a level at a time and bounded.",
+    "keywords": [
+        "authorization",
+        "rebac",
+        "relationships",
+        "zanzibar",
+        "access-control",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "contact@yorvolabs.com"
+        }
+    ],
+    "support": {
+        "email": "contact@yorvolabs.com",
+        "issues": "https://github.com/yorvoid/yorvoid/issues",
+        "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/relations",
+        "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+        "security": "https://github.com/yorvoid/yorvoid/security/policy"
+    },
+    "require": {
+        "php": ">=8.4",
+        "doctrine/dbal": "^4.3",
+        "yorvoid/core": "^0.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Relations\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.4.x-dev"
+        }
+    }
+}

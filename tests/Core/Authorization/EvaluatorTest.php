@@ -12,6 +12,7 @@ use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\ForbidElement;
 use YorvoID\Core\Authorization\IndeterminateReason;
+use YorvoID\Core\Authorization\MissingData;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Authorization\Reason;
@@ -331,6 +332,16 @@ final class EvaluatorTest extends TestCase
                 self::assertStringContainsString($message, $error->getMessage());
             }
         }
+    }
+
+    public function testDataNotOnRecordIsMissingDataNeverAPermit(): void
+    {
+        $missing = new class('The page has no owner.') extends \RuntimeException implements MissingData {};
+        $decision = $this->decide([new StubPermit('p', $missing)]);
+
+        self::assertSame(Verdict::Indeterminate, $decision->verdict);
+        self::assertSame([IndeterminateReason::MissingData], $decision->indeterminate);
+        self::assertSame('A permit couldn\'t be evaluated: The page has no owner.', $decision->reason);
     }
 
     /**

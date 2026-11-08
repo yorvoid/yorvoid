@@ -10,6 +10,7 @@ use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Policy\AbilityChanges;
+use YorvoID\Policy\GroupRoleAssignment;
 use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\RoleAssignment;
 
@@ -148,6 +149,58 @@ trait PolicyStoreContract
         $store->forgetPrincipal($acme, $ada);
         self::assertSame([], $store->assignments($acme, $ada));
         self::assertCount(1, $store->assignments(new Realm('other'), $ada));
+    }
+
+    #[DataProvider('implementations')]
+    public function testKeepsGroupsAndTheirRoles(string $implementation): void
+    {
+        $store = $this->policyStore($implementation);
+        $acme = new Realm('acme');
+        $other = new Realm('other');
+        $at = new \DateTimeImmutable('2026-11-08 02:00:00.000000 UTC');
+        $until = new \DateTimeImmutable('2026-12-08 02:00:00.000000 UTC');
+
+        self::assertSame([], $store->groups($acme));
+        self::assertSame([], $store->groupAssignments($acme, []));
+
+        $store->saveGroup($acme, 'writers', 'Writers');
+        $store->saveGroup($acme, 'admins', 'Admins');
+        $store->saveGroup($other, 'writers', 'Other writers');
+        $store->saveGroup($acme, 'writers', 'Senior writers');
+        self::assertSame(['admins' => 'Admins', 'writers' => 'Senior writers'], $store->groups($acme), 'By name; saving again relabels.');
+
+        // Out of order: they come back by group, role, then scope.
+        $store->assignGroup(new GroupRoleAssignment($acme, 'writers', 'manager', $at, new ResourceRef('site', 'b')));
+        $store->assignGroup(new GroupRoleAssignment($acme, 'writers', 'editor', $at));
+        $store->assignGroup(new GroupRoleAssignment($acme, 'writers', 'manager', $at, new ResourceRef('site', 'a'), $until));
+        $store->assignGroup(new GroupRoleAssignment($acme, 'admins', 'admin', $at));
+        $store->assignGroup(new GroupRoleAssignment($other, 'writers', 'editor', $at));
+        $store->assignGroup(new GroupRoleAssignment($acme, 'writers', 'editor', $at, expiresAt: $until));
+
+        $assignments = $store->groupAssignments($acme, ['writers', 'admins', 'ghosts']);
+        self::assertSame(['admins/admin/', 'writers/editor/', 'writers/manager/site:a', 'writers/manager/site:b'], array_map(static fn (GroupRoleAssignment $assignment): string => $assignment->group.'/'.$assignment->role.'/'.$assignment->scope, $assignments));
+        self::assertEquals($until, $assignments[1]->expiresAt, 'Assigning again replaces.');
+        self::assertEquals($at, $assignments[1]->assignedAt);
+        self::assertNull($assignments[3]->expiresAt);
+        self::assertTrue($assignments[0]->realm->equals($acme));
+        self::assertCount(1, $store->groupAssignments($acme, ['admins']));
+
+        self::assertTrue($store->unassignGroup($acme, 'writers', 'manager', new ResourceRef('site', 'b')));
+        self::assertFalse($store->unassignGroup($acme, 'writers', 'manager', new ResourceRef('site', 'b')));
+        self::assertFalse($store->unassignGroup($acme, 'writers', 'manager', null));
+        self::assertTrue($store->unassignGroup($acme, 'writers', 'editor', null));
+        self::assertCount(1, $store->groupAssignments($other, ['writers']), 'Another realm\'s stays.');
+
+        $store->assignGroup(new GroupRoleAssignment($acme, 'admins', 'editor', $at));
+        $store->unassignRole($acme, 'editor');
+        self::assertSame(['admin'], array_map(static fn (GroupRoleAssignment $assignment): string => $assignment->role, $store->groupAssignments($acme, ['admins'])), 'A role taken from everyone goes from groups too.');
+        self::assertCount(1, $store->groupAssignments($other, ['writers']), 'In that realm only.');
+
+        $store->deleteGroup($acme, 'writers');
+        self::assertSame(['admins' => 'Admins'], $store->groups($acme));
+        self::assertSame([], $store->groupAssignments($acme, ['writers']), 'Its roles go with it.');
+        self::assertSame(['writers' => 'Other writers'], $store->groups($other));
+        self::assertCount(1, $store->groupAssignments($other, ['writers']));
     }
 
     #[DataProvider('implementations')]

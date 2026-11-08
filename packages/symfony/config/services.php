@@ -75,7 +75,13 @@ use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
+use YorvoID\Policy\Attribute\AttributeChanges;
+use YorvoID\Policy\Attribute\Attributes;
+use YorvoID\Policy\Attribute\AttributeStore;
+use YorvoID\Policy\Attribute\ForgetAttributesOfDeletedPrincipals;
 use YorvoID\Policy\ForgetRolesOfDeletedPrincipals;
+use YorvoID\Policy\GroupChanges;
+use YorvoID\Policy\GroupRelations;
 use YorvoID\Policy\NoEscalation;
 use YorvoID\Policy\Policy;
 use YorvoID\Policy\PolicyCatalogue;
@@ -83,8 +89,16 @@ use YorvoID\Policy\PolicyChanges;
 use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Roles;
+use YorvoID\Policy\Storage\DbalAttributeStore;
 use YorvoID\Policy\Storage\DbalPolicyStore;
 use YorvoID\Policy\YorvoIDDeclarations;
+use YorvoID\Relations\ForgetRelationsOfDeletedPrincipals;
+use YorvoID\Relations\RelationChanges;
+use YorvoID\Relations\RelationPermit;
+use YorvoID\Relations\Relations;
+use YorvoID\Relations\RelationSchema;
+use YorvoID\Relations\RelationStore;
+use YorvoID\Relations\Storage\DbalRelationStore;
 use YorvoID\Symfony\Command\DoctorCommand;
 use YorvoID\Symfony\Command\IdentifiersNormalizeCommand;
 use YorvoID\Symfony\Command\KeysRotateCommand;
@@ -182,6 +196,8 @@ return static function (ContainerConfigurator $container): void {
         CeremonyStore::class => DbalCeremonyStore::class,
         ThrottleStore::class => DbalThrottleStore::class,
         PolicyStore::class => DbalPolicyStore::class,
+        RelationStore::class => DbalRelationStore::class,
+        AttributeStore::class => DbalAttributeStore::class,
     ] as $interface => $implementation) {
         $services->set($implementation);
         $services->alias($interface, $implementation);
@@ -227,7 +243,15 @@ return static function (ContainerConfigurator $container): void {
     $services->set(OperationCatalogue::class)->factory([OperationCatalogue::class, 'of'])->args([tagged_iterator('yorvoid.operation_handler')])->public();
     $services->set(YorvoIDDeclarations::class)->tag('yorvoid.policy_declarations');
     $services->set(PolicyCatalogue::class)->factory([PolicyCatalogue::class, 'of'])->args([tagged_iterator('yorvoid.policy_declarations')])->public();
-    $services->set(Roles::class)->arg('$sources', tagged_iterator('yorvoid.role_source'))->public();
+    $services->set(GroupRelations::class)->tag('yorvoid.relation_declarations');
+    $services->set(RelationSchema::class)->factory([RelationSchema::class, 'of'])->args([tagged_iterator('yorvoid.relation_declarations')])->public();
+    $services->set(Relations::class)->public();
+    $services->set(RelationPermit::class)->tag('yorvoid.policy_element');
+    $services->set(RelationChanges::class);
+    $services->set(GroupChanges::class);
+    $services->set(Attributes::class)->args([tagged_iterator('yorvoid.attribute_declarations'), service(AttributeStore::class), tagged_iterator('yorvoid.attribute_resolver')])->public();
+    $services->set(AttributeChanges::class);
+    $services->set(Roles::class)->arg('$sources', tagged_iterator('yorvoid.role_source'))->arg('$relations', service(Relations::class))->public();
     $services->set(SessionStepUpCheck::class);
     $services->alias(StepUpCheck::class, SessionStepUpCheck::class);
     $services->set(RolePermit::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]))->tag('yorvoid.policy_element');
@@ -257,6 +281,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(EndSessionsOfInactivePrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
     $services->set(ForgetCredentialsOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
     $services->set(ForgetRolesOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
+    $services->set(ForgetRelationsOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
+    $services->set(ForgetAttributesOfDeletedPrincipals::class)->tag('kernel.event_listener', ['event' => PrincipalStatusChanging::class]);
     $services->set(RemovePasskeyWithCredential::class)->tag('kernel.event_listener', ['event' => CredentialRemoving::class]);
 
     // Security: the user, the request's YorvoID session, the authenticators, the endpoints.

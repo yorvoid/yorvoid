@@ -24,7 +24,12 @@ use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
+use YorvoID\Policy\Attribute\AttributeChanges;
+use YorvoID\Policy\Attribute\AttributeResolver;
+use YorvoID\Policy\Attribute\Attributes;
 use YorvoID\Policy\Change\AssignRole;
+use YorvoID\Policy\GroupChanges;
+use YorvoID\Policy\GroupRelations;
 use YorvoID\Policy\NoEscalation;
 use YorvoID\Policy\Policy;
 use YorvoID\Policy\PolicyCatalogue;
@@ -36,7 +41,12 @@ use YorvoID\Policy\RoleSource;
 use YorvoID\Policy\Rule\Rule;
 use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Policy\YorvoIDDeclarations;
+use YorvoID\Relations\RelationChanges;
+use YorvoID\Relations\RelationPermit;
+use YorvoID\Relations\Relations;
+use YorvoID\Relations\RelationSchema;
 use YorvoID\Testing\InMemoryStorage;
+use YorvoID\Tests\Relations\Fixtures\AcmeRelations;
 
 /**
  * YorvoID with the policy, in memory: operations run as they do in an application, the host's operator
@@ -52,6 +62,10 @@ final class PolicyWorld
 
     public readonly Roles $roles;
 
+    public readonly Relations $relations;
+
+    public readonly Attributes $attributes;
+
     public readonly Operations $operations;
 
     public readonly OperationCatalogue $catalogue;
@@ -59,21 +73,25 @@ final class PolicyWorld
     public readonly Policy $policy;
 
     /**
-     * @param list<PolicyDeclarations> $declarations
-     * @param list<Rule>               $rules
-     * @param list<RoleSource>         $sources
+     * @param list<PolicyDeclarations>                $declarations
+     * @param list<Rule>                              $rules
+     * @param list<RoleSource>                        $sources
+     * @param list<AttributeResolver>                 $resolvers
+     * @param (\Closure(Attributes): list<Rule>)|null $rulesOf      Rules that read attributes
      */
-    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null)
+    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null)
     {
         $this->memory = new InMemoryStorage();
         $this->clock = new MockClock('2026-11-07 20:00:00');
         $this->realm = new Realm('acme');
         $catalogue = PolicyCatalogue::of([new YorvoIDDeclarations(), new AcmeDeclarations(), ...$declarations]);
-        $this->roles = new Roles($catalogue, $this->memory->policy, $sources);
+        $this->relations = new Relations(RelationSchema::of([new AcmeRelations(), new GroupRelations()]), $this->memory->relations, $maxDepth);
+        $this->roles = new Roles($catalogue, $this->memory->policy, $sources, $this->relations);
+        $this->attributes = new Attributes([new AcmeAttributes()], $this->memory->attributes, $resolvers);
         $log = new SecurityLog($this->memory->log, $this->memory->transactions, clock: $this->clock);
-        $elements = [new RolePermit($this->roles, $stepUp, $window), new NoEscalation($this->roles)];
+        $elements = [new RolePermit($this->roles, $stepUp, $window), new NoEscalation($this->roles), new RelationPermit($this->relations)];
 
-        foreach ($rules as $rule) {
+        foreach ([...$rules, ...(null === $rulesOf ? [] : $rulesOf($this->attributes))] as $rule) {
             array_push($elements, ...RuleElements::of($rule));
         }
 
@@ -81,6 +99,9 @@ final class PolicyWorld
         $handlers = [
             new Principals($this->memory->principals, $this->memory->identifiers, $log, $this->memory->transactions, clock: $this->clock),
             new PolicyChanges($catalogue, $this->memory->policy, $this->memory->principals, $log, $this->memory->transactions, $this->clock),
+            new GroupChanges($catalogue, $this->memory->policy, $this->memory->relations, $this->memory->principals, $log, $this->memory->transactions, $this->clock),
+            new RelationChanges($this->relations->schema(), $this->memory->relations, $log, $this->memory->transactions),
+            new AttributeChanges($this->attributes, $this->memory->attributes, $this->memory->principals, $log, $this->memory->transactions),
         ];
         $this->catalogue = OperationCatalogue::of($handlers);
         $this->operations = new Operations($this->catalogue, $evaluator, $log, $handlers);

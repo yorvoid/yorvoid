@@ -365,6 +365,8 @@ final readonly class Evaluator implements Authorization
         } catch (IntegratorError $error) {
             // A mistake in the setup: shown, not decided around. Nothing runs either way.
             throw $error;
+        } catch (MissingData $missing) {
+            return Truth::unknown(IndeterminateReason::MissingData, $missing->getMessage());
         } catch (\Throwable $exception) {
             $unreachable = StoreUnreachable::of($exception);
 

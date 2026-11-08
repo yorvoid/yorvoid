@@ -9,6 +9,7 @@ use YorvoID\Core\Migrations\CoreMigrations;
 use YorvoID\Core\Storage\Migration\Migration;
 use YorvoID\Passkeys\Migrations\PasskeysMigrations;
 use YorvoID\Policy\Migrations\PolicyMigrations;
+use YorvoID\Relations\Migrations\RelationsMigrations;
 use YorvoID\Throttle\Migrations\ThrottleMigrations;
 
 /**
@@ -24,6 +25,6 @@ final class Migrations
      */
     public static function all(): array
     {
-        return array_merge(CoreMigrations::all(), AuthnMigrations::all(), PasskeysMigrations::all(), PolicyMigrations::all(), ThrottleMigrations::all());
+        return array_merge(CoreMigrations::all(), AuthnMigrations::all(), PasskeysMigrations::all(), PolicyMigrations::all(), RelationsMigrations::all(), ThrottleMigrations::all());
     }
 }

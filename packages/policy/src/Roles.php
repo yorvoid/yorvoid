@@ -5,8 +5,13 @@ declare(strict_types=1);
 namespace YorvoID\Policy;
 
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Relations\Relations;
+use YorvoID\Relations\Subject;
+use YorvoID\Relations\TooDeep;
 
 /**
  * Which roles have which abilities in a realm, and which roles an actor has: the declared defaults with
@@ -24,12 +29,14 @@ final readonly class Roles
     private \WeakMap $memo;
 
     /**
-     * @param iterable<RoleSource> $sources Roles an actor has without their being stored
+     * @param iterable<RoleSource> $sources   Roles an actor has without their being stored
+     * @param Relations|null       $relations For roles on a parent that count for its children, and groups
      */
     public function __construct(
         private PolicyCatalogue $catalogue,
         private PolicyStore $store,
         iterable $sources = [],
+        private ?Relations $relations = null,
     ) {
         $list = [];
 
@@ -142,10 +149,13 @@ final readonly class Roles
     }
 
     /**
-     * The roles the request's actor has: "everyone", what's assigned to it in the realm and counts for
-     * the request's moment and resource, and what the role sources add.
+     * The roles the request's actor has: "everyone", what's assigned to it and to its groups in the
+     * realm and counts for the request's moment and resource (or one the resource is within), and what
+     * the role sources add.
      *
      * @return list<string>
+     *
+     * @throws TooDeep When the resource's parents or the actor's groups go deeper than they're followed
      */
     public function rolesOf(Request $request): array
     {
@@ -157,9 +167,16 @@ final readonly class Roles
 
         if ($request->actorInRealm()) {
             \assert(null !== $request->actor->principalId);
+            $resources = $this->within($request);
 
             foreach ($this->store->assignments($request->realm, $request->actor->principalId) as $assignment) {
-                if ($assignment->counts($request->at, $request->resource)) {
+                if ($assignment->counts($request->at, ...$resources)) {
+                    $roles[] = $assignment->role;
+                }
+            }
+
+            foreach ($this->store->groupAssignments($request->realm, $this->groupsOf($request->realm, $request->actor->principalId)) as $assignment) {
+                if ($assignment->counts($request->at, ...$resources)) {
                     $roles[] = $assignment->role;
                 }
             }
@@ -172,6 +189,67 @@ final readonly class Roles
         }
 
         return $this->memo[$request] = array_values(array_unique($roles));
+    }
+
+    /**
+     * The groups the principal is a member of, through groups within groups too.
+     *
+     * @return list<string> Their names
+     *
+     * @throws TooDeep
+     */
+    public function groupsOf(Realm $realm, PrincipalId $principal): array
+    {
+        if (null === $this->relations) {
+            return [];
+        }
+
+        $groups = $this->relations->memberships($realm, Subject::principal($principal), GroupRelations::TYPE, GroupRelations::MEMBER) ?? throw new TooDeep('The groups of a principal');
+
+        return array_map(static fn (ResourceRef $group): string => $group->id, $groups);
+    }
+
+    /**
+     * The roles given to the group and to every group it's within: what a member gets, whatever the scope.
+     *
+     * @return list<string>
+     *
+     * @throws TooDeep
+     */
+    public function rolesOfGroup(Realm $realm, string $group): array
+    {
+        $within = null === $this->relations ? [] : $this->relations->memberships($realm, GroupRelations::members($group), GroupRelations::TYPE, GroupRelations::MEMBER) ?? throw new TooDeep(\sprintf('The groups "%s" is within', $group));
+        $groups = [$group, ...array_map(static fn (ResourceRef $parent): string => $parent->id, $within)];
+
+        return array_values(array_unique(array_map(static fn (GroupRoleAssignment $assignment): string => $assignment->role, $this->store->groupAssignments($realm, $groups))));
+    }
+
+    /**
+     * The relations, if roles are read with them.
+     */
+    public function relations(): ?Relations
+    {
+        return $this->relations;
+    }
+
+    /**
+     * The request's resource and what it's within, nearest first.
+     *
+     * @return list<ResourceRef>
+     *
+     * @throws TooDeep
+     */
+    private function within(Request $request): array
+    {
+        if (null === $request->resource) {
+            return [];
+        }
+
+        if (null === $this->relations) {
+            return [$request->resource];
+        }
+
+        return [$request->resource, ...$this->relations->ancestors($request->realm, $request->resource) ?? throw new TooDeep(\sprintf('The parents of %s', $request->resource))];
     }
 
     /**
