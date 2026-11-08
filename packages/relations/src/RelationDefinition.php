@@ -36,7 +36,12 @@ final readonly class RelationDefinition
     ) {
         self::check($name);
 
-        foreach ([...$impliedBy, ...array_keys($fromParents), ...array_values($fromParents)] as $relation) {
+        foreach ($impliedBy as $relation) {
+            self::check($relation);
+        }
+
+        foreach ($fromParents as $via => $relation) {
+            self::check($via);
             self::check($relation);
         }
     }

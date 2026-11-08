@@ -107,6 +107,52 @@ final class RelationsTest extends TestCase
         self::assertNull($relations->memberships($this->realm, self::principal('ada'), 'group', 'member'));
     }
 
+    public function testTheBoundIsExact(): void
+    {
+        $chain = function (int $length): void {
+            $this->store = new InMemoryRelationStore();
+
+            for ($i = 0; $i < $length; ++$i) {
+                $this->relate(GroupRelations::group('g'.$i), 'member', GroupRelations::members('g'.($i + 1)));
+                $this->relate(new ResourceRef('site', 's'.$i), 'parent', new Subject(new ResourceRef('site', 's'.($i + 1))));
+            }
+
+            $this->relate(GroupRelations::group('g'.$length), 'member', self::principal('ada'));
+        };
+
+        $chain(2);
+        $relations = $this->relations(maxDepth: 3);
+        self::assertTrue($relations->check($this->realm, GroupRelations::group('g0'), 'member', self::principal('ada')));
+        self::assertCount(2, $relations->ancestors($this->realm, new ResourceRef('site', 's0')) ?? []);
+        self::assertNull($relations->memberships($this->realm, self::principal('ada'), 'group', 'member'));
+
+        $chain(1);
+        self::assertCount(2, $this->relations(maxDepth: 3)->memberships($this->realm, self::principal('ada'), 'group', 'member') ?? []);
+
+        $chain(3);
+        $relations = $this->relations(maxDepth: 3);
+        self::assertNull($relations->check($this->realm, GroupRelations::group('g0'), 'member', self::principal('ada')));
+        self::assertNull($relations->ancestors($this->realm, new ResourceRef('site', 's0')));
+
+        $chain(15);
+        self::assertTrue($this->relations()->check($this->realm, GroupRelations::group('g0'), 'member', self::principal('ada')), 'Sixteen levels by default.');
+        $chain(16);
+        self::assertNull($this->relations()->check($this->realm, GroupRelations::group('g0'), 'member', self::principal('ada')));
+    }
+
+    public function testImpliedRelationsInACycleEnd(): void
+    {
+        $schema = RelationSchema::of([self::declaring(new ResourceType('doc', [new RelationDefinition('a', impliedBy: ['b'], grants: ['acme.docs.read']), new RelationDefinition('b', impliedBy: ['a'], grants: ['acme.docs.read', 'acme.docs.write'])]))]);
+        $relations = new Relations($schema, $this->store);
+        $this->relate(new ResourceRef('doc', '1'), 'b', self::principal('ada'));
+
+        self::assertTrue($relations->check($this->realm, new ResourceRef('doc', '1'), 'a', self::principal('ada')));
+        self::assertFalse($relations->check($this->realm, new ResourceRef('doc', '1'), 'a', self::principal('bob')));
+        self::assertSame(['acme.docs.read', 'acme.docs.write'], $schema->abilitiesGivenBy('doc', 'a'), 'Each once.');
+        self::assertSame(['acme.docs.read', 'acme.docs.write'], $schema->abilities());
+        self::assertSame(['a', 'b'], $schema->granting('doc', 'acme.docs.read'));
+    }
+
     public function testTheSchemaSaysWhatGivesWhat(): void
     {
         $schema = RelationSchema::of([new AcmeRelations()]);
@@ -169,8 +215,16 @@ final class RelationsTest extends TestCase
         self::assertFalse($tuple->equals(new RelationTuple($this->realm, new ResourceRef('page', '1'), 'viewer', $set)));
         self::assertFalse($tuple->equals(new RelationTuple($this->realm, new ResourceRef('page', '1'), 'editor', self::principal('ada'))));
 
-        $this->expectException(IntegratorError::class);
-        Subject::parse('group:editors#Bad');
+        foreach ([static fn () => Subject::parse('group:editors#Bad'), static fn () => Subject::parse('group:editors#member#more'), static fn () => new RelationTuple(new Realm('acme'), new ResourceRef('page', '1'), 'Bad', Subject::parse('principal:ada'))] as $invalid) {
+            try {
+                $invalid();
+                self::fail('It was taken.');
+            } catch (IntegratorError $error) {
+                self::assertStringStartsWith('The relation name "', $error->getMessage());
+            }
+        }
+
+        self::assertSame('The groups of a principal go deeper than the 16 levels relations are followed.', new \YorvoID\Relations\TooDeep('The groups of a principal')->getMessage());
     }
 
     private function relations(int $maxDepth = Relations::MAX_DEPTH): Relations

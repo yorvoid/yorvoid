@@ -108,7 +108,7 @@ final readonly class NoEscalation implements ForbidElement
      */
     private function abilities(Request $request, array $abilities): Truth
     {
-        $missing = array_values(array_filter($this->roles->missing($request, array_unique($abilities)), fn (string $ability): bool => !$this->related($request, $ability)));
+        $missing = array_filter($this->roles->missing($request, array_unique($abilities)), fn (string $ability): bool => !$this->related($request, $ability));
 
         return [] === $missing
             ? Truth::fails('They hold everything they change.')

@@ -104,7 +104,10 @@ trait RelationStoreContract
         $store->add(new RelationTuple($acme, new ResourceRef('principal', 'ada'), 'manager', $bob));
         $store->add(new RelationTuple(new Realm('other'), $page, 'editor', $ada));
 
+        $store->add(new RelationTuple(new Realm('other'), $page, 'editor', $bob));
+        $store->add(new RelationTuple(new Realm('other'), new ResourceRef('page', '9'), 'editor', $ada));
         self::assertTrue($store->remove(new RelationTuple($acme, $page, 'editor', $bob)));
+        self::assertSame(['page:1#editor@principal:ada', 'page:1#editor@principal:bob'], self::strings($store->of(new Realm('other'), $page)), 'Another realm\'s stays.');
         self::assertFalse($store->remove(new RelationTuple($acme, $page, 'editor', $bob)));
         self::assertFalse($store->remove(new RelationTuple($acme, $page, 'editor', new Subject(new ResourceRef('principal', 'ada'), 'member'))), 'A subject set isn\'t its resource.');
         self::assertSame(['page:1#editor@principal:ada'], self::strings($store->of($acme, $page)));
@@ -112,7 +115,8 @@ trait RelationStoreContract
         $store->forget($acme, $ada->resource);
         self::assertSame([], $store->of($acme, $page), 'As a subject.');
         self::assertSame([], $store->of($acme, new ResourceRef('principal', 'ada')), 'As an object.');
-        self::assertCount(1, $store->of(new Realm('other'), $page), 'Another realm\'s stay.');
+        self::assertCount(2, $store->of(new Realm('other'), $page), 'Another realm\'s stay.');
+        self::assertCount(1, $store->of(new Realm('other'), new ResourceRef('page', '9')), 'As a subject too.');
     }
 
     /**

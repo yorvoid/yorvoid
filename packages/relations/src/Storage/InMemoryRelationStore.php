@@ -9,63 +9,54 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryStore;
 use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationTuple;
-use YorvoID\Relations\Subject;
 
 /**
- * @implements InMemoryStore<array<string, RelationTuple>>
+ * @implements InMemoryStore<array<string, array<string, RelationTuple>>>
  *
  * @api
  */
 final class InMemoryRelationStore implements RelationStore, InMemoryStore
 {
-    /** @var array<string, RelationTuple> By realm and tuple */
+    /** @var array<string, array<string, RelationTuple>> By realm, then as written */
     private array $tuples = [];
 
     public function add(RelationTuple $tuple): void
     {
-        $this->tuples[self::key($tuple)] = $tuple;
+        $this->tuples[$tuple->realm->name][(string) $tuple] = $tuple;
     }
 
     public function remove(RelationTuple $tuple): bool
     {
-        $had = isset($this->tuples[self::key($tuple)]);
-        unset($this->tuples[self::key($tuple)]);
+        $had = isset($this->tuples[$tuple->realm->name][(string) $tuple]);
+        unset($this->tuples[$tuple->realm->name][(string) $tuple]);
 
         return $had;
     }
 
     public function subjects(Realm $realm, array $of): array
     {
-        $wanted = [];
+        $wanted = array_map(static fn (array $pair): string => $pair[0].'#'.$pair[1], $of);
 
-        foreach ($of as [$object, $relation]) {
-            $wanted[$object.'#'.$relation] = true;
-        }
-
-        return self::sorted(array_filter($this->tuples, static fn (RelationTuple $tuple): bool => $tuple->realm->equals($realm) && isset($wanted[$tuple->object.'#'.$tuple->relation])));
+        return self::sorted(array_filter($this->tuples[$realm->name] ?? [], static fn (RelationTuple $tuple): bool => \in_array($tuple->object.'#'.$tuple->relation, $wanted, true)));
     }
 
     public function objects(Realm $realm, array $subjects, string $relation): array
     {
-        $wanted = [];
+        $wanted = array_map(strval(...), $subjects);
 
-        foreach ($subjects as $subject) {
-            $wanted[(string) $subject] = true;
-        }
-
-        return self::sorted(array_filter($this->tuples, static fn (RelationTuple $tuple): bool => $tuple->realm->equals($realm) && $tuple->relation === $relation && isset($wanted[(string) $tuple->subject])));
+        return self::sorted(array_filter($this->tuples[$realm->name] ?? [], static fn (RelationTuple $tuple): bool => $tuple->relation === $relation && \in_array((string) $tuple->subject, $wanted, true)));
     }
 
     public function of(Realm $realm, ResourceRef $object): array
     {
-        return self::sorted(array_filter($this->tuples, static fn (RelationTuple $tuple): bool => $tuple->realm->equals($realm) && $tuple->object->equals($object)));
+        return self::sorted(array_filter($this->tuples[$realm->name] ?? [], static fn (RelationTuple $tuple): bool => $tuple->object->equals($object)));
     }
 
     public function forget(Realm $realm, ResourceRef $resource): void
     {
-        foreach ($this->tuples as $key => $tuple) {
-            if ($tuple->realm->equals($realm) && ($tuple->object->equals($resource) || $tuple->subject->resource->equals($resource))) {
-                unset($this->tuples[$key]);
+        foreach ($this->tuples[$realm->name] ?? [] as $key => $tuple) {
+            if ($tuple->object->equals($resource) || $tuple->subject->resource->equals($resource)) {
+                unset($this->tuples[$realm->name][$key]);
             }
         }
     }
@@ -80,19 +71,14 @@ final class InMemoryRelationStore implements RelationStore, InMemoryStore
         $this->tuples = $snapshot;
     }
 
-    private static function key(RelationTuple $tuple): string
-    {
-        return $tuple->realm->name."\n".$tuple;
-    }
-
     /**
      * @param array<string, RelationTuple> $tuples
      *
-     * @return list<RelationTuple> By object, relation, then subject
+     * @return list<RelationTuple> As written, e.g. page:1#editor@principal:ada, sorted
      */
     private static function sorted(array $tuples): array
     {
-        usort($tuples, static fn (RelationTuple $a, RelationTuple $b): int => [(string) $a->object, $a->relation, (string) $a->subject] <=> [(string) $b->object, $b->relation, (string) $b->subject]);
+        usort($tuples, static fn (RelationTuple $a, RelationTuple $b): int => (string) $a <=> (string) $b);
 
         return $tuples;
     }

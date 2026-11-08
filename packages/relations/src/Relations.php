@@ -35,6 +35,10 @@ final readonly class Relations
         $seen = [];
 
         for ($depth = 0; $depth < $this->maxDepth; ++$depth) {
+            if ([] === $frontier) {
+                return false;
+            }
+
             // The relations implied on the same object need no reading.
             $pairs = [];
             /** @var array<string, list<string>> $parents Tuple key => the parents' relations they lead to */
@@ -49,7 +53,7 @@ final readonly class Relations
                     continue;
                 }
 
-                $seen[$key] = true;
+                $seen[$key] = $definition;
                 $pairs[$key] = [$current, $name];
 
                 foreach ($definition->impliedBy as $implied) {
@@ -57,13 +61,9 @@ final readonly class Relations
                 }
 
                 foreach ($definition->fromParents as $via => $parentRelation) {
-                    $pairs[$current.'#'.$via] ??= [$current, $via];
+                    $pairs[$current.'#'.$via] = [$current, $via];
                     $parents[$current.'#'.$via][] = $parentRelation;
                 }
-            }
-
-            if ([] === $pairs) {
-                return false;
             }
 
             foreach ($this->store->subjects($realm, array_values($pairs)) as $tuple) {
@@ -83,13 +83,9 @@ final readonly class Relations
                     $frontier[] = [$tuple->subject->resource, $parentRelation];
                 }
             }
-
-            if ([] === $frontier) {
-                return false;
-            }
         }
 
-        return null;
+        return [] === $frontier ? false : null;
     }
 
     /**
@@ -100,7 +96,7 @@ final readonly class Relations
     public function ancestors(Realm $realm, ResourceRef $resource, string $via = 'parent'): ?array
     {
         $ancestors = [];
-        $seen = [(string) $resource => true];
+        $seen = [(string) $resource => $resource];
         $frontier = [$resource];
 
         for ($depth = 0; $depth < $this->maxDepth; ++$depth) {
@@ -110,7 +106,7 @@ final readonly class Relations
                 $parent = $tuple->subject->resource;
 
                 if (!isset($seen[(string) $parent])) {
-                    $seen[(string) $parent] = true;
+                    $seen[(string) $parent] = $parent;
                     $ancestors[] = $parent;
                     $next[] = $parent;
                 }

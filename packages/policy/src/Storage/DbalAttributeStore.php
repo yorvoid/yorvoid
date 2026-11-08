@@ -39,7 +39,7 @@ final readonly class DbalAttributeStore implements AttributeStore
     public function set(Realm $realm, PrincipalId $principalId, string $name, string|int|bool|array $value): void
     {
         $this->remove($realm, $principalId, $name);
-        $this->database->connection->insert($this->table(), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122(), 'name' => $name, 'value' => json_encode($value, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE)]);
+        $this->database->connection->insert($this->table(), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122(), 'name' => $name, 'value' => json_encode($value, \JSON_THROW_ON_ERROR)]);
     }
 
     public function remove(Realm $realm, PrincipalId $principalId, string $name): bool

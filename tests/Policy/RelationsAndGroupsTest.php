@@ -247,6 +247,127 @@ final class RelationsAndGroupsTest extends TestCase
         self::assertSame([], $world->memory->relations->of($world->realm, new ResourceRef('page', '2')));
     }
 
+    public function testEachGroupChangeIsRecordedWithWhatChanged(): void
+    {
+        $world = new PolicyWorld();
+        $ada = $world->principal();
+        $version = static fn (): int => $world->memory->policy->version($world->realm);
+        $start = $version();
+        $world->asOperator(new CreateGroup($world->realm, 'writers', 'Writers'));
+        $world->asOperator(new AddGroupMember($world->realm, 'writers', self::subject($ada)));
+        $world->asOperator(new AssignGroupRole($world->realm, 'writers', 'manager', new ResourceRef('site', 'a')));
+        $world->asOperator(new UnassignGroupRole($world->realm, 'writers', 'manager', new ResourceRef('site', 'a')));
+        $world->asOperator(new RemoveGroupMember($world->realm, 'writers', self::subject($ada)));
+        self::assertSame($start + 5, $version(), 'Each change increments the policy version.');
+        $entries = \count(self::entries($world, 'yorvoid.group.'));
+
+        self::assertFalse($world->asOperator(new RemoveGroupMember($world->realm, 'writers', self::subject($ada))));
+        self::assertFalse($world->asOperator(new UnassignGroupRole($world->realm, 'writers', 'manager')));
+        self::assertCount($entries, self::entries($world, 'yorvoid.group.'), 'Nothing removed, nothing recorded.');
+        $world->asOperator(new DeleteGroup($world->realm, 'writers'));
+        self::assertSame($start + 8, $version());
+
+        self::assertSame([
+            ['label' => 'Writers'],
+            ['member' => (string) self::subject($ada)],
+            ['role' => 'manager', 'scope' => 'site:a'],
+            ['role' => 'manager', 'scope' => 'site:a'],
+            ['member' => (string) self::subject($ada)],
+            [],
+        ], array_map(static fn (LogEntry $entry): array => $entry->details, self::entries($world, 'yorvoid.group.')));
+
+        $world->asOperator(new AddRelation($world->realm, new ResourceRef('page', '1'), 'editor', self::subject($ada)));
+        $relations = \count(self::entries($world, 'yorvoid.relation.'));
+        self::assertFalse($world->asOperator(new RemoveRelation($world->realm, new ResourceRef('page', '1'), 'viewer', self::subject($ada))));
+        self::assertCount($relations, self::entries($world, 'yorvoid.relation.'), 'Nothing removed, nothing recorded.');
+    }
+
+    public function testAGroupsRolesAreItsOwnThenThoseOfTheGroupsItsWithin(): void
+    {
+        $world = new PolicyWorld();
+
+        foreach (['a', 'b', 'c'] as $group) {
+            $world->asOperator(new CreateGroup($world->realm, $group, strtoupper($group)));
+        }
+
+        $world->asOperator(new AddGroupMember($world->realm, 'b', GroupRelations::members('a')));
+        $world->asOperator(new AddGroupMember($world->realm, 'c', GroupRelations::members('a')));
+        $world->asOperator(new AssignGroupRole($world->realm, 'a', 'editor'));
+        $world->asOperator(new AssignGroupRole($world->realm, 'b', 'editor'));
+        $world->asOperator(new AssignGroupRole($world->realm, 'c', 'member'));
+
+        self::assertSame(['editor', 'member'], $world->roles->rolesOfGroup($world->realm, 'a'), 'Each once.');
+
+        $this->expectException(InvalidRole::class);
+        $world->asOperator(new AddGroupMember($world->realm, 'a', new Subject(GroupRelations::group('b'))));
+    }
+
+    public function testRelationsTooDeepForAChangeAreNeverAPermit(): void
+    {
+        $world = new PolicyWorld(maxDepth: 2, stepUp: new StubStepUpCheck());
+        $world->asOperator(new GrantAbilities($world->realm, 'manager', [YorvoIDDeclarations::ROLES_MANAGE, YorvoIDDeclarations::RELATIONS_MANAGE]));
+        $manager = $world->principal('manager');
+
+        foreach (['a', 'b', 'c'] as $group) {
+            $world->asOperator(new CreateGroup($world->realm, $group, strtoupper($group)));
+        }
+
+        $world->asOperator(new AddGroupMember($world->realm, 'b', GroupRelations::members('a')));
+        $world->asOperator(new AddGroupMember($world->realm, 'c', GroupRelations::members('b')));
+        $world->asOperator(new AddGroupMember($world->realm, 'a', self::subject($world->principal())));
+
+        foreach (['The groups "a" is within go deeper' => new AddGroupMember($world->realm, 'a', self::subject($manager))] as $why => $command) {
+            try {
+                $world->as($manager, $command);
+                self::fail($why);
+            } catch (NotPermitted $refused) {
+                self::assertSame(Verdict::Indeterminate, $refused->decision->verdict);
+                self::assertStringContainsString($why, $refused->decision->reason);
+            }
+        }
+
+        $world->asOperator(new AddGroupMember($world->realm, 'a', self::subject($manager)));
+        self::assertStringContainsString('The groups of a principal go deeper', $world->decide($manager, 'acme.pages.view')->reason);
+    }
+
+    public function testEscalationEdges(): void
+    {
+        $world = new PolicyWorld(maxDepth: 2, stepUp: new StubStepUpCheck());
+        $world->asOperator(new GrantAbilities($world->realm, 'manager', [YorvoIDDeclarations::ROLES_MANAGE, YorvoIDDeclarations::RELATIONS_MANAGE]));
+        $manager = $world->principal('manager');
+        $admin = $world->principal('admin');
+        $world->asOperator(new CreateGroup($world->realm, 'writers', 'Writers'));
+        $world->asOperator(new AssignGroupRole($world->realm, 'writers', 'editor'));
+
+        try {
+            $world->as($manager, new UnassignGroupRole($world->realm, 'writers', 'editor'));
+            self::fail('A manager took a role it doesn\'t hold.');
+        } catch (NotPermitted $refused) {
+            self::assertStringStartsWith('A forbid applies: They\'d change what they don\'t hold', $refused->decision->reason);
+        }
+
+        // Without relations, a relation's abilities aren't known: none is given.
+        $roles = new \YorvoID\Policy\Roles(\YorvoID\Policy\PolicyCatalogue::of([new YorvoIDDeclarations(), new Fixtures\AcmeDeclarations()]), $world->memory->policy);
+        $request = \YorvoID\Core\Authorization\Request::forOperation($world->catalogue->get('yorvoid.relation.add'), new AddRelation($world->realm, new ResourceRef('page', '1'), 'editor', self::subject($manager)), $manager, new \YorvoID\Core\Event\Origin(\YorvoID\Core\Event\OriginKind::Web), new \DateTimeImmutable());
+        self::assertSame('They hold everything they change.', new \YorvoID\Policy\NoEscalation($roles)->evaluate($request)->detail);
+
+        // A relation too deep to tell what they hold is never a Permit.
+        for ($i = 0; $i < 3; ++$i) {
+            $world->asOperator(new AddRelation($world->realm, new ResourceRef('page', 'p'.$i), 'parent', new Subject(new ResourceRef('page', 'p'.($i + 1)))));
+        }
+
+        $deep = $world->decide($manager, 'acme.pages.view_drafts', new ResourceRef('page', 'p0'));
+        self::assertSame(Verdict::Indeterminate, $deep->verdict);
+        $details = implode(' | ', array_map(static fn (\YorvoID\Core\Authorization\Reason $reason): string => $reason->truth->detail, $deep->reasons));
+        self::assertStringContainsString('Their relations to page:p0 go deeper', $details);
+        self::assertStringContainsString('The parents of page:p0 go deeper', $details);
+
+        // A group's role that isn't a role (any more) is no super role.
+        $world->memory->policy->assignGroup(new \YorvoID\Policy\GroupRoleAssignment($world->realm, 'writers', 'ghost', new \DateTimeImmutable()));
+        $world->as($admin, new AddGroupMember($world->realm, 'writers', self::subject($world->principal())));
+        $this->addToAssertionCount(1);
+    }
+
     private static function id(Actor $actor): PrincipalId
     {
         \assert(null !== $actor->principalId);

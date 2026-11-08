@@ -136,11 +136,11 @@ final readonly class DbalRelationStore implements RelationStore
     /**
      * @param list<RelationTuple> $tuples
      *
-     * @return list<RelationTuple> By object, relation, then subject
+     * @return list<RelationTuple> As written, e.g. page:1#editor@principal:ada, sorted
      */
     private static function sorted(array $tuples): array
     {
-        usort($tuples, static fn (RelationTuple $a, RelationTuple $b): int => [(string) $a->object, $a->relation, (string) $a->subject] <=> [(string) $b->object, $b->relation, (string) $b->subject]);
+        usort($tuples, static fn (RelationTuple $a, RelationTuple $b): int => (string) $a <=> (string) $b);
 
         return $tuples;
     }

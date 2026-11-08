@@ -65,6 +65,49 @@ final class AttributesTest extends TestCase
         self::assertSame(Verdict::Indeterminate, $world->decide($ada, 'acme.pages.publish')->verdict, 'Removed.');
     }
 
+    public function testThePrincipalsAttributesAreReadOncePerRequest(): void
+    {
+        $store = new class(new InMemoryAttributeStore()) implements \YorvoID\Policy\Attribute\AttributeStore {
+            public int $reads = 0;
+
+            public function __construct(
+                private readonly InMemoryAttributeStore $store,
+            ) {
+            }
+
+            public function of(\YorvoID\Core\Realm $realm, PrincipalId $principalId): array
+            {
+                ++$this->reads;
+
+                return $this->store->of($realm, $principalId);
+            }
+
+            public function set(\YorvoID\Core\Realm $realm, PrincipalId $principalId, string $name, string|int|bool|array $value): void
+            {
+                $this->store->set($realm, $principalId, $name, $value);
+            }
+
+            public function remove(\YorvoID\Core\Realm $realm, PrincipalId $principalId, string $name): bool
+            {
+                return $this->store->remove($realm, $principalId, $name);
+            }
+
+            public function forget(\YorvoID\Core\Realm $realm, PrincipalId $principalId): void
+            {
+                $this->store->forget($realm, $principalId);
+            }
+        };
+        $ada = new PrincipalId(new UuidV7());
+        $store->set(new \YorvoID\Core\Realm('acme'), $ada, 'acme.department', 'R&D');
+        $store->set(new \YorvoID\Core\Realm('acme'), $ada, 'acme.clearance', 3);
+        $attributes = new Attributes([new AcmeAttributes()], $store);
+        $request = Request::forAbility('acme.pages.view', new \YorvoID\Core\Realm('acme'), null, new \YorvoID\Tests\Core\Operation\Fixtures\Badges\Member(new \YorvoID\Core\Realm('acme'), $ada), new Origin(OriginKind::Web), new \DateTimeImmutable());
+
+        self::assertSame('R&D', $attributes->principal($request, 'acme.department'));
+        self::assertSame(3, $attributes->principal($request, 'acme.clearance'));
+        self::assertSame(1, $store->reads);
+    }
+
     public function testResolversAnswerForTheRequest(): void
     {
         $office = new class implements AttributeResolver {

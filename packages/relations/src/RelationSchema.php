@@ -102,7 +102,7 @@ final readonly class RelationSchema
                 continue;
             }
 
-            $seen[$name] = true;
+            $seen[$name] = $definition;
             array_push($abilities, ...$definition->grants);
 
             foreach ($this->types[$type]->relations ?? [] as $other) {
