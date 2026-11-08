@@ -13,6 +13,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Row;
 use YorvoID\Policy\AbilityChanges;
+use YorvoID\Policy\GroupRoleAssignment;
 use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\RoleAssignment;
 
@@ -31,6 +32,10 @@ final readonly class DbalPolicyStore implements PolicyStore
     public const string ASSIGNMENT_TABLE = 'policy_role_assignment';
 
     public const string VERSION_TABLE = 'policy_version';
+
+    public const string GROUP_TABLE = 'policy_group';
+
+    public const string GROUP_ASSIGNMENT_TABLE = 'policy_group_role_assignment';
 
     private const array TIMES = ['assigned_at' => Types::DATETIMETZ_IMMUTABLE, 'expires_at' => Types::DATETIMETZ_IMMUTABLE];
 
@@ -136,6 +141,75 @@ final readonly class DbalPolicyStore implements PolicyStore
     public function unassignRole(Realm $realm, string $role): void
     {
         $this->database->connection->delete($this->table(self::ASSIGNMENT_TABLE), ['realm' => $realm->name, 'role' => $role]);
+        $this->database->connection->delete($this->table(self::GROUP_ASSIGNMENT_TABLE), ['realm' => $realm->name, 'role' => $role]);
+    }
+
+    public function groups(Realm $realm): array
+    {
+        $groups = [];
+
+        foreach ($this->database->connection->iterateAssociative(\sprintf('SELECT name, label FROM %s WHERE realm = ? ORDER BY name', $this->table(self::GROUP_TABLE)), [$realm->name]) as $row) {
+            $groups[Row::string($row, 'name')] = Row::string($row, 'label');
+        }
+
+        return $groups;
+    }
+
+    public function saveGroup(Realm $realm, string $name, string $label): void
+    {
+        if (0 === $this->database->connection->update($this->table(self::GROUP_TABLE), ['label' => $label], ['realm' => $realm->name, 'name' => $name])) {
+            $this->database->connection->insert($this->table(self::GROUP_TABLE), ['realm' => $realm->name, 'name' => $name, 'label' => $label]);
+        }
+    }
+
+    public function deleteGroup(Realm $realm, string $name): void
+    {
+        $this->database->connection->delete($this->table(self::GROUP_ASSIGNMENT_TABLE), ['realm' => $realm->name, 'group_name' => $name]);
+        $this->database->connection->delete($this->table(self::GROUP_TABLE), ['realm' => $realm->name, 'name' => $name]);
+    }
+
+    public function groupAssignments(Realm $realm, array $groups): array
+    {
+        if ([] === $groups) {
+            return [];
+        }
+
+        $assignments = [];
+
+        foreach ($this->database->connection->iterateAssociative(
+            \sprintf('SELECT group_name, role, scope, assigned_at, expires_at FROM %s WHERE realm = ? AND group_name IN (%s) ORDER BY group_name, role, scope', $this->table(self::GROUP_ASSIGNMENT_TABLE), implode(', ', array_fill(0, \count($groups), '?'))),
+            [$realm->name, ...$groups],
+        ) as $row) {
+            $scope = Row::string($row, 'scope');
+            $assignments[] = new GroupRoleAssignment(
+                $realm,
+                Row::string($row, 'group_name'),
+                Row::string($row, 'role'),
+                $this->time($row['assigned_at']),
+                '' === $scope ? null : ResourceRef::parse($scope),
+                null === $row['expires_at'] ? null : $this->time($row['expires_at']),
+            );
+        }
+
+        return $assignments;
+    }
+
+    public function assignGroup(GroupRoleAssignment $assignment): void
+    {
+        $this->unassignGroup($assignment->realm, $assignment->group, $assignment->role, $assignment->scope);
+        $this->database->connection->insert($this->table(self::GROUP_ASSIGNMENT_TABLE), [
+            'realm' => $assignment->realm->name,
+            'group_name' => $assignment->group,
+            'role' => $assignment->role,
+            'scope' => (string) $assignment->scope,
+            'assigned_at' => $assignment->assignedAt,
+            'expires_at' => $assignment->expiresAt,
+        ], self::TIMES);
+    }
+
+    public function unassignGroup(Realm $realm, string $group, string $role, ?ResourceRef $scope): bool
+    {
+        return 0 < $this->database->connection->delete($this->table(self::GROUP_ASSIGNMENT_TABLE), ['realm' => $realm->name, 'group_name' => $group, 'role' => $role, 'scope' => (string) $scope]);
     }
 
     public function forgetPrincipal(Realm $realm, PrincipalId $principalId): void

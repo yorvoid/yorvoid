@@ -35,6 +35,7 @@ use YorvoID\Passkeys\Translations as PasskeysTranslations;
 use YorvoID\Policy\PolicyDeclarations;
 use YorvoID\Policy\RoleSource;
 use YorvoID\Policy\Rule\Rule;
+use YorvoID\Relations\RelationDeclarations;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Debug\SecretCaster;
 use YorvoID\Symfony\Flow\FlowCustomizer;
@@ -172,6 +173,7 @@ final class YorvoIDBundle extends AbstractBundle
         $builder->registerForAutoconfiguration(PolicyDeclarations::class)->addTag('yorvoid.policy_declarations');
         $builder->registerForAutoconfiguration(Rule::class)->addTag('yorvoid.rule');
         $builder->registerForAutoconfiguration(RoleSource::class)->addTag('yorvoid.role_source');
+        $builder->registerForAutoconfiguration(RelationDeclarations::class)->addTag('yorvoid.relation_declarations');
         $builder->registerForAutoconfiguration(FlowSource::class)->addTag('yorvoid.flow_source');
 
         // The flow pages' translations, when the application renders them with Twig.

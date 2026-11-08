@@ -39,6 +39,8 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 ### Fixed
 
 - The packages require each other at the version they're released with (`^0.4` for 0.4), so a release installs as a set. 0.2.0 and 0.3.0 required `^0.1` of each other and don't install together from Packagist: stay on 0.1.0, or take 0.4.0. Every release now checks this before it's published, and installs from Packagist afterwards.
+- `yorvoid/relations`: relations between resources (ReBAC, AUZ-011): declared per resource type, implied by others, inherited from parents, to subject sets; checked a level at a time and at most 16 levels deep (`Relations`), with abilities they give on their resource (`RelationPermit`) and changes through `yorvoid.relation.add` and `.remove`. A role on a resource counts for what's within it ([relations](docs/concepts/authorization.md#relations)).
+- Groups (IDN-056): nested, with roles given to them (`yorvoid.group.*`, `GroupChanges`, `GroupRelations`).
 
 ## 0.3.0 (2026-11-06)
 

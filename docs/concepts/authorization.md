@@ -115,6 +115,49 @@ Two rules hold for everyone but the host's operator:
 - **Nobody gives what they don't hold** (`NoEscalation`): a role whose abilities they don't all have, a super role unless they have one, an ability they lack.
 - **Giving a strict ability or a super role takes a recent proof** of who one is (AUZ-052): the role permit asks a `StepUpCheck` (in Symfony, the session's step-up, within `step_up.window`), and a refusal carries a `StepUpRemedy`. Without a `StepUpCheck`, only the operator gives them.
 
+## Relations
+
+Relations (`yorvoid/relations`) say how people and resources relate, e.g. Ada is an editor of page 42, or site 42's parent is server 1. Each resource type declares its relations, in a service implementing `RelationDeclarations`:
+
+```php
+use YorvoID\Relations\RelationDeclarations;
+use YorvoID\Relations\RelationDefinition;
+use YorvoID\Relations\ResourceType;
+
+final readonly class AcmeRelations implements RelationDeclarations
+{
+    public function types(): iterable
+    {
+        yield new ResourceType('page', [
+            new RelationDefinition('parent'),
+            new RelationDefinition('editor', grants: ['acme.pages.publish']),
+            new RelationDefinition('viewer', impliedBy: ['editor'], fromParents: ['parent' => 'viewer'], grants: ['acme.pages.view']),
+        ]);
+    }
+}
+```
+
+- **A relation can imply another** (`impliedBy`): an editor is a viewer.
+- **It can be inherited from a parent** (`fromParents`): whoever views a page's parent views the page.
+- **It can be to a set of subjects**: `group:writers#member` is every member of the group, so `page:42#editor@group:writers#member` makes them all editors.
+- **It gives abilities on its resource** (`grants`): the relation permit (`RelationPermit`) lets an editor of page 42 publish page 42, and no other page.
+
+Relations are added and removed with `AddRelation` and `RemoveRelation` (`yorvoid.relation.add`, `.remove`, ability `yorvoid.relations.manage`), each recorded in the security log; nobody gives a relation that gives what they don't hold on the resource themselves. A deleted principal's relations go.
+
+A role assigned on a resource also counts for what's within it, through `parent`: a manager of server 1 manages its sites. Relations are followed a level at a time, one query per level, at most 16 levels deep (`Relations::MAX_DEPTH`); what goes deeper can't be told, and the decision is Indeterminate, never a Permit.
+
+## Groups
+
+A group's members are principals, or another group's members, so groups nest. A role given to a group (`AssignGroupRole`) is every member's: in the whole realm, or on one resource, with an expiry.
+
+| Operation | Command |
+|---|---|
+| `yorvoid.group.create`, `.delete` | `CreateGroup` (again: relabels it), `DeleteGroup` (its members leave it, its roles go) |
+| `yorvoid.group.add_member`, `.remove_member` | `AddGroupMember`, `RemoveGroupMember`, with `Subject::principal($id)` or `GroupRelations::members('writers')` |
+| `yorvoid.group.assign_role`, `.unassign_role` | `AssignGroupRole`, `UnassignGroupRole` |
+
+They need `yorvoid.roles.manage`. Adding someone to a group gives them its roles, so the same rules hold as for giving a role: nobody adds a member to a group with a role they don't hold, and a group with a super role takes a recent proof. Groups are relations of the type `group` (`GroupRelations`, which the Symfony bundle declares).
+
 ## Resources
 
 A request may be about one resource, by its type and ID (`ResourceRef`, e.g. `site:42`); YorvoID never loads it. A role assigned on that resource counts for the request. A command about one resource implements `ConcernsResource`, and isGranted()'s subject is the resource when it's a `ResourceRef` or a `ConcernsResource`.

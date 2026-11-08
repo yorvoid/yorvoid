@@ -31,7 +31,8 @@
         "doctrine/dbal": "^4.3",
         "psr/clock": "^1.0",
         "symfony/clock": "^7.4 || ^8.1",
-        "yorvoid/core": "^0.4"
+        "yorvoid/core": "^0.4",
+        "yorvoid/relations": "^0.4"
     },
     "autoload": {
         "psr-4": {

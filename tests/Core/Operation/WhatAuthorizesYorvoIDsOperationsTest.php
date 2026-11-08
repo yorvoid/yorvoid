@@ -37,6 +37,12 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.credential.remove' => ['self'],
         'yorvoid.credential.rename' => ['self'],
         'yorvoid.email_verification.confirm' => ['authentication'],
+        'yorvoid.group.add_member' => ['ability', 'operator'],
+        'yorvoid.group.assign_role' => ['ability', 'operator'],
+        'yorvoid.group.create' => ['ability', 'operator'],
+        'yorvoid.group.delete' => ['ability', 'operator'],
+        'yorvoid.group.remove_member' => ['ability', 'operator'],
+        'yorvoid.group.unassign_role' => ['ability', 'operator'],
         'yorvoid.identifier.remove' => ['self', 'ability', 'operator'],
         'yorvoid.identifier.set' => ['self', 'ability', 'operator'],
         'yorvoid.identifier.verify' => ['consequence'],
@@ -56,6 +62,8 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.recovery_codes.generate' => ['self'],
         'yorvoid.recovery_link.issue' => ['ability', 'operator'],
         'yorvoid.recovery_link.use' => ['authentication'],
+        'yorvoid.relation.add' => ['ability', 'operator'],
+        'yorvoid.relation.remove' => ['ability', 'operator'],
         'yorvoid.role.assign' => ['ability', 'operator'],
         'yorvoid.role.create' => ['ability', 'operator'],
         'yorvoid.role.delete' => ['ability', 'operator'],
@@ -147,7 +155,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
             }
         }
 
-        self::assertCount(40, $commands, 'The operations moved.');
+        self::assertCount(48, $commands, 'The operations moved.');
 
         return $commands;
     }

@@ -15,6 +15,8 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Policy\Change\AddGroupMember;
+use YorvoID\Policy\Change\AssignGroupRole;
 use YorvoID\Policy\Change\AssignRole;
 use YorvoID\Policy\Change\CreateRole;
 use YorvoID\Policy\Change\GrantAbilities;
@@ -95,8 +97,16 @@ final readonly class RolePermit implements PermitElement, ChecksCatalogue
     {
         $command = $request->command;
 
-        if ($command instanceof AssignRole && true === $this->roles->role($request->realm, $command->role)?->super) {
+        if (($command instanceof AssignRole || $command instanceof AssignGroupRole) && true === $this->roles->role($request->realm, $command->role)?->super) {
             return \sprintf('Giving the super role "%s"', $command->role);
+        }
+
+        if ($command instanceof AddGroupMember) {
+            foreach ($this->roles->rolesOfGroup($request->realm, $command->group) as $role) {
+                if (true === $this->roles->role($request->realm, $role)?->super) {
+                    return \sprintf('Giving the super role "%s" through the group "%s"', $role, $command->group);
+                }
+            }
         }
 
         $given = match (true) {

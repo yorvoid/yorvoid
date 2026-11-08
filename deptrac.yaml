@@ -35,6 +35,10 @@ deptrac:
       collectors:
         - type: classLike
           value: ^YorvoID\\Policy\\.*
+    - name: Relations
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Relations\\.*
     - name: Symfony
       collectors:
         - type: classLike
@@ -98,9 +102,13 @@ deptrac:
       - Notifications
       - Passkeys
       - Policy
+      - Relations
       - Throttle
       - Translation
     Policy:
+      - Core
+      - Relations
+    Relations:
       - Core
     Throttle:
       - Core
@@ -115,6 +123,7 @@ deptrac:
       - Flows
       - Passkeys
       - Policy
+      - Relations
       - Symfony
       - Throttle
       - VirtualAuthenticator
