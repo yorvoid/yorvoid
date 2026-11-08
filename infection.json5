@@ -40,6 +40,8 @@
         },
         "DecrementInteger": {
             "ignoreSourceCodeByRegex": [
+                // Equivalent: see LessThan.
+                ".*\\$this->sampleRate \\* 0x100000000.*",
                 // Equivalent: any size of block finds the same last line, a block or two later.
                 ".*private const int BLOCK = 4096;.*",
                 // Equivalent: any size of batch deletes the same rows, in more or fewer statements.
@@ -108,6 +110,8 @@
         },
         "LessThan": {
             "ignoreSourceCodeByRegex": [
+                // Equivalent: a hash's first 32 bits equal the threshold exactly once in 2^32 requests.
+                ".*PermitRecording::Sampled => hexdec\\(.*",
                 // Equivalent: two readings of a microsecond clock are never exactly equal in practice.
                 ".*microtime\\(true\\) < \\$deadline.*",
                 // Equivalent: see DecrementInteger.
@@ -116,6 +120,8 @@
         },
         "IncrementInteger": {
             "ignoreSourceCodeByRegex": [
+                // Equivalent: see LessThan; a threshold one in 2^32 higher or lower.
+                ".*\\$this->sampleRate \\* 0x100000000.*",
                 // Equivalent: see DecrementInteger.
                 ".*private const int BLOCK = 4096;.*",
                 ".*public function deleteInBatches\\(.*int \\$batch = 10_000\\).*",

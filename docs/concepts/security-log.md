@@ -87,3 +87,31 @@ $verification = $checkpoints->verify(Realm::default(), $file->read(Realm::defaul
 - A checkpoint the ring's keys didn't sign, or a line of the file that isn't one, fails verification. Keep the keys a checkpoint was signed with in the ring, verify-only, as long as you keep the checkpoint.
 
 In Symfony, set `yorvoid.log.checkpoint_file` (or `checkpoint_logger`) next to `yorvoid.keys.file`, and run `yorvoid:log:checkpoint` from cron; `yorvoid:log:verify` checks the chain and the checkpoints. `yorvoid:doctor` warns outside development while there are none, or the newest is more than a day old.
+
+## The decision log
+
+Decisions are recorded apart from the security log, in `yorvoid_authorization_decision`. Each record holds the decision's ID, time, realm, the operation or ability, the acting principal, the resource, the verdict and its basis, the summary reason, why it couldn't decide, the remedies' names, each element's name and truth value (never their texts, which can hold data), the versions it read and the origin. It's hashed over a versioned canonical form.
+
+It isn't a chain, and recording takes no lock: every request asks for decisions, reads included, and none waits for the realm's log or for each other.
+
+What's recorded, and when:
+
+- **An operation's decision**, whatever it is, at once and before the operation runs, in a statement of its own. The operation's transaction starts afterwards, so a change rolled back still has its decision; if you call `Operations::run()` inside a transaction of your own, the decision is part of yours. If it can't be written, the operation doesn't run.
+- **An ability's refusal or Indeterminate**, always, and its permit as configured: none by default, all, or a sampled share of requests, chosen per correlation ID so a request is recorded whole or not at all. An ability declared with `recordsPermits: true` records its permits whatever the configuration, e.g. one for explaining someone else's access.
+- Abilities' records wait for the end of what asked for them and are written together: call `DecisionLog::flush()` when a request, command or job ends (in Symfony, `kernel.terminate`, `console.terminate` and Messenger's handled and failed messages do), and whenever 100 are waiting. That's best effort: a process that dies before then loses them, and a write that fails is logged as an error, not thrown.
+
+```php
+use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
+use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
+use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
+use YorvoID\Core\Authorization\Evaluator;
+
+$decisions = new DecisionLog(new DbalDecisionLogStore($database), PermitRecording::Sampled, sampleRate: 0.01);
+$evaluator = Evaluator::builtIn($authority, versions: [$policyVersion, $relationsVersion], decisions: $decisions);
+```
+
+Every security-log entry recorded while an operation runs, and the entry of an operation refused, cites the decision in its details: `decision: {id, hash}`. Its consequences cite the same one. The chain then proves which decision allowed each change, and a decision record changed afterwards no longer matches the hash the chain holds.
+
+Old decisions are pruned by `yorvoid:purge` (`--keep-decisions`, 90 days by default), or `DecisionLog::purge()`. The security log keeps the hashes of those it cites.
+
+In Symfony, `yorvoid.decision_log.permits` (`none`, `sampled` or `all`) and `sample_rate` configure it. A `DecisionLogStore` of your own passes `DecisionLogStoreContract` ([storage](storage.md#stores-of-your-own)).

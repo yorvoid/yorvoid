@@ -11,7 +11,7 @@ use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationTuple;
 
 /**
- * @implements InMemoryStore<array<string, array<string, RelationTuple>>>
+ * @implements InMemoryStore<array{tuples?: array<string, array<string, RelationTuple>>, versions?: array<string, int>}>
  *
  * @api
  */
@@ -20,17 +20,27 @@ final class InMemoryRelationStore implements RelationStore, InMemoryStore
     /** @var array<string, array<string, RelationTuple>> By realm, then as written */
     private array $tuples = [];
 
+    /** @var array<string, int> By realm */
+    private array $versions = [];
+
     public function add(RelationTuple $tuple): void
     {
-        $this->tuples[$tuple->realm->name][(string) $tuple] = $tuple;
+        if (!isset($this->tuples[$tuple->realm->name][(string) $tuple])) {
+            $this->tuples[$tuple->realm->name][(string) $tuple] = $tuple;
+            $this->bump($tuple->realm);
+        }
     }
 
     public function remove(RelationTuple $tuple): bool
     {
-        $had = isset($this->tuples[$tuple->realm->name][(string) $tuple]);
-        unset($this->tuples[$tuple->realm->name][(string) $tuple]);
+        if (!isset($this->tuples[$tuple->realm->name][(string) $tuple])) {
+            return false;
+        }
 
-        return $had;
+        unset($this->tuples[$tuple->realm->name][(string) $tuple]);
+        $this->bump($tuple->realm);
+
+        return true;
     }
 
     public function subjects(Realm $realm, array $of): array
@@ -54,21 +64,39 @@ final class InMemoryRelationStore implements RelationStore, InMemoryStore
 
     public function forget(Realm $realm, ResourceRef $resource): void
     {
+        $removed = 0;
+
         foreach ($this->tuples[$realm->name] ?? [] as $key => $tuple) {
             if ($tuple->object->equals($resource) || $tuple->subject->resource->equals($resource)) {
                 unset($this->tuples[$realm->name][$key]);
+                ++$removed;
             }
         }
+
+        if (0 < $removed) {
+            $this->bump($realm);
+        }
+    }
+
+    public function version(Realm $realm): int
+    {
+        return $this->versions[$realm->name] ?? 0;
     }
 
     public function snapshot(): mixed
     {
-        return $this->tuples;
+        return ['tuples' => $this->tuples, 'versions' => $this->versions];
     }
 
     public function restore(mixed $snapshot): void
     {
-        $this->tuples = $snapshot;
+        $this->tuples = $snapshot['tuples'] ?? [];
+        $this->versions = $snapshot['versions'] ?? [];
+    }
+
+    private function bump(Realm $realm): void
+    {
+        $this->versions[$realm->name] = ($this->versions[$realm->name] ?? 0) + 1;
     }
 
     /**

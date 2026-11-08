@@ -19,6 +19,8 @@ use YorvoID\Passkeys\ClonePolicy;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\UserVerification;
+use YorvoID\Policy\Ability;
+use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\Rule\Rule;
 use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Symfony\Controller\FlowController;
@@ -97,6 +99,16 @@ final class Factories
         }
 
         return $elements;
+    }
+
+    /**
+     * The abilities whose permits the decision log records whatever it's configured to.
+     *
+     * @return list<string>
+     */
+    public static function recordingPermits(PolicyCatalogue $catalogue): array
+    {
+        return array_values(array_map(static fn (Ability $ability): string => $ability->name, array_filter($catalogue->abilities(), static fn (Ability $ability): bool => $ability->recordsPermits)));
     }
 
     /**

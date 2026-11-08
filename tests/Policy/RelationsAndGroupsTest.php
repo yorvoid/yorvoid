@@ -66,7 +66,7 @@ final class RelationsAndGroupsTest extends TestCase
             ['yorvoid.relation.add', 'page', '1', ['relation' => 'editor', 'subject' => (string) self::subject($ada)]],
             ['yorvoid.relation.add', 'page', '1', ['relation' => 'editor', 'subject' => (string) self::subject($ada)]],
             ['yorvoid.relation.remove', 'page', '1', ['relation' => 'editor', 'subject' => (string) self::subject($ada)]],
-        ], array_map(static fn (LogEntry $entry): array => [$entry->action, $entry->subjectType, $entry->subjectId, $entry->details], self::entries($world, 'yorvoid.relation.')));
+        ], array_map(static fn (LogEntry $entry): array => [$entry->action, $entry->subjectType, $entry->subjectId, array_diff_key($entry->details, ['decision' => true])], self::entries($world, 'yorvoid.relation.')));
     }
 
     public function testOnlyDeclaredRelations(): void
@@ -145,8 +145,8 @@ final class RelationsAndGroupsTest extends TestCase
         self::assertSame(['juniors'], $world->roles->groupsOf($world->realm, self::id($ada)));
         self::assertSame([], $world->memory->policy->groupAssignments($world->realm, ['writers']));
         self::assertSame(['yorvoid.group.create', 'yorvoid.group.create', 'yorvoid.group.create', 'yorvoid.group.add_member', 'yorvoid.group.add_member', 'yorvoid.group.assign_role', 'yorvoid.group.assign_role', 'yorvoid.group.unassign_role', 'yorvoid.group.remove_member', 'yorvoid.group.add_member', 'yorvoid.group.delete'], array_map(static fn (LogEntry $entry): string => $entry->action, self::entries($world, 'yorvoid.group.')));
-        self::assertSame(['label' => 'Writers'], self::entries($world, 'yorvoid.group.')[0]->details);
-        self::assertSame(['role' => 'manager', 'scope' => 'site:a'], self::entries($world, 'yorvoid.group.')[6]->details);
+        self::assertSame(['label' => 'Writers'], array_diff_key(self::entries($world, 'yorvoid.group.')[0]->details, ['decision' => true]));
+        self::assertSame(['role' => 'manager', 'scope' => 'site:a'], array_diff_key(self::entries($world, 'yorvoid.group.')[6]->details, ['decision' => true]));
     }
 
     public function testGroupsAndTheirMembersAreChecked(): void
@@ -274,7 +274,7 @@ final class RelationsAndGroupsTest extends TestCase
             ['role' => 'manager', 'scope' => 'site:a'],
             ['member' => (string) self::subject($ada)],
             [],
-        ], array_map(static fn (LogEntry $entry): array => $entry->details, self::entries($world, 'yorvoid.group.')));
+        ], array_map(static fn (LogEntry $entry): array => array_diff_key($entry->details, ['decision' => true]), self::entries($world, 'yorvoid.group.')));
 
         $world->asOperator(new AddRelation($world->realm, new ResourceRef('page', '1'), 'editor', self::subject($ada)));
         $relations = \count(self::entries($world, 'yorvoid.relation.'));

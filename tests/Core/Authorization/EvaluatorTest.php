@@ -88,7 +88,7 @@ final class EvaluatorTest extends TestCase
         $first = $this->decide(array_values($elements));
         $reversed = $this->decide(array_reverse(array_values($elements)));
 
-        self::assertEquals($first, $reversed);
+        self::assertEquals([$first->verdict, $first->basis, $first->reason, $first->reasons, $first->remedies], [$reversed->verdict, $reversed->basis, $reversed->reason, $reversed->reasons, $reversed->remedies], 'Only its ID and time differ.');
         self::assertSame('a holds', $first->reason, 'The element first by name leads.');
         self::assertSame(['a', 'b', 'c', 'd', 'authority'], array_map(static fn (Reason $reason): string => $reason->source, $first->reasons));
         self::assertSame(['permit', 'permit', 'forbid', 'permit', 'authority'], array_map(static fn (Reason $reason): string => $reason->effect, $first->reasons));

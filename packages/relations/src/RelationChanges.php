@@ -20,6 +20,9 @@ use YorvoID\Relations\Change\RemoveRelation;
  * entry. Only relations the schema declares, to subjects whose relation it declares too.
  *
  * @api
+ *
+ * @experimental Outside the 1.0 promise until an application uses it directly: it may change in a
+ *               minor release ([compatibility](docs/compatibility.md)).
  */
 final readonly class RelationChanges implements OperationHandler
 {

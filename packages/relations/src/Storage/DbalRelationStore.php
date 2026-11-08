@@ -23,6 +23,8 @@ final readonly class DbalRelationStore implements RelationStore
 {
     public const string TABLE = 'relation_tuple';
 
+    public const string VERSION_TABLE = 'relation_version';
+
     /** Pairs per query: well within every platform's limit on parameters */
     private const int BATCH = 100;
 
@@ -39,12 +41,21 @@ final readonly class DbalRelationStore implements RelationStore
             $this->database->connection->insert($this->table(), ['realm' => $tuple->realm->name, ...self::columns($tuple)]);
         } catch (UniqueConstraintViolationException) {
             // It's there already.
+            return;
         }
+
+        $this->bump($tuple->realm);
     }
 
     public function remove(RelationTuple $tuple): bool
     {
-        return 0 < $this->database->connection->delete($this->table(), ['realm' => $tuple->realm->name, ...self::columns($tuple)]);
+        if (0 === $this->database->connection->delete($this->table(), ['realm' => $tuple->realm->name, ...self::columns($tuple)])) {
+            return false;
+        }
+
+        $this->bump($tuple->realm);
+
+        return true;
     }
 
     public function subjects(Realm $realm, array $of): array
@@ -92,8 +103,37 @@ final readonly class DbalRelationStore implements RelationStore
 
     public function forget(Realm $realm, ResourceRef $resource): void
     {
-        $this->database->connection->delete($this->table(), ['realm' => $realm->name, 'object_type' => $resource->type, 'object_id' => $resource->id]);
-        $this->database->connection->delete($this->table(), ['realm' => $realm->name, 'subject_type' => $resource->type, 'subject_id' => $resource->id]);
+        $removed = $this->database->connection->delete($this->table(), ['realm' => $realm->name, 'object_type' => $resource->type, 'object_id' => $resource->id])
+            + $this->database->connection->delete($this->table(), ['realm' => $realm->name, 'subject_type' => $resource->type, 'subject_id' => $resource->id]);
+
+        if (0 < $removed) {
+            $this->bump($realm);
+        }
+    }
+
+    public function version(Realm $realm): int
+    {
+        $row = $this->database->connection->fetchAssociative(\sprintf('SELECT version FROM %s WHERE realm = ?', $this->database->table(self::VERSION_TABLE)), [$realm->name]);
+
+        return false === $row ? 0 : Row::int($row, 'version');
+    }
+
+    /**
+     * The update holds the realm's row until the transaction ends, as the policy version's does.
+     */
+    private function bump(Realm $realm): void
+    {
+        $table = $this->database->table(self::VERSION_TABLE);
+        $increment = \sprintf('UPDATE %s SET version = version + 1 WHERE realm = ?', $table);
+
+        if (0 === $this->database->connection->executeStatement($increment, [$realm->name])) {
+            try {
+                $this->database->connection->insert($table, ['realm' => $realm->name, 'version' => 1]);
+            } catch (UniqueConstraintViolationException) {
+                // Another change made the row first.
+                $this->database->connection->executeStatement($increment, [$realm->name]);
+            }
+        }
     }
 
     /**

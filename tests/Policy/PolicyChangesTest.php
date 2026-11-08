@@ -80,7 +80,7 @@ final class PolicyChangesTest extends TestCase
             ['yorvoid.ability.reset', null, null, ['abilities' => ['acme.pages.view_drafts']]],
             ['yorvoid.ability.reset', null, null, ['abilities' => 'all']],
             ['yorvoid.role.delete', 'role', 'reviewer', []],
-        ], array_map(static fn (LogEntry $entry): array => [$entry->action, $entry->subjectType, $entry->subjectId, $entry->details], self::entries($world, 'yorvoid.role.', 'yorvoid.ability.')));
+        ], array_map(static fn (LogEntry $entry): array => [$entry->action, $entry->subjectType, $entry->subjectId, array_diff_key($entry->details, ['decision' => true])], self::entries($world, 'yorvoid.role.', 'yorvoid.ability.')));
 
         foreach (self::entries($world, 'yorvoid.role.', 'yorvoid.ability.') as $entry) {
             self::assertSame(Outcome::Success, $entry->outcome);

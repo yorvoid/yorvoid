@@ -76,6 +76,43 @@ trait RelationStoreContract
     }
 
     #[DataProvider('implementations')]
+    public function testEveryChangeIncrementsTheRealmsVersion(string $implementation): void
+    {
+        $store = $this->relationStore($implementation);
+        $acme = new Realm('acme');
+        $page = new ResourceRef('page', '1');
+        $ada = new Subject(new ResourceRef('principal', 'ada'));
+        $editor = new RelationTuple($acme, $page, 'editor', $ada);
+
+        self::assertSame(0, $store->version($acme));
+
+        $store->add($editor);
+        self::assertSame(1, $store->version($acme));
+        $store->add($editor);
+        self::assertSame(1, $store->version($acme), 'Adding one again changes nothing.');
+
+        $store->add(new RelationTuple($acme, $page, 'viewer', $ada));
+        self::assertTrue($store->remove($editor));
+        self::assertSame(3, $store->version($acme));
+        self::assertFalse($store->remove($editor));
+        self::assertSame(3, $store->version($acme), 'Removing what isn\'t there changes nothing.');
+
+        $store->forget($acme, new ResourceRef('page', '2'));
+        self::assertSame(3, $store->version($acme), 'Forgetting what has no tuples changes nothing.');
+        $store->forget($acme, $ada->resource);
+        self::assertSame(4, $store->version($acme));
+
+        $other = new Realm('other');
+        $store->add(new RelationTuple($other, $page, 'viewer', $ada));
+        $store->add(new RelationTuple($acme, $page, 'viewer', new Subject(new ResourceRef('principal', 'bob'))));
+        $store->forget($acme, $page);
+        self::assertSame(6, $store->version($acme), 'An add and a forget.');
+        self::assertSame(1, $store->version($other));
+        self::assertCount(1, $store->of($other, $page), 'Forgetting a resource in one realm leaves it in another.');
+        self::assertSame(0, $store->version(new Realm('globex')), 'Each realm has its own.');
+    }
+
+    #[DataProvider('implementations')]
     public function testFindsManyPairsAtOnce(string $implementation): void
     {
         $store = $this->relationStore($implementation);

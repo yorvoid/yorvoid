@@ -13,13 +13,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Duration;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Throttle\Throttle;
 
 /**
  * Removes what YorvoID no longer needs: ended sessions, used and expired tokens, expired ceremonies,
- * throttling state that's clear, ended cool-downs, devices not used for long. Run it daily.
+ * throttling state that's clear, ended cool-downs, devices not used for long, old decisions. Run it daily.
  *
  * @internal
  */
@@ -32,6 +33,7 @@ final class PurgeCommand extends Command
         private readonly Passkeys $passkeys,
         private readonly Throttle $throttle,
         private readonly StepUp $stepUp,
+        private readonly DecisionLog $decisions,
     ) {
         parent::__construct();
     }
@@ -40,6 +42,7 @@ final class PurgeCommand extends Command
     {
         $this->addOption('keep-sessions', null, InputOption::VALUE_REQUIRED, 'How long ended sessions stay listed, e.g. "30d"', '30d');
         $this->addOption('keep-devices', null, InputOption::VALUE_REQUIRED, 'How long an unused device stays known: longer than its cookie lives', '400d');
+        $this->addOption('keep-decisions', null, InputOption::VALUE_REQUIRED, 'How long the decision log keeps a decision; the security log keeps the hashes of those it cites', '90d');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -51,6 +54,7 @@ final class PurgeCommand extends Command
             'passkey ceremonies' => $this->passkeys->purge(),
             'throttling keys' => $this->throttle->purge(),
             'cool-downs' => $this->stepUp->purge(),
+            'decisions' => $this->decisions->purge(Duration::parse(Options::string($input->getOption('keep-decisions')))),
         ];
 
         new SymfonyStyle($input, $output)->success(implode(', ', array_map(static fn (string $what, int $count): string => \sprintf('%d %s', $count, $what), array_keys($purged), $purged)).'.');

@@ -6,14 +6,22 @@ namespace YorvoID\Tests\Symfony;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Event\TerminateEvent;
+use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\Security\Core\Authentication\Token\NullToken;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\VoterInterface;
+use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
+use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Migration\Migrator;
+use YorvoID\Core\Storage\Row;
 use YorvoID\Policy\Policy;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Symfony\Migrations;
@@ -68,6 +76,17 @@ final class PolicyVoterTest extends TestCase
         self::assertFalse($checker->isGranted('acme.pages.view', new LockedPage()), 'A subject that says which resource it concerns.');
         self::assertTrue($checker->isGranted('acme.pages.view_drafts', new ResourceRef('page', 'help')));
         self::assertFalse($checker->isGranted('acme.pages.view_drafts', new ResourceRef('page', 'other')));
+
+        // Refusals are recorded when the request ends; permits of abilities aren't, by default.
+        $table = $database->table(DbalDecisionLogStore::TABLE);
+        self::assertSame([], $database->connection->fetchFirstColumn(\sprintf('SELECT id FROM %s', $table)), 'They wait for the end of the request.');
+        $dispatcher = $container->get('event_dispatcher');
+        \assert($dispatcher instanceof EventDispatcherInterface);
+        $dispatcher->dispatch(new TerminateEvent($this->kernel ?? throw new \LogicException('Not booted.'), new Request(), new Response()), KernelEvents::TERMINATE);
+        $recorded = array_map(static fn (array $row): array => [Row::string($row, 'name'), Row::string($row, 'verdict'), DecisionRecord::fromJson(Row::string($row, 'content'))], $database->connection->fetchAllAssociative(\sprintf('SELECT name, verdict, content FROM %s ORDER BY name', $table)));
+        self::assertSame(['acme.pages.publish', 'acme.pages.view', 'acme.pages.view', 'acme.pages.view_drafts', 'acme.sites.update', 'yorvoid.principals.manage'], array_column($recorded, 0));
+        self::assertSame(['deny'], array_values(array_unique(array_column($recorded, 1))));
+        self::assertSame(['policy', 'relations'], array_keys($recorded[0][2]->versions), 'Each records the versions it read.');
 
         $voter = $container->get(PolicyVoter::class);
         \assert($voter instanceof PolicyVoter);

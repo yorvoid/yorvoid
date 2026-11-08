@@ -85,6 +85,9 @@ final class YorvoIDBundle extends AbstractBundle
         $children->arrayNode('log')->addDefaultsIfNotSet()->children()
             ->scalarNode('checkpoint_file')->defaultNull()->info('Where yorvoid:log:checkpoint appends signed checkpoints of the security log, out of the database user\'s reach, e.g. on another disk or host; needs keys.file')->end()
             ->booleanNode('checkpoint_logger')->defaultFalse()->info('Whether checkpoints also go to the application\'s logger, for a pipeline that ships logs elsewhere')->end();
+        $children->arrayNode('decision_log')->addDefaultsIfNotSet()->children()
+            ->enumNode('permits')->values(['none', 'sampled', 'all'])->defaultValue('none')->info('Which permits of abilities are recorded: refusals, Indeterminate and every operation\'s decision always are')->end()
+            ->floatNode('sample_rate')->min(0.0)->max(1.0)->defaultValue(0.01)->info('With permits: sampled, the share of requests whose permits are recorded')->end();
         $children->arrayNode('cookies')->addDefaultsIfNotSet()->children()
             ->scalarNode('device')->defaultValue('__Host-yorvoid_device')->info('The cookie that recognises devices')->end();
         $children->arrayNode('storage')->addDefaultsIfNotSet()->children()

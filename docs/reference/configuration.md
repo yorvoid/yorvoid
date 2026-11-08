@@ -33,6 +33,13 @@ yorvoid:
 
         # Whether checkpoints also go to the application's logger, for a pipeline that ships logs elsewhere
         checkpoint_logger:    false
+    decision_log:
+
+        # Which permits of abilities are recorded: refusals, Indeterminate and every operation's decision always are
+        permits:              none # One of "none"; "sampled"; "all"
+
+        # With permits: sampled, the share of requests whose permits are recorded
+        sample_rate:          0.01
     cookies:
 
         # The cookie that recognises devices

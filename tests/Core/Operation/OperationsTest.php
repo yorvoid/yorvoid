@@ -128,7 +128,7 @@ final class OperationsTest extends TestCase
         self::assertSame(Outcome::Denied, $entry->outcome);
         self::assertNull($entry->actor);
         self::assertSame('request-1', $entry->origin->correlationId);
-        self::assertSame(['reason' => \sprintf('The host\'s operator acts from the command line or as the system, not from "%s".', $kind->value), 'verdict' => 'deny'], $entry->details);
+        self::assertSame(['reason' => \sprintf('The host\'s operator acts from the command line or as the system, not from "%s".', $kind->value), 'verdict' => 'deny'], array_diff_key($entry->details, ['decision' => true]));
     }
 
     public function testSomeoneRunsAnOperationOnTheirOwnAccount(): void
@@ -161,7 +161,7 @@ final class OperationsTest extends TestCase
         self::assertSame(Verdict::Indeterminate, $decision->verdict);
         self::assertNull($decision->basis);
         self::assertSame('A permit couldn\'t be evaluated: The ability policy can\'t tell who holds "acme.badges.issue".', $decision->reason);
-        self::assertSame(['indeterminate' => ['missing_data'], 'reason' => 'A permit couldn\'t be evaluated: The ability policy can\'t tell who holds "acme.badges.issue".', 'verdict' => 'indeterminate'], $this->entries()[0]->details);
+        self::assertSame(['indeterminate' => ['missing_data'], 'reason' => 'A permit couldn\'t be evaluated: The ability policy can\'t tell who holds "acme.badges.issue".', 'verdict' => 'indeterminate'], array_diff_key($this->entries()[0]->details, ['decision' => true]));
     }
 
     public function testTheAbilityPolicyLetsSomeoneElseRunIt(): void

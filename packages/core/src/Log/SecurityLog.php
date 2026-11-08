@@ -12,6 +12,7 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Event\SecurityLogEntryRecorded;
+use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
@@ -25,10 +26,15 @@ use YorvoID\Core\Storage\Transactions;
  * its own it doesn't stop someone who can write the database from rewriting the whole chain: signed
  * checkpoints kept outside the database close that gap (AUD-003).
  *
+ * Every entry recorded while an operation runs cites the decision that let it run: its ID, and the hash
+ * of its record in the decision log. The chain then proves which decision allowed each change (ADR-09).
+ *
  * @api
  */
 final readonly class SecurityLog
 {
+    private CurrentDecision $current;
+
     public function __construct(
         private SecurityLogStore $store,
         private Transactions $transactions,
@@ -36,6 +42,41 @@ final readonly class SecurityLog
         private IdGenerator $ids = new UuidV7Generator(),
         private ClockInterface $clock = new NativeClock(),
     ) {
+        $this->current = new CurrentDecision();
+    }
+
+    /**
+     * Runs what the decision permitted, or records its refusal: what's recorded meanwhile cites it.
+     *
+     * @template T
+     *
+     * @param \Closure(): T $run
+     *
+     * @return T
+     *
+     * @internal Operations calls it
+     */
+    public function citing(Decision $decision, \Closure $run): mixed
+    {
+        if (null === $decision->id) {
+            return $run();
+        }
+
+        $this->current->push(null === $decision->hash ? ['id' => $decision->id] : ['id' => $decision->id, 'hash' => $decision->hash]);
+
+        try {
+            return $run();
+        } finally {
+            $this->current->pop();
+        }
+    }
+
+    /**
+     * Between requests of a long-running process.
+     */
+    public function reset(): void
+    {
+        $this->current->reset();
     }
 
     /**
@@ -65,6 +106,12 @@ final readonly class SecurityLog
         ?string $subjectId = null,
         array $details = [],
     ): LogEntry {
+        $decision = $this->current->current();
+
+        if (null !== $decision && !\array_key_exists('decision', $details)) {
+            $details['decision'] = $decision;
+        }
+
         return $this->transactions->run(function () use ($realm, $action, $outcome, $origin, $actor, $subjectType, $subjectId, $details): LogEntry {
             $entry = $this->store->append($realm, fn (int $sequence, ?string $previousHash): LogEntry => LogEntry::create(
                 $realm,

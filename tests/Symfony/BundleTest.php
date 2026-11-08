@@ -217,7 +217,7 @@ final class BundleTest extends TestCase
 
         $purge = new CommandTester($application->find('yorvoid:purge'));
         self::assertSame(0, $purge->execute([]));
-        self::assertStringContainsString('0 sessions, 0 devices, 0 one-time tokens, 0 passkey ceremonies, 0 throttling keys, 0 cool-downs.', (string) preg_replace('/\s+/', ' ', $purge->getDisplay()));
+        self::assertStringContainsString('0 sessions, 0 devices, 0 one-time tokens, 0 passkey ceremonies, 0 throttling keys, 0 cool-downs, 0 decisions.', (string) preg_replace('/\s+/', ' ', $purge->getDisplay()));
 
         // An address 0.1 stored in its lowercase form, and one that is now the same as another.
         $database = $this->database($container);
