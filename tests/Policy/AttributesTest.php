@@ -155,7 +155,7 @@ final class AttributesTest extends TestCase
         $world->asOperator(new SetAttribute($world->realm, self::id($ada), 'acme.clearance', 3));
         $world->asOperator(new SetAttribute($world->realm, self::id($ada), 'acme.contractor', true));
         self::assertSame(['acme.clearance' => 3, 'acme.contractor' => true, 'acme.teams' => ['blue']], $world->memory->attributes->of($world->realm, self::id($ada)));
-        self::assertSame([['attribute' => 'acme.teams', 'removed' => false], 'principal'], [self::entries($world)[0]->details, self::entries($world)[0]->subjectType], 'The name, never the value.');
+        self::assertSame([['attribute' => 'acme.teams', 'removed' => false], 'principal'], [array_diff_key(self::entries($world)[0]->details, ['decision' => true]), self::entries($world)[0]->subjectType], 'The name, never the value.');
 
         $this->expectException(UnknownPrincipal::class);
         $world->asOperator(new SetAttribute($world->realm, new PrincipalId(new UuidV7()), 'acme.department', 'R&D'));

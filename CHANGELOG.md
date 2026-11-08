@@ -16,6 +16,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - Principals' events (`PrincipalCreating`, `PrincipalCreated`, `PrincipalStatusChanging`, `PrincipalStatusChanged`, `IdentifierChanging`, `IdentifierChanged`) carry the operation's permit; `EmailVerification::send()` takes the permit of the operation that set the address, and `EmailVerification::principalCreated()` sends the link for a principal created active.
 - `SecurityNotifications` takes `Operations` instead of `OneTimeTokens`; `PasskeyFlows`, its steps (`PasskeySignInStep`, `PasskeyRegistrationStep`, `SetupCodeStep`, `InvitationStep`, `RecoveryCodeStep`, `RecoveryCodesStep`, `RecoveryLinkStep`, `EmailVerificationStep`), `CurrentSession`, the authenticators (`PasskeyAuthenticator`, `RecoveryCodeAuthenticator`, `RecoveryLinkAuthenticator`) and `Scenario` take `Operations`.
 - `Checkpoints` takes `KeyRings`, each realm's signing keys, instead of one `KeyRing`: pass `new SharedKeyRings($ring)` for what it did before.
+- `RelationStore::version()` is new, and every change to relations increments the realm's relations version: a store of your own keeps one (`RelationStoreContract`).
 
 ### Added
 
@@ -42,6 +43,8 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - `yorvoid/relations`: relations between resources (ReBAC, AUZ-011): declared per resource type, implied by others, inherited from parents, to subject sets; checked a level at a time and at most 16 levels deep (`Relations`), with abilities they give on their resource (`RelationPermit`) and changes through `yorvoid.relation.add` and `.remove`. A role on a resource counts for what's within it ([relations](docs/concepts/authorization.md#relations)).
 - Groups (IDN-056): nested, with roles given to them (`yorvoid.group.*`, `GroupChanges`, `GroupRelations`).
 - Security attributes of principals (IDN-055) and attributes of the request through resolvers (AUZ-013): `SecurityAttribute`, `AttributeDeclarations`, `Attributes`, `AttributeResolver`, `yorvoid.attribute.set`. What isn't known is Indeterminate (`missing_data`), as is any exception implementing `MissingData` ([attributes](docs/concepts/authorization.md#attributes)).
+- The decision log (AUZ-040), apart from the security log and without a lock (`DecisionLog`, `DecisionLogStore`, `DecisionRecord`, `PermitRecording`): every operation's decision before it runs, abilities' refusals and Indeterminate, and their permits as configured (`yorvoid.decision_log.permits`, `sample_rate`; `Ability::$recordsPermits`). Security-log entries cite the decision that let their operation run, by ID and hash. `yorvoid:purge --keep-decisions` prunes it ([decision log](docs/concepts/security-log.md#the-decision-log)).
+- Each decision has an ID, a time and the versions it read (`Decision::$id`, `$at`, `$versions`, `VersionSource`, `PolicyVersion`, `RelationsVersion`); the permit of an operation carries its decision's ID.
 
 ## 0.3.0 (2026-11-06)
 

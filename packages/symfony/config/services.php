@@ -35,6 +35,10 @@ use YorvoID\Authn\StepUp\Storage\DbalCoolDownStore;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
+use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
+use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\OfflineDecider;
 use YorvoID\Core\Authorization\PrincipalAuthority;
@@ -87,6 +91,7 @@ use YorvoID\Policy\Policy;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\PolicyChanges;
 use YorvoID\Policy\PolicyStore;
+use YorvoID\Policy\PolicyVersion;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Roles;
 use YorvoID\Policy\Storage\DbalAttributeStore;
@@ -98,6 +103,7 @@ use YorvoID\Relations\RelationPermit;
 use YorvoID\Relations\Relations;
 use YorvoID\Relations\RelationSchema;
 use YorvoID\Relations\RelationStore;
+use YorvoID\Relations\RelationsVersion;
 use YorvoID\Relations\Storage\DbalRelationStore;
 use YorvoID\Symfony\Command\DoctorCommand;
 use YorvoID\Symfony\Command\IdentifiersNormalizeCommand;
@@ -198,6 +204,7 @@ return static function (ContainerConfigurator $container): void {
         PolicyStore::class => DbalPolicyStore::class,
         RelationStore::class => DbalRelationStore::class,
         AttributeStore::class => DbalAttributeStore::class,
+        DecisionLogStore::class => DbalDecisionLogStore::class,
     ] as $interface => $implementation) {
         $services->set($implementation);
         $services->alias($interface, $implementation);
@@ -218,7 +225,23 @@ return static function (ContainerConfigurator $container): void {
     $services->set(KeyFiles::class)->args([param('yorvoid.keys.file'), param('yorvoid.keys.per_realm'), param('yorvoid.keys.directory')]);
 
     // The services.
-    $services->set(SecurityLog::class);
+    $services->set(SecurityLog::class)->tag('kernel.reset', ['method' => 'reset']);
+    // Ability decisions wait for the end of what asked for them: a request, a command, a message.
+    $services->set(DecisionLog::class)
+        ->args([
+            service(DecisionLogStore::class),
+            inline_service(PermitRecording::class)->factory([PermitRecording::class, 'from'])->args([param('yorvoid.decision_log.permits')]),
+            param('yorvoid.decision_log.sample_rate'),
+            inline_service('array')->factory([Factories::class, 'recordingPermits'])->args([service(PolicyCatalogue::class)]),
+            service('logger')->nullOnInvalid(),
+            service(ClockInterface::class),
+        ])
+        ->tag('kernel.reset', ['method' => 'reset'])
+        ->tag('kernel.event_listener', ['event' => 'kernel.terminate', 'method' => 'flush'])
+        ->tag('kernel.event_listener', ['event' => 'console.terminate', 'method' => 'flush'])
+        ->tag('kernel.event_listener', ['event' => 'Symfony\\Component\\Messenger\\Event\\WorkerMessageHandledEvent', 'method' => 'flush'])
+        ->tag('kernel.event_listener', ['event' => 'Symfony\\Component\\Messenger\\Event\\WorkerMessageFailedEvent', 'method' => 'flush'])
+        ->public();
     $services->set(Principals::class)->arg('$guardRules', tagged_iterator('yorvoid.guard_rule'));
     $services->set(Sessions::class)->arg('$devices', service(KnownDeviceStore::class)->nullOnInvalid());
     $services->set(StepUp::class)->arg('$coolDown', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.cool_down')]));
@@ -246,6 +269,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(GroupRelations::class)->tag('yorvoid.relation_declarations');
     $services->set(RelationSchema::class)->factory([RelationSchema::class, 'of'])->args([tagged_iterator('yorvoid.relation_declarations')])->public();
     $services->set(Relations::class)->public();
+    $services->set(PolicyVersion::class)->tag('yorvoid.version_source');
+    $services->set(RelationsVersion::class)->tag('yorvoid.version_source');
     $services->set(RelationPermit::class)->tag('yorvoid.policy_element');
     $services->set(RelationChanges::class);
     $services->set(GroupChanges::class);
@@ -271,6 +296,9 @@ return static function (ContainerConfigurator $container): void {
         service('logger')->nullOnInvalid(),
         // Off unless the application registers one: offline decisions are its own build-time choice.
         service(OfflineDecider::class)->nullOnInvalid(),
+        tagged_iterator('yorvoid.version_source'),
+        service(IdGenerator::class),
+        service(DecisionLog::class),
     ]);
     $services->alias(Authorization::class, Evaluator::class);
     $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->public();

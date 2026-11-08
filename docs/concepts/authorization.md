@@ -30,6 +30,8 @@ Every element that's about the request is evaluated, so neither the outcome nor 
 
 Row 2 gives Indeterminate even when nothing could permit the request: an unknown forbid is reported, and the reason says the request would be refused regardless.
 
+Each decision has an ID, its time, and the versions of what it read (`Decision::$versions`): the realm's policy version and its relations version, from the `VersionSource`s the evaluator is given. Every change to roles, abilities, assignments, groups and attributes increments the policy version; every change to relations, the relations version. Decisions are recorded in the [decision log](security-log.md#the-decision-log).
+
 ## The built-in permits
 
 YorvoID's ways to authorize, which each operation names in `#[Operation(authorizedBy: ...)]`, are permits:

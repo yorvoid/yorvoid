@@ -11,6 +11,8 @@ use YorvoID\Authn\Session\SessionStore;
 use YorvoID\Authn\Setup\SetupStore;
 use YorvoID\Authn\StepUp\CoolDownStore;
 use YorvoID\Authn\Token\OneTimeTokenStore;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
+use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
 use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Principal\IdentifierStore;
 use YorvoID\Core\Principal\PrincipalStore;
@@ -48,6 +50,7 @@ final readonly class Stack
         public RelationStore $relations,
         public AttributeStore $attributes,
         public ?Database $database = null,
+        public DecisionLogStore $decisions = new InMemoryDecisionLogStore(),
     ) {
     }
 }

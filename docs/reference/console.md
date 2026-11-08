@@ -89,6 +89,7 @@ php bin/console yorvoid:purge [options]
 |---|---|---|
 | `--keep-sessions` | How long ended sessions stay listed, e.g. "30d" | `30d` |
 | `--keep-devices` | How long an unused device stays known: longer than its cookie lives | `400d` |
+| `--keep-decisions` | How long the decision log keeps a decision; the security log keeps the hashes of those it cites | `90d` |
 
 ## `yorvoid:recovery-link`
 

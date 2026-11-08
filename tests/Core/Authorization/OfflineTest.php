@@ -145,7 +145,7 @@ final class OfflineTest extends TestCase
         self::assertSame(AuthorizedBy::Ability, $doors->permits[0]->basis);
         self::assertTrue($doors->permits[1]->offline, 'Its consequence was offline too.');
         [$entry] = iterator_to_array($log->entries(new Realm('acme'), 1), false);
-        self::assertSame(['yorvoid.decision.offline', Outcome::Success, 'operation', 'acme.door.open', ['reason' => 'Permitted offline: budget left']], [$entry->action, $entry->outcome, $entry->subjectType, $entry->subjectId, $entry->details]);
+        self::assertSame(['yorvoid.decision.offline', Outcome::Success, 'operation', 'acme.door.open', ['reason' => 'Permitted offline: budget left']], [$entry->action, $entry->outcome, $entry->subjectType, $entry->subjectId, array_diff_key($entry->details, ['decision' => true])]);
         self::assertEquals($actor->principalId, $entry->actor);
     }
 

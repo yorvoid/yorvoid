@@ -12,8 +12,11 @@ use YorvoID\Core\Authorization\BuiltIn\AbilityPermit;
 use YorvoID\Core\Authorization\BuiltIn\AuthenticationPermit;
 use YorvoID\Core\Authorization\BuiltIn\OperatorPermit;
 use YorvoID\Core\Authorization\BuiltIn\SelfServicePermit;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Id\IdGenerator;
+use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Operation\AbilityPolicy;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\Authorization;
@@ -50,9 +53,15 @@ final readonly class Evaluator implements Authorization
     /** @var array<string, PolicyElement> By name */
     private array $elements;
 
+    /** @var list<VersionSource> */
+    private array $versions;
+
     /**
-     * @param iterable<PolicyElement> $elements The policy: permits and forbids
-     * @param OfflineDecider|null     $offline  Asked while a store is unreachable, for the operations that accept it
+     * @param iterable<PolicyElement> $elements  The policy: permits and forbids
+     * @param OfflineDecider|null     $offline   Asked while a store is unreachable, for the operations that accept it
+     * @param iterable<VersionSource> $versions  What each decision records the version of (AUZ-009)
+     * @param IdGenerator             $ids       Each decision's ID
+     * @param DecisionLog|null        $decisions Where decisions are recorded (AUZ-040); without it, nowhere
      *
      * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, or a
      *                         permit authorizes by Consequence, which only another operation's permit gives
@@ -63,7 +72,17 @@ final readonly class Evaluator implements Authorization
         private ClockInterface $clock = new NativeClock(),
         private LoggerInterface $logger = new NullLogger(),
         private ?OfflineDecider $offline = null,
+        iterable $versions = [],
+        private IdGenerator $ids = new UuidV7Generator(),
+        private ?DecisionLog $decisions = null,
     ) {
+        $sources = [];
+
+        foreach ($versions as $source) {
+            $sources[] = $source;
+        }
+
+        $this->versions = $sources;
         $list = [];
 
         foreach ($elements as $element) {
@@ -97,6 +116,8 @@ final readonly class Evaluator implements Authorization
      *                                             commands and workers: the host's operator acts only from there.
      *                                             Found out if not given
      * @param OfflineDecider|null     $offline     Asked while a store is unreachable, for the operations that accept it
+     * @param iterable<VersionSource> $versions    What each decision records the version of
+     * @param DecisionLog|null        $decisions   Where decisions are recorded
      */
     public static function builtIn(
         AuthorityCheck $authority,
@@ -107,6 +128,9 @@ final readonly class Evaluator implements Authorization
         ClockInterface $clock = new NativeClock(),
         ?LoggerInterface $logger = null,
         ?OfflineDecider $offline = null,
+        iterable $versions = [],
+        IdGenerator $ids = new UuidV7Generator(),
+        ?DecisionLog $decisions = null,
     ): self {
         $builtIn = [
             new AuthenticationPermit(),
@@ -118,7 +142,7 @@ final readonly class Evaluator implements Authorization
             $builtIn[] = new AbilityPermit($abilities);
         }
 
-        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline);
+        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions);
     }
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
@@ -136,7 +160,38 @@ final readonly class Evaluator implements Authorization
         return $this->evaluate(Request::forAbility($ability, $realm, $resource, $actor, $origin, $this->clock->now()));
     }
 
+    /**
+     * Decides, identifies the decision and records it: an operation's before it runs.
+     */
     private function evaluate(Request $request): Decision
+    {
+        $decision = $this->judge($request)->identified((string) $this->ids->next(), $request->at, $this->versionsOf($request));
+
+        return null === $this->decisions ? $decision : $this->decisions->record($request, $decision);
+    }
+
+    /**
+     * The versions of what the decision read, as they are now: a source that can't tell is left out,
+     * and the decision itself comes from the elements, which report what they couldn't read.
+     *
+     * @return array<string, int>
+     */
+    private function versionsOf(Request $request): array
+    {
+        $versions = [];
+
+        foreach ($this->versions as $source) {
+            try {
+                $versions[$source->name()] = $source->version($request->realm);
+            } catch (\Throwable $e) {
+                $this->logger->warning('YorvoID couldn\'t read the {source} version: {message}', ['source' => $source->name(), 'message' => $e->getMessage()]);
+            }
+        }
+
+        return $versions;
+    }
+
+    private function judge(Request $request): Decision
     {
         $authorizedBy = $request->authorizedBy();
         $reasons = [];

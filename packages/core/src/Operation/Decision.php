@@ -23,6 +23,10 @@ final readonly class Decision
      * @param list<Reason>              $reasons       What each element that matched, and the authority check, gave
      * @param list<Remedy>              $remedies      What could satisfy what's missing, on a Deny caused only by unmet evidence
      * @param list<IndeterminateReason> $indeterminate Why it couldn't decide: at least one exactly when it's Indeterminate
+     * @param string|null               $id            Its ID, from the evaluator, which the operation's permit and its log entries carry
+     * @param \DateTimeImmutable|null   $at            When it was decided
+     * @param array<string, int>        $versions      The versions of what it read, by source, e.g. ["policy" => 12, "relations" => 4] (AUZ-009)
+     * @param string|null               $hash          Its record's hash in the decision log, when it's recorded there
      *
      * @throws IntegratorError When the parts don't fit the verdict
      */
@@ -33,6 +37,10 @@ final readonly class Decision
         public array $reasons = [],
         public array $remedies = [],
         public array $indeterminate = [],
+        public ?string $id = null,
+        public ?\DateTimeImmutable $at = null,
+        public array $versions = [],
+        public ?string $hash = null,
     ) {
         $fits = match ($verdict) {
             Verdict::Permit, Verdict::PermitOffline => null !== $basis && [] === $remedies && [] === $indeterminate,
@@ -69,6 +77,24 @@ final readonly class Decision
     public static function indeterminate(array $indeterminate, string $reason, array $reasons = []): self
     {
         return new self(Verdict::Indeterminate, null, $reason, $reasons, indeterminate: $indeterminate);
+    }
+
+    /**
+     * The same decision, with its ID, its time and the versions it read.
+     *
+     * @param array<string, int> $versions
+     */
+    public function identified(string $id, \DateTimeImmutable $at, array $versions): self
+    {
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $id, $at, $versions, $this->hash);
+    }
+
+    /**
+     * The same decision, with the hash of its record in the decision log.
+     */
+    public function recorded(string $hash): self
+    {
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $hash);
     }
 
     /**
