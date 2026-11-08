@@ -97,7 +97,14 @@ final class DecisionRecordTest extends TestCase
         yield 'elements not a list' => [$with(['elements' => 'all']), 'A stored decision\'s elements aren\'t a list.'];
         yield 'a malformed element' => [$with(['elements' => [['a', 'permit']]]), 'A stored decision\'s element is malformed.'];
         yield 'versions not a map' => [$with(['versions' => 'v1']), 'A stored decision\'s versions aren\'t a map.'];
-        yield 'a version not a number' => [$with(['versions' => ['policy' => '7']]), 'A stored decision\'s version isn\'t a number.'];
+        yield 'a version not a number' => [$with(['versions' => ['policy' => '7']]), 'A stored decision\'s versions are malformed.'];
+        yield 'a version without a name' => [$with(['versions' => ['7' => 7]]), 'A stored decision\'s versions are malformed.'];
+        yield 'an element not a list' => [$with(['elements' => ['permit']]), 'A stored decision\'s element is malformed.'];
+        yield 'an element without a source' => [$with(['elements' => [[1, 'permit', 'holds']]]), 'A stored decision\'s element is malformed.'];
+        yield 'an element without an effect' => [$with(['elements' => [['a', 1, 'holds']]]), 'A stored decision\'s element is malformed.'];
+        yield 'an element without a truth' => [$with(['elements' => [['a', 'permit', 1]]]), 'A stored decision\'s element is malformed.'];
+        yield 'an origin of text' => [$with(['origin' => 'web']), 'A stored decision\'s origin is malformed.'];
+        yield 'an origin without a kind' => [$with(['origin' => [1, 'r']]), 'A stored decision\'s origin is malformed.'];
         yield 'a malformed origin' => [$with(['origin' => ['web']]), 'A stored decision\'s origin is malformed.'];
     }
 
@@ -112,10 +119,28 @@ final class DecisionRecordTest extends TestCase
 
     public function testAResourceThatIsntAPairIsNone(): void
     {
-        $json = json_encode(['format' => 1, 'id' => 'd-1', 'realm' => 'acme', 'decided_at' => '2026-11-08T18:00:00.000000Z', 'kind' => 'operation', 'name' => 'acme.badge.issue', 'actor' => 'a', 'resource' => ['page'], 'verdict' => 'deny', 'basis' => 'self', 'reason' => 'No.', 'indeterminate' => [], 'remedies' => [], 'elements' => [], 'versions' => ['policy' => 1], 'origin' => ['web', 'r']], \JSON_THROW_ON_ERROR);
-        $record = DecisionRecord::fromJson($json);
+        foreach ([['page'], 'page', [1, '2'], ['page', 2]] as $resource) {
+            $json = json_encode(['format' => 1, 'id' => 'd-1', 'realm' => 'acme', 'decided_at' => '2026-11-08T18:00:00.000000Z', 'kind' => 'operation', 'name' => 'acme.badge.issue', 'actor' => 'a', 'resource' => $resource, 'verdict' => 'deny', 'basis' => 'self', 'reason' => 'No.', 'indeterminate' => ['a', 'b'], 'remedies' => ['step_up', 'wait'], 'elements' => [], 'versions' => ['policy' => 1], 'origin' => ['web', 'r']], \JSON_THROW_ON_ERROR);
+            $record = DecisionRecord::fromJson($json);
 
-        self::assertNull($record->resource);
-        self::assertSame(['a', 'self', ['policy' => 1]], [$record->actor, $record->basis, $record->versions]);
+            self::assertNull($record->resource, json_encode($resource, \JSON_THROW_ON_ERROR));
+            self::assertSame(['a', 'self', ['policy' => 1], ['a', 'b'], ['step_up', 'wait']], [$record->actor, $record->basis, $record->versions, $record->indeterminate, $record->remedies]);
+        }
+    }
+
+    public function testTheTextIsWrittenAsItIs(): void
+    {
+        $request = Request::forAbility('acme.pages.edit', new Realm('acme'), new ResourceRef('page', 'ünï/1'), new Operator(), new Origin(OriginKind::Web), new \DateTimeImmutable('2026-11-08 18:00:00 UTC'));
+
+        self::assertStringContainsString('["page","ünï/1"]', DecisionRecord::of($request, Decision::deny('No.')->identified('d-1', $request->at, []))->json(), 'Neither slashes nor letters are escaped.');
+    }
+
+    public function testADecisionWithoutItsTimeIsntRecorded(): void
+    {
+        $request = Request::forAbility('acme.pages.edit', new Realm('acme'), null, new Operator(), new Origin(OriginKind::Web), new \DateTimeImmutable());
+
+        $this->expectException(\YorvoID\Core\Exception\IntegratorError::class);
+
+        DecisionRecord::of($request, new Decision(\YorvoID\Core\Operation\Verdict::Deny, null, 'No.', id: 'd-1'));
     }
 }

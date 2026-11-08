@@ -64,14 +64,16 @@ final class InMemoryRelationStore implements RelationStore, InMemoryStore
 
     public function forget(Realm $realm, ResourceRef $resource): void
     {
+        $removed = 0;
+
         foreach ($this->tuples[$realm->name] ?? [] as $key => $tuple) {
             if ($tuple->object->equals($resource) || $tuple->subject->resource->equals($resource)) {
                 unset($this->tuples[$realm->name][$key]);
-                $removed = true;
+                ++$removed;
             }
         }
 
-        if (isset($removed)) {
+        if (0 < $removed) {
             $this->bump($realm);
         }
     }

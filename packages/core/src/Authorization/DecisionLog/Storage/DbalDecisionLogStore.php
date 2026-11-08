@@ -46,8 +46,8 @@ final readonly class DbalDecisionLogStore implements DecisionLogStore
                 array_push($parameters, $record->id, $record->realm->name, $time->convertToDatabaseValue($record->at, $platform), $record->name, $record->actor, $record->verdict, $record->json(), $record->hash());
             }
 
-            $row = '('.implode(', ', array_fill(0, \count(self::COLUMNS), '?')).')';
-            $connection->executeStatement(\sprintf('INSERT INTO %s (%s) VALUES %s', $this->table(), implode(', ', self::COLUMNS), implode(', ', array_fill(0, \count($batch), $row))), $parameters);
+            $row = '('.implode(', ', array_map(static fn (): string => '?', self::COLUMNS)).')';
+            $connection->executeStatement(\sprintf('INSERT INTO %s (%s) VALUES %s', $this->table(), implode(', ', self::COLUMNS), implode(', ', array_map(static fn (): string => $row, $batch))), $parameters);
         }
     }
 

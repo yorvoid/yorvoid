@@ -101,7 +101,15 @@ trait RelationStoreContract
         self::assertSame(3, $store->version($acme), 'Forgetting what has no tuples changes nothing.');
         $store->forget($acme, $ada->resource);
         self::assertSame(4, $store->version($acme));
-        self::assertSame(0, $store->version(new Realm('other')), 'Each realm has its own.');
+
+        $other = new Realm('other');
+        $store->add(new RelationTuple($other, $page, 'viewer', $ada));
+        $store->add(new RelationTuple($acme, $page, 'viewer', new Subject(new ResourceRef('principal', 'bob'))));
+        $store->forget($acme, $page);
+        self::assertSame(6, $store->version($acme), 'An add and a forget.');
+        self::assertSame(1, $store->version($other));
+        self::assertCount(1, $store->of($other, $page), 'Forgetting a resource in one realm leaves it in another.');
+        self::assertSame(0, $store->version(new Realm('globex')), 'Each realm has its own.');
     }
 
     #[DataProvider('implementations')]

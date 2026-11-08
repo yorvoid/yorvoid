@@ -133,9 +133,9 @@ final readonly class DecisionRecord
     public static function fromJson(string $json): self
     {
         try {
-            $data = json_decode($json, true, 8, \JSON_THROW_ON_ERROR);
+            $data = json_decode($json, true, flags: \JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
-            throw new \UnexpectedValueException('A stored decision isn\'t valid JSON.', 0, $e);
+            throw new \UnexpectedValueException('A stored decision isn\'t valid JSON.', previous: $e);
         }
 
         if (!\is_array($data) || self::FORMAT !== ($data['format'] ?? null)) {
@@ -232,7 +232,11 @@ final readonly class DecisionRecord
         $versions = [];
 
         foreach (\is_array($data['versions'] ?? null) ? $data['versions'] : throw new \UnexpectedValueException('A stored decision\'s versions aren\'t a map.') as $source => $version) {
-            $versions[(string) $source] = \is_int($version) ? $version : throw new \UnexpectedValueException('A stored decision\'s version isn\'t a number.');
+            if (!\is_string($source) || !\is_int($version)) {
+                throw new \UnexpectedValueException('A stored decision\'s versions are malformed.');
+            }
+
+            $versions[$source] = $version;
         }
 
         return $versions;

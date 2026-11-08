@@ -78,7 +78,16 @@ final class DecisionLogTest extends TestCase
                 throw new \RuntimeException('Unreachable.');
             }
         };
-        $evaluator = Evaluator::builtIn(new ValidAuthority(), clock: $this->clock, versions: [self::version('relations', 4), $failing, self::version('policy', 12)]);
+        $logger = new class extends AbstractLogger {
+            /** @var list<array{string, array<mixed>}> */
+            public array $logs = [];
+
+            public function log($level, \Stringable|string $message, array $context = []): void
+            {
+                $this->logs[] = [(string) $message, $context];
+            }
+        };
+        $evaluator = Evaluator::builtIn(new ValidAuthority(), clock: $this->clock, logger: $logger, versions: [self::version('relations', 4), $failing, self::version('policy', 12)]);
 
         $first = $evaluator->decideAbility(new Operator(), 'acme.pages.edit', $this->realm, null, new Origin(OriginKind::Console));
         $second = $evaluator->decideAbility(new Operator(), 'acme.pages.edit', $this->realm, null, new Origin(OriginKind::Console));
@@ -88,6 +97,7 @@ final class DecisionLogTest extends TestCase
         self::assertEquals($this->clock->now(), $first->at);
         self::assertSame(['relations' => 4, 'policy' => 12], $first->versions, 'A version that can\'t be read is left out.');
         self::assertNull($first->hash, 'Without a decision log, nothing is recorded.');
+        self::assertSame(['YorvoID couldn\'t read the {source} version: {message}', ['source' => 'broken', 'message' => 'Unreachable.']], $logger->logs[0]);
     }
 
     public function testAnOperationsDecisionIsRecordedBeforeItRuns(): void
@@ -268,6 +278,20 @@ final class DecisionLogTest extends TestCase
         self::assertFalse($recorded(new DecisionLog($this->store, alwaysRecord: ['acme.access.explain'])));
         self::assertFalse($recorded(new DecisionLog($this->store, PermitRecording::Sampled, 0.0)));
         self::assertTrue($recorded(new DecisionLog($this->store, PermitRecording::Sampled, 1.0)));
+
+        $offline = new DecisionLog($this->store);
+        $decision = $offline->record($this->ability(), new Decision(\YorvoID\Core\Operation\Verdict::PermitOffline, \YorvoID\Core\Operation\AuthorizedBy::Ability, 'Offline.')->identified((string) new UuidV7(), $this->clock->now(), []));
+        self::assertNotNull($decision->hash, 'Permit-offline is always recorded.');
+
+        $byDefault = new DecisionLog($this->store, PermitRecording::Sampled);
+        $share = 0;
+
+        for ($i = 0; $i < 1000; ++$i) {
+            $share += $recorded($byDefault, correlation: 'request-'.$i) ? 1 : 0;
+        }
+
+        self::assertGreaterThan(0, $share);
+        self::assertLessThan(40, $share, 'One request in a hundred, by default.');
 
         $sampled = new DecisionLog($this->store, PermitRecording::Sampled, 0.5);
         $requests = [];

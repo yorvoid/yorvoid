@@ -46,7 +46,7 @@ final class DecisionLog
     public function __construct(
         private readonly DecisionLogStore $store,
         private readonly PermitRecording $permits = PermitRecording::None,
-        private readonly float $sampleRate = 0.0,
+        private readonly float $sampleRate = 0.01,
         array $alwaysRecord = [],
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly ClockInterface $clock = new NativeClock(),
@@ -126,9 +126,10 @@ final class DecisionLog
 
     private function records(Request $request, Decision $decision): bool
     {
+        // Only a Permit is volume: anything else, Permit-offline too, is always recorded.
         $permitted = match ($decision->verdict) {
-            Verdict::Permit, Verdict::PermitOffline => true,
-            Verdict::Deny, Verdict::Indeterminate => false,
+            Verdict::Permit => true,
+            Verdict::PermitOffline, Verdict::Deny, Verdict::Indeterminate => false,
         };
 
         if (!$permitted) {
