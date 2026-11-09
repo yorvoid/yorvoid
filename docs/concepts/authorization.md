@@ -49,6 +49,37 @@ A permit speaks only for the operations that name its way to authorize: an abili
 
 `PrincipalAuthority` checks the actor's own authority: a principal that exists, is active and acts in the command's realm. A suspended or deleted principal is denied whatever the permits say; one that isn't on record is Indeterminate (`missing_data`). The host's operator and someone not signed in claim no authority, so there's nothing to invalidate.
 
+An actor needn't be a YorvoID principal. Your application's own users can ask as they are: implement `Actor` on them, with the `PrincipalId` you map each to if their roles and relations are stored in YorvoID, or none if a `RoleSource` of yours gives their roles. Their authority is then yours to check: an `AuthorityCheck` that answers for your actors and leaves the others to `PrincipalAuthority`.
+
+```php
+use Acme\Security\AcmeUser;
+use YorvoID\Core\Authorization\AuthorityCheck;
+use YorvoID\Core\Authorization\Ground;
+use YorvoID\Core\Authorization\PrincipalAuthority;
+use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\Truth;
+
+final readonly class AcmeAuthority implements AuthorityCheck
+{
+    public function __construct(private PrincipalAuthority $principals) {}
+
+    public function check(Request $request): Truth
+    {
+        $actor = $request->actor;
+
+        if (!$actor instanceof AcmeUser) {
+            return $this->principals->check($request);
+        }
+
+        return $actor->blocked
+            ? Truth::fails('The user is blocked.')->grounded(Ground::authority('blocked'))
+            : Truth::holds('The user is active.', Ground::authority('active'));
+    }
+}
+```
+
+Give it to the evaluator in place of `PrincipalAuthority`; in Symfony, decorate the `PrincipalAuthority` service with it.
+
 ## Abilities
 
 An ability is what a role can have, e.g. "publish pages". Its owner declares it in a `PolicyDeclarations`, with a label, the roles that have it by default, a group for pages that list them, and whether it's **strict**:
@@ -75,7 +106,7 @@ final readonly class AcmeDeclarations implements PolicyDeclarations
 }
 ```
 
-Names start with the owner's namespace (`acme.`). Every ability an operation needs (`#[Operation(ability: ...)]`) must be declared; YorvoID declares its own (`YorvoIDDeclarations`): managing principals, issuing recovery links (strict: it hands an account over), signing others out, managing roles, changing which roles have which abilities, and seeing why someone else may or may not do something (`yorvoid.policy.explain`). A declaration that doesn't fit (a name twice, a default role that isn't declared, an operation's undeclared ability) fails when YorvoID is built. In Symfony, a service implementing `PolicyDeclarations` is collected by itself.
+By convention a name starts with its owner's namespace (`acme.`). That's a convention, not a check: the owner is what the declaration says, and an application may name abilities after what they're about (`content.edit`) and declare them as its core's. Every ability an operation needs (`#[Operation(ability: ...)]`) must be declared; YorvoID declares its own (`YorvoIDDeclarations`): managing principals, issuing recovery links (strict: it hands an account over), signing others out, managing roles, changing which roles have which abilities, seeing why someone else may or may not do something (`yorvoid.policy.explain`), and seeing the application as someone else sees it (`yorvoid.policy.view_as`). A declaration that doesn't fit (a name twice, a default role that isn't declared, an operation's undeclared ability) fails when YorvoID is built. In Symfony, a service implementing `PolicyDeclarations` is collected by itself.
 
 Ask about one of your own abilities with `Policy::decide()` or `allows()`, or in Symfony with `isGranted()`, which YorvoID decides for every declared ability:
 
@@ -317,6 +348,37 @@ $why = $policy->whyNot($session, $member, 'acme.pages.publish', $realm, new Reso
 ```
 
 An actor asks about themselves. Asking about someone else in the realm takes `yorvoid.policy.explain`, decided as any ability and, permitted or not, always recorded in the decision log; without it, `whyNot()` throws `NotPermitted`. `Policy` needs the `Roles` it decides with; in Symfony it has them.
+
+### View-as
+
+An administrator can see the application as someone else sees it (AUZ-023), e.g. to check what a member may see. `ViewingAs` is that actor: it acts as the target, and the evaluator decides each request for the viewer and for the target, each as above, and intersects them. So the view never exceeds the viewer:
+
+| Viewer | Target | View |
+|---|---|---|
+| Permit | Permit | Permit |
+| Indeterminate, or anything | Indeterminate, or anything | Indeterminate, if either is |
+| Permit or Deny | Deny | Deny, with the target's reasons and remedies |
+| Deny | Permit | Deny, with the viewer's reasons and remedies: none of the target's |
+
+The decision carries the reasons of the side that decided, and the viewer's own decision (`Decision::$viewer`). The decision log records both: the target as the actor, and the viewer with its verdict and elements.
+
+A view is read-only: the forbid `yorvoid.view_as.read_only` refuses every operation to it, and the security log names the viewer as the one who tried, with the target in `viewing_as`.
+
+Begin one with the operation `yorvoid.view_as.begin` (`BeginViewAs`), which takes the ability `yorvoid.policy.view_as`. It refuses a target that isn't active or is the viewer, is recorded in the security log with the viewer as the actor and the target as the subject, and returns the actor and what's beyond the viewer: the abilities the target's roles give and the viewer's don't, in the whole realm and on each resource the target has a role on. Decide whether to show such a view at all (refuse it, as Quire does) or to warn that it's partial:
+
+```php
+use YorvoID\Policy\ViewAs\BeginViewAs;
+
+$view = $operations->run(new BeginViewAs($realm, $member), $session, $origin);
+
+if (!$view->complete()) {
+    // $view->beyond: each Beyond's ability, and the resource it's on (null for the whole realm)
+}
+
+$policy->allows($view->actor, 'acme.pages.edit', $realm, $page, $origin);
+```
+
+Only roles are compared for what's beyond: a relation or a rule that permits the target isn't listed, though the view refuses it too. Nothing is stored: a view lasts as long as you hold the actor, and every decision reads the policy as it is then, so a viewer who loses a role during the view loses it in the view too. All of it is experimental.
 
 ## Why it couldn't decide
 

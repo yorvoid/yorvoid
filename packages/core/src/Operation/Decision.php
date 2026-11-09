@@ -29,6 +29,8 @@ final readonly class Decision
      * @param array<string, int>        $versions      The versions of what it read, by source, e.g. ["policy" => 12, "relations" => 4] (AUZ-009)
      * @param string|null               $hash          Its record's hash in the decision log, when it's recorded there
      * @param Precedence|null           $precedence    The row of the precedence that decided, from the evaluator (experimental)
+     * @param Decision|null             $viewer        Viewing as someone else, the viewer's own decision: this one is both
+     *                                                 intersected, with the reasons of the side that decided (experimental)
      *
      * @throws IntegratorError When the parts don't fit the verdict
      */
@@ -44,6 +46,7 @@ final readonly class Decision
         public array $versions = [],
         public ?string $hash = null,
         public ?Precedence $precedence = null,
+        public ?self $viewer = null,
     ) {
         $fits = match ($verdict) {
             Verdict::Permit, Verdict::PermitOffline => null !== $basis && [] === $remedies && [] === $indeterminate,
@@ -89,7 +92,7 @@ final readonly class Decision
      */
     public function identified(string $id, \DateTimeImmutable $at, array $versions): self
     {
-        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $id, $at, $versions, $this->hash, $this->precedence);
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $id, $at, $versions, $this->hash, $this->precedence, $this->viewer);
     }
 
     /**
@@ -97,7 +100,7 @@ final readonly class Decision
      */
     public function recorded(string $hash): self
     {
-        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $hash, $this->precedence);
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $hash, $this->precedence, $this->viewer);
     }
 
     /**

@@ -98,7 +98,9 @@ final readonly class Operations
         };
 
         if (null === $offline || null === $decision->basis) {
-            $this->log->citing($decision, fn (): LogEntry => $this->log->record($command->realm, $operation->name, Outcome::Denied, $origin, $actor->principalId, details: array_filter([
+            // Viewing as someone else, the viewer tried it.
+            $this->log->citing($decision, fn (): LogEntry => $this->log->record($command->realm, $operation->name, Outcome::Denied, $origin, $actor instanceof ViewingAs ? $actor->viewer->principalId : $actor->principalId, details: array_filter([
+                'viewing_as' => $actor instanceof ViewingAs && null !== $actor->target->principalId ? (string) $actor->target->principalId : [],
                 'verdict' => $decision->verdict->value,
                 'reason' => $decision->reason,
                 'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate),
@@ -106,6 +108,10 @@ final readonly class Operations
             ], static fn (string|array $value): bool => [] !== $value)));
 
             throw new NotPermitted($operation->name, $decision);
+        }
+
+        if ($actor instanceof ViewingAs) {
+            throw new IntegratorError(\sprintf('The authorization permitted "%s" to a view as someone else.', $operation->name), 'A view-as is read-only: decide with the Evaluator, or refuse every operation to a ViewingAs actor.', 'concepts/authorization.md#view-as');
         }
 
         $basis = $decision->basis;

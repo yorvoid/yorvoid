@@ -60,6 +60,7 @@ final class DecisionRecordTest extends TestCase
             'elements' => [['yorvoid.policy.roles', 'permit', 'fails'], ['authority', 'authority', 'holds']],
             'versions' => ['policy' => 7, 'relations' => 2],
             'origin' => ['web', 'request-1'],
+            'viewer' => null,
         ], $record->toArray(), 'The elements\' texts aren\'t kept.');
         self::assertSame(hash('sha256', $record->json()), $record->hash());
         self::assertSame($record->json(), DecisionRecord::fromJson($record->json())->json());

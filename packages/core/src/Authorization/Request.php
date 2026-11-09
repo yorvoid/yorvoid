@@ -80,6 +80,14 @@ final readonly class Request
     }
 
     /**
+     * The same request, asked by another actor: each side of a view-as.
+     */
+    public function by(Actor $actor): self
+    {
+        return new self($this->name, $this->realm, $this->ability, $this->resource, $this->operation, $this->command, $actor, $this->origin, $this->at, $this->subject);
+    }
+
+    /**
      * What it's about, for reasons and the log: the operation's name, or the ability's.
      */
     public function name(): string

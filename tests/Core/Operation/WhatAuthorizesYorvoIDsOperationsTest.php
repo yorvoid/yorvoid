@@ -78,6 +78,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.testing.sign_in' => ['authentication'],
         'yorvoid.token.issue' => ['ability', 'operator'],
         'yorvoid.token.revoke' => ['ability', 'operator'],
+        'yorvoid.view_as.begin' => ['ability'],
     ];
 
     /** What each runs as its consequences (#[Operation(causes: [...])]): a permit gives nothing else */
@@ -156,7 +157,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
             }
         }
 
-        self::assertCount(49, $commands, 'The operations moved.');
+        self::assertCount(50, $commands, 'The operations moved.');
 
         return $commands;
     }

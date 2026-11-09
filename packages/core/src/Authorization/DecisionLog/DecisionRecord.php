@@ -11,6 +11,7 @@ use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\ViewingAs;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Text;
 
@@ -29,14 +30,17 @@ final readonly class DecisionRecord
     public const string ALGORITHM = 'sha256';
 
     /**
-     * @param 'operation'|'ability'               $kind
-     * @param string                              $name          The operation's name, or the ability's
-     * @param string|null                         $actor         The acting principal's ID, if there's one
-     * @param list<string>                        $indeterminate Why it couldn't decide
-     * @param list<string>                        $remedies      Their names
-     * @param list<array{string, string, string}> $elements      Each element that matched, and the authority check: source, effect, truth value
-     * @param array<string, int>                  $versions
-     * @param array{string, string}               $origin        Its kind and correlation ID
+     * @param 'operation'|'ability'                                                                               $kind
+     * @param string                                                                                              $name          The operation's name, or the ability's
+     * @param string|null                                                                                         $actor         The acting principal's ID, if there's one
+     * @param list<string>                                                                                        $indeterminate Why it couldn't decide
+     * @param list<string>                                                                                        $remedies      Their names
+     * @param list<array{string, string, string}>                                                                 $elements      Each element that matched, and the authority check: source, effect, truth value
+     * @param array<string, int>                                                                                  $versions
+     * @param array{string, string}                                                                               $origin        Its kind and correlation ID
+     * @param array{actor: string|null, verdict: string|null, elements: list<array{string, string, string}>}|null $viewer        Viewing as
+     *                                                                                                                           someone else: the viewer, and its own decision if one was made
+     *                                                                                                                           (none for an operation, which is refused); the actor is then the target
      */
     public function __construct(
         public string $id,
@@ -54,6 +58,7 @@ final readonly class DecisionRecord
         public array $elements,
         public array $versions,
         public array $origin,
+        public ?array $viewer = null,
     ) {
     }
 
@@ -79,10 +84,37 @@ final readonly class DecisionRecord
             Text::utf8($decision->reason),
             array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate),
             array_map(static fn (Remedy $remedy): string => $remedy->name(), $decision->remedies),
-            array_map(static fn (Reason $reason): array => [$reason->source, $reason->effect, $reason->truth->value->value], $decision->reasons),
+            self::reasons($decision),
             $decision->versions,
             [$request->origin->kind->value, $request->origin->correlationId],
+            self::viewer($request, $decision),
         );
+    }
+
+    /**
+     * @return array{actor: string|null, verdict: string|null, elements: list<array{string, string, string}>}|null
+     */
+    private static function viewer(Request $request, Decision $decision): ?array
+    {
+        $actor = $request->actor;
+
+        if (!$actor instanceof ViewingAs) {
+            return null;
+        }
+
+        return [
+            'actor' => null === $actor->viewer->principalId ? null : (string) $actor->viewer->principalId,
+            'verdict' => $decision->viewer?->verdict->value,
+            'elements' => null === $decision->viewer ? [] : self::reasons($decision->viewer),
+        ];
+    }
+
+    /**
+     * @return list<array{string, string, string}>
+     */
+    private static function reasons(Decision $decision): array
+    {
+        return array_map(static fn (Reason $reason): array => [$reason->source, $reason->effect, $reason->truth->value->value], $decision->reasons);
     }
 
     /**
@@ -112,6 +144,7 @@ final readonly class DecisionRecord
             'elements' => $this->elements,
             'versions' => $versions,
             'origin' => $this->origin,
+            'viewer' => $this->viewer,
         ];
     }
 
@@ -166,6 +199,7 @@ final readonly class DecisionRecord
             self::elements($data),
             self::versions($data),
             self::origin($data),
+            self::viewerOf($data),
         );
     }
 
@@ -220,6 +254,26 @@ final readonly class DecisionRecord
         }
 
         return $elements;
+    }
+
+    /**
+     * @param array<mixed> $data
+     *
+     * @return array{actor: string|null, verdict: string|null, elements: list<array{string, string, string}>}|null
+     */
+    private static function viewerOf(array $data): ?array
+    {
+        $viewer = $data['viewer'] ?? null;
+
+        if (null === $viewer) {
+            return null;
+        }
+
+        if (!\is_array($viewer)) {
+            throw new \UnexpectedValueException('A stored decision\'s viewer is malformed.');
+        }
+
+        return ['actor' => self::nullableString($viewer, 'actor'), 'verdict' => self::nullableString($viewer, 'verdict'), 'elements' => self::elements($viewer)];
     }
 
     /**

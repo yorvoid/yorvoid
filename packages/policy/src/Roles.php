@@ -9,8 +9,11 @@ use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\RoleGrant;
 use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Policy\ViewAs\Beyond;
 use YorvoID\Relations\Relations;
 use YorvoID\Relations\Subject;
 use YorvoID\Relations\TooDeep;
@@ -404,6 +407,51 @@ final readonly class Roles
         }
 
         return $grounds;
+    }
+
+    /**
+     * What the target's roles give and the viewer's don't, in the whole realm and on each resource the
+     * target has a role on: what a view as the target refuses though the target would be permitted.
+     * Only roles are read; a relation or a rule that permits the target isn't listed.
+     *
+     * @return list<Beyond> In the catalogue's order, the whole realm first
+     *
+     * @throws TooDeep
+     */
+    public function beyond(Realm $realm, Actor $viewer, Actor $target, Origin $origin, \DateTimeImmutable $at): array
+    {
+        $scopes = [null];
+        // The roles don't depend on the ability asked: any names the request.
+        $inRealm = Request::forAbility(YorvoIDDeclarations::POLICY_VIEW_AS, $realm, null, $target, $origin, $at);
+
+        if ($inRealm->actorInRealm()) {
+            \assert(null !== $target->principalId);
+
+            foreach ([...$this->store->assignments($realm, $target->principalId), ...$this->store->groupAssignments($realm, $this->groupsOf($realm, $target->principalId))] as $assignment) {
+                if (null !== $assignment->scope && $assignment->counts($at, $assignment->scope)) {
+                    $scopes[(string) $assignment->scope] = $assignment->scope;
+                }
+            }
+        }
+
+        $abilities = array_keys($this->catalogue->abilities());
+        $beyond = [];
+        $everywhere = [];
+
+        foreach ($scopes as $scope) {
+            $asTarget = Request::forAbility(YorvoIDDeclarations::POLICY_VIEW_AS, $realm, $scope, $target, $origin, $at);
+            $held = array_diff($abilities, $this->missing($asTarget, $abilities), $everywhere);
+
+            foreach ($this->missing($asTarget->by($viewer), $held) as $ability) {
+                $beyond[] = new Beyond($ability, $scope);
+
+                if (null === $scope) {
+                    $everywhere[] = $ability;
+                }
+            }
+        }
+
+        return $beyond;
     }
 
     /**
