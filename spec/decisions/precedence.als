@@ -139,15 +139,20 @@ one sig PermitOffline extends Outcome {}
 abstract sig Flag {}
 one sig On, Off extends Flag {}
 
-fun offlineOutcome[es: set Element, a: Authority, unreachable: set Element, authorityUnreachable, decider, accepts, holds: Flag]: one Outcome {
-    (outcome[es, a] = Indeterminate
+-- For elements with these effects and values.
+fun offlineTable[es: set Element, eff: Element -> Effect, v: Element -> Value, a: Authority, unreachable: set Element, authorityUnreachable, decider, accepts, holds: Flag]: one Outcome {
+    (table[es, eff, v, a] = Indeterminate
         and decider = On and accepts = On and holds = On
-        and (no e: es | e.effect = ForbidEffect and e.condition = Unknown)
+        and (no e: es | e.eff = ForbidEffect and e.v = Unknown)
         and (a = AuthorityUnknown
             implies authorityUnreachable = On
-            else (all e: es | (e.effect = PermitEffect and e.condition = Unknown) implies e in unreachable))
-        and (some e: es | e.effect = PermitEffect and e.condition in True + Unknown))
-    => PermitOffline else outcome[es, a]
+            else (all e: es | (e.eff = PermitEffect and e.v = Unknown) implies e in unreachable))
+        and (some e: es | e.eff = PermitEffect and e.v in True + Unknown))
+    => PermitOffline else table[es, eff, v, a]
+}
+
+fun offlineOutcome[es: set Element, a: Authority, unreachable: set Element, authorityUnreachable, decider, accepts, holds: Flag]: one Outcome {
+    offlineTable[es, effect, condition, a, unreachable, authorityUnreachable, decider, accepts, holds]
 }
 
 /* P1′: Permit-offline arises only from Indeterminate, only with a decider registered, only for an
@@ -317,6 +322,35 @@ fun orderedValue[es: set Element, now, last: lone Level, engaged: set ExtensionP
 fun decideOrdered[es: set Element, a: Authority, now, last: lone Level, engaged: set ExtensionPoint]: one Outcome {
     table[es, orderedEffect[es, now, last, engaged], orderedValue[es, now, last, engaged], a]
 }
+
+/* Both extension points together: the offline path on the rules' answers. Whatever the configuration,
+ * a forbid on the ordered fact that holds at a value the fact may have leaves neither a Permit nor a
+ * Permit-offline: unknown by default, it's an unknown forbid, which the offline path never passes;
+ * pessimistic, it holds. */
+fun decideAll[es: set Element, a: Authority, unreachable: set Element, authorityUnreachable, holds: Flag, now, last: lone Level, engaged: set ExtensionPoint]: one Outcome {
+    offlineTable[es, orderedEffect[es, now, last, engaged], orderedValue[es, now, last, engaged], a, unreachable, authorityUnreachable, (OfflineDecisions in engaged => On else Off), On, holds]
+}
+
+assert AnOrderedForbidThatMayHoldNeverPermitsOffline {
+    all es, u: set Element, a: Authority, au, h: Flag, now, last: lone Level, x: set ExtensionPoint |
+        (lone now and (some now implies no last)
+            and some e: es & Ordered | e.effect = ForbidEffect and (some l: possible[now, last] | holdsAt[e, l]))
+        implies decideAll[es, a, u, au, h, now, last, x] not in Permit + PermitOffline
+}
+check AnOrderedForbidThatMayHoldNeverPermitsOffline for 4 Element expect 0
+
+-- And with no rule on the fact, both together are the offline path as it was.
+assert WithoutOrderedRulesItsTheOfflinePath {
+    all es, u: set Element, a: Authority, au, h: Flag, now, last: lone Level, x: set ExtensionPoint |
+        no es & Ordered implies decideAll[es, a, u, au, h, now, last, x] = decide[es, a, u, au, h, x]
+}
+check WithoutOrderedRulesItsTheOfflinePath for 4 Element expect 0
+
+-- Permit-offline still happens with a rule on the fact, so the first check isn't vacuous.
+run SomePermitOfflineWithAnOrderedRule {
+    some es, u: set Element, a: Authority, au: Flag, last: lone Level |
+        some es & Ordered and decideAll[es, a, u, au, On, none, last, ExtensionPoint] = PermitOffline
+} for 3 Element expect 1
 
 -- How permissive an outcome is.
 fun permissiveness: Outcome -> Int { Deny -> 0 + Indeterminate -> 1 + PermitOffline -> 1 + Permit -> 2 }

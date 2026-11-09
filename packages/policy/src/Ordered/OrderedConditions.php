@@ -74,7 +74,10 @@ final readonly class OrderedConditions
         }
 
         [$low, $high] = $any || null !== $fact->value ? $fact->possible() : [$fact->min, $fact->max];
-        // A condition holds at a range's every value or any of them where it holds at its ends.
+        // The two ends are enough only because every condition is monotone: "at least" and "at most" hold
+        // on a range's every value, or any, where they hold at its ends. A condition that isn't, e.g.
+        // "between" or "equals", would be decided wrongly here, which is why OrderedCondition is closed
+        // to those two.
         $atLow = $condition->holdsAt($low);
         $atHigh = $condition->holdsAt($high);
 

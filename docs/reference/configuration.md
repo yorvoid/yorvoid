@@ -136,4 +136,8 @@ yorvoid:
 
         # The translation domain of your operations' summaries
         summaries_domain:     messages
+    ordered_conditions:
+
+        # Whether rules decide an unknown ordered fact at its worst instead of as missing data (experimental)
+        pessimistic:          false
 ```

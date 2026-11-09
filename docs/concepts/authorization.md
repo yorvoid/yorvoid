@@ -439,7 +439,10 @@ A rule may depend on a fact on an ordered scale, e.g. a readiness level, with `O
 - **The fact** is an `OrderedFact` on a declared scale: `OrderedFact::known('readiness', 0, 3, $level)`, or `OrderedFact::unknown('readiness', 0, 3, $lastKnown)` when it isn't known now. **Higher is worse:** a scale that runs the other way (DEFCON 1 is the most severe) is mapped so that it does.
 - **The condition** is `OrderedCondition::atLeast($k)` or `atMost($k)`. `$conditions->forbid($fact, $condition, $detail)` refuses when it holds; `$conditions->permit(...)` permits when the requirement is met. Both answer as a rule does.
 - **By default, an unknown fact is missing data:** the rule can't tell, and the decision is Indeterminate (`missing_data`), as for any unknown.
-- **Pessimistic** (`new OrderedConditions(pessimistic: true)`), an unknown fact is decided at its worst. A forbid applies if it applies at any value from the last known one up to the scale's highest. A requirement counts as unmet unless every value of the scale meets it: assuming the worst is no reason to meet one.
+- **Pessimistic** (`new OrderedConditions(pessimistic: true)`; in Symfony, `ordered_conditions.pessimistic: true`), an unknown fact is decided at its worst, by two views taken from two requirements:
+  - **A forbid** applies if it applies at any value from the last known one up to the scale's highest (XP-15). This view assumes the fact hasn't fallen below its last known value while unknown.
+  - **A requirement** counts as unmet unless every value of the scale meets it (RDY-04: "a requirement satisfied by readiness counts as unmet"). This view assumes nothing, so assuming the worst is never a reason to meet one.
+  - **The asymmetry is deliberate:** each side is as strict as its requirement asks.
 - **A Deny with no history is the point:** pessimistic, an unknown fact with no last known value gives a Deny under a forbid on any value of the scale, not Indeterminate. That's deliberate (RDY-04), not a bug to fix.
 
 ```php

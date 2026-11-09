@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace YorvoID\Policy\Ordered;
 
 /**
- * A condition on an ordered fact (XP-15): at least, or at most, a value.
+ * A condition on an ordered fact (XP-15): at least, or at most, a value. Only these two: OrderedConditions
+ * decides a range of values by its ends, which is right only for a condition that's monotone.
  *
  * @api
  *

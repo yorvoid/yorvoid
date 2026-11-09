@@ -48,6 +48,7 @@ use YorvoID\Notifications\SecurityNotifications;
 use YorvoID\Passkeys\ClonePolicy;
 use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\UserVerification;
+use YorvoID\Policy\Ordered\OrderedConditions;
 use YorvoID\Symfony\Command\MigrateCommand;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Symfony\App\TestKernel;
@@ -129,6 +130,12 @@ final class BundleTest extends TestCase
         $default = $this->boot(fresh: true);
         self::assertSame(['consumer_site', '5m', '24h'], [$default->getParameter('yorvoid.preset'), $default->getParameter('yorvoid.step_up.window'), $default->getParameter('yorvoid.step_up.cool_down')]);
         self::assertSame('24h', $this->boot(['preset' => 'internal_tool'], fresh: true)->getParameter('yorvoid.step_up.cool_down'), 'Every preset waits after a recovery.');
+    }
+
+    public function testOrderedConditionsArePessimisticOnlyWhenTheApplicationSays(): void
+    {
+        self::assertEquals(new OrderedConditions(), $this->boot(fresh: true)->get(OrderedConditions::class), 'Off by default (MP-1).');
+        self::assertEquals(new OrderedConditions(pessimistic: true), $this->boot(['ordered_conditions' => ['pessimistic' => true]], fresh: true)->get(OrderedConditions::class));
     }
 
     public function testNotificationsOffNeedNoSettings(): void
