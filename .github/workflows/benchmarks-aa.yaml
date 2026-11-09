@@ -1,0 +1,60 @@
+---
+name: Benchmarks A/A
+
+# How often the benchmarks' gate fails when nothing changed (M2-8, C1): the head against itself,
+# twenty times on twenty runners, as a pull request is compared. The gate is trusted only while none
+# fails. It runs by hand, and on a pull request that changes how the benchmarks measure.
+on:
+  workflow_dispatch: ~
+  pull_request:
+    paths:
+      - tools/bench/**
+      - phpbench.json
+      - .github/workflows/benchmarks-aa.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  aa:
+    name: A/A ${{ matrix.run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the development images
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        with:
+          pull: true
+          load: true
+          source: .
+          files: compose.yaml
+          targets: php,postgres
+          set: |
+            php.cache-from=type=gha,scope=dev-${{ github.ref }}
+            php.cache-from=type=gha,scope=dev-refs/heads/main
+      - name: Start services
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose up --wait --no-build
+      - name: Install dependencies
+        run: docker compose exec -T php composer install --no-interaction --no-progress
+      - name: The head against itself
+        run: docker compose exec -T -e GITHUB_STEP_SUMMARY=var/bench/summary.md php sh tools/bench/ci.sh aa
+      - name: Show the table
+        if: always()
+        run: cat var/bench/summary.md >> "$GITHUB_STEP_SUMMARY" || true

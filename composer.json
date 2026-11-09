@@ -59,6 +59,7 @@
         "infection/infection": "^0.35.8",
         "innmind/black-box": "^7.0",
         "nikic/php-fuzzer": "^0.0.11",
+        "phpbench/phpbench": "^1.4",
         "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan": "^2.3",
         "phpstan/phpstan-phpunit": "^2.1",
@@ -78,6 +79,7 @@
     },
     "autoload-dev": {
         "psr-4": {
+            "YorvoID\\Bench\\": "tools/bench/",
             "YorvoID\\E2e\\": "e2e/app/src/",
             "YorvoID\\Tests\\": "tests/",
             "YorvoID\\Tools\\PHPStan\\": "tools/phpstan/src/"
@@ -102,6 +104,12 @@
             "@php tools/compat/bc-check.php"
         ],
         "test": "phpunit",
+        "bench": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php -r \"is_dir('var/bench') || mkdir('var/bench', 0777, true);\"",
+            "@php -d opcache.enable_cli=1 -d pcov.enabled=0 vendor/bin/phpbench run --dump-file=var/bench/run.xml --progress=none --report=aggregate",
+            "@php tools/bench/bench.php report var/bench/run.xml"
+        ],
         "infection": [
             "Composer\\Config::disableProcessTimeout",
             "@php tools/infection/no-skipped.php clear",
@@ -132,6 +140,7 @@
         "dependencies": "Checks that each package requires what it uses, and uses what it requires",
         "bc": "Checks the compatibility promise against the last release: every break of @api code is in the changelog",
         "test": "Runs the tests",
+        "bench": "Runs the benchmarks (PostgreSQL), and writes their table",
         "infection": "Mutation testing",
         "docs-reference": "Writes the reference pages from the code: the configuration and the console commands",
         "qa": "Everything CI checks, in order",

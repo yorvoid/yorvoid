@@ -109,6 +109,7 @@ export default defineConfig({
         items: [
           { text: 'Configuration', link: '/reference/configuration' },
           { text: 'Console commands', link: '/reference/console' },
+          { text: 'Performance', link: '/reference/performance' },
         ],
       },
       {

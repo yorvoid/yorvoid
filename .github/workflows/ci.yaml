@@ -383,6 +383,66 @@ jobs:
           docker compose --profile spec run --rm spec ./check.sh
 
   # The one check that pull requests need to pass: every job above passed.
+  # The hot paths' speed (M2-8): a pull request's head against its base, on one runner, subject by
+  # subject in turns (tools/bench/ci.sh); main's table, and the change since the last release, in the
+  # job summary. Not yet one of the checks "CI" requires: that waits for the A/A record (benchmarks-aa).
+  benchmarks:
+    name: Benchmarks
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The base, and the last release's tag, to measure against.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the development images
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        with:
+          pull: true
+          load: true
+          source: .
+          files: compose.yaml
+          targets: php,postgres
+          set: |
+            php.cache-from=type=gha,scope=dev-${{ github.ref }}
+            php.cache-from=type=gha,scope=dev-refs/heads/main
+      - name: Start services
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose up --wait --no-build
+      - name: Install dependencies
+        run: docker compose exec -T php composer install --no-interaction --no-progress
+      - name: Measure
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          docker compose exec -T php git config --global --add safe.directory '*'
+          if [ "$EVENT" = pull_request ]; then
+            docker compose exec -T -e GITHUB_STEP_SUMMARY=var/bench/summary.md php sh tools/bench/ci.sh pr "$BASE"
+          else
+            docker compose exec -T -e GITHUB_STEP_SUMMARY=var/bench/summary.md php sh tools/bench/ci.sh main
+          fi
+      - name: Show the tables
+        if: always()
+        run: cat var/bench/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Keep the runs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: benchmarks
+          path: var/bench/*.xml
+          retention-days: 30
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
   ci:
     name: CI
     if: always()
