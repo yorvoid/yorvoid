@@ -7,6 +7,7 @@
     {"path": "packages/mail", "repository": "yorvoid/mail"},
     {"path": "packages/notifications", "repository": "yorvoid/notifications"},
     {"path": "packages/passkeys", "repository": "yorvoid/passkeys"},
+    {"path": "packages/policy-testing", "repository": "yorvoid/policy-testing"},
     {"path": "packages/policy", "repository": "yorvoid/policy"},
     {"path": "packages/relations", "repository": "yorvoid/relations"},
     {"path": "packages/symfony", "repository": "yorvoid/symfony"},

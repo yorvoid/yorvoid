@@ -35,6 +35,10 @@ deptrac:
       collectors:
         - type: classLike
           value: ^YorvoID\\Policy\\.*
+    - name: PolicyTesting
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\PolicyTesting\\.*
     - name: Relations
       collectors:
         - type: classLike
@@ -108,6 +112,16 @@ deptrac:
     Policy:
       - Core
       - Relations
+    # A development tool: nothing else refers to it, neither the bridge production runs nor the store
+    # contracts it builds on (M2-5).
+    PolicyTesting:
+      - Core
+      - Authn
+      - Passkeys
+      - Policy
+      - Relations
+      - Testing
+      - Throttle
     Relations:
       - Core
     Throttle:

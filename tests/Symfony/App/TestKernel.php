@@ -18,6 +18,7 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Kernel;
+use YorvoID\PolicyTesting\Symfony\YorvoIDPolicyTestingBundle;
 use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\RecoveryCodeAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\RecoveryLinkAuthenticator;
@@ -26,6 +27,7 @@ use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\YorvoIDBundle;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
+use YorvoID\Tests\PolicyTesting\Fixtures\AcmeCases;
 use YorvoID\Tests\Support\StatementLog;
 
 /**
@@ -53,8 +55,9 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         bool $debugging = true,
         private readonly bool $session = true,
         private readonly bool $mailer = true,
+        string $environment = 'test',
     ) {
-        parent::__construct('test', $debugging);
+        parent::__construct($environment, $debugging);
     }
 
     public function registerBundles(): iterable
@@ -66,6 +69,9 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         yield new DoctrineBundle();
         yield new SecurityBundle();
         yield new YorvoIDBundle();
+        if (YorvoIDPolicyTestingBundle::ENVIRONMENT === $this->environment) {
+            yield new YorvoIDPolicyTestingBundle();
+        }
     }
 
     public function getProjectDir(): string
@@ -75,7 +81,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
 
     public function getCacheDir(): string
     {
-        return $this->directory.'/cache';
+        return $this->directory.'/cache/'.$this->environment;
     }
 
     public function getLogDir(): string
@@ -134,6 +140,8 @@ final class TestKernel extends Kernel implements CompilerPassInterface
             $container->register(AcmeDeclarations::class)->setAutoconfigured(true);
             $container->register(LockedPages::class)->setAutoconfigured(true);
             $container->register(HelpersModerate::class)->setAutoconfigured(true);
+            // The sample policy's cases, which the policy testing bundle collects.
+            $container->register(AcmeCases::class)->setAutoconfigured(true);
             $container->register(MeController::class)->setPublic(true)->setAutowired(true)->addTag('controller.service_arguments');
             $container->register(SignOutController::class)->setPublic(true)->setAutowired(true)->addTag('controller.service_arguments');
             $container->register('test.users', OwnUsers::class);

@@ -18,6 +18,7 @@ Documentation for two readers: **integrators**, who add YorvoID to an applicatio
 - [Rotate the signing keys](how-to/rotate-keys.md) without downtime.
 - [Change the sign-in pages](how-to/sign-in-pages.md) to your look.
 - [Sign operations with a Symfony console](how-to/signed-operations.md): signed intents end to end, the console and the privileged side.
+- [Test your policy](how-to/test-your-policy.md): the decisions it must give, as cases, in PHPUnit and in CI.
 - [Integrate without a framework bridge](how-to/without-a-bridge.md): the security work the Symfony bridge does, for Laravel, Drupal or plain PHP.
 
 ## Reference
