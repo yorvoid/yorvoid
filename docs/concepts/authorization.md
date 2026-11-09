@@ -412,6 +412,43 @@ Some deployments must keep a few operations going while the store they decide fr
 
 What the decider allows is **Permit-offline**, a verdict of its own, not a Permit: `Decision::permits()` is false for it, and only an operation that accepts it runs. Its permit says so (`$permit->offline`, as do its consequences), the security log records `yorvoid.decision.offline`, and it's logged as a warning. A decider without such an operation, or such an operation without a decider, fails when `Operations` is built.
 
+### Offline limits
+
+How long a node may decide offline is measured by **elapsed time**, never the wall clock, so setting the clock back or forward can't stretch it (experimental, XP-14):
+
+- **`Elapsed`** gives a mark (`Instant`) and, later, the nanoseconds since it. It has no "now": decisions still read the PSR clock. It returns null, never a guess or a negative duration, for a mark of another boot, of another process where marks are per process, or ahead of now.
+- **`BootTime`** is the one to use. On Linux it reads `/proc/uptime` with the boot's ID, so time the machine spends suspended counts. PHP's `hrtime()` doesn't count it (it reads `CLOCK_MONOTONIC`), so `BootTime` doesn't use it. Without `/proc`, marks are per process, for development only: under PHP-FPM every worker has its own, so each refuses the others' marks. `BootTime::boots()` says which it is.
+- **`WithinOfflineLimit`** wraps your `OfflineDecider`: what it allows stands only while less than the limit has passed since a mark, e.g. when the link was lost. It can only refuse what the decider it wraps would allow, never allow more. A mark it can't measure from refuses, so a reboot never restarts the limit.
+- **A stored mark is trusted data:** whoever can rewrite it can extend the limit. Where you keep it and how it's protected, e.g. with the grant, in the store, is yours.
+- **In tests,** `YorvoID\Testing\MockElapsed` moves apart from a `MockClock`, and reboots.
+
+```php
+use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\WithinOfflineLimit;
+use YorvoID\Core\Clock\BootTime;
+use YorvoID\Core\Clock\Instant;
+use YorvoID\Core\Duration;
+
+$offline = new WithinOfflineLimit($decider, new BootTime(), static fn (Request $request): ?Instant => $link->lostAt(), Duration::hours(4));
+```
+
+## Ordered conditions
+
+A rule may depend on a fact on an ordered scale, e.g. a readiness level, with `OrderedConditions` (experimental, XP-15):
+
+- **The fact** is an `OrderedFact` on a declared scale: `OrderedFact::known('readiness', 0, 3, $level)`, or `OrderedFact::unknown('readiness', 0, 3, $lastKnown)` when it isn't known now. **Higher is worse:** a scale that runs the other way (DEFCON 1 is the most severe) is mapped so that it does.
+- **The condition** is `OrderedCondition::atLeast($k)` or `atMost($k)`. `$conditions->forbid($fact, $condition, $detail)` refuses when it holds; `$conditions->permit(...)` permits when the requirement is met. Both answer as a rule does.
+- **By default, an unknown fact is missing data:** the rule can't tell, and the decision is Indeterminate (`missing_data`), as for any unknown.
+- **Pessimistic** (`new OrderedConditions(pessimistic: true)`), an unknown fact is decided at its worst. A forbid applies if it applies at any value from the last known one up to the scale's highest. A requirement counts as unmet unless every value of the scale meets it: assuming the worst is no reason to meet one.
+- **A Deny with no history is the point:** pessimistic, an unknown fact with no last known value gives a Deny under a forbid on any value of the scale, not Indeterminate. That's deliberate (RDY-04), not a bug to fix.
+
+```php
+use YorvoID\Core\Authorization\OrderedFact;
+use YorvoID\Policy\Ordered\OrderedCondition;
+
+return $this->conditions->forbid(OrderedFact::unknown('readiness', 0, 3, $this->lastReadiness()), OrderedCondition::atLeast(3), 'At readiness 3 or worse, nothing is deleted.');
+```
+
 ## Policy elements
 
 Your own rules are elements: a class implementing `PermitElement` (with the way it authorizes by) or `ForbidElement`, with a stable name for reasons and the log.
