@@ -57,6 +57,18 @@ parameters:
                 - 'strncasecmp()'
             message: 'compares in variable time; use hash_equals() for anything secret, or === otherwise (PLT-053)'
 
+    # The verifier's state is read and written only through Verifier::transaction(), which applies the
+    # key changes that are due first: so no call ever sees a change that's due and not applied, e.g. the
+    # first key between its bootstrap and its apply (M2-7, spec/README.md).
+    disallowedMethodCalls:
+        -
+            method: 'YorvoID\IntentVerifier\VerifierStore::transaction()'
+            message: 'skips applying the due key changes; go through Verifier::transaction() (M2-7)'
+            allowInMethods:
+                - 'YorvoID\IntentVerifier\Verifier::transaction()'
+            allowIn:
+                - tests/*
+
     ignoreErrors:
         -
             # BlackBox's Set::either() declares a type parameter per possible argument, which PHPStan

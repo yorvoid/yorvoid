@@ -59,7 +59,7 @@ What runs, and where each package belongs:
 | `yorvoid/mail` | Emails from structured content, as plain text and accessible HTML. |
 | `yorvoid/translation` | ICU messages from the catalogues packages ship. |
 | `yorvoid/intent-signing` | The application's side of signed intents: asking, limits, summaries, the log. |
-| `yorvoid/intent-verifier` | The privileged side of signed intents. Stands alone: no framework, no database layer, no other YorvoID package. |
+| `yorvoid/intent-verifier` | The privileged side of signed intents. Stands alone: no framework, no database layer, no other YorvoID package. `Verifier` is its API, over `IntentChecks` (what the browser answers) and `KeyRegistry` (the keys and their changes, replayed against its formal model). |
 | `yorvoid/symfony` | The bundle: configuration, firewall authenticators, user provider, console commands, mailer and translator glue. |
 | `yorvoid/testing`, `yorvoid/virtual-authenticator` | For your tests: fixtures, a movable clock, a software authenticator. |
 | `@yorvoid/browser` | The browser client, on npm. No dependencies. |

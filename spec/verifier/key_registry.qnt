@@ -127,3 +127,9 @@ module counted {
 module uncounted {
   import keyRegistry(KEYS = Set("k1", "k2", "k3"), DELAY = 1, MAX_TIME = 3, COUNT_LEAVING = false).*
 }
+
+// What the PHP tests replay (tests/IntentVerifier/KeyRegistryTracesTest.php): YorvoID's way, with a
+// clock that runs longer, so executions apply more changes.
+module replayed {
+  import keyRegistry(KEYS = Set("k1", "k2", "k3"), DELAY = 1, MAX_TIME = 8, COUNT_LEAVING = true).*
+}

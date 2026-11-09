@@ -44,6 +44,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - A deleted principal's roles are taken.
 - The policy changes through operations (`yorvoid.role.*`, `yorvoid.ability.*`, `PolicyChanges`), each in the security log and incrementing the realm's policy version. Nobody gives what they don't hold (`NoEscalation`), and giving a strict ability or a super role takes a recent proof (`StepUpCheck`, `SessionStepUpCheck`).
 - A policy element can check the operations when `Operations` is built (`ChecksCatalogue`): the role permit refuses an operation whose ability isn't declared.
+- Every behaviour model is replayed against the code: the setup claim (by the order its transactions commit in) and the intent verifier's keys, as the one-time tokens were; the decision model and its fixtures in two configurations, the default and every extension point engaged (XP-16), the default's outcomes unchanged ([formal models](spec/README.md)). Inside `Verifier`, which is unchanged, its keys and the checks of what the browser answers are parts of their own (`KeyRegistry`, `IntentChecks`, internal).
 
 ### Fixed
 

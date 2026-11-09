@@ -76,6 +76,20 @@
                 ".*\\$count = \\(int\\) \\$this->connection->executeStatement\\(.*"
             ]
         },
+        "MethodCallRemoval": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: IntentChecks checks the answer's origin itself, byte for byte, before the
+                // library's ceremony runs; the library's own check is a second one.
+                ".*\\$steps->setAllowedOrigins\\(\\$this->config->origins\\);.*"
+            ]
+        },
+        "Throw_": {
+            "ignoreSourceCodeByRegex": [
+                // Equivalent: the library accepts a registration only with the algorithms Key accepts
+                // (ES256, EdDSA, RS256), so its key is always one.
+                ".*return \\$key \\?\\? throw new IntentRefused\\(Refusal::InvalidKey\\);.*"
+            ]
+        },
         "MatchArmRemoval": {
             "ignore": [
                 // Equivalent: without its default arm the match throws, which accepts() takes as a refusal.

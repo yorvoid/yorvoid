@@ -45,7 +45,10 @@ alloy() { java -jar /opt/alloy/alloy.jar exec -q -c '*' -o /tmp/alloy -f -t json
 holds "decisions/precedence.als (Alloy)" alloy decisions/precedence.als
 # The requests that tests/Core/Authorization/PrecedenceFixturesTest.php decides with the PHP evaluator
 # must be the model's: regenerate them with "node decisions/fixtures.mjs > decisions/fixtures.json".
-holds "decisions: the fixtures the PHP tests decide are the model's" sh -c 'node decisions/fixtures.mjs | cmp -s - decisions/fixtures.json'
+holds "decisions: the fixtures the PHP tests decide are the model's (default configuration)" sh -c 'node decisions/fixtures.mjs | cmp -s - decisions/fixtures.json'
+# The extended configuration (XP-16): every M2 extension point engaged; "node decisions/fixtures.mjs
+# extended > decisions/fixtures-extended.json". The default's are unchanged by it (MP-1, DefaultIsTheTable).
+holds "decisions: the fixtures the PHP tests decide are the model's (extended configuration)" sh -c 'node decisions/fixtures.mjs extended | cmp -s - decisions/fixtures-extended.json'
 
 # One-time tokens, in Quint: Apalache checks every execution up to the bound (10 steps, beyond the
 # model's longest execution of 9 steps), and simulation runs random executions.
@@ -56,8 +59,9 @@ holds "tokens: atomic consumption is safe (Quint, simulation)" quint run --main=
 violated "tokens: naive consumption uses a token twice (Quint, simulation)" "\[violation\]" quint run --main=naive --invariant=AT_MOST_ONCE --max-samples=20000 --max-steps=20 --seed=42 tokens/one_time_token.qnt
 
 # The executions that tests/Authn/Token/OneTimeTokenTracesTest.php replays against the PHP code must be
-# the model's: regenerate them with "node tokens/traces.mjs > tokens/traces.json" after changing it.
-holds "tokens: the executions the PHP tests replay are the model's" sh -c 'node tokens/traces.mjs | cmp -s - tokens/traces.json'
+# the model's: regenerate them with the command in TRACES_TOKENS after changing it.
+TRACES_TOKENS='node traces.mjs tokens/one_time_token.qnt atomic 100 12 0x5e171e1'
+holds "tokens: the executions the PHP tests replay are the model's" sh -c "$TRACES_TOKENS | cmp -s - tokens/traces.itf.json"
 
 # The intent verifier's keys, in Quint: never without keys, nothing added before its delay. The variant
 # that counts only the current keys, not those already leaving, must lose them all.
@@ -65,6 +69,10 @@ holds "verifier keys: typecheck (Quint)" quint typecheck verifier/key_registry.q
 holds "verifier keys: safe (Quint, Apalache)" quint verify --main=counted --invariant=SAFETY --max-steps=10 verifier/key_registry.qnt
 violated "verifier keys: counting only current keys loses them all (Quint, Apalache)" "\[violation\]" quint verify --main=uncounted --invariant=NEVER_WITHOUT_KEYS --max-steps=10 verifier/key_registry.qnt
 holds "verifier keys: safe (Quint, simulation)" quint run --main=counted --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 verifier/key_registry.qnt
+holds "verifier keys: safe with the replayed clock (Quint, simulation)" quint run --main=replayed --invariant=SAFETY --max-samples=20000 --max-steps=30 --seed=42 verifier/key_registry.qnt
+# What tests/IntentVerifier/KeyRegistryTracesTest.php replays against KeyRegistry.
+TRACES_KEYS='node traces.mjs verifier/key_registry.qnt replayed 60 24 0x6b657973'
+holds "verifier keys: the executions the PHP tests replay are the model's" sh -c "$TRACES_KEYS | cmp -s - verifier/traces.itf.json"
 
 # Claiming a realm with its setup code, in Quint: one owner, whoever comes at the same moment, and the
 # realm's first principal, also when an invitation is accepted at the same moment. Marking it claimed
@@ -74,6 +82,9 @@ holds "setup claim: one owner, the first principal (Quint, Apalache)" quint veri
 violated "setup claim: without a compare-and-swap, two owners (Quint, Apalache)" "\[violation\]" quint verify --main=naive --invariant=ONE_OWNER --max-steps=12 setup/setup_claim.qnt
 violated "setup claim: without the log's lock, an owner after someone (Quint, Apalache)" "\[violation\]" quint verify --main=unlocked --invariant=OWNER_FIRST --max-steps=12 setup/setup_claim.qnt
 holds "setup claim: one owner, the first principal (Quint, simulation)" quint run --main=atomic --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 setup/setup_claim.qnt
+# What tests/Authn/Setup/SetupClaimTracesTest.php replays against SetupCodes: only LOCKED = true, YorvoID's.
+TRACES_SETUP='node traces.mjs setup/setup_claim.qnt atomic 100 14 0x5e7c1a1'
+holds "setup claim: the executions the PHP tests replay are the model's" sh -c "$TRACES_SETUP | cmp -s - setup/traces.itf.json"
 
 # Apalache writes its working files next to the models; they aren't needed afterwards.
 rm -rf "$out" _apalache-out

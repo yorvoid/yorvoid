@@ -176,19 +176,82 @@ run SomePermitOffline {
     some es, u: set Element, a: Authority, au: Flag | offlineOutcome[es, a, u, au, On, On, On] = PermitOffline
 } for 6 Element expect 1
 
+/* The two configurations (XP-16, MP-1): the extension points at their default (enterprise), and all
+ * engaged (extended). In M2 the point is offline decisions (XP-03): an OfflineDecider registered, for an
+ * operation that accepts Permit-offline. XP-15's ordered conditions join the extended configuration
+ * with M2-11, so the configuration is a set of extension points, not a flag. */
+abstract sig ExtensionPoint {}
+one sig OfflineDecisions extends ExtensionPoint {}
+
+fun decide[es: set Element, a: Authority, unreachable: set Element, authorityUnreachable, holds: Flag, engaged: set ExtensionPoint]: one Outcome {
+    offlineOutcome[es, a, unreachable, authorityUnreachable, (OfflineDecisions in engaged => On else Off), On, holds]
+}
+
+/* MP-1: with nothing engaged, the decision is the table, whatever stores are unreachable. */
+assert DefaultIsTheTable {
+    all es, u: set Element, a: Authority, au, h: Flag | decide[es, a, u, au, h, none] = outcome[es, a]
+}
+check DefaultIsTheTable for 6 Element expect 0
+
+/* P1, in the default configuration: a Permit needs a validated authority and a permit that holds, and
+ * no forbid that holds or might. */
+assert DefaultPermitNeedsEverything {
+    all es, u: set Element, a: Authority, au, h: Flag | decide[es, a, u, au, h, none] = Permit implies {
+        a = Valid
+        some e: es | e.effect = PermitEffect and e.condition = True
+        no e: es | e.effect = ForbidEffect and e.condition in True + Unknown
+    }
+}
+check DefaultPermitNeedsEverything for 6 Element expect 0
+
+/* P1′, in the extended configuration: Permit-offline only from an Indeterminate that a store unreachable
+ * caused, and a Permit only where the default gives one. */
+assert ExtendedOnlyAddsPermitOffline {
+    all es, u: set Element, a: Authority, au, h: Flag | let x = decide[es, a, u, au, h, ExtensionPoint] {
+        x != outcome[es, a] implies (x = PermitOffline and outcome[es, a] = Indeterminate)
+    }
+}
+check ExtendedOnlyAddsPermitOffline for 6 Element expect 0
+
 /* The fixtures the PHP evaluator is tested against (tests/Core/Authorization/PrecedenceFixturesTest.php):
- * every request with up to 6 matching elements, its authority, and the outcome the table gives it.
- * decisions/fixtures.mjs enumerates them into decisions/fixtures.json; check.sh fails if that file isn't
- * what the model gives. */
-one sig Request {
+ * every request with up to 6 matching elements, its authority, and the outcome the table gives it, in
+ * the default configuration. decisions/fixtures.mjs enumerates them into decisions/fixtures.json;
+ * check.sh fails if that file isn't what the model gives. */
+lone sig Request {
     elements: set Element,
     authority: one Authority,
     result: one Outcome
 }
 
 fact fixture {
-    Request.elements = Element
-    Request.result = outcome[Request.elements, Request.authority]
+    some Request implies {
+        Request.elements = Element
+        Request.result = decide[Request.elements, Request.authority, none, Off, Off, none]
+    }
 }
 
-run fixtures {} for 6 Element
+run fixtures { one Request and no ExtendedRequest } for 6 Element
+
+/* And in the extended configuration, for an operation that accepts Permit-offline: which unknown
+ * conditions an unreachable store caused, whether the authority's was, and what the decider says, up to
+ * 4 matching elements. decisions/fixtures.mjs extended enumerates them into
+ * decisions/fixtures-extended.json. */
+lone sig ExtendedRequest {
+    elements: set Element,
+    unreachable: set Element,
+    authority: one Authority,
+    authorityUnreachable: one Flag,
+    holds: one Flag,
+    result: one Outcome
+}
+
+fact extendedFixture {
+    some ExtendedRequest implies {
+        ExtendedRequest.elements = Element
+        ExtendedRequest.unreachable in condition.Unknown
+        ExtendedRequest.authority != AuthorityUnknown implies ExtendedRequest.authorityUnreachable = Off
+        ExtendedRequest.result = decide[ExtendedRequest.elements, ExtendedRequest.authority, ExtendedRequest.unreachable, ExtendedRequest.authorityUnreachable, ExtendedRequest.holds, ExtensionPoint]
+    }
+}
+
+run fixturesExtended { one ExtendedRequest and no Request } for 4 Element

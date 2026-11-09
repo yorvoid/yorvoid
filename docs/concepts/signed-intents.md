@@ -142,6 +142,8 @@ The verifier accepts signatures only from passkeys of its own relying party, reg
 - **The first key** comes with a **bootstrap secret**: the host's root creates it (`createBootstrapSecret()`, e.g. from a console command), valid for an hour by default, and the owner types it on the signing page, never into the console. The new passkey signs its own addition (`prepareRegistration($label, bootstrap: true)`, then `bootstrap($secret, $nonce, $assertion)`). The first key is added at once; the secret works once.
 - **If every key is lost**, the host's root creates a new bootstrap secret: the way back in (INT-016). With keys still there, the new key waits like any change, so their owners can cancel it.
 
+For reviewers: `Verifier` is the API, over two internal parts. `IntentChecks` checks what the browser answers: the nonce taken once, the assertion over the intent's challenge, a registration's attestation. `KeyRegistry` keeps the keys and their changes as the formal model `spec/verifier/key_registry.qnt` describes them, and the tests replay the model's executions against it.
+
 ## Telling the owners
 
 The verifier's `VerifierNotifier` hears of every operation verified and every change to the keys: asked for, cancelled, taken effect, and every bootstrap secret created. Implement it on the privileged side, e.g. an email the privileged process sends itself: a channel the console doesn't control (INT-012). If it throws, the call fails, and an operation whose notice couldn't be sent doesn't run. `CollectingNotifier` keeps notices in memory, for tests or to send them afterwards.

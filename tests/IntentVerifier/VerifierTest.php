@@ -154,6 +154,8 @@ final class VerifierTest extends TestCase
         self::assertSame(['verified', ['action' => 'acme.site.remove', 'nonce' => $prepared->intent->nonce, 'key' => $verified->key->id(), 'algorithm' => -7]], [$entry['event'], $entry['details']]);
 
         $this->refused(Refusal::UnknownIntent, fn () => $verifier->verify($prepared->intent->nonce, $this->owner->signIn($prepared->options)), 'A signature worked twice.');
+        $entry = $this->log->entries[\count($this->log->entries) - 1];
+        self::assertSame(['refused', ['nonce' => $prepared->intent->nonce, 'reason' => 'unknown_intent']], [$entry['event'], $entry['details']], 'A nonce of the verifier\'s, used up: recorded as it is.');
         $this->refused(Refusal::UnknownIntent, fn () => $verifier->verify('never-prepared', $this->owner->signIn($prepared->options)));
         $entry = $this->log->entries[\count($this->log->entries) - 1];
         // Not a nonce the verifier made: recorded by a short hash.
