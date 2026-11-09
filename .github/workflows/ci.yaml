@@ -385,10 +385,9 @@ jobs:
   # The one check that pull requests need to pass: every job above passed.
   # The hot paths' speed (M2-8): a pull request's head against its base, on one runner, subject by
   # subject in turns (tools/bench/ci.sh); main's table, and the change since the last release, in the
-  # job summary. Not yet one of the checks "CI" requires: that waits for the A/A record (benchmarks-aa).
+  # job summary, also on the nightly run. Required since its A/A record was clean (benchmarks-aa).
   benchmarks:
     name: Benchmarks
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -455,6 +454,7 @@ jobs:
       - e2e
       - quickstart
       - specification
+      - benchmarks
     runs-on: ubuntu-latest
     steps:
       - name: Check every job passed
