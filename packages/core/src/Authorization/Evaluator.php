@@ -378,7 +378,7 @@ final readonly class Evaluator implements Authorization
             return null;
         }
 
-        return new Decision(Verdict::PermitOffline, $basis, \sprintf('Permitted offline: %s', $truth->detail), [...$decision->reasons, new Reason('offline', 'offline', $truth)]);
+        return new Decision(Verdict::PermitOffline, $basis, \sprintf('Permitted offline: %s', $truth->detail), [...$decision->reasons, new Reason('offline', 'offline', $truth)], precedence: Precedence::Offline);
     }
 
     /**
@@ -390,7 +390,7 @@ final readonly class Evaluator implements Authorization
     {
         // 1.
         if ([] !== $forbids['holds']) {
-            return Decision::deny(\sprintf('A forbid applies: %s', $forbids['holds'][0]->detail), $reasons);
+            return Decision::deny(\sprintf('A forbid applies: %s', $forbids['holds'][0]->detail), $reasons, precedence: Precedence::ForbidHolds);
         }
 
         $couldPermit = [] !== $permits['holds'] || [] !== $permits['unknown'];
@@ -401,16 +401,17 @@ final readonly class Evaluator implements Authorization
                 self::why([IndeterminateReason::UnknownForbid], $forbids['unknown']),
                 \sprintf('A forbid couldn\'t be ruled out: %s%s', $forbids['unknown'][0]->detail, $couldPermit && TruthValue::Fails !== $authority->value ? '' : ' (refused regardless: nothing could permit it)'),
                 $reasons,
+                Precedence::ForbidUnknown,
             );
         }
 
         // 3. and 4.
         if (TruthValue::Fails === $authority->value) {
-            return Decision::deny(\sprintf('The actor\'s authority is invalid: %s', $authority->detail), $reasons);
+            return Decision::deny(\sprintf('The actor\'s authority is invalid: %s', $authority->detail), $reasons, precedence: Precedence::AuthorityInvalid);
         }
 
         if (TruthValue::Unknown === $authority->value) {
-            return Decision::indeterminate(self::why([], [$authority]), \sprintf('The actor\'s authority couldn\'t be established: %s', $authority->detail), $reasons);
+            return Decision::indeterminate(self::why([], [$authority]), \sprintf('The actor\'s authority couldn\'t be established: %s', $authority->detail), $reasons, Precedence::AuthorityUnknown);
         }
 
         // 5. The basis the operation names first, as #[Operation] orders them.
@@ -427,7 +428,7 @@ final readonly class Evaluator implements Authorization
 
             \assert(null !== $chosen);
 
-            return Decision::permit($chosen[0]->basis(), $chosen[1]->detail, $reasons);
+            return Decision::permit($chosen[0]->basis(), $chosen[1]->detail, $reasons, Precedence::PermitHolds);
         }
 
         // 6.
@@ -436,6 +437,7 @@ final readonly class Evaluator implements Authorization
                 self::why([], array_map(static fn (array $permit): Truth => $permit[1], $permits['unknown'])),
                 \sprintf('A permit couldn\'t be evaluated: %s', $permits['unknown'][0][1]->detail),
                 $reasons,
+                Precedence::PermitUnknown,
             );
         }
 
@@ -452,6 +454,7 @@ final readonly class Evaluator implements Authorization
             [] === $permits['fails'] ? \sprintf('No permit applies to "%s".', $request->name()) : $permits['fails'][0][1]->detail,
             $reasons,
             array_values($remedies),
+            Precedence::NoPermit,
         );
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Authn\StepUp;
 
 use YorvoID\Authn\Session\Session;
+use YorvoID\Core\Authorization\Ground;
 use YorvoID\Core\Authorization\StepUpCheck;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
@@ -38,6 +39,6 @@ final readonly class SessionStepUpCheck implements StepUpCheck
             return Truth::fails('The account was recovered recently.', new WaitRemedy($held->until));
         }
 
-        return Truth::holds('The session proved who it is recently.');
+        return Truth::holds('The session proved who it is recently.', Ground::evidence('step_up'));
     }
 }

@@ -16,6 +16,7 @@ use YorvoID\Authn\StepUp\SessionStepUpCheck;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpSelfService;
 use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\Ground;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\TruthValue;
@@ -218,6 +219,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
         $required = new StepUpRemedy(Duration::minutes(5), operation: 'yorvoid.role.assign');
 
         self::assertSame([TruthValue::Holds, 'The session proved who it is recently.'], [$check->check($session, $required)->value, $check->check($session, $required)->detail]);
+        self::assertEquals([Ground::evidence('step_up')], $check->check($session, $required)->grounds, 'Evidence, for explainers.');
 
         $this->clock->sleep(301);
         $old = $check->check($session, $required);

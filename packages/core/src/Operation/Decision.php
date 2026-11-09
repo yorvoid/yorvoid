@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Core\Operation;
 
 use YorvoID\Core\Authorization\IndeterminateReason;
+use YorvoID\Core\Authorization\Precedence;
 use YorvoID\Core\Authorization\Reason;
 use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Exception\IntegratorError;
@@ -27,6 +28,7 @@ final readonly class Decision
      * @param \DateTimeImmutable|null   $at            When it was decided
      * @param array<string, int>        $versions      The versions of what it read, by source, e.g. ["policy" => 12, "relations" => 4] (AUZ-009)
      * @param string|null               $hash          Its record's hash in the decision log, when it's recorded there
+     * @param Precedence|null           $precedence    The row of the precedence that decided, from the evaluator (experimental)
      *
      * @throws IntegratorError When the parts don't fit the verdict
      */
@@ -41,6 +43,7 @@ final readonly class Decision
         public ?\DateTimeImmutable $at = null,
         public array $versions = [],
         public ?string $hash = null,
+        public ?Precedence $precedence = null,
     ) {
         $fits = match ($verdict) {
             Verdict::Permit, Verdict::PermitOffline => null !== $basis && [] === $remedies && [] === $indeterminate,
@@ -56,27 +59,27 @@ final readonly class Decision
     /**
      * @param list<Reason> $reasons
      */
-    public static function permit(AuthorizedBy $basis, string $reason, array $reasons = []): self
+    public static function permit(AuthorizedBy $basis, string $reason, array $reasons = [], ?Precedence $precedence = null): self
     {
-        return new self(Verdict::Permit, $basis, $reason, $reasons);
+        return new self(Verdict::Permit, $basis, $reason, $reasons, precedence: $precedence);
     }
 
     /**
      * @param list<Reason> $reasons
      * @param list<Remedy> $remedies
      */
-    public static function deny(string $reason, array $reasons = [], array $remedies = []): self
+    public static function deny(string $reason, array $reasons = [], array $remedies = [], ?Precedence $precedence = null): self
     {
-        return new self(Verdict::Deny, null, $reason, $reasons, $remedies);
+        return new self(Verdict::Deny, null, $reason, $reasons, $remedies, precedence: $precedence);
     }
 
     /**
      * @param non-empty-list<IndeterminateReason> $indeterminate
      * @param list<Reason>                        $reasons
      */
-    public static function indeterminate(array $indeterminate, string $reason, array $reasons = []): self
+    public static function indeterminate(array $indeterminate, string $reason, array $reasons = [], ?Precedence $precedence = null): self
     {
-        return new self(Verdict::Indeterminate, null, $reason, $reasons, indeterminate: $indeterminate);
+        return new self(Verdict::Indeterminate, null, $reason, $reasons, indeterminate: $indeterminate, precedence: $precedence);
     }
 
     /**
@@ -86,7 +89,7 @@ final readonly class Decision
      */
     public function identified(string $id, \DateTimeImmutable $at, array $versions): self
     {
-        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $id, $at, $versions, $this->hash);
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $id, $at, $versions, $this->hash, $this->precedence);
     }
 
     /**
@@ -94,7 +97,7 @@ final readonly class Decision
      */
     public function recorded(string $hash): self
     {
-        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $hash);
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $hash, $this->precedence);
     }
 
     /**

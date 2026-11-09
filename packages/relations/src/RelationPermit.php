@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Relations;
 
+use YorvoID\Core\Authorization\Ground;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\Preloads;
@@ -93,7 +94,7 @@ final readonly class RelationPermit implements PermitElement, Preloads
             $has = \array_key_exists($relation, $preloaded) ? $preloaded[$relation] : $this->relations->check($request->realm, $resource, $relation, Subject::principal($principal));
 
             if (true === $has) {
-                return Truth::holds(\sprintf('They\'re %s of %s, which gives "%s".', $relation, $resource, $ability));
+                return Truth::holds(\sprintf('They\'re %s of %s, which gives "%s".', $relation, $resource, $ability), Ground::relation($resource, $relation));
             }
 
             $tooDeep = $tooDeep || null === $has;

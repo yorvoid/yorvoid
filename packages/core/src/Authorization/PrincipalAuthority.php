@@ -53,22 +53,22 @@ final readonly class PrincipalAuthority implements AuthorityCheck, Preloads
         $actor = $request->actor;
 
         if (null === $actor->principalId) {
-            return Truth::holds('No principal acts, so no authority is claimed.');
+            return Truth::holds('No principal acts, so no authority is claimed.', Ground::authority('none'));
         }
 
         if (null === $actor->realm || !$actor->realm->equals($request->realm)) {
-            return Truth::fails('The actor acts in another realm than the request\'s.');
+            return Truth::fails('The actor acts in another realm than the request\'s.')->grounded(Ground::authority('other_realm'));
         }
 
         $principal = ($this->preloaded[$request] ?? [$this->principal($actor->realm, $actor)])[0];
 
         if (null === $principal) {
-            return Truth::unknown(IndeterminateReason::MissingData, \sprintf('The acting principal %s isn\'t on record.', $actor->principalId));
+            return Truth::unknown(IndeterminateReason::MissingData, \sprintf('The acting principal %s isn\'t on record.', $actor->principalId))->grounded(Ground::authority('missing'));
         }
 
         return PrincipalStatus::Active === $principal->status
-            ? Truth::holds('The acting principal is active in the realm.')
-            : Truth::fails(\sprintf('The acting principal is %s.', $principal->status->value));
+            ? Truth::holds('The acting principal is active in the realm.', Ground::authority($principal->status->value))
+            : Truth::fails(\sprintf('The acting principal is %s.', $principal->status->value))->grounded(Ground::authority($principal->status->value));
     }
 
     private function principal(Realm $realm, Actor $actor): ?Principal

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Policy\Fixtures;
 
+use YorvoID\Core\Authorization\Ground;
 use YorvoID\Core\Authorization\StepUpCheck;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
@@ -23,6 +24,6 @@ final class StubStepUpCheck implements StepUpCheck
     {
         $this->asked[] = $required;
 
-        return $this->proven ? Truth::holds('Proved recently.') : Truth::fails('Not proved recently.', $required);
+        return $this->proven ? Truth::holds('Proved recently.', Ground::evidence('step_up')) : Truth::fails('Not proved recently.', $required);
     }
 }
