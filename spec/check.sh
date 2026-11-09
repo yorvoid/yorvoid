@@ -49,6 +49,13 @@ holds "decisions: the fixtures the PHP tests decide are the model's (default con
 # The extended configuration (XP-16): every M2 extension point engaged; "node decisions/fixtures.mjs
 # extended > decisions/fixtures-extended.json". The default's are unchanged by it (MP-1, DefaultIsTheTable).
 holds "decisions: the fixtures the PHP tests decide are the model's (extended configuration)" sh -c 'node decisions/fixtures.mjs extended | cmp -s - decisions/fixtures-extended.json'
+# Ordered conditions (XP-15) in both configurations; "node decisions/fixtures.mjs ordered >
+# decisions/fixtures-ordered.json".
+holds "decisions: the fixtures the PHP tests decide are the model's (ordered conditions)" sh -c 'node decisions/fixtures.mjs ordered | cmp -s - decisions/fixtures-ordered.json'
+# MP-1: the default configuration's fixtures are the enterprise behaviour, so they don't change when an
+# extension point is added. A change to them is a change of the default, and needs this hash changed too,
+# in review.
+holds "decisions: the default configuration's fixtures are unchanged (MP-1)" sh -c 'echo "818929b131d3830eb4911f8cf9b341779bda21ccc58a7c79dc2735f37d45ec4c  decisions/fixtures.json" | sha256sum -c -'
 
 # One-time tokens, in Quint: Apalache checks every execution up to the bound (10 steps, beyond the
 # model's longest execution of 9 steps), and simulation runs random executions.
@@ -90,7 +97,9 @@ holds "setup claim: the executions the PHP tests replay are the model's" sh -c "
 # the wall clock and reboots do; measured by the wall clock it does, and only when that's set back.
 holds "offline limit: typecheck (Quint)" quint typecheck offline/elapsed.qnt
 holds "offline limit: elapsed time never permits past it (Quint, Apalache)" quint verify --main=elapsedLimit --invariant=SAFE --max-steps=12 offline/elapsed.qnt
-violated "offline limit: the wall clock permits past it (Quint, Apalache)" "\[violation\]" quint verify --main=wallLimit --invariant=SAFE --max-steps=12 offline/elapsed.qnt
+# The counterexample is the wall clock set back (its states are printed at verbosity 3), and the next
+# check shows that every one is.
+violated "offline limit: the wall clock permits past it, set back (Quint, Apalache)" "offlineLimit::setBack: true" quint verify --main=wallLimit --invariant=SAFE --max-steps=12 --verbosity=3 offline/elapsed.qnt
 holds "offline limit: the wall clock breaks it only when set back (Quint, Apalache)" quint verify --main=wallLimit --invariant=WALL_SAFE_UNLESS_SET_BACK --max-steps=12 offline/elapsed.qnt
 holds "offline limit: elapsed time never permits past it (Quint, simulation)" quint run --main=elapsedLimit --invariant=SAFE --max-samples=20000 --max-steps=20 --seed=42 offline/elapsed.qnt
 # What tests/Core/Authorization/OfflineLimitTracesTest.php replays against WithinOfflineLimit.

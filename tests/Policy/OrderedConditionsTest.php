@@ -53,7 +53,8 @@ final class OrderedConditionsTest extends TestCase
     {
         // The condition, the last known value; what a forbid and a permit on it answer.
         yield 'forbid ≥ 2, last 0: some value up is ≥ 2' => [OrderedCondition::atLeast(2), 0, RuleOutcome::Forbid, RuleOutcome::Abstain];
-        yield '≥ 2, last 3' => [OrderedCondition::atLeast(2), 3, RuleOutcome::Forbid, RuleOutcome::Permit];
+        yield '≥ 2, last 3: met at every value up, still unmet (RDY-04)' => [OrderedCondition::atLeast(2), 3, RuleOutcome::Forbid, RuleOutcome::Abstain];
+        yield '≥ min, last 2: met at every value of the scale' => [OrderedCondition::atLeast(0), 2, RuleOutcome::Forbid, RuleOutcome::Permit];
         yield '≥ 0, last none: met everywhere' => [OrderedCondition::atLeast(0), null, RuleOutcome::Forbid, RuleOutcome::Permit];
         yield '≤ 1, last 1' => [OrderedCondition::atMost(1), 1, RuleOutcome::Forbid, RuleOutcome::Abstain];
         yield '≤ 1, last 2: no value up is ≤ 1' => [OrderedCondition::atMost(1), 2, RuleOutcome::Abstain, RuleOutcome::Abstain];

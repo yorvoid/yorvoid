@@ -30,15 +30,20 @@ one sig Valid, Invalid, AuthorityUnknown extends Authority {}
 abstract sig Outcome {}
 one sig Permit, Deny, Indeterminate extends Outcome {}
 
--- The precedence table of 06 §3, first matching row wins.
+-- The precedence table of 06 §3, first matching row wins, for elements with these effects and values.
+fun table[es: set Element, eff: Element -> Effect, v: Element -> Value, a: Authority]: one Outcome {
+    (some e: es | e.eff = ForbidEffect and e.v = True) => Deny                      -- 1
+    else (some e: es | e.eff = ForbidEffect and e.v = Unknown) => Indeterminate     -- 2
+    else a = Invalid => Deny                                                     -- 3
+    else a = AuthorityUnknown => Indeterminate                                   -- 4
+    else (some e: es | e.eff = PermitEffect and e.v = True) => Permit               -- 5
+    else (some e: es | e.eff = PermitEffect and e.v = Unknown) => Indeterminate     -- 6
+    else Deny                                                                    -- 7
+}
+
+-- The table for the elements as they are.
 fun outcome[es: set Element, a: Authority]: one Outcome {
-    (some e: es | e.effect = ForbidEffect and e.condition = True) => Deny               -- 1
-    else (some e: es | e.effect = ForbidEffect and e.condition = Unknown) => Indeterminate -- 2
-    else a = Invalid => Deny                                                         -- 3
-    else a = AuthorityUnknown => Indeterminate                                       -- 4
-    else (some e: es | e.effect = PermitEffect and e.condition = True) => Permit        -- 5
-    else (some e: es | e.effect = PermitEffect and e.condition = Unknown) => Indeterminate -- 6
-    else Deny                                                                        -- 7
+    table[es, effect, condition, a]
 }
 
 -- rs is es with every unknown condition made known (true or false), element by element.
@@ -177,11 +182,11 @@ run SomePermitOffline {
 } for 6 Element expect 1
 
 /* The two configurations (XP-16, MP-1): the extension points at their default (enterprise), and all
- * engaged (extended). In M2 the point is offline decisions (XP-03): an OfflineDecider registered, for an
- * operation that accepts Permit-offline. XP-15's ordered conditions join the extended configuration
- * with M2-11, so the configuration is a set of extension points, not a flag. */
+ * engaged (extended). The points are offline decisions (XP-03): an OfflineDecider registered, for an
+ * operation that accepts Permit-offline; and the pessimistic mode of ordered conditions (XP-15, M2-11),
+ * below. */
 abstract sig ExtensionPoint {}
-one sig OfflineDecisions extends ExtensionPoint {}
+one sig OfflineDecisions, PessimisticOrdering extends ExtensionPoint {}
 
 fun decide[es: set Element, a: Authority, unreachable: set Element, authorityUnreachable, holds: Flag, engaged: set ExtensionPoint]: one Outcome {
     offlineOutcome[es, a, unreachable, authorityUnreachable, (OfflineDecisions in engaged => On else Off), On, holds]
@@ -230,7 +235,7 @@ fact fixture {
     }
 }
 
-run fixtures { one Request and no ExtendedRequest } for 6 Element
+run fixtures { one Request and no ExtendedRequest and no OrderedRequest and no Ordered } for 6 Element
 
 /* And in the extended configuration, for an operation that accepts Permit-offline: which unknown
  * conditions an unreachable store caused, whether the authority's was, and what the decider says, up to
@@ -254,4 +259,134 @@ fact extendedFixture {
     }
 }
 
-run fixturesExtended { one ExtendedRequest and no Request } for 4 Element
+run fixturesExtended { one ExtendedRequest and no Request and no OrderedRequest and no Ordered } for 4 Element
+
+/* Ordered conditions (XP-15, M2-11): a rule whose condition is on an ordered fact, e.g. "readiness ≥ 2",
+ * on a bounded scale, higher being worse (here 0..3). The fact is known (now), or unknown with or without
+ * a last known value. A rule answers as RuleElements makes it the evaluator's elements: a forbid rule is
+ * a forbid that holds when its condition does; a permit rule, a permit that holds when its requirement
+ * is met; and either, when it can't tell, an unknown forbid. In the default configuration an unknown fact
+ * can't be told (missing data); with PessimisticOrdering engaged, it's decided at every value it may
+ * have, from the last known one to the top of the scale: a forbid applies if it applies at any. A
+ * requirement counts as unmet (RDY-04) unless it's met at every value of the scale: assuming the worst
+ * of the fact is no reason to meet one, even one that a worse value would meet. */
+abstract sig Level {}
+one sig L0, L1, L2, L3 extends Level {}
+
+fun rank: Level -> Int { L0 -> 0 + L1 -> 1 + L2 -> 2 + L3 -> 3 }
+
+abstract sig Direction {}
+one sig AtLeast, AtMost extends Direction {}
+
+-- The elements that are rules on the ordered fact; their own condition plays no part.
+sig Ordered in Element {
+    direction: one Direction,
+    bound: one Level
+}
+
+pred holdsAt[e: Ordered, l: Level] {
+    e.direction = AtLeast implies l.rank >= e.bound.rank else l.rank <= e.bound.rank
+}
+
+-- The values the fact may have: itself when known; else every value from the last known one, or from
+-- the bottom of the scale with none, to the top.
+fun possible[now, last: lone Level]: set Level {
+    some now => now else { l: Level | l.rank >= (some last => last.rank else 0) }
+}
+
+-- What a rule on the fact answers: True (refuses, or permits), False (neither) or Unknown.
+fun answer[e: Ordered, now, last: lone Level, engaged: set ExtensionPoint]: one Value {
+    some now => (holdsAt[e, now] => True else False)
+    else PessimisticOrdering not in engaged => Unknown
+    else e.effect = ForbidEffect => ((some l: possible[now, last] | holdsAt[e, l]) => True else False)
+    else ((all l: Level | holdsAt[e, l]) => True else False)
+}
+
+-- The elements as the evaluator sees them: a rule that can't tell is an unknown forbid.
+fun orderedEffect[es: set Element, now, last: lone Level, engaged: set ExtensionPoint]: Element -> Effect {
+    { e: es, f: Effect | (e in Ordered and answer[e, now, last, engaged] = Unknown) => f = ForbidEffect else f = e.effect }
+}
+
+fun orderedValue[es: set Element, now, last: lone Level, engaged: set ExtensionPoint]: Element -> Value {
+    { e: es, x: Value | e in Ordered => x = answer[e, now, last, engaged] else x = e.condition }
+}
+
+-- The decision with the ordered fact as it is. It's the table on the rules' answers: an ordered rule
+-- adds neither an unreachable store nor a reason to ask the offline decider, so the offline path is as
+-- above, on these elements.
+fun decideOrdered[es: set Element, a: Authority, now, last: lone Level, engaged: set ExtensionPoint]: one Outcome {
+    table[es, orderedEffect[es, now, last, engaged], orderedValue[es, now, last, engaged], a]
+}
+
+-- How permissive an outcome is.
+fun permissiveness: Outcome -> Int { Deny -> 0 + Indeterminate -> 1 + PermitOffline -> 1 + Permit -> 2 }
+
+/* R2 (XP-15, RDY-04), in the extended configuration: with the fact unknown, the decision is never more
+ * permissive than at any value the fact may have; in particular never a Permit that one of them denies. */
+assert UnknownIsNoMorePermissive {
+    all es: set Element, a: Authority, last: lone Level, l: possible[none, last] |
+        decideOrdered[es, a, none, last, ExtensionPoint].permissiveness <= decideOrdered[es, a, l, none, ExtensionPoint].permissiveness
+}
+check UnknownIsNoMorePermissive for 4 Element expect 0
+
+-- It's the pessimistic mode that gives it: in the default configuration it doesn't hold (an unknown forbid
+-- is Indeterminate where a value it may have is a Deny), so the check above isn't vacuous.
+assert DefaultUnknownIsNoMorePermissive {
+    all es: set Element, a: Authority, last: lone Level, l: possible[none, last] |
+        decideOrdered[es, a, none, last, none].permissiveness <= decideOrdered[es, a, l, none, none].permissiveness
+}
+check DefaultUnknownIsNoMorePermissive for 4 Element expect 1
+
+/* MP-1, in the default configuration: a rule on an unknown fact can't tell, so unless a forbid that holds
+ * decides it, the decision is Indeterminate (missing data, in the evaluator's reasons). */
+assert DefaultUnknownOrderedIsIndeterminate {
+    all es: set Element, a: Authority, last: lone Level |
+        (some es & Ordered and no e: es - Ordered | e.effect = ForbidEffect and e.condition = True)
+            implies decideOrdered[es, a, none, last, none] = Indeterminate
+}
+check DefaultUnknownOrderedIsIndeterminate for 4 Element expect 0
+
+-- The mode is about an unknown fact only: with it known, both configurations decide alike; and without
+-- rules on it, the decision is the table.
+assert KnownDecidesAlike {
+    all es: set Element, a: Authority, l: Level |
+        decideOrdered[es, a, l, none, none] = decideOrdered[es, a, l, none, ExtensionPoint]
+}
+check KnownDecidesAlike for 4 Element expect 0
+
+assert WithoutOrderedRulesItsTheTable {
+    all es: set Element, a: Authority, now, last: lone Level, x: set ExtensionPoint |
+        no es & Ordered implies decideOrdered[es, a, now, last, x] = outcome[es, a]
+}
+check WithoutOrderedRulesItsTheTable for 4 Element expect 0
+
+-- Engaged, an unknown fact with no history is a Deny under a forbid on any value: the mode's point, not a
+-- bug (RDY-04).
+run NoHistoryDenies {
+    some e: Ordered | e.effect = ForbidEffect and decideOrdered[e, Valid, none, none, ExtensionPoint] = Deny
+} for 1 Element expect 1
+
+/* The fixtures of ordered conditions (tests/Policy/OrderedFixturesTest.php): every request of up to 2
+ * matching elements, plain or rules on the fact, with each authority and each state of the fact, and
+ * what each configuration decides. decisions/fixtures.mjs ordered enumerates them into
+ * decisions/fixtures-ordered.json. */
+lone sig OrderedRequest {
+    elements: set Element,
+    authority: one Authority,
+    now: lone Level,
+    last: lone Level,
+    default: one Outcome,
+    extended: one Outcome
+}
+
+fact orderedFixture {
+    some OrderedRequest implies {
+        OrderedRequest.elements = Element
+        some OrderedRequest.now implies no OrderedRequest.last
+        all e: Ordered | e.condition = False
+        OrderedRequest.default = decideOrdered[Element, OrderedRequest.authority, OrderedRequest.now, OrderedRequest.last, none]
+        OrderedRequest.extended = decideOrdered[Element, OrderedRequest.authority, OrderedRequest.now, OrderedRequest.last, ExtensionPoint]
+    }
+}
+
+run fixturesOrdered { one OrderedRequest and no Request and no ExtendedRequest } for 2 Element

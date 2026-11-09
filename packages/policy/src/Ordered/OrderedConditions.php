@@ -15,9 +15,10 @@ use YorvoID\Policy\Rule\RuleAnswer;
  *
  * Pessimistic, the extension point (off by default, MP-1), an unknown fact is decided at every value it
  * may have, from the last known one to the scale's highest (higher being worse): a forbid applies if it
- * applies at any of them, and a requirement is met only if it's met at all of them. With no last known
- * value, every value of the scale is possible, so a forbid on any of them gives a Deny, not
- * Indeterminate, which is what the mode is for (RDY-04).
+ * applies at any of them. A requirement counts as unmet (RDY-04) unless it's met at every value of the
+ * scale, e.g. "≤ its highest": assuming the worst of the fact is no reason to meet a requirement, even
+ * one that a worse value would meet. With no last known value, every value is possible, so a forbid on
+ * any of them gives a Deny, not Indeterminate, which is what the mode is for.
  *
  * ```php
  * return $this->conditions->forbid($this->readiness($request), OrderedCondition::atLeast(3), 'At readiness 3 or worse, nothing is deleted.');
@@ -63,8 +64,8 @@ final readonly class OrderedConditions
     }
 
     /**
-     * Whether the condition holds: at the value, or, pessimistic and unknown, at any of the possible
-     * values (a forbid) or at all of them (a requirement). Null when it can't tell.
+     * Whether the condition holds: at the value, or, pessimistic and unknown, at any of the values the
+     * fact may have (a forbid) or at every value of the scale (a requirement). Null when it can't tell.
      */
     private function decide(OrderedFact $fact, OrderedCondition $condition, bool $any): ?bool
     {
@@ -72,7 +73,7 @@ final readonly class OrderedConditions
             return null;
         }
 
-        [$low, $high] = $fact->possible();
+        [$low, $high] = $any || null !== $fact->value ? $fact->possible() : [$fact->min, $fact->max];
         // A condition holds at a range's every value or any of them where it holds at its ends.
         $atLow = $condition->holdsAt($low);
         $atHigh = $condition->holdsAt($high);
