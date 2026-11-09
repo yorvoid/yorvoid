@@ -132,3 +132,76 @@ vendor/bin/yorvoid-policy test --bootstrap=tests/policy.php
 ```
 
 `PolicyCasesTest` works the same: return that suite from `policySuite()`.
+
+## Mutation testing
+
+Passing cases say the policy gives the decisions they ask about; they don't say whether they ask about enough. Mutation testing (AUZ-045) breaks the policy one change at a time and runs your cases against each change, the mutant. A mutant that no case catches is a decision your cases don't pin down: a role that could have an ability it shouldn't, a forbid nothing relies on.
+
+```bash
+bin/console yorvoid:policy:mutate --env=yorvoid_policy
+vendor/bin/yorvoid-policy mutate --bootstrap=tests/policy.php
+```
+
+```text
+✘ widen:acme.pages.delete:member: The role "member" has "acme.pages.delete". No case catches it.
+37 mutants: 36 caught, 1 survived, 0 ignored. Score 97.3% (at least 100%).
+```
+
+It fails below `--min-score`, 100 unless you say otherwise, and it mutates nothing while a case fails on the policy itself. `--format=json` gives every mutant and the case that caught it, for CI. YorvoID's own sample, 37 mutants against 32 cases, takes under a second.
+
+The mutants come from your policy. Each changes one thing:
+
+| Operator | ID | What it changes | A case that catches it |
+|---|---|---|---|
+| Widen a grant | `widen:<ability>:<role>` | A role has an ability it doesn't (`everyone` too) | That role refused it |
+| Narrow a grant | `narrow:<ability>:<role>` | A role lacks an ability it has | That role permitted it |
+| Strict off | `strict_off:<ability>:<role>` | A super role has a strict ability | A super role refused it |
+| Make a role super | `super:<role>` | A role is a super role | That role refused something |
+| Scope widens | `scope_widens` | A role on a resource counts in the whole realm | Refused on another resource |
+| Groups don't count | `groups_dont_count` | Roles and relations through a group don't reach its members | A group's member permitted |
+| Parents don't count | `parents_dont_count` | Roles and relations on a parent don't reach its children | Permitted on a child |
+| Drop a forbid | `drop_forbid:<element>` | A forbid never holds | One it must refuse |
+| Forbid everything | `forbid_everything:<element>` | A forbid holds whenever it matches | One it matches that's permitted |
+| A permit always | `permit_always:<element>` | A permit holds whenever it matches | One it matches that's refused |
+| A permit never | `permit_never:<element>` | A permit never holds | One it permits |
+| It can tell | `can_tell:<element>` | Where it couldn't tell, it fails | One that can't be decided |
+| Authority off | `authority_off` | A suspended, deleted or invited actor passes | A suspended actor refused |
+
+Only your own abilities and elements are mutated. YorvoID's precedence isn't: it's the same for every policy, and tested in YorvoID itself.
+
+The mutants come from what your policy declares, never from what your cases do, so thinner tests never raise the score. A mutant no case reaches says so when it survives:
+
+```text
+✘ drop_forbid:acme.help_drafts:forbid: The forbid "acme.help_drafts:forbid" never holds. Not exercised: no case reaches it. Add one, or --ignore it if it's equivalent.
+```
+
+That is a forbid no case saw hold, or an element no case saw unable to tell. In JSON, each survivor has `exercised`.
+
+**Not mutated, yet:**
+- **A relation that implies another** (`impliedBy`: an editor is a viewer). Follows before M2 closes.
+- **A step-up requirement:** cases ask abilities, and YorvoID asks for a recent proof only for sensitive operations. A remedy your own permit gives is dropped by "a permit always".
+
+In Symfony the bundle builds the policy through the mutants. Without it, pass what production's function builds through the `Mutants` it's given: its catalogue, schema, elements, authority check and stores. Production passes nothing:
+
+```php
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\PolicyTesting\Mutation\Mutants;
+
+// In Security::build(..., ?Mutants $mutants = null), production calling it without one:
+$mutants?->catalogue($catalogue);
+$evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements);
+```
+
+A policy not built through them refuses to be mutated, so a mutant can't silently change nothing.
+
+### Equivalent mutants
+
+Some mutants no decision can tell from your policy, e.g. a role widened to an ability that a rule refuses it anyway. Leave them out of the score by their IDs, which stay the same as your policy changes:
+
+```bash
+bin/console yorvoid:policy:mutate --env=yorvoid_policy --ignore=widen:acme.pages.purge:member
+```
+
+The report lists the ignored ones apart. An ignored ID that isn't one of the policy's mutants fails the run: the policy changed, or it was misspelt.
+
+The operators follow XACMUT (Bertolino, Daoudagh, Lonetti and Marchetti, 2013) and Xu et al. (2018), on YorvoID's own model of roles, relations and elements.

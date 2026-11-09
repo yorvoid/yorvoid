@@ -10,7 +10,9 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Realm;
 use YorvoID\Policy\Policy;
+use YorvoID\PolicyTesting\Console\PolicyMutateCommand;
 use YorvoID\PolicyTesting\Console\PolicyTestCommand;
+use YorvoID\PolicyTesting\Mutation\Mutants;
 use YorvoID\PolicyTesting\PolicyServices;
 use YorvoID\PolicyTesting\PolicySuite;
 use YorvoID\PolicyTesting\PolicyUnderTest;
@@ -38,7 +40,8 @@ final class PolicyKernel
         $kernel->boot();
         $container = self::container($kernel);
         $stores = $container->get(Stores::class);
-        \assert($stores instanceof Stores);
+        $mutants = $container->get(Mutants::class);
+        \assert($stores instanceof Stores && $mutants instanceof Mutants);
 
         return new PolicyUnderTest(static function () use ($container, $stores): PolicyServices {
             $stores->empty();
@@ -48,7 +51,7 @@ final class PolicyKernel
             \assert($operations instanceof Operations && $policy instanceof Policy && $realm instanceof Realm);
 
             return new PolicyServices($operations, $policy, $realm);
-        });
+        }, $mutants);
     }
 
     /**
@@ -73,6 +76,16 @@ final class PolicyKernel
     public static function command(KernelInterface $kernel): PolicyTestCommand
     {
         return new PolicyTestCommand(static fn (): PolicySuite => self::suite($kernel));
+    }
+
+    /**
+     * yorvoid:policy:mutate, run in the environment it's in.
+     *
+     * @internal The bundle's factory
+     */
+    public static function mutateCommand(KernelInterface $kernel): PolicyMutateCommand
+    {
+        return new PolicyMutateCommand(static fn (): PolicySuite => self::suite($kernel));
     }
 
     private static function container(KernelInterface $kernel): ContainerInterface

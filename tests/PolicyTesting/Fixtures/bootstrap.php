@@ -8,6 +8,7 @@ declare(strict_types=1);
  * that fails.
  */
 
+use YorvoID\PolicyTesting\Mutation\Mutants;
 use YorvoID\PolicyTesting\PolicyCase;
 use YorvoID\PolicyTesting\PolicyCases;
 use YorvoID\PolicyTesting\PolicyServices;
@@ -16,8 +17,8 @@ use YorvoID\PolicyTesting\PolicyUnderTest;
 use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 
-$policy = PolicyUnderTest::of(static function (InMemoryStorage $stores): PolicyServices {
-    $world = new PolicyWorld(memory: $stores);
+$policy = PolicyUnderTest::of(static function (InMemoryStorage $stores, Mutants $mutants): PolicyServices {
+    $world = new PolicyWorld(memory: $stores, mutants: $mutants);
 
     return new PolicyServices($world->operations, $world->policy, $world->realm);
 });

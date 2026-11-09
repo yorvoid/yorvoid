@@ -8,6 +8,7 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Bundle\Bundle;
+use YorvoID\PolicyTesting\Console\PolicyMutateCommand;
 use YorvoID\PolicyTesting\Console\PolicyTestCommand;
 use YorvoID\PolicyTesting\PolicyCases;
 
@@ -35,5 +36,6 @@ final class YorvoIDPolicyTestingBundle extends Bundle
         $container->registerForAutoconfiguration(PolicyCases::class)->addTag('yorvoid.policy_cases');
         $container->addCompilerPass(new InMemoryStoresPass());
         $container->setDefinition(PolicyTestCommand::class, new Definition(PolicyTestCommand::class)->setFactory([PolicyKernel::class, 'command'])->setArguments([new Reference('kernel')])->addTag('console.command'));
+        $container->setDefinition(PolicyMutateCommand::class, new Definition(PolicyMutateCommand::class)->setFactory([PolicyKernel::class, 'mutateCommand'])->setArguments([new Reference('kernel')])->addTag('console.command'));
     }
 }

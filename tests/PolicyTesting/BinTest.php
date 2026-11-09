@@ -23,6 +23,19 @@ final class BinTest extends TestCase
         self::assertStringContainsString('"failed": 1', $output);
     }
 
+    public function testMutatesThePolicy(): void
+    {
+        [$status, $output] = self::bin(['mutate', '--bootstrap='.__DIR__.'/Fixtures/bootstrap.php']);
+        self::assertSame(1, $status, 'One case catches few mutants.');
+        self::assertStringContainsString('widen:acme.pages.delete:member: The role "member" has "acme.pages.delete". No case catches it.', $output);
+
+        [$status, $output] = self::bin(['mutate', '--bootstrap='.__DIR__.'/Fixtures/bootstrap.php', '--min-score=0', '--ignore=widen:acme.pages.delete:member', '--ignore=widen:acme.pages.delete:manager', '--format=json']);
+        self::assertSame(0, $status, $output);
+        self::assertStringContainsString('"narrow:acme.pages.publish:editor": "An editor publishes"', $output);
+        self::assertStringContainsString('"id": "widen:acme.pages.delete:member"', $output, 'Each ignored one…');
+        self::assertStringContainsString('"id": "widen:acme.pages.delete:manager"', $output, '…of several.');
+    }
+
     public function testRefusesWhatIsntABootstrap(): void
     {
         [$status, $output] = self::bin(['test']);

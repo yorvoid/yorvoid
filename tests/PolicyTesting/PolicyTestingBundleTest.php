@@ -7,6 +7,7 @@ namespace YorvoID\Tests\PolicyTesting;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Tester\CommandTester;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Contracts\Service\ResetInterface;
@@ -22,11 +23,15 @@ use YorvoID\Core\Storage\Transactions;
 use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\PolicyTesting\Console\PolicyTestCommand;
+use YorvoID\PolicyTesting\Mutation\MutatedForbid;
+use YorvoID\PolicyTesting\Mutation\MutatedPermit;
+use YorvoID\PolicyTesting\Mutation\MutatedPolicyStore;
 use YorvoID\PolicyTesting\PolicyCase;
 use YorvoID\PolicyTesting\PolicyCases;
 use YorvoID\PolicyTesting\PolicyResult;
 use YorvoID\PolicyTesting\PolicySuite;
 use YorvoID\PolicyTesting\PolicyTests;
+use YorvoID\PolicyTesting\Symfony\InMemoryStoresPass;
 use YorvoID\PolicyTesting\Symfony\PolicyKernel;
 use YorvoID\PolicyTesting\Symfony\Stores;
 use YorvoID\PolicyTesting\Symfony\YorvoIDPolicyTestingBundle;
@@ -66,11 +71,14 @@ final class PolicyTestingBundleTest extends TestCase
     {
         $production = $this->kernel('prod');
         $underTest = $this->kernel(YorvoIDPolicyTestingBundle::ENVIRONMENT);
-        $elements = static fn (TestKernel $kernel): array => array_map(static fn (PolicyElement $element): string => $element::class, self::elements($kernel));
+        // Each through the mutants, which change nothing while none is on.
+        $elements = static fn (TestKernel $kernel): array => array_map(static fn (PolicyElement $element): string => ($element instanceof MutatedPermit || $element instanceof MutatedForbid ? $element->inner : $element)::class, self::elements($kernel));
 
         self::assertSame($elements($production), $elements($underTest));
         self::assertContains('YorvoID\Tests\Symfony\App\LockedPages', $elements($underTest), 'The application\'s own.');
-        self::assertInstanceOf(InMemoryPolicyStore::class, self::service($underTest, PolicyStore::class));
+        $policyStore = self::service($underTest, PolicyStore::class);
+        self::assertInstanceOf(MutatedPolicyStore::class, $policyStore, 'Through the mutants…');
+        self::assertInstanceOf(InMemoryPolicyStore::class, $policyStore->inner, '…in memory.');
         self::assertInstanceOf(InMemoryPrincipalStore::class, self::service($underTest, PrincipalStore::class));
         self::assertNotInstanceOf(InMemoryPolicyStore::class, self::service($production, PolicyStore::class), 'Only in its environment.');
         self::assertTrue($underTest->getContainer()->has(Transactions::class), 'As public as the bridge made it…');
@@ -101,7 +109,7 @@ final class PolicyTestingBundleTest extends TestCase
         $policy = PolicyKernel::underTest($this->kernel(YorvoIDPolicyTestingBundle::ENVIRONMENT));
         $result = new PolicyTests()->one($policy, PolicyCase::that('a member publishes')->given(roles: ['member'])->asks('acme.pages.publish', new ResourceRef('page', '1'))->permits());
 
-        self::assertSame('Expected permit, got deny: None of their roles has "acme.pages.publish". (a member publishes)', $result->failure);
+        self::assertSame('Expected permit, got deny: They have no relation to page:1 that gives "acme.pages.publish". (a member publishes)', $result->failure);
     }
 
     public function testBootsTheKernelAndCollectsItsCases(): void
@@ -111,7 +119,7 @@ final class PolicyTestingBundleTest extends TestCase
         $suite = PolicyKernel::suite($kernel);
 
         self::assertSame([AcmeCases::class], array_map(static fn (PolicyCases $cases): string => $cases::class, $suite->cases));
-        self::assertCount(17, $suite->all());
+        self::assertCount(32, $suite->all());
     }
 
     public function testEmptiesTheStoresAndResetsTheServicesForEachCase(): void
@@ -136,6 +144,16 @@ final class PolicyTestingBundleTest extends TestCase
         Stores::store($storage, 'nothing');
     }
 
+    public function testFollowsHowTheBridgeBuildsTheEvaluator(): void
+    {
+        $container = new ContainerBuilder();
+        $container->register(Evaluator::class, Evaluator::class)->setFactory([Evaluator::class, 'somehowElse']);
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('The bridge no longer builds the evaluator with Evaluator::builtIn(): the policy testing pass must follow it.');
+        new InMemoryStoresPass()->process($container);
+    }
+
     public function testNeedsTheBundle(): void
     {
         $this->expectException(IntegratorError::class);
@@ -150,12 +168,12 @@ final class PolicyTestingBundleTest extends TestCase
 
         self::assertSame(0, $tester->execute([]));
         self::assertStringContainsString('✔ An editor publishes', $tester->getDisplay());
-        self::assertStringContainsString('17 cases, 0 failed.', $tester->getDisplay());
+        self::assertStringContainsString('32 cases, 0 failed.', $tester->getDisplay());
 
         self::assertSame(0, $tester->execute(['--format' => 'json']));
         $report = json_decode($tester->getDisplay(), true, flags: \JSON_THROW_ON_ERROR);
         self::assertIsArray($report);
-        self::assertSame([17, 0], [$report['passed'] ?? null, $report['failed'] ?? null]);
+        self::assertSame([32, 0], [$report['passed'] ?? null, $report['failed'] ?? null]);
         self::assertIsArray($report['cases'] ?? null);
         self::assertSame(['description' => 'Anyone views pages', 'passed' => true, 'expected' => 'permit', 'verdict' => 'permit', 'failure' => null], $report['cases'][0] ?? null);
 
