@@ -86,6 +86,17 @@ holds "setup claim: one owner, the first principal (Quint, simulation)" quint ru
 TRACES_SETUP='node traces.mjs setup/setup_claim.qnt atomic 100 14 0x5e7c1a1'
 holds "setup claim: the executions the PHP tests replay are the model's" sh -c "$TRACES_SETUP | cmp -s - setup/traces.itf.json"
 
+# An offline limit (XP-14), in Quint: measured by elapsed time it never permits past the limit, whatever
+# the wall clock and reboots do; measured by the wall clock it does, and only when that's set back.
+holds "offline limit: typecheck (Quint)" quint typecheck offline/elapsed.qnt
+holds "offline limit: elapsed time never permits past it (Quint, Apalache)" quint verify --main=elapsedLimit --invariant=SAFE --max-steps=12 offline/elapsed.qnt
+violated "offline limit: the wall clock permits past it (Quint, Apalache)" "\[violation\]" quint verify --main=wallLimit --invariant=SAFE --max-steps=12 offline/elapsed.qnt
+holds "offline limit: the wall clock breaks it only when set back (Quint, Apalache)" quint verify --main=wallLimit --invariant=WALL_SAFE_UNLESS_SET_BACK --max-steps=12 offline/elapsed.qnt
+holds "offline limit: elapsed time never permits past it (Quint, simulation)" quint run --main=elapsedLimit --invariant=SAFE --max-samples=20000 --max-steps=20 --seed=42 offline/elapsed.qnt
+# What tests/Core/Authorization/OfflineLimitTracesTest.php replays against WithinOfflineLimit.
+TRACES_OFFLINE='node traces.mjs offline/elapsed.qnt elapsedLimit 80 16 0x0ff11e'
+holds "offline limit: the executions the PHP tests replay are the model's" sh -c "$TRACES_OFFLINE | cmp -s - offline/traces.itf.json"
+
 # Apalache writes its working files next to the models; they aren't needed afterwards.
 rm -rf "$out" _apalache-out
 rmdir tmp 2>/dev/null
