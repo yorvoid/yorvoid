@@ -23,6 +23,8 @@ use YorvoID\Tests\Support\Permits;
  * What every signed-in request does first: checking its session's token (Sessions::check()), on
  * PostgreSQL, the session found, active and touched.
  */
+// Ten checks an iteration: a single one, under half a millisecond, varies too much to compare.
+#[Measure(revolutions: 10)]
 final class SessionBench
 {
     /** @var array{Sessions, Secret}|null */

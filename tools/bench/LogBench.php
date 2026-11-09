@@ -14,6 +14,8 @@ use YorvoID\Core\Realm;
  * An entry appended to the security log (SecurityLog::record()) on PostgreSQL: the realm's lock, the
  * chain's hash, the insert, in its own transaction.
  */
+// Five entries an iteration: a single one, under a millisecond, varies too much to compare.
+#[Measure(revolutions: 5)]
 final class LogBench
 {
     private static ?SecurityLog $shared = null;

@@ -15,7 +15,8 @@ use YorvoID\IntentVerifier\VerifierConfig;
 use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
 
 /**
- * A signed intent checked where the operation runs (Verifier::verify()), on the verifier's own files:
+ * A signed intent checked where the operation runs (Verifier::verify()), on the verifier's own files, in
+ * /dev/shm where there is one:
  * its nonce taken, its assertion checked, its log appended. Intents are prepared and signed ten at a
  * time before the iterations that verify them, so only the verifying is timed (and taking the next).
  */
@@ -51,7 +52,8 @@ final class VerifierBench
 
     private static function verifier(): Verifier
     {
-        $directory = \sprintf('%s/yorvoid-bench-verifier-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
+        // In memory where the system has it: the verifier, not the disk's cache, is what's measured.
+        $directory = \sprintf('%s/yorvoid-bench-verifier-%s', is_dir('/dev/shm') && is_writable('/dev/shm') ? '/dev/shm' : sys_get_temp_dir(), bin2hex(random_bytes(6)));
         mkdir($directory);
         $verifier = new Verifier(
             new VerifierConfig('acme-verifier:host-1', 'sign.acme.example', ['https://sign.acme.example'], ['https://acme.example']),

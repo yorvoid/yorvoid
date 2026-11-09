@@ -9,8 +9,14 @@ declare(strict_types=1);
  *   php tools/bench/bench.php compare <base.json> <head.json> [<changed>]  fails when a subject's median is
  *                                                                        more than 20 % above the base's
  *
+ *   php tools/bench/bench.php record <directory> <runs>                the A/A record from the runs' changes:
+ *                                                                        fails on a failure, a subject whose
+ *                                                                        worst |change| is over 15 %, or fewer
+ *                                                                        runs than there should be
+ *
  * Each of base and head may be several dumps, separated by commas: their iterations are pooled, as
- * ci.sh measures base and head in turns (ABBA).
+ * ci.sh measures base and head in turns (ABBA). A subject the base has and the head doesn't is
+ * "removed, not gated", and the table says first how many weren't.
  *
  * The centre is the median of the iterations, everywhere: robust where a subject's times have two
  * peaks, which a mode jumps between. <changed> lists the subjects
@@ -18,8 +24,6 @@ declare(strict_types=1);
  * "*" for every one: they and the new ones are reported "changed, not gated" (C3). Tables go to stdout as Markdown,
  * for the job summary.
  */
-
-require dirname(__DIR__, 2).'/vendor/autoload.php';
 
 const THRESHOLD = 20.0;
 
@@ -42,15 +46,35 @@ function iterations(string $files): array
 }
 
 /**
+ * A dump's subjects and their times; refused when it isn't one: a time that isn't a number, or a subject
+ * without any, would make a centre of nothing.
+ *
  * @return array<string, list<float>>
+ *
+ * @throws RuntimeException
  */
 function dump(string $file): array
 {
     $data = json_decode((string) file_get_contents($file), true, flags: \JSON_THROW_ON_ERROR);
+
+    if (!is_array($data) || !is_array($data['subjects'] ?? null)) {
+        throw new RuntimeException(sprintf('%s isn\'t a dump of tools/bench/run.php.', $file));
+    }
+
     $subjects = [];
 
-    foreach (is_array($data) && is_array($data['subjects'] ?? null) ? $data['subjects'] : [] as $subject => $times) {
-        $subjects[(string) $subject] = array_values(array_map(static fn (mixed $time): float => is_numeric($time) ? (float) $time : 0.0, is_array($times) ? $times : []));
+    foreach ($data['subjects'] as $subject => $times) {
+        if (!is_array($times) || [] === $times) {
+            throw new RuntimeException(sprintf('%s has no times for %s.', $file, $subject));
+        }
+
+        foreach ($times as $time) {
+            if (!is_int($time) && !is_float($time)) {
+                throw new RuntimeException(sprintf('%s has a time for %s that isn\'t a number: %s.', $file, $subject, json_encode($time)));
+            }
+        }
+
+        $subjects[(string) $subject] = array_values(array_map(floatval(...), $times));
     }
 
     return $subjects;
@@ -104,13 +128,16 @@ if ('compare' === $command && isset($argv[2], $argv[3])) {
     $lines = isset($argv[4]) && is_file($argv[4]) ? file($argv[4]) : false;
     $changed = array_values(array_filter(array_map(trim(...), false === $lines ? [] : $lines), static fn (string $line): bool => '' !== $line));
     $failed = false;
-    echo "| Subject | Base (median) | Head (median) | Change | |\n|---|---|---|---|---|\n";
+    $rows = [];
+    $changes = [];
+    $ungated = 0;
 
     foreach ($head as $subject => $times) {
         $class = explode('::', $subject)[0].'::*';
 
         if (!isset($base[$subject]) || in_array('*', $changed, true) || in_array($subject, $changed, true) || in_array($class, $changed, true)) {
-            printf("| %s | %s | %s | | changed, not gated |\n", $subject, isset($base[$subject]) ? ms(median($base[$subject])) : 'new', ms(median($times)));
+            $rows[] = sprintf('| %s | %s | %s | | changed, not gated |', $subject, isset($base[$subject]) ? ms(median($base[$subject])) : 'new', ms(median($times)));
+            ++$ungated;
 
             continue;
         }
@@ -118,11 +145,60 @@ if ('compare' === $command && isset($argv[2], $argv[3])) {
         $change = 100.0 * (median($times) - median($base[$subject])) / median($base[$subject]);
         $slower = $change > THRESHOLD;
         $failed = $failed || $slower;
-        printf("| %s | %s | %s | %+.1f %% | %s |\n", $subject, ms(median($base[$subject])), ms(median($times)), $change, $slower ? '**slower**' : 'ok');
+        $changes[$subject] = round($change, 2);
+        $rows[] = sprintf('| %s | %s | %s | %+.1f %% | %s |', $subject, ms(median($base[$subject])), ms(median($times)), $change, $slower ? '**slower**' : 'ok');
+    }
+
+    // A subject the head doesn't have any more, e.g. renamed, isn't compared: said so, not left out.
+    foreach (array_diff_key($base, $head) as $subject => $times) {
+        $rows[] = sprintf('| %s | %s | | | removed, not gated |', $subject, ms(median($times)));
+        ++$ungated;
+    }
+
+    printf("%d of %d subjects not gated.\n\n| Subject | Base (median) | Head (median) | Change | |\n|---|---|---|---|---|\n%s\n", $ungated, count($rows), implode("\n", $rows));
+
+    // The changes, for the A/A record.
+    if (isset($argv[5])) {
+        file_put_contents($argv[5], json_encode($changes, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR)."\n");
     }
 
     exit($failed ? 1 : 0);
 }
 
-fwrite(\STDERR, "Usage: php tools/bench/bench.php report <run.xml> | compare <base.json> <head.json> [<changed>]\n");
+if ('record' === $command && isset($argv[2], $argv[3])) {
+    // The A/A record (C1): each subject's largest |change| across the runs, and how many failed.
+    $files = glob(rtrim($argv[2], '/').'/*.json');
+    $worst = [];
+    $failures = [];
+    $runs = 0;
+
+    foreach (false === $files ? [] : $files as $file) {
+        $changes = json_decode((string) file_get_contents($file), true, flags: \JSON_THROW_ON_ERROR);
+        ++$runs;
+
+        foreach (is_array($changes) ? $changes : [] as $subject => $change) {
+            if (!is_int($change) && !is_float($change)) {
+                throw new RuntimeException(sprintf('%s has a change for %s that isn\'t a number.', $file, $subject));
+            }
+
+            $worst[$subject] = max($worst[$subject] ?? 0.0, abs((float) $change));
+            $failures[$subject] = ($failures[$subject] ?? 0) + ($change > THRESHOLD ? 1 : 0);
+        }
+    }
+
+    ksort($worst);
+    printf("%d A/A runs.\n\n| Subject | Worst change | Failures |\n|---|---|---|\n", $runs);
+    $over = false;
+
+    foreach ($worst as $subject => $change) {
+        // Three quarters of the gate: a subject this jumpy is fixed at its source, not by a wider gate.
+        $over = $over || $change > 0.75 * THRESHOLD || $failures[$subject] > 0;
+        printf("| %s | %.1f %% | %d |\n", $subject, $change, $failures[$subject]);
+    }
+
+    // A run that left no changes failed before comparing: it counts as a failure.
+    exit($over || $runs < (int) $argv[3] ? 1 : 0);
+}
+
+fwrite(\STDERR, "Usage: php tools/bench/bench.php report <run.json> | compare <base.json> <head.json> [<changed>] [<changes.json>] | record <directory> <runs>\n");
 exit(2);

@@ -87,7 +87,7 @@ changed() {
 }
 
 compare() {
-	php "$root/tools/bench/bench.php" compare "$1" "$2" "$out/changed.txt" >>"$summary"
+	php "$root/tools/bench/bench.php" compare "$1" "$2" "$out/changed.txt" "$out/changes.json" >>"$summary"
 }
 
 case "${1:-}" in
