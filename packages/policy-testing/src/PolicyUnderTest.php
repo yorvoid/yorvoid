@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\PolicyTesting;
 
+use YorvoID\PolicyTesting\Mutation\Mutants;
 use YorvoID\Testing\InMemoryStorage;
 
 /**
@@ -26,19 +27,25 @@ use YorvoID\Testing\InMemoryStorage;
 final readonly class PolicyUnderTest
 {
     /**
-     * @param \Closure(): PolicyServices $fresh The policy on stores with nothing in them, each time it's called
+     * @param \Closure(): PolicyServices $fresh   The policy on stores with nothing in them, each time it's called
+     * @param Mutants|null               $mutants What it was built through, for mutation testing
      */
     public function __construct(
         private \Closure $fresh,
+        public ?Mutants $mutants = null,
     ) {
     }
 
     /**
-     * @param \Closure(InMemoryStorage): PolicyServices $build Production's own function, given new in-memory stores for each case
+     * @param \Closure(InMemoryStorage, Mutants): PolicyServices $build Production's own function, given new in-memory stores
+     *                                                                  for each case, and the mutants to build through for
+     *                                                                  mutation testing
      */
     public static function of(\Closure $build): self
     {
-        return new self(static fn (): PolicyServices => $build(new InMemoryStorage()));
+        $mutants = new Mutants();
+
+        return new self(static fn (): PolicyServices => $build(new InMemoryStorage(), $mutants), $mutants);
     }
 
     /**

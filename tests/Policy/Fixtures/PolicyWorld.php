@@ -46,6 +46,7 @@ use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Policy\Storage\CachedPolicyStore;
 use YorvoID\Policy\ViewAs\Views;
 use YorvoID\Policy\YorvoIDDeclarations;
+use YorvoID\PolicyTesting\Mutation\Mutants;
 use YorvoID\Relations\RelationChanges;
 use YorvoID\Relations\RelationPermit;
 use YorvoID\Relations\Relations;
@@ -93,8 +94,9 @@ final class PolicyWorld
      * @param (\Closure(Attributes): list<Rule>)|null $rulesOf      Rules that read attributes
      * @param Stack|null                              $stack        Its stores instead of in-memory ones
      * @param InMemoryStorage|null                    $memory       The in-memory stores, if given
+     * @param Mutants|null                            $mutants      What it's built through for mutation testing, as production would pass it
      */
-    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null, ?Stack $stack = null, private readonly ?VersionedCache $cache = null, ?InMemoryStorage $memory = null)
+    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null, ?Stack $stack = null, private readonly ?VersionedCache $cache = null, ?InMemoryStorage $memory = null, ?Mutants $mutants = null)
     {
         $this->memory = $memory ?? new InMemoryStorage();
         $principals = $stack->principals ?? $this->memory->principals;
@@ -103,12 +105,17 @@ final class PolicyWorld
         $attributes = $stack->attributes ?? $this->memory->attributes;
         $policyStore = $stack->policy ?? $this->memory->policy;
         $relationStore = $stack->relations ?? $this->memory->relations;
-        $this->policyStore = null === $cache ? $policyStore : new CachedPolicyStore($policyStore, $cache);
-        $this->relationStore = null === $cache ? $relationStore : new CachedRelationStore($relationStore, $cache);
+        $policyStore = null === $cache ? $policyStore : new CachedPolicyStore($policyStore, $cache);
+        $relationStore = null === $cache ? $relationStore : new CachedRelationStore($relationStore, $cache);
+        $this->policyStore = $mutants?->policyStore($policyStore) ?? $policyStore;
+        $this->relationStore = $mutants?->relationStore($relationStore) ?? $relationStore;
         $this->clock = new MockClock('2026-11-07 20:00:00');
         $this->realm = new Realm('acme');
         $catalogue = PolicyCatalogue::of([new YorvoIDDeclarations(), new AcmeDeclarations(), ...$declarations]);
-        $this->relations = new Relations(RelationSchema::of([new AcmeRelations(), new GroupRelations()]), $this->relationStore, $maxDepth);
+        $mutants?->catalogue($catalogue);
+        $schema = RelationSchema::of([new AcmeRelations(), new GroupRelations()]);
+        $mutants?->schema($schema);
+        $this->relations = new Relations($schema, $this->relationStore, $maxDepth);
         $this->roles = new Roles($catalogue, $this->policyStore, $sources, $this->relations);
         $this->attributes = new Attributes([new AcmeAttributes()], $attributes, $resolvers);
         $log = new SecurityLog($stack->log ?? $this->memory->log, $transactions, clock: $this->clock);
@@ -118,7 +125,8 @@ final class PolicyWorld
             array_push($elements, ...RuleElements::of($rule));
         }
 
-        $evaluator = Evaluator::builtIn(new PrincipalAuthority($principals), elements: $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)]);
+        $authority = new PrincipalAuthority($principals);
+        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)]);
         $handlers = [
             new Principals($principals, $identifiers, $log, $transactions, clock: $this->clock),
             new PolicyChanges($catalogue, $this->policyStore, $principals, $log, $transactions, $this->clock),

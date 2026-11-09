@@ -54,6 +54,16 @@ final readonly class RelationSchema
         return new self($types);
     }
 
+    /**
+     * Every resource type, by name.
+     *
+     * @return array<string, ResourceType>
+     */
+    public function types(): array
+    {
+        return $this->types;
+    }
+
     public function type(string $name): ?ResourceType
     {
         return $this->types[$name] ?? null;

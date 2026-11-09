@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Symfony\App;
 
 use YorvoID\Core\Authorization\ForbidElement;
+use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\Truth;
 
@@ -25,6 +26,11 @@ final readonly class LockedPages implements ForbidElement
 
     public function evaluate(Request $request): Truth
     {
-        return 'locked' === $request->resource?->id ? Truth::holds('The page is locked.') : Truth::fails('The page is open.');
+        return match ($request->resource?->id) {
+            'locked' => Truth::holds('The page is locked.'),
+            // Its lock is somewhere that can't be read.
+            'unreadable' => Truth::unknown(IndeterminateReason::MissingData, 'The page\'s lock can\'t be read.'),
+            default => Truth::fails('The page is open.'),
+        };
     }
 }

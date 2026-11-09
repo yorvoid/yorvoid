@@ -7,12 +7,14 @@ declare(strict_types=1);
  * Runs a policy's cases without Symfony's console:
  *
  *   vendor/bin/yorvoid-policy test --bootstrap=tests/policy.php [--format=json]
+ *   vendor/bin/yorvoid-policy mutate --bootstrap=tests/policy.php [--min-score=100] [--ignore=ID ...] [--format=json]
  *
  * The bootstrap file returns a YorvoID\PolicyTesting\PolicySuite.
  */
 
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Input\ArgvInput;
+use YorvoID\PolicyTesting\Console\PolicyMutateCommand;
 use YorvoID\PolicyTesting\Console\PolicyTestCommand;
 use YorvoID\PolicyTesting\PolicySuite;
 
@@ -48,5 +50,6 @@ $suite = static function () use ($bootstrap): PolicySuite {
 
 $application = new Application('yorvoid-policy');
 $application->addCommand(new PolicyTestCommand($suite)->setName('test'));
+$application->addCommand(new PolicyMutateCommand($suite)->setName('mutate'));
 $application->setDefaultCommand('test');
 exit($application->run(new ArgvInput(array_values($argv))));

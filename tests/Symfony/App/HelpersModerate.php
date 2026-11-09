@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Symfony\App;
 
+use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Policy\Rule\Rule;
 use YorvoID\Policy\Rule\RuleAnswer;
@@ -26,6 +27,11 @@ final readonly class HelpersModerate implements Rule
 
     public function decide(Request $request): RuleAnswer
     {
-        return 'help' === $request->resource?->id || $request->subject instanceof HelpDraft ? RuleAnswer::permit('Help drafts are public.') : RuleAnswer::abstain();
+        return match (true) {
+            'help' === $request->resource?->id || $request->subject instanceof HelpDraft => RuleAnswer::permit('Help drafts are public.'),
+            'help-archived' === $request->resource?->id => RuleAnswer::forbid('Archived help is no one\'s.'),
+            'help-lost' === $request->resource?->id => RuleAnswer::unknown(IndeterminateReason::MissingData, 'The help draft can\'t be found.'),
+            default => RuleAnswer::abstain(),
+        };
     }
 }
