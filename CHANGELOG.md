@@ -46,6 +46,8 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - A policy element can check the operations when `Operations` is built (`ChecksCatalogue`): the role permit refuses an operation whose ability isn't declared.
 - Every behaviour model is replayed against the code: the setup claim (by the order its transactions commit in) and the intent verifier's keys, as the one-time tokens were; the decision model and its fixtures in two configurations, the default and every extension point engaged (XP-16), the default's outcomes unchanged ([formal models](spec/README.md)). Inside `Verifier`, which is unchanged, its keys and the checks of what the browser answers are parts of their own (`KeyRegistry`, `IntentChecks`, internal).
 
+- [Performance](docs/reference/performance.md): the targets (OPS-042), what each release measures, and how to measure it yourself (`composer bench`, on PostgreSQL).
+
 ### Fixed
 
 - The packages require each other at the version they're released with (`^0.4` for 0.4), so a release installs as a set. 0.2.0 and 0.3.0 required `^0.1` of each other and don't install together from Packagist: stay on 0.1.0, or take 0.4.0. Every release now checks this before it's published, and installs from Packagist afterwards.

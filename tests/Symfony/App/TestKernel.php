@@ -45,6 +45,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
      * @param bool                 $debugging      Whether it runs in debug mode, as in development
      * @param bool                 $session        Whether it has a PHP session
      * @param bool                 $mailer         Whether it has Symfony Mailer
+     * @param string|null          $database       The application's database, if not its own SQLite file
      */
     public function __construct(
         private readonly string $directory,
@@ -57,6 +58,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         private readonly bool $session = true,
         private readonly bool $mailer = true,
         string $environment = 'test',
+        private readonly ?string $database = null,
     ) {
         parent::__construct($environment, $debugging);
     }
@@ -119,7 +121,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                 'property_info' => ['with_constructor_extractor' => true],
             ]);
             $container->loadFromExtension('doctrine', ['dbal' => ['default_connection' => 'default', 'connections' => [
-                'default' => ['url' => 'sqlite:///'.$this->directory.'/yorvoid.sqlite'],
+                'default' => ['url' => $this->database ?? 'sqlite:///'.$this->directory.'/yorvoid.sqlite'],
                 'other' => ['url' => 'sqlite:///'.$this->directory.'/other.sqlite'],
             ]]]);
             $container->loadFromExtension('security', [

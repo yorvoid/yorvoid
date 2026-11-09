@@ -10,35 +10,10 @@ use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Logging\Middleware as LoggingMiddleware;
 use Doctrine\DBAL\Tools\DsnParser;
 use PHPUnit\Framework\TestCase;
-use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
-use YorvoID\Authn\Migrations\AuthnMigrations;
-use YorvoID\Authn\Recovery\Storage\DbalRecoveryCodeStore;
-use YorvoID\Authn\Session\Storage\DbalKnownDeviceStore;
-use YorvoID\Authn\Session\Storage\DbalSessionStore;
-use YorvoID\Authn\Setup\Storage\DbalSetupStore;
-use YorvoID\Authn\StepUp\Storage\DbalCoolDownStore;
-use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
-use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
-use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
-use YorvoID\Core\Migrations\CoreMigrations;
-use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
-use YorvoID\Core\Principal\Storage\DbalPrincipalStore;
 use YorvoID\Core\Storage\Database;
-use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
-use YorvoID\Core\Storage\Migration\Migrator;
 use YorvoID\Core\Storage\StorageLocation;
-use YorvoID\Passkeys\Migrations\PasskeysMigrations;
-use YorvoID\Passkeys\Storage\DbalCeremonyStore;
-use YorvoID\Passkeys\Storage\DbalPasskeyStore;
-use YorvoID\Policy\Migrations\PolicyMigrations;
-use YorvoID\Policy\Storage\DbalAttributeStore;
-use YorvoID\Policy\Storage\DbalPolicyStore;
-use YorvoID\Relations\Migrations\RelationsMigrations;
-use YorvoID\Relations\Storage\DbalRelationStore;
 use YorvoID\Testing\InMemoryStorage;
-use YorvoID\Throttle\Migrations\ThrottleMigrations;
-use YorvoID\Throttle\Storage\DbalThrottleStore;
 
 /**
  * Runs a test against every database YorvoID supports (PLT-024, PLT-025), each test in a location of its
@@ -95,9 +70,8 @@ abstract class DatabaseTestCase extends TestCase
 
         $middleware = new TransactionMiddleware();
         $database = new Database($this->connect($implementation, $middleware, $statements), new StorageLocation(StorageLocation::DEFAULT_PREFIX, 'postgresql' === $implementation ? $this->locations[$implementation] : null));
-        new Migrator($database, [...CoreMigrations::all(), ...AuthnMigrations::all(), ...PasskeysMigrations::all(), ...PolicyMigrations::all(), ...RelationsMigrations::all(), ...ThrottleMigrations::all()])->migrate();
 
-        return new Stack($implementation, new DbalTransactions($database->connection, $middleware), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database), new DbalRelationStore($database), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database));
+        return Stack::onDatabase($implementation, $database, $middleware);
     }
 
     /**

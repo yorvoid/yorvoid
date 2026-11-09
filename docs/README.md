@@ -25,6 +25,7 @@ Documentation for two readers: **integrators**, who add YorvoID to an applicatio
 
 - [Configuration](reference/configuration.md): everything the Symfony bundle takes, with its defaults.
 - [Console commands](reference/console.md): every command, its arguments and options.
+- [Performance](reference/performance.md): the targets, what each release measured, and how to measure it yourself.
 
 ## Concepts
 
