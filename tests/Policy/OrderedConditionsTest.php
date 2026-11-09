@@ -103,6 +103,11 @@ final class OrderedConditionsTest extends TestCase
         }
     }
 
+    public function testAConditionSaysWhatItIs(): void
+    {
+        self::assertSame(['≥ 2', '≤ 0'], [(string) OrderedCondition::atLeast(2), (string) OrderedCondition::atMost(0)]);
+    }
+
     public function testTheScaleIsDeclared(): void
     {
         self::assertSame([1, 3], OrderedFact::unknown('readiness', 0, 3, 1)->possible());

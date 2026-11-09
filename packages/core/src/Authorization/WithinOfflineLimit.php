@@ -53,7 +53,7 @@ final readonly class WithinOfflineLimit implements OfflineDecider
         }
 
         if ($elapsed >= $this->limit->seconds * 1_000_000_000) {
-            return Truth::fails(\sprintf('The offline limit of %s has passed: %d seconds since it started.', $this->limit, intdiv($elapsed, 1_000_000_000)));
+            return Truth::fails(\sprintf('The offline limit of %s has passed.', $this->limit));
         }
 
         return $truth;

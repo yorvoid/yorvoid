@@ -62,8 +62,12 @@ final class BootTimeTest extends TestCase
             self::assertNull($this->bootTime($uptime)->since($mark), 'Not in another one, e.g. another PHP-FPM worker.');
         }
 
-        file_put_contents($this->directory.'/boot_id', 'not an ID');
-        self::assertFalse($this->bootTime('100.25 50.00')->boots(), 'A boot ID that isn\'t one.');
+        self::assertMatchesRegularExpression('/^process-[0-9a-f]{16}$/D', $this->bootTime(null)->mark()->clock, 'A random ID, 8 bytes.');
+
+        foreach (['not an ID', 'x'.self::BOOT, self::BOOT.'x'] as $id) {
+            file_put_contents($this->directory.'/boot_id', $id);
+            self::assertFalse($this->bootTime('100.25 50.00')->boots(), 'A boot ID that isn\'t one: '.$id);
+        }
     }
 
     /**

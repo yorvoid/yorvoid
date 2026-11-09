@@ -62,9 +62,10 @@ final readonly class BootTime implements Elapsed
     {
         $uptime = @file_get_contents($this->uptime);
         $boot = @file_get_contents($this->bootId);
+        $boot = \is_string($boot) ? trim($boot) : '';
 
-        if (\is_string($uptime) && \is_string($boot) && 1 === preg_match('/^(\d+)\.(\d{1,9})\s/', $uptime, $parts) && 1 === preg_match('/^[0-9a-f-]{36}$/D', trim($boot))) {
-            return new Instant(trim($boot), (int) $parts[1] * 1_000_000_000 + (int) str_pad($parts[2], 9, '0'));
+        if (\is_string($uptime) && 1 === preg_match('/^(?<seconds>\d+)\.(?<fraction>\d{1,9})\s/', $uptime, $parts) && 1 === preg_match('/^[0-9a-f-]{36}$/', $boot)) {
+            return new Instant($boot, (int) $parts['seconds'] * 1_000_000_000 + (int) str_pad($parts['fraction'], 9, '0'));
         }
 
         return new Instant($this->process, hrtime(true));

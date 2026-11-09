@@ -79,13 +79,11 @@ final class WithinOfflineLimitTest extends TestCase
             self::assertSame('The offline limit can\'t be measured: no mark of this boot to measure it from.', $truth->detail);
         }
 
-        $mark = $elapsed->mark();
-        $elapsed->advance(Duration::minutes(59));
-        self::assertSame(TruthValue::Holds, $limit($mark)->decide($request)->value, 'Just under.');
-        $elapsed->advance(Duration::minutes(1));
-        $truth = $limit($mark)->decide($request);
+        $elapsed->advance(Duration::hours(1));
+        self::assertSame(TruthValue::Holds, $limit(new Instant('boot-1', 1))->decide($request)->value, 'A nanosecond under.');
+        $truth = $limit(new Instant('boot-1', 0))->decide($request);
         self::assertSame(TruthValue::Fails, $truth->value, 'At the limit, it has passed.');
-        self::assertSame('The offline limit of 1h has passed: 3600 seconds since it started.', $truth->detail);
+        self::assertSame('The offline limit of 1h has passed.', $truth->detail);
     }
 
     /**

@@ -73,7 +73,9 @@
         "CastInt": {
             "ignoreSourceCodeByRegex": [
                 // Equivalent: PDO counts affected rows as an int, on PostgreSQL and on SQLite.
-                ".*\\$count = \\(int\\) \\$this->connection->executeStatement\\(.*"
+                ".*\\$count = \\(int\\) \\$this->connection->executeStatement\\(.*",
+                // Equivalent: the digits the pattern matched compute the same as a number or as a string.
+                ".*\\(int\\) \\$parts\\['seconds'\\] \\* 1_000_000_000 \\+ \\(int\\) str_pad\\(\\$parts\\['fraction'\\].*"
             ]
         },
         "MethodCallRemoval": {
