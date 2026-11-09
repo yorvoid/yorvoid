@@ -1,0 +1,87 @@
+<?php
+
+declare(strict_types=1);
+
+namespace YorvoID\Policy\Ordered;
+
+use YorvoID\Core\Authorization\IndeterminateReason;
+use YorvoID\Core\Authorization\OrderedFact;
+use YorvoID\Policy\Rule\RuleAnswer;
+
+/**
+ * What a rule answers on an ordered fact (XP-15): a forbid, or a permit's requirement, on a condition
+ * such as "level ≥ 2". A known fact is the condition at its value. An unknown one is missing data: the
+ * decision is Indeterminate, as for any unknown.
+ *
+ * Pessimistic, the extension point (off by default, MP-1), an unknown fact is decided at every value it
+ * may have, from the last known one to the scale's highest (higher being worse): a forbid applies if it
+ * applies at any of them, and a requirement is met only if it's met at all of them. With no last known
+ * value, every value of the scale is possible, so a forbid on any of them gives a Deny, not
+ * Indeterminate, which is what the mode is for (RDY-04).
+ *
+ * ```php
+ * return $this->conditions->forbid($this->readiness($request), OrderedCondition::atLeast(3), 'At readiness 3 or worse, nothing is deleted.');
+ * ```
+ *
+ * @api
+ *
+ * @experimental Outside the 1.0 promise until an extension's ordered conditions use it: it may change in a
+ *               minor release ([compatibility](docs/compatibility.md)).
+ */
+final readonly class OrderedConditions
+{
+    /**
+     * @param bool $pessimistic Whether an unknown fact is decided at its worst values (XP-15's extension point)
+     */
+    public function __construct(
+        public bool $pessimistic = false,
+    ) {
+    }
+
+    /**
+     * A forbid when the condition holds, else nothing.
+     */
+    public function forbid(OrderedFact $fact, OrderedCondition $condition, string $detail): RuleAnswer
+    {
+        return match ($this->decide($fact, $condition, any: true)) {
+            true => RuleAnswer::forbid($detail),
+            false => RuleAnswer::abstain(),
+            null => self::unknown($fact),
+        };
+    }
+
+    /**
+     * A permit when the condition, a requirement, is met, else nothing.
+     */
+    public function permit(OrderedFact $fact, OrderedCondition $condition, string $detail): RuleAnswer
+    {
+        return match ($this->decide($fact, $condition, any: false)) {
+            true => RuleAnswer::permit($detail),
+            false => RuleAnswer::abstain(),
+            null => self::unknown($fact),
+        };
+    }
+
+    /**
+     * Whether the condition holds: at the value, or, pessimistic and unknown, at any of the possible
+     * values (a forbid) or at all of them (a requirement). Null when it can't tell.
+     */
+    private function decide(OrderedFact $fact, OrderedCondition $condition, bool $any): ?bool
+    {
+        if (null === $fact->value && !$this->pessimistic) {
+            return null;
+        }
+
+        [$low, $high] = $fact->possible();
+        // A condition holds at a range's every value or any of them where it holds at its ends.
+        $atLow = $condition->holdsAt($low);
+        $atHigh = $condition->holdsAt($high);
+
+        return $any ? $atLow || $atHigh : $atLow && $atHigh;
+    }
+
+    private static function unknown(OrderedFact $fact): RuleAnswer
+    {
+        return RuleAnswer::unknown(IndeterminateReason::MissingData, \sprintf('"%s" isn\'t known.', $fact->name));
+    }
+}
