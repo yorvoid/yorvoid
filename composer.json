@@ -59,7 +59,6 @@
         "infection/infection": "^0.35.8",
         "innmind/black-box": "^7.0",
         "nikic/php-fuzzer": "^0.0.11",
-        "phpbench/phpbench": "^1.4",
         "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan": "^2.3",
         "phpstan/phpstan-phpunit": "^2.1",
@@ -106,9 +105,8 @@
         "test": "phpunit",
         "bench": [
             "Composer\\Config::disableProcessTimeout",
-            "@php -r \"is_dir('var/bench') || mkdir('var/bench', 0777, true);\"",
-            "@php -d opcache.enable_cli=1 -d pcov.enabled=0 vendor/bin/phpbench run --dump-file=var/bench/run.xml --progress=none --report=aggregate",
-            "@php tools/bench/bench.php report var/bench/run.xml"
+            "@php -d opcache.enable_cli=1 -d pcov.enabled=0 tools/bench/run.php --out=var/bench/run.json",
+            "@php tools/bench/bench.php report var/bench/run.json"
         ],
         "infection": [
             "Composer\\Config::disableProcessTimeout",

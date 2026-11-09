@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Bench;
 
-use PhpBench\Attributes as Bench;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -20,9 +19,6 @@ use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
  * levels up (page → site → server). Cached: as the request's second decision, with the shared pool
  * warm. Uncached: nothing cached, every read from PostgreSQL. And a batch of 100 pages at once.
  */
-#[Bench\BeforeMethods('setUp')]
-#[Bench\Warmup(5)]
-#[Bench\Iterations(200)]
 final class DecisionBench
 {
     private const int PAGES = 100;
@@ -37,40 +33,26 @@ final class DecisionBench
     /** @var list<ResourceRef> */
     private array $pages;
 
-    /**
-     * @param array{cached?: bool} $parameters
-     */
-    public function setUp(array $parameters = []): void
+    public function setUp(string $subject): void
     {
-        $cached = $parameters['cached'] ?? false;
+        $cached = 'benchCachedDecision' === $subject;
         [$this->world, $this->ada, $this->pages] = self::$worlds[$cached ? 'cached' : 'uncached'] ??= self::world($cached);
     }
 
-    #[Bench\Revs(20)]
-    #[Bench\ParamProviders('cached')]
+    #[Measure(revolutions: 20)]
     public function benchCachedDecision(): void
     {
         $this->world->allows($this->ada, 'acme.pages.publish', $this->pages[0]) || throw new \LogicException('Refused.');
     }
 
-    #[Bench\Revs(1)]
     public function benchUncachedDecision(): void
     {
         $this->world->allows($this->ada, 'acme.pages.publish', $this->pages[0]) || throw new \LogicException('Refused.');
     }
 
-    #[Bench\Revs(1)]
     public function benchBatchDecision(): void
     {
         self::PAGES === \count($this->world->policy->decideMany($this->ada, 'acme.pages.publish', $this->world->realm, $this->pages, new Origin(OriginKind::Web))) || throw new \LogicException('Not every page.');
-    }
-
-    /**
-     * @return iterable<string, array{cached: bool}>
-     */
-    public function cached(): iterable
-    {
-        yield 'cached' => ['cached' => true];
     }
 
     /**

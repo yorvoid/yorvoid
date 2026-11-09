@@ -13,6 +13,9 @@
 # when it's set, and the runs' dumps stay in var/bench for the job's artifact.
 set -eu
 
+# The container has no home to write git's configuration to: the checkout is trusted for this run.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'
+
 root=$(cd "$(dirname "$0")/../.." && pwd)
 out="$root/var/bench"
 summary=${GITHUB_STEP_SUMMARY:-/dev/stdout}
@@ -27,13 +30,13 @@ run() {
 	dump=$2
 	filter=${3:-}
 
-	if [ ! -f "$dir/phpbench.json" ] || { [ -n "$filter" ] && ! grep -qs "function ${filter#*::}(" "$dir/tools/bench/${filter%%::*}.php"; }; then
-		echo '<phpbench/>' >"$dump"
+	if [ ! -f "$dir/tools/bench/run.php" ] || { [ -n "$filter" ] && ! grep -qs "function ${filter#*::}(" "$dir/tools/bench/${filter%%::*}.php"; }; then
+		echo '{"subjects": {}}' >"$dump"
 		return
 	fi
 
 	php "$root/tools/bench/settle.php"
-	(cd "$dir" && php -d opcache.enable_cli=1 -d pcov.enabled=0 vendor/bin/phpbench run ${filter:+--filter="$filter" --iterations=$ROUND} --dump-file="$dump" --progress=none >/dev/null)
+	(cd "$dir" && php -d opcache.enable_cli=1 -d pcov.enabled=0 tools/bench/run.php --out="$dump" ${filter:+--filter="$filter" --iterations=$ROUND} 2>/dev/null)
 }
 
 # The head's subjects, as Class::subject.
@@ -53,12 +56,12 @@ turns() {
 
 	for subject in $(subjects); do
 		name=$(echo "$subject" | tr ':' '_')
-		run "$a" "$out/$name-a1.xml" "$subject"
-		run "$b" "$out/$name-b1.xml" "$subject"
-		run "$b" "$out/$name-b2.xml" "$subject"
-		run "$a" "$out/$name-a2.xml" "$subject"
-		printf '%s,%s,' "$out/$name-a1.xml" "$out/$name-a2.xml" >>"$out/a.list"
-		printf '%s,%s,' "$out/$name-b1.xml" "$out/$name-b2.xml" >>"$out/b.list"
+		run "$a" "$out/$name-a1.json" "$subject"
+		run "$b" "$out/$name-b1.json" "$subject"
+		run "$b" "$out/$name-b2.json" "$subject"
+		run "$a" "$out/$name-a2.json" "$subject"
+		printf '%s,%s,' "$out/$name-a1.json" "$out/$name-a2.json" >>"$out/a.list"
+		printf '%s,%s,' "$out/$name-b1.json" "$out/$name-b2.json" >>"$out/b.list"
 	done
 }
 
@@ -75,7 +78,7 @@ checkout() {
 # The subjects whose benchmark code differs between the two commits (C3): a benchmark's own file
 # changes its subjects; anything else they're built from changes them all.
 changed() {
-	git -C "$root" diff --name-only "$1" "$2" -- tools/bench tests/Support tests/Policy/Fixtures tests/Relations/Fixtures tests/Symfony/App phpbench.json composer.lock | while read -r file; do
+	git -C "$root" diff --name-only "$1" "$2" -- tools/bench tests/Support tests/Policy/Fixtures tests/Relations/Fixtures tests/Symfony/App composer.lock | while read -r file; do
 		case "$file" in
 			tools/bench/*Bench.php) basename "$file" .php | sed 's/$/::*/' ;;
 			*) echo '*' ;;
@@ -97,8 +100,8 @@ case "${1:-}" in
 		;;
 	main)
 		echo '## Benchmarks' >>"$summary"
-		run "$root" "$out/head.xml"
-		php "$root/tools/bench/bench.php" report "$out/head.xml" >>"$summary"
+		run "$root" "$out/head.json"
+		php "$root/tools/bench/bench.php" report "$out/head.json" >>"$summary"
 		tag=${2:-$(git -C "$root" describe --tags --abbrev=0 2>/dev/null || true)}
 
 		if [ -n "$tag" ]; then

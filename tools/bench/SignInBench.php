@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Bench;
 
-use PhpBench\Attributes as Bench;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -33,10 +32,6 @@ use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
  * fraction of a millisecond in software, is inside the time. The attempt limits are raised, as one
  * address signs in more often than a person would: they're still counted, as on every sign-in.
  */
-#[Bench\BeforeMethods('setUp')]
-#[Bench\Warmup(5)]
-#[Bench\Iterations(200)]
-#[Bench\Revs(1)]
 final class SignInBench
 {
     /** @var array{KernelBrowser, VirtualAuthenticator}|null */

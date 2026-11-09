@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Bench;
 
-use PhpBench\Attributes as Bench;
 use YorvoID\IntentVerifier\CollectingNotifier;
 use YorvoID\IntentVerifier\Operation;
 use YorvoID\IntentVerifier\OperationPolicy;
@@ -20,11 +19,8 @@ use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
  * its nonce taken, its assertion checked, its log appended. Intents are prepared and signed ten at a
  * time before the iterations that verify them, so only the verifying is timed (and taking the next).
  */
-#[Bench\BeforeMethods('setUp')]
-#[Bench\Warmup(5)]
-#[Bench\Iterations(200)]
 // Five verifications an iteration: the verifier's files make single ones vary too much to compare.
-#[Bench\Revs(5)]
+#[Measure(revolutions: 5)]
 final class VerifierBench
 {
     private static ?Verifier $shared = null;

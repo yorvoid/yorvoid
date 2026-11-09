@@ -3,10 +3,10 @@
 declare(strict_types=1);
 
 /*
- * The benchmarks' tables and gate (M2-8), from phpbench's dumps (composer bench):
+ * The benchmarks' tables and gate (M2-8), from tools/bench/run.php's dumps (composer bench):
  *
- *   php tools/bench/bench.php report <run.xml>                          the table: median, p99, target
- *   php tools/bench/bench.php compare <base.xml> <head.xml> [<changed>]  fails when a subject's median is
+ *   php tools/bench/bench.php report <run.json>                         the table: median, p99, target
+ *   php tools/bench/bench.php compare <base.json> <head.json> [<changed>]  fails when a subject's median is
  *                                                                        more than 20 % above the base's
  *
  * Each of base and head may be several dumps, separated by commas: their iterations are pooled, as
@@ -46,30 +46,11 @@ function iterations(string $files): array
  */
 function dump(string $file): array
 {
-    $xml = simplexml_load_file($file);
-
-    if (false === $xml) {
-        throw new RuntimeException(sprintf('%s isn\'t a phpbench dump.', $file));
-    }
-
+    $data = json_decode((string) file_get_contents($file), true, flags: \JSON_THROW_ON_ERROR);
     $subjects = [];
-    $benchmarks = $xml->xpath('//benchmark');
 
-    foreach ($benchmarks ?? [] as $benchmark) {
-        $parts = explode('\\', (string) $benchmark['class']);
-        $class = end($parts);
-
-        foreach ($benchmark->subject as $subject) {
-            foreach ($subject->variant as $variant) {
-                $times = [];
-
-                foreach ($variant->iteration as $iteration) {
-                    $times[] = (float) $iteration['time-avg'];
-                }
-
-                $subjects[$class.'::'.$subject['name']] = $times;
-            }
-        }
+    foreach (is_array($data) && is_array($data['subjects'] ?? null) ? $data['subjects'] : [] as $subject => $times) {
+        $subjects[(string) $subject] = array_values(array_map(static fn (mixed $time): float => is_numeric($time) ? (float) $time : 0.0, is_array($times) ? $times : []));
     }
 
     return $subjects;
@@ -143,5 +124,5 @@ if ('compare' === $command && isset($argv[2], $argv[3])) {
     exit($failed ? 1 : 0);
 }
 
-fwrite(\STDERR, "Usage: php tools/bench/bench.php report <run.xml> | compare <base.xml> <head.xml> [<changed>]\n");
+fwrite(\STDERR, "Usage: php tools/bench/bench.php report <run.xml> | compare <base.json> <head.json> [<changed>]\n");
 exit(2);

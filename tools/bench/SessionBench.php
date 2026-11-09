@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Bench;
 
-use PhpBench\Attributes as Bench;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -24,10 +23,6 @@ use YorvoID\Tests\Support\Permits;
  * What every signed-in request does first: checking its session's token (Sessions::check()), on
  * PostgreSQL, the session found, active and touched.
  */
-#[Bench\BeforeMethods('setUp')]
-#[Bench\Warmup(5)]
-#[Bench\Iterations(200)]
-#[Bench\Revs(1)]
 final class SessionBench
 {
     /** @var array{Sessions, Secret}|null */

@@ -9,7 +9,6 @@ on:
   pull_request:
     paths:
       - tools/bench/**
-      - phpbench.json
       - .github/workflows/benchmarks-aa.yaml
 
 permissions:

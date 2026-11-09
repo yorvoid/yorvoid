@@ -423,7 +423,6 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          docker compose exec -T php git config --global --add safe.directory '*'
           if [ "$EVENT" = pull_request ]; then
             docker compose exec -T -e GITHUB_STEP_SUMMARY=var/bench/summary.md php sh tools/bench/ci.sh pr "$BASE"
           else
@@ -437,7 +436,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: benchmarks
-          path: var/bench/*.xml
+          path: var/bench/*.json
           retention-days: 30
       - name: Show logs on failure
         if: failure()
