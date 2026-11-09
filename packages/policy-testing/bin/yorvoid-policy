@@ -1,0 +1,52 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * Runs a policy's cases without Symfony's console:
+ *
+ *   vendor/bin/yorvoid-policy test --bootstrap=tests/policy.php [--format=json]
+ *
+ * The bootstrap file returns a YorvoID\PolicyTesting\PolicySuite.
+ */
+
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Input\ArgvInput;
+use YorvoID\PolicyTesting\Console\PolicyTestCommand;
+use YorvoID\PolicyTesting\PolicySuite;
+
+foreach ([dirname(__DIR__, 3).'/autoload.php', dirname(__DIR__).'/vendor/autoload.php', dirname(__DIR__, 3).'/vendor/autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+
+        break;
+    }
+}
+
+$argv = $_SERVER['argv'] ?? [];
+$bootstrap = null;
+
+foreach ($argv as $i => $argument) {
+    if (is_string($argument) && str_starts_with($argument, '--bootstrap=')) {
+        $bootstrap = substr($argument, strlen('--bootstrap='));
+        unset($argv[$i]);
+    }
+}
+
+if (null === $bootstrap || !is_file($bootstrap)) {
+    fwrite(\STDERR, "Give the file that returns the PolicySuite: --bootstrap=tests/policy.php\n");
+
+    exit(2);
+}
+
+$suite = static function () use ($bootstrap): PolicySuite {
+    $suite = require $bootstrap;
+
+    return $suite instanceof PolicySuite ? $suite : throw new UnexpectedValueException(sprintf('%s returns %s, not a PolicySuite.', $bootstrap, get_debug_type($suite)));
+};
+
+$application = new Application('yorvoid-policy');
+$application->addCommand(new PolicyTestCommand($suite)->setName('test'));
+$application->setDefaultCommand('test');
+exit($application->run(new ArgvInput(array_values($argv))));

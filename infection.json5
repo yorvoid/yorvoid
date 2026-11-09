@@ -79,7 +79,10 @@
         "MatchArmRemoval": {
             "ignore": [
                 // Equivalent: without its default arm the match throws, which accepts() takes as a refusal.
-                "YorvoID\\Passkeys\\PublicKeyCheck::accepts"
+                "YorvoID\\Passkeys\\PublicKeyCheck::accepts",
+                // Equivalent: a policy's ability decisions are never Permit-offline, which only an
+                // operation that accepts it gets; the arm is there so the match covers every verdict.
+                "YorvoID\\PolicyTesting\\PolicyTests::verdict"
             ]
         },
         "ReturnRemoval": {

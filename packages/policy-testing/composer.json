@@ -1,0 +1,58 @@
+{
+    "name": "yorvoid/policy-testing",
+    "type": "library",
+    "description": "Tests for an application's YorvoID policy: the decisions it must give, as cases in PHP, run in PHPUnit or from a command, on the policy as production builds it with its stores in memory.",
+    "keywords": [
+        "authorization",
+        "policy",
+        "testing",
+        "access-control",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "contact@yorvolabs.com"
+        }
+    ],
+    "support": {
+        "email": "contact@yorvolabs.com",
+        "issues": "https://github.com/yorvoid/yorvoid/issues",
+        "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/policy-testing",
+        "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+        "security": "https://github.com/yorvoid/yorvoid/security/policy"
+    },
+    "require": {
+        "php": ">=8.4",
+        "doctrine/dbal": "^4.3",
+        "phpunit/phpunit": "^12.0 || ^13.0",
+        "symfony/console": "^7.4 || ^8.1",
+        "yorvoid/authn": "^0.4",
+        "yorvoid/core": "^0.4",
+        "yorvoid/passkeys": "^0.4",
+        "yorvoid/policy": "^0.4",
+        "yorvoid/relations": "^0.4",
+        "yorvoid/testing": "^0.4",
+        "yorvoid/throttle": "^0.4"
+    },
+    "suggest": {
+        "symfony/dependency-injection": "For the Symfony bundle: the policy under test from the application's own container",
+        "symfony/http-kernel": "For the Symfony bundle",
+        "symfony/service-contracts": "For the Symfony bundle"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\PolicyTesting\\": "src/"
+        }
+    },
+    "bin": [
+        "bin/yorvoid-policy"
+    ],
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.4.x-dev"
+        }
+    }
+}

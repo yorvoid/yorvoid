@@ -92,10 +92,11 @@ final class PolicyWorld
      * @param list<AttributeResolver>                 $resolvers
      * @param (\Closure(Attributes): list<Rule>)|null $rulesOf      Rules that read attributes
      * @param Stack|null                              $stack        Its stores instead of in-memory ones
+     * @param InMemoryStorage|null                    $memory       The in-memory stores, if given
      */
-    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null, ?Stack $stack = null, private readonly ?VersionedCache $cache = null)
+    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null, ?Stack $stack = null, private readonly ?VersionedCache $cache = null, ?InMemoryStorage $memory = null)
     {
-        $this->memory = new InMemoryStorage();
+        $this->memory = $memory ?? new InMemoryStorage();
         $principals = $stack->principals ?? $this->memory->principals;
         $identifiers = $stack->identifiers ?? $this->memory->identifiers;
         $transactions = $stack->transactions ?? $this->memory->transactions;

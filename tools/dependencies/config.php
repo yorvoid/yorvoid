@@ -18,6 +18,7 @@ $optional = [
     'intent-signing' => ['symfony/translation', 'yorvoid/notifications'],
     'intent-verifier' => ['ext-posix'],
     'passkeys' => ['yorvoid/notifications'],
+    'policy-testing' => ['symfony/dependency-injection', 'symfony/http-kernel', 'symfony/service-contracts'],
     'symfony' => ['symfony/mailer', 'symfony/mime', 'symfony/translation', 'symfony/var-dumper', 'twig/twig'],
     'testing' => ['symfony/framework-bundle', 'yorvoid/symfony'],
 ];
