@@ -4,22 +4,13 @@ declare(strict_types=1);
 
 namespace YorvoID\IntentVerifier;
 
-use Cose\Algorithm\Manager;
 use Cose\Algorithm\Signature\ECDSA\ES256;
 use Cose\Algorithm\Signature\EdDSA\Ed25519;
 use Cose\Algorithm\Signature\RSA\RS256;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Component\Uid\Uuid;
 use Webauthn\AttestationStatement\AttestationStatementSupportManager;
-use Webauthn\AuthenticatorAssertionResponse;
-use Webauthn\AuthenticatorAssertionResponseValidator;
-use Webauthn\AuthenticatorAttestationResponse;
-use Webauthn\AuthenticatorAttestationResponseValidator;
 use Webauthn\AuthenticatorSelectionCriteria;
-use Webauthn\CeremonyStep\CeremonyStepManagerFactory;
-use Webauthn\CollectedClientData;
-use Webauthn\CredentialRecord;
 use Webauthn\Denormalizer\WebauthnSerializerFactory;
 use Webauthn\PublicKeyCredentialCreationOptions;
 use Webauthn\PublicKeyCredentialDescriptor;
@@ -27,7 +18,6 @@ use Webauthn\PublicKeyCredentialParameters;
 use Webauthn\PublicKeyCredentialRequestOptions;
 use Webauthn\PublicKeyCredentialRpEntity;
 use Webauthn\PublicKeyCredentialUserEntity;
-use Webauthn\TrustPath\EmptyTrustPath;
 
 /**
  * Signed intents, checked where the operation runs (D-11, INT-001…010, INT-015, INT-016): the verifier
@@ -63,10 +53,11 @@ final readonly class Verifier
     /** How many intents and registrations may wait at once: each is read and written with the whole state */
     public const int MAX_WAITING = 1000;
 
-    /** A nonce as begin() makes it: 18 random bytes, base64url */
-    private const string NONCE = '/^[A-Za-z0-9_-]{24}$/D';
-
     private SerializerInterface $serializer;
+
+    private IntentChecks $checks;
+
+    private KeyRegistry $registry;
 
     public function __construct(
         private VerifierConfig $config,
@@ -77,6 +68,8 @@ final readonly class Verifier
         private ClockInterface $clock = new SystemClock(),
     ) {
         $this->serializer = new WebauthnSerializerFactory(new AttestationStatementSupportManager())->create();
+        $this->checks = new IntentChecks($config, $log, $clock, $this->serializer);
+        $this->registry = new KeyRegistry($config, $log, $this->checks, $clock);
     }
 
     /**
@@ -162,7 +155,7 @@ final readonly class Verifier
                     throw new IntentRefused(Refusal::InvalidRegistration);
                 }
 
-                $key = $this->registered($pending, $attestation);
+                $key = $this->checks->registered($pending, $attestation);
                 $this->log->record('registered', ['registration' => $registration, 'subject' => $key->id(), 'algorithm' => $key->algorithm], $this->clock->now());
 
                 return [$key, $pending->bootstrap];
@@ -193,8 +186,8 @@ final readonly class Verifier
     public function verify(string $nonce, string $assertion): VerifiedIntent
     {
         $verified = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): VerifiedIntent {
-            $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && !str_starts_with($pending->intent->action, 'yorvoid.verifier.'));
-            $verified = $this->check($state, $pending, $state->keys, $assertion);
+            $pending = $this->checks->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && !str_starts_with($pending->intent->action, 'yorvoid.verifier.'));
+            $verified = $this->checks->check($state, $pending, $state->keys, $assertion);
             $this->record('verified', $verified);
 
             return $verified;
@@ -213,11 +206,11 @@ final readonly class Verifier
     public function addKey(string $nonce, string $assertion): KeyChange
     {
         [$change, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
-            $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && OperationPolicy::ADD_KEY === $pending->intent->action);
-            $key = $this->newKey($state, $pending->intent);
-            $verified = $this->check($state, $pending, $state->keys, $assertion);
+            $pending = $this->checks->take($state, $nonce, static fn (PendingIntent $pending): bool => !$pending->bootstrap && OperationPolicy::ADD_KEY === $pending->intent->action);
+            $key = $this->registry->newKey($state, $pending->intent);
+            $verified = $this->checks->check($state, $pending, $state->keys, $assertion);
 
-            return [$this->requestChange($state, KeyChange::ADD, $key, $verified), $verified->intent];
+            return [$this->registry->add($state, $key, $verified), $verified->intent];
         });
 
         return $this->requested($change, $intent);
@@ -233,17 +226,10 @@ final readonly class Verifier
     public function removeKey(string $nonce, string $assertion): KeyChange
     {
         [$change, $intent] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
-            $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => OperationPolicy::REMOVE_KEY === $pending->intent->action);
-            $verified = $this->check($state, $pending, $state->keys, $assertion);
-            $removed = $pending->intent->parameters['credential_id'];
-            $leaving = array_map(static fn (KeyChange $change): string => $change->key->id(), array_filter($state->keyChanges, static fn (KeyChange $change): bool => KeyChange::REMOVE === $change->kind));
-            $key = \is_string($removed) && isset($state->keys[$removed]) && !\in_array($removed, $leaving, true) ? $state->keys[$removed] : $this->refuse($pending->intent, Refusal::UnknownKey);
+            $pending = $this->checks->take($state, $nonce, static fn (PendingIntent $pending): bool => OperationPolicy::REMOVE_KEY === $pending->intent->action);
+            $verified = $this->checks->check($state, $pending, $state->keys, $assertion);
 
-            if (\count($state->keys) - \count($leaving) <= 1) {
-                $this->refuse($pending->intent, Refusal::LastKey);
-            }
-
-            return [$this->requestChange($state, KeyChange::REMOVE, $key, $verified), $verified->intent];
+            return [$this->registry->remove($state, $verified), $verified->intent];
         });
 
         return $this->requested($change, $intent);
@@ -258,14 +244,10 @@ final readonly class Verifier
     public function cancelKeyChange(string $nonce, string $assertion): KeyChange
     {
         [$change, $verified] = $this->attempt(function (VerifierState $state) use ($nonce, $assertion): array {
-            $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => OperationPolicy::CANCEL_KEY_CHANGE === $pending->intent->action);
-            $verified = $this->check($state, $pending, $state->keys, $assertion);
-            $id = $pending->intent->parameters['change'];
-            $change = \is_string($id) && isset($state->keyChanges[$id]) ? $state->keyChanges[$id] : $this->refuse($pending->intent, Refusal::UnknownKeyChange);
-            unset($state->keyChanges[$change->id]);
-            $this->record('key_change_cancelled', $verified, ['change' => $change->id]);
+            $pending = $this->checks->take($state, $nonce, static fn (PendingIntent $pending): bool => OperationPolicy::CANCEL_KEY_CHANGE === $pending->intent->action);
+            $verified = $this->checks->check($state, $pending, $state->keys, $assertion);
 
-            return [$change, $verified];
+            return [$this->registry->cancel($state, $verified), $verified];
         });
         $this->notifier->notify(new VerifierNotice(VerifierNotice::KEY_CHANGE_CANCELLED, $verified->intent, $verified->key, $verified->verifiedAt, $change));
 
@@ -319,11 +301,7 @@ final readonly class Verifier
         $secret = Base64Url::encode(random_bytes(32));
         $expiresAt = new \DateTimeImmutable('@'.($this->clock->now()->getTimestamp() + $lifetime));
 
-        $this->transaction(function (VerifierState $state) use ($secret, $expiresAt): void {
-            $state->bootstrapSecretHash = hash('sha256', $secret);
-            $state->bootstrapSecretExpiresAt = $expiresAt;
-            $this->log->record('bootstrap_secret_created', ['keys' => \count($state->keys), 'expires_at' => $expiresAt->getTimestamp()], $this->clock->now());
-        });
+        $this->transaction(fn (VerifierState $state) => $this->registry->createSecret($state, $secret, $expiresAt));
         $this->notifier->notify(new VerifierNotice(VerifierNotice::BOOTSTRAP_SECRET_CREATED, null, null, $this->clock->now()));
 
         return $secret;
@@ -339,19 +317,16 @@ final readonly class Verifier
     public function bootstrap(#[\SensitiveParameter] string $secret, string $nonce, string $assertion): KeyChange
     {
         [$change, $intent] = $this->attempt(function (VerifierState $state) use ($secret, $nonce, $assertion): array {
-            $pending = $this->take($state, $nonce, static fn (PendingIntent $pending): bool => $pending->bootstrap);
+            $pending = $this->checks->take($state, $nonce, static fn (PendingIntent $pending): bool => $pending->bootstrap);
 
-            // A secret and its expiry are set and cleared together.
-            if (null === $state->bootstrapSecretExpiresAt || $this->clock->now() >= $state->bootstrapSecretExpiresAt || !hash_equals((string) $state->bootstrapSecretHash, hash('sha256', $secret))) {
-                $this->refuse($pending->intent, Refusal::InvalidBootstrapSecret);
+            if (!$this->registry->secretWorks($state, $secret)) {
+                $this->checks->refuse($pending->intent, Refusal::InvalidBootstrapSecret);
             }
 
-            $key = $this->newKey($state, $pending->intent);
-            $verified = $this->check($state, $pending, [$key->id() => $key], $assertion);
-            $state->bootstrapSecretHash = null;
-            $state->bootstrapSecretExpiresAt = null;
+            $key = $this->registry->newKey($state, $pending->intent);
+            $verified = $this->checks->check($state, $pending, [$key->id() => $key], $assertion);
 
-            return [$this->requestChange($state, KeyChange::ADD, $verified->key, $verified, [] === $state->keys), $verified->intent];
+            return [$this->registry->bootstrap($state, $verified), $verified->intent];
         });
 
         return $this->requested($change, $intent);
@@ -404,7 +379,7 @@ final readonly class Verifier
     {
         $now = $this->clock->now();
         [$result, $changes] = $this->store->transaction(function (VerifierState $state) use ($work, $now): array {
-            $changes = $this->applyDue($state, $now);
+            $changes = $this->registry->applyDue($state, $now);
 
             return [$work($state), $changes];
         });
@@ -416,31 +391,6 @@ final readonly class Verifier
         $applied = \count($changes);
 
         return $result;
-    }
-
-    /**
-     * @return list<KeyChange> The changes that took effect
-     */
-    private function applyDue(VerifierState $state, \DateTimeImmutable $now): array
-    {
-        $applied = [];
-
-        // Asking for a change checked it against the keys and the changes before it: none can leave the
-        // verifier without keys, nor add one twice.
-        foreach (array_filter($state->keyChanges, static fn (KeyChange $change): bool => $now >= $change->effectiveAt) as $id => $change) {
-            unset($state->keyChanges[$id]);
-
-            if (KeyChange::ADD === $change->kind) {
-                $state->keys[$change->key->id()] = $change->key;
-            } else {
-                unset($state->keys[$change->key->id()]);
-            }
-
-            $this->log->record(KeyChange::ADD === $change->kind ? 'key_added' : 'key_removed', ['change' => $change->id, 'key' => $change->key->id(), 'signer' => $change->signer], $now);
-            $applied[] = $change;
-        }
-
-        return $applied;
     }
 
     /**
@@ -554,109 +504,6 @@ final readonly class Verifier
     }
 
     /**
-     * Takes the intent waiting under the nonce, using the nonce up, if it's of the kind expected.
-     *
-     * @param \Closure(PendingIntent): bool $expected
-     *
-     * @throws IntentRefused
-     */
-    private function take(VerifierState $state, string $nonce, \Closure $expected): PendingIntent
-    {
-        // Not one the verifier made: recorded by a short hash, whatever its size or encoding (FUZZ-08).
-        if (1 !== preg_match(self::NONCE, $nonce)) {
-            $this->log->record('refused', ['nonce_hash' => substr(hash('sha256', $nonce), 0, 16), 'reason' => Refusal::UnknownIntent->value], $this->clock->now());
-
-            throw new IntentRefused(Refusal::UnknownIntent);
-        }
-
-        $pending = $state->pending[$nonce] ?? null;
-        unset($state->pending[$nonce]);
-
-        // The log has the nonce used already: the state was restored from an older copy (INTENTS-07).
-        if (null !== $pending && $this->log->usedNonce($nonce, $pending->intent->issuedAt)) {
-            $pending = null;
-        }
-
-        if (null === $pending || $this->clock->now() >= $pending->intent->expiresAt) {
-            $this->log->record('refused', ['nonce' => $nonce, 'reason' => Refusal::UnknownIntent->value], $this->clock->now());
-
-            throw new IntentRefused(Refusal::UnknownIntent);
-        }
-
-        if (!$expected($pending)) {
-            $this->refuse($pending->intent, Refusal::WrongOperation);
-        }
-
-        return $pending;
-    }
-
-    /**
-     * Checks the assertion over the intent's challenge with one of the keys, and records the key's new
-     * signature counter.
-     *
-     * @param array<string, Key> $keys By ID
-     *
-     * @throws IntentRefused
-     */
-    private function check(VerifierState $state, PendingIntent $pending, array $keys, string $assertion): VerifiedIntent
-    {
-        try {
-            $credential = Answer::assertion($assertion);
-        } catch (\Throwable $exception) {
-            $this->refuse($pending->intent, Refusal::InvalidSignature, $exception);
-        }
-
-        $response = $credential->response;
-
-        if (!$response instanceof AuthenticatorAssertionResponse || !$this->isOwnClientData($response->clientDataJSON, 'webauthn.get')) {
-            $this->refuse($pending->intent, Refusal::InvalidSignature);
-        }
-
-        $key = $keys[Base64Url::encode($credential->rawId)] ?? null;
-
-        if (null === $key) {
-            $this->refuse($pending->intent, Refusal::UnknownKey);
-        }
-
-        // Required whatever an answer says, and checked before the library's other checks.
-        if (!$response->authenticatorData->isUserVerified()) {
-            $this->refuse($pending->intent, Refusal::UserNotVerified);
-        }
-
-        // The key is known before the ceremony, so its user handle is given: signing passkeys aren't
-        // discoverable, and browsers leave the user handle out of their answers.
-        $options = PublicKeyCredentialRequestOptions::create($pending->intent->challenge(), $this->config->relyingPartyId, [], PublicKeyCredentialRequestOptions::USER_VERIFICATION_REQUIREMENT_REQUIRED);
-        try {
-            $record = AuthenticatorAssertionResponseValidator::create($this->steps()->requestCeremony())->check(self::credentialRecord($key), $response, $options, $this->config->relyingPartyId, $key->userHandle);
-        } catch (\Throwable $exception) {
-            $this->refuse($pending->intent, Refusal::InvalidSignature, $exception);
-        }
-
-        $used = $key->withSignCount($record->counter);
-
-        if (isset($state->keys[$key->id()])) {
-            $state->keys[$key->id()] = $used;
-        }
-
-        return new VerifiedIntent($pending->intent, $used, $this->clock->now());
-    }
-
-    /**
-     * Keeps a signed change to the keys until it's due, and records it.
-     *
-     * @param bool $now Whether it takes effect at once: only the first key, which no owner could cancel
-     */
-    private function requestChange(VerifierState $state, string $kind, Key $key, VerifiedIntent $verified, bool $now = false): KeyChange
-    {
-        $at = new \DateTimeImmutable('@'.$this->clock->now()->getTimestamp());
-        $change = new KeyChange(Base64Url::encode(random_bytes(12)), $kind, $key, $at, $now ? $at : $at->modify(\sprintf('+%d seconds', $this->config->keyChangeDelay)), $verified->key->id());
-        $state->keyChanges[$change->id] = $change;
-        $this->record('key_change_requested', $verified, ['change' => $change->id, 'kind' => $kind, 'subject' => $key->id(), 'effective_at' => $change->effectiveAt->getTimestamp()]);
-
-        return $change;
-    }
-
-    /**
      * Tells the notifier of a change just asked for, and applies it if it's due already.
      */
     private function requested(KeyChange $change, Intent $intent): KeyChange
@@ -665,83 +512,6 @@ final readonly class Verifier
         $this->applyKeyChanges();
 
         return $change;
-    }
-
-    /**
-     * The key the authenticator registered, if its answer is a valid one to the registration: user
-     * verified, at a signing origin, for the signing relying party.
-     *
-     * @throws IntentRefused
-     */
-    private function registered(PendingRegistration $pending, string $attestation): Key
-    {
-        try {
-            $credential = Answer::attestation($attestation, new AttestationStatementSupportManager());
-            // The library writes the relying party's name as its ID, and warns when it reads one back.
-            $stored = json_decode($pending->options, true, flags: \JSON_THROW_ON_ERROR);
-            \assert(\is_array($stored) && \is_array($stored['rp']));
-            $stored['rp']['name'] = '';
-            $options = $this->serializer->deserialize(json_encode($stored, \JSON_THROW_ON_ERROR), PublicKeyCredentialCreationOptions::class, 'json');
-        } catch (\Throwable $exception) {
-            throw new IntentRefused(Refusal::InvalidRegistration, $exception);
-        }
-
-        $response = $credential->response;
-
-        if (!$response instanceof AuthenticatorAttestationResponse || !$this->isOwnClientData($response->clientDataJSON, 'webauthn.create')) {
-            throw new IntentRefused(Refusal::InvalidRegistration);
-        }
-
-        if (!$response->attestationObject->authData->isUserVerified()) {
-            throw new IntentRefused(Refusal::UserNotVerified);
-        }
-
-        try {
-            $record = AuthenticatorAttestationResponseValidator::create($this->steps()->creationCeremony())->check($response, $options, $this->config->relyingPartyId);
-        } catch (\Throwable $exception) {
-            throw new IntentRefused(Refusal::InvalidRegistration, $exception);
-        }
-
-        $key = Key::fromParameters(['credential_id' => Base64Url::encode($record->publicKeyCredentialId), 'public_key' => Base64Url::encode($record->credentialPublicKey), 'user_handle' => Base64Url::encode($record->userHandle), 'label' => $pending->label], new \DateTimeImmutable('@'.$this->clock->now()->getTimestamp()));
-
-        return $key ?? throw new IntentRefused(Refusal::InvalidKey);
-    }
-
-    /**
-     * What the library leaves (INTENTS-08): the answer is for this kind of ceremony, not from a frame,
-     * and from one of the signing origins exactly as configured, byte for byte.
-     */
-    private function isOwnClientData(CollectedClientData $clientData, string $type): bool
-    {
-        return $type === $clientData->type && !$clientData->crossOrigin && null === $clientData->topOrigin && \in_array($clientData->origin, array_map(static fn (string $origin): string => rtrim($origin, '/'), $this->config->origins), true);
-    }
-
-    private function steps(): CeremonyStepManagerFactory
-    {
-        $steps = new CeremonyStepManagerFactory();
-        $steps->setAllowedOrigins($this->config->origins);
-        $steps->setAlgorithmManager(Manager::create()->add(ES256::create(), Ed25519::create(), RS256::create()));
-
-        return $steps;
-    }
-
-    /**
-     * The key an "add key" intent describes, if it's a usable passkey public key the verifier hasn't got.
-     *
-     * @throws IntentRefused
-     */
-    private function newKey(VerifierState $state, Intent $intent): Key
-    {
-        $key = Key::fromParameters($intent->parameters, new \DateTimeImmutable('@'.$this->clock->now()->getTimestamp()));
-        // A key being removed is there still; one being added, not yet.
-        $coming = array_map(static fn (KeyChange $change): string => $change->key->id(), $state->keyChanges);
-
-        return null === $key || isset($state->keys[$key->id()]) || \in_array($key->id(), $coming, true) ? $this->refuse($intent, Refusal::InvalidKey) : $key;
-    }
-
-    private static function credentialRecord(Key $key): CredentialRecord
-    {
-        return CredentialRecord::create($key->credentialId, 'public-key', [], 'none', EmptyTrustPath::create(), Uuid::fromString('00000000-0000-0000-0000-000000000000'), $key->publicKey, $key->userHandle, $key->signCount);
     }
 
     /**
@@ -756,15 +526,5 @@ final readonly class Verifier
             'algorithm' => $verified->key->algorithm,
             ...$details,
         ], $verified->verifiedAt);
-    }
-
-    /**
-     * @throws IntentRefused
-     */
-    private function refuse(Intent $intent, Refusal $refusal, ?\Throwable $previous = null): never
-    {
-        $this->log->record('refused', ['action' => $intent->action, 'nonce' => $intent->nonce, 'reason' => $refusal->value], $this->clock->now());
-
-        throw new IntentRefused($refusal, $previous);
     }
 }

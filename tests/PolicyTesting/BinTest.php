@@ -47,7 +47,7 @@ final class BinTest extends TestCase
 
         [$status, $output] = self::bin(['test', '--bootstrap='.__DIR__.'/Fixtures/AcmeCases.php']);
         self::assertSame(1, $status);
-        self::assertStringContainsString('AcmeCases.php returns int, not a PolicySu', $output);
+        self::assertStringContainsString('AcmeCases.php returns int, not a PolicySuite.', $output);
     }
 
     /**
@@ -58,7 +58,7 @@ final class BinTest extends TestCase
      */
     private static function bin(array $arguments, array $environment = []): array
     {
-        $process = proc_open([\PHP_BINARY, '-d', 'auto_prepend_file='.\dirname(__DIR__).'/bootstrap.php', \dirname(__DIR__, 2).'/packages/policy-testing/bin/yorvoid-policy', ...$arguments], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $environment + getenv());
+        $process = proc_open([\PHP_BINARY, '-d', 'auto_prepend_file='.\dirname(__DIR__).'/bootstrap.php', \dirname(__DIR__, 2).'/packages/policy-testing/bin/yorvoid-policy', ...$arguments], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $environment + ['COLUMNS' => '1000'] + getenv());
         \assert(\is_resource($process));
         $output = stream_get_contents($pipes[1]).stream_get_contents($pipes[2]);
         fclose($pipes[1]);
