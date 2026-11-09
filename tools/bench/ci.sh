@@ -2,8 +2,8 @@
 # The benchmarks in CI (M2-8), in the php container:
 #
 #   sh tools/bench/ci.sh pr <base>   a pull request: the base and the head on this runner, subject by
-#                                    subject in turns, base, head, head, base (ABBA, C2), so that the
-#                                    runner's drift falls on both alike; then compared
+#                                    subject in eight turns (ABBABAAB, C2), so that the runner's drift and
+#                                    bursts fall on both alike; then compared
 #   sh tools/bench/ci.sh main [<tag>] a push to main: the head's table, and, against the last release's
 #                                    tag if it has benchmarks, the change since, which gates nothing
 #   sh tools/bench/ci.sh aa          the gate's false failures: the head against itself, in the same
@@ -21,7 +21,10 @@ out="$root/var/bench"
 summary=${GITHUB_STEP_SUMMARY:-/dev/stdout}
 mkdir -p "$out"
 
-ROUND=100
+# Each subject's turns: base and head eight times, 50 iterations each, so that a burst of the
+# runner's noise covers little of either side.
+ROUND=50
+TURNS='a b b a b a a b'
 
 # Runs a checkout's benchmarks, or one subject of them, into a dump; a checkout without it writes an
 # empty one.
@@ -47,7 +50,7 @@ subjects() {
 	done
 }
 
-# Base and head, each subject in turns (ABBA): their dumps, pooled per side, in $out/a.list and $out/b.list.
+# Base and head, each subject in turns: their dumps, pooled per side, in $out/a.list and $out/b.list.
 turns() {
 	a=$1
 	b=$2
@@ -56,12 +59,16 @@ turns() {
 
 	for subject in $(subjects); do
 		name=$(echo "$subject" | tr ':' '_')
-		run "$a" "$out/$name-a1.json" "$subject"
-		run "$b" "$out/$name-b1.json" "$subject"
-		run "$b" "$out/$name-b2.json" "$subject"
-		run "$a" "$out/$name-a2.json" "$subject"
-		printf '%s,%s,' "$out/$name-a1.json" "$out/$name-a2.json" >>"$out/a.list"
-		printf '%s,%s,' "$out/$name-b1.json" "$out/$name-b2.json" >>"$out/b.list"
+		turn=0
+
+		for side in $TURNS; do
+			turn=$((turn + 1))
+
+			if [ "$side" = a ]; then dir=$a; else dir=$b; fi
+
+			run "$dir" "$out/$name-$side$turn.json" "$subject"
+			printf '%s,' "$out/$name-$side$turn.json" >>"$out/$side.list"
+		done
 	done
 }
 

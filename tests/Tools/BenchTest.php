@@ -25,15 +25,15 @@ final class BenchTest extends TestCase
         self::removeDirectory($this->directory);
     }
 
-    public function testGatesOnTheMedian(): void
+    public function testGatesOnTheLowerQuartile(): void
     {
-        $base = $this->dump('base', ['A::benchX' => [10, 10, 10], 'A::benchY' => [10, 10, 10], 'A::benchGone' => [5]]);
-        $head = $this->dump('head', ['A::benchX' => [11, 11, 30], 'A::benchY' => [13, 13, 13], 'A::benchNew' => [1]]);
+        $base = $this->dump('base', ['A::benchX' => [10, 10, 10, 10], 'A::benchY' => [10, 10, 10, 10], 'A::benchGone' => [5]]);
+        $head = $this->dump('head', ['A::benchX' => [11, 30, 30, 30], 'A::benchY' => [13, 13, 13, 13], 'A::benchNew' => [1]]);
 
         [$status, $output] = self::bench('compare', $base, $head, $this->directory.'/none.txt', $this->directory.'/changes.json');
         self::assertSame(1, $status, $output);
         self::assertStringStartsWith('2 of 4 subjects not gated.', $output);
-        self::assertStringContainsString('| A::benchX | 0.010 ms | 0.011 ms | +10.0 % | ok |', $output, 'The median: one slow iteration doesn\'t move it.');
+        self::assertStringContainsString('| A::benchX | 0.010 ms | 0.011 ms | +10.0 % | ok |', $output, 'The lower quartile: three slow iterations of four don\'t move it.');
         self::assertStringContainsString('| A::benchY | 0.010 ms | 0.013 ms | +30.0 % | **slower** |', $output);
         self::assertStringContainsString('| A::benchNew | new | 0.001 ms | | changed, not gated |', $output);
         self::assertStringContainsString('| A::benchGone | 0.005 ms | | | removed, not gated |', $output);
@@ -43,7 +43,7 @@ final class BenchTest extends TestCase
         [$status, $output] = self::bench('compare', $base, $head, $this->directory.'/changed.txt');
         self::assertSame(0, $status, 'A benchmark that changed isn\'t gated.');
         self::assertStringStartsWith('4 of 4 subjects not gated.', $output);
-        self::assertSame(0, self::bench('compare', $this->dump('one', ['A::benchX' => [10, 10]]).','.$this->dump('two', ['A::benchX' => [12, 12]]), $this->dump('three', ['A::benchX' => [12]]))[0], 'Dumps pooled per side: median 11, then 12.');
+        self::assertSame(1, self::bench('compare', $this->dump('one', ['A::benchX' => [10, 10]]).','.$this->dump('two', ['A::benchX' => [20, 20]]), $this->dump('three', ['A::benchX' => [13, 14]]))[0], 'Dumps pooled per side: 10 against 13.');
     }
 
     public function testRefusesWhatIsntAMeasurement(): void

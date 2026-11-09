@@ -6,7 +6,7 @@ declare(strict_types=1);
  * The benchmarks' tables and gate (M2-8), from tools/bench/run.php's dumps (composer bench):
  *
  *   php tools/bench/bench.php report <run.json>                         the table: median, p99, target
- *   php tools/bench/bench.php compare <base.json> <head.json> [<changed>]  fails when a subject's median is
+ *   php tools/bench/bench.php compare <base.json> <head.json> [<changed>]  fails when a subject's lower quartile is
  *                                                                        more than 20 % above the base's
  *
  *   php tools/bench/bench.php record <directory> <runs>                the A/A record from the runs' changes:
@@ -18,8 +18,9 @@ declare(strict_types=1);
  * ci.sh measures base and head in turns (ABBA). A subject the base has and the head doesn't is
  * "removed, not gated", and the table says first how many weren't.
  *
- * The centre is the median of the iterations, everywhere: robust where a subject's times have two
- * peaks, which a mode jumps between. <changed> lists the subjects
+ * The gate compares the lower quartile (p25) of the iterations: the A/A record on GitHub's runners showed
+ * the median moving by up to 47 % between runs of the same code, as bursts of the runner's noise slowed
+ * whole turns. The table of the targets gives the median and the p99. <changed> lists the subjects
  * whose benchmark code differs between base and head, one per line, "Class::subject", "Class::*" or
  * "*" for every one: they and the new ones are reported "changed, not gated" (C3). Tables go to stdout as Markdown,
  * for the job summary.
@@ -92,6 +93,19 @@ function median(array $times): float
 }
 
 /**
+ * The lower quartile: what the gate compares. A shared runner's noise only ever adds time, so a burst
+ * that slows some turns moves the median, and leaves the quartile to the turns it didn't reach.
+ *
+ * @param list<float> $times
+ */
+function p25(array $times): float
+{
+    sort($times);
+
+    return $times[(int) max(0, ceil(0.25 * count($times)) - 1)] ?? 0.0;
+}
+
+/**
  * @param list<float> $times
  */
 function p99(array $times): float
@@ -136,26 +150,26 @@ if ('compare' === $command && isset($argv[2], $argv[3])) {
         $class = explode('::', $subject)[0].'::*';
 
         if (!isset($base[$subject]) || in_array('*', $changed, true) || in_array($subject, $changed, true) || in_array($class, $changed, true)) {
-            $rows[] = sprintf('| %s | %s | %s | | changed, not gated |', $subject, isset($base[$subject]) ? ms(median($base[$subject])) : 'new', ms(median($times)));
+            $rows[] = sprintf('| %s | %s | %s | | changed, not gated |', $subject, isset($base[$subject]) ? ms(p25($base[$subject])) : 'new', ms(p25($times)));
             ++$ungated;
 
             continue;
         }
 
-        $change = 100.0 * (median($times) - median($base[$subject])) / median($base[$subject]);
+        $change = 100.0 * (p25($times) - p25($base[$subject])) / p25($base[$subject]);
         $slower = $change > THRESHOLD;
         $failed = $failed || $slower;
         $changes[$subject] = round($change, 2);
-        $rows[] = sprintf('| %s | %s | %s | %+.1f %% | %s |', $subject, ms(median($base[$subject])), ms(median($times)), $change, $slower ? '**slower**' : 'ok');
+        $rows[] = sprintf('| %s | %s | %s | %+.1f %% | %s |', $subject, ms(p25($base[$subject])), ms(p25($times)), $change, $slower ? '**slower**' : 'ok');
     }
 
     // A subject the head doesn't have any more, e.g. renamed, isn't compared: said so, not left out.
     foreach (array_diff_key($base, $head) as $subject => $times) {
-        $rows[] = sprintf('| %s | %s | | | removed, not gated |', $subject, ms(median($times)));
+        $rows[] = sprintf('| %s | %s | | | removed, not gated |', $subject, ms(p25($times)));
         ++$ungated;
     }
 
-    printf("%d of %d subjects not gated.\n\n| Subject | Base (median) | Head (median) | Change | |\n|---|---|---|---|---|\n%s\n", $ungated, count($rows), implode("\n", $rows));
+    printf("%d of %d subjects not gated.\n\n| Subject | Base (p25) | Head (p25) | Change | |\n|---|---|---|---|---|\n%s\n", $ungated, count($rows), implode("\n", $rows));
 
     // The changes, for the A/A record.
     if (isset($argv[5])) {

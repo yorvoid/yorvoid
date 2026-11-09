@@ -35,8 +35,9 @@ The benchmarks are in `tools/bench`:
 - **Several runs an iteration** where single ones are too short, or too noisy, to compare: 20 cached decisions, 10 session checks, 5 log entries, 5 verifications. Their p99 is that of the iterations, not of single runs.
 - **The verifier's files** are in `/dev/shm` where there is one, so it's the verifier that's measured, not the disk's cache.
 
-**In CI**, a pull request's head is measured against its base on one runner, subject by subject in turns: base, head, head, base. The runner's drift then falls on both alike.
-- A subject whose median is more than 20 % above the base's fails the build.
+**In CI**, a pull request's head is measured against its base on one runner, subject by subject in turns. The runner's drift and bursts then fall on both alike.
+- **Turns:** eight per subject, 50 iterations each: base, head, head, base, head, base, base, head.
+- **The gate:** a subject whose lower quartile (p25) is more than 20 % above the base's fails the build. A shared runner's noise only adds time, so the quartile follows the turns it didn't reach.
 - A subject whose benchmark code changed in the pull request, or that's new or removed, is reported but not gated. The table says first how many weren't.
 - A dump with a time that isn't a number, or a subject without times, fails the job.
 - The gate's own false failures are measured by the `Benchmarks A/A` workflow: the head against itself, twenty times. It's trusted while none fails and no subject moves more than 15 %.
