@@ -44,6 +44,7 @@ use YorvoID\Policy\RoleSource;
 use YorvoID\Policy\Rule\Rule;
 use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Policy\Storage\CachedPolicyStore;
+use YorvoID\Policy\ViewAs\Views;
 use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\Relations\RelationChanges;
 use YorvoID\Relations\RelationPermit;
@@ -123,6 +124,7 @@ final class PolicyWorld
             new GroupChanges($catalogue, $this->policyStore, $this->relationStore, $principals, $log, $transactions, $this->clock),
             new RelationChanges($this->relations->schema(), $this->relationStore, $log, $transactions),
             new AttributeChanges($this->attributes, $attributes, $principals, $log, $transactions),
+            new Views($this->roles, $principals, $log, $this->clock),
         ];
         $this->catalogue = OperationCatalogue::of($handlers);
         $this->operations = new Operations($this->catalogue, $evaluator, $log, $handlers);

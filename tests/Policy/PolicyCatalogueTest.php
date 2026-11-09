@@ -32,7 +32,7 @@ final class PolicyCatalogueTest extends TestCase
     {
         $catalogue = PolicyCatalogue::of([new YorvoIDDeclarations(), new AcmeDeclarations()]);
 
-        self::assertSame(['yorvoid.principals.manage', 'yorvoid.principals.recover', 'yorvoid.sessions.manage', 'yorvoid.roles.manage', 'yorvoid.permissions.manage', 'yorvoid.relations.manage', 'yorvoid.policy.explain', 'acme.pages.view', 'acme.pages.view_drafts', 'acme.pages.publish', 'acme.pages.delete', 'acme.pages.purge', 'acme.sites.update'], array_keys($catalogue->abilities()));
+        self::assertSame(['yorvoid.principals.manage', 'yorvoid.principals.recover', 'yorvoid.sessions.manage', 'yorvoid.roles.manage', 'yorvoid.permissions.manage', 'yorvoid.relations.manage', 'yorvoid.policy.explain', 'yorvoid.policy.view_as', 'acme.pages.view', 'acme.pages.view_drafts', 'acme.pages.publish', 'acme.pages.delete', 'acme.pages.purge', 'acme.sites.update'], array_keys($catalogue->abilities()));
         self::assertSame(['member', 'editor', 'manager', 'admin'], array_keys($catalogue->roles()));
         self::assertTrue($catalogue->has('acme.pages.view'));
         self::assertFalse($catalogue->has('acme.pages.edit'));

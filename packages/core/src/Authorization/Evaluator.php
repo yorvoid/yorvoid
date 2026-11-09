@@ -28,6 +28,7 @@ use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\SelfServicePolicy;
 use YorvoID\Core\Operation\Verdict;
+use YorvoID\Core\Operation\ViewingAs;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StoreUnreachable;
 
@@ -46,6 +47,11 @@ use YorvoID\Core\Storage\StoreUnreachable;
  * Every element that matches is evaluated, so the outcome and its reasons never depend on their order
  * (P2). An element or check that throws counts as unknown, never as holding (P1).
  *
+ * Viewing as someone else ({@see ViewingAs}), no operation runs: the forbid "yorvoid.view_as.read_only"
+ * holds. An ability is decided for the viewer and the target, each as above, and intersected: a Permit
+ * only if both are; else Indeterminate if either is; else a Deny. The decision carries the reasons of the
+ * side that decided, the target's when both refuse, and the viewer's own decision.
+ *
  * @api
  */
 final readonly class Evaluator implements Authorization
@@ -55,6 +61,9 @@ final readonly class Evaluator implements Authorization
 
     /** @var list<VersionSource> */
     private array $versions;
+
+    /** @var \WeakMap<Request, non-empty-list<Request>> The sides of a batch's view-as requests, as preloaded */
+    private \WeakMap $sides;
 
     /**
      * @param iterable<PolicyElement> $elements  The policy: permits and forbids
@@ -83,6 +92,7 @@ final readonly class Evaluator implements Authorization
         }
 
         $this->versions = $sources;
+        $this->sides = new \WeakMap();
         $list = [];
 
         foreach ($elements as $element) {
@@ -184,7 +194,18 @@ final readonly class Evaluator implements Authorization
             return [];
         }
 
-        $this->preload($requests);
+        $sides = [];
+
+        foreach ($requests as $request) {
+            $both = self::sides($request);
+            array_push($sides, ...$both);
+
+            if ($request->actor instanceof ViewingAs) {
+                $this->sides[$request] = $both;
+            }
+        }
+
+        $this->preload($sides);
         // One realm, one moment: the versions are read once.
         $versions = $this->versionsOf($requests[0]);
 
@@ -263,8 +284,26 @@ final readonly class Evaluator implements Authorization
         return $versions;
     }
 
+    /**
+     * Who the elements decide for: the actor, or both sides of a view-as.
+     *
+     * @return non-empty-list<Request>
+     */
+    private static function sides(Request $request): array
+    {
+        $actor = $request->actor;
+
+        return $actor instanceof ViewingAs ? [$request->by($actor->viewer), $request->by($actor->target)] : [$request];
+    }
+
     private function judge(Request $request): Decision
     {
+        $actor = $request->actor;
+
+        if ($actor instanceof ViewingAs) {
+            return $this->viewingAs($request, $actor);
+        }
+
         $authorizedBy = $request->authorizedBy();
         $reasons = [];
         /** @var array<string, list<Truth>> $forbids */
@@ -321,6 +360,39 @@ final readonly class Evaluator implements Authorization
         $this->logger->warning('YorvoID permitted "{operation}" offline: {reason}', ['operation' => $request->name(), 'reason' => $offline->reason]);
 
         return $offline;
+    }
+
+    /**
+     * Read-only, and never more than the viewer may: see the class.
+     */
+    private function viewingAs(Request $request, ViewingAs $actor): Decision
+    {
+        if (null !== $request->operation) {
+            $truth = Truth::holds('A view as someone else is read-only: no operation runs for it.');
+
+            return Decision::deny(\sprintf('A forbid applies: %s', $truth->detail), [new Reason(ViewingAs::READ_ONLY, 'forbid', $truth)], precedence: Precedence::ForbidHolds);
+        }
+
+        // A Request is the key elements keep what they preloaded by: the same sides, if it was a batch.
+        [$viewerSide, $targetSide] = $this->sides[$request] ?? self::sides($request);
+        $viewer = $this->judge($viewerSide);
+        $target = $this->judge($targetSide);
+
+        // Only an Indeterminate has reasons it couldn't decide. Permit-offline never comes of an ability.
+        if ([] !== $target->indeterminate || ([] === $viewer->indeterminate && (!$target->permits() || $viewer->permits()))) {
+            return self::seen($target, $viewer);
+        }
+
+        // The target may, or the viewer couldn't be decided: the viewer's side decides, with the
+        // viewer's own remedies and none of the target's.
+        return [] !== $viewer->indeterminate
+            ? self::seen(new Decision(Verdict::Indeterminate, null, \sprintf('Viewing as someone else, the viewer\'s own access couldn\'t be decided: %s', $viewer->reason), $viewer->reasons, indeterminate: $viewer->indeterminate, precedence: $viewer->precedence), $viewer)
+            : self::seen(Decision::deny(\sprintf('Viewing as someone else, the viewer may not: %s', $viewer->reason), $viewer->reasons, $viewer->remedies, $viewer->precedence), $viewer);
+    }
+
+    private static function seen(Decision $decided, Decision $viewer): Decision
+    {
+        return new Decision($decided->verdict, $decided->basis, $decided->reason, $decided->reasons, $decided->remedies, $decided->indeterminate, precedence: $decided->precedence, viewer: $viewer);
     }
 
     /**

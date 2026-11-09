@@ -99,6 +99,7 @@ use YorvoID\Policy\Roles;
 use YorvoID\Policy\Storage\CachedPolicyStore;
 use YorvoID\Policy\Storage\DbalAttributeStore;
 use YorvoID\Policy\Storage\DbalPolicyStore;
+use YorvoID\Policy\ViewAs\Views;
 use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\Relations\ForgetRelationsOfDeletedPrincipals;
 use YorvoID\Relations\RelationChanges;
@@ -295,6 +296,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(RolePermit::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]))->tag('yorvoid.policy_element');
     $services->set(NoEscalation::class)->tag('yorvoid.policy_element');
     $services->set(PolicyChanges::class);
+    $services->set(Views::class);
     $services->set('yorvoid.rule_elements', 'array')->factory([Factories::class, 'ruleElements'])->args([tagged_iterator('yorvoid.rule')]);
     $services->set(StepUpSelfService::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
     // The request's own principal is read once, by its session's check (PERF-07); the evaluator reuses it.

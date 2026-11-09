@@ -18,17 +18,21 @@ use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Operation\AbilityPolicy;
 use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Operation\Anonymous;
+use YorvoID\Core\Operation\Authorization;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\NoAbilityPolicy;
 use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Operation\Verdict;
+use YorvoID\Core\Operation\ViewingAs;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
@@ -171,6 +175,51 @@ final class OperationsTest extends TestCase
 
         self::assertSame(AuthorizedBy::Ability, $this->badges->permits[0]->basis);
         self::assertTrue($boss->equals($this->badges->permits[0]->actor->principalId ?? throw new \LogicException()));
+    }
+
+    public function testAViewAsRunsNothingAndTheViewerIsLogged(): void
+    {
+        $boss = new PrincipalId(new UuidV7());
+        $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new ViewingAs(new Member($this->realm, $boss), new Member($this->realm, $this->ana)), new Origin(OriginKind::Web), new Policy(true));
+
+        self::assertSame(Verdict::Deny, $decision->verdict);
+        $entry = $this->entries()[0];
+        self::assertTrue($boss->equals($entry->actor ?? throw new \LogicException()), 'The viewer tried it, not the target.');
+        self::assertSame((string) $this->ana, $entry->details['viewing_as'] ?? null);
+        self::assertArrayNotHasKey('viewing_as', $this->refusedEntry(new Member($this->realm, $boss)), 'Only viewing as someone.');
+        self::assertArrayNotHasKey('viewing_as', $this->refusedEntry(new ViewingAs(new Member($this->realm, $boss), new Anonymous())), 'Viewing as nobody in particular.');
+    }
+
+    public function testAnAuthorizationThatPermitsAViewAsIsAMistake(): void
+    {
+        $permitting = new readonly class implements Authorization {
+            public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
+            {
+                return Decision::permit(AuthorizedBy::Ability, 'Anything goes.');
+            }
+        };
+        $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), $permitting, new SecurityLog($this->log, new InMemoryTransactions()), [$this->badges]);
+
+        try {
+            $operations->run(new IssueBadge($this->realm, $this->ana), new ViewingAs(new Member($this->realm, new PrincipalId(new UuidV7())), new Member($this->realm, $this->ana)), new Origin(OriginKind::Web));
+            self::fail('It ran for a view-as.');
+        } catch (IntegratorError $error) {
+            self::assertStringStartsWith('The authorization permitted "acme.badge.issue" to a view as someone else.', $error->getMessage());
+        }
+
+        self::assertSame([], $this->badges->permits);
+        self::assertSame([], $this->entries());
+    }
+
+    /**
+     * @return array<mixed> The details of its refusal's entry
+     */
+    private function refusedEntry(Actor $actor): array
+    {
+        $this->refused(new IssueBadge($this->realm, $this->ana), $actor, new Origin(OriginKind::Web), new Policy(false));
+        $entries = $this->entries();
+
+        return end($entries)->details ?? [];
     }
 
     public function testTheAbilityPolicyRefuses(): void
