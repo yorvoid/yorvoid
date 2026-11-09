@@ -59,8 +59,25 @@ final class BenchTest extends TestCase
             self::assertStringContainsString($message, $output);
         }
 
+        // An empty base never reaches the comparison, whose quartile it would divide by.
+        [$status, $output] = self::bench('compare', $this->dump('empty', ['A::benchX' => []]), $good);
+        self::assertNotSame(0, $status);
+        self::assertStringContainsString('has no times for A::benchX', $output);
+        self::assertStringNotContainsString('Division', $output);
+
         file_put_contents($this->directory.'/nothing.json', '{"php": "8.5"}');
         self::assertStringContainsString('isn\'t a dump of tools/bench/run.php.', self::bench('report', $this->directory.'/nothing.json')[1]);
+    }
+
+    public function testTellsTheDriftSinceARelease(): void
+    {
+        $release = $this->dump('release', ['A::benchX' => [10, 10, 10, 10]]);
+        $head = $this->dump('head', ['A::benchX' => [10, 10, 12, 40], 'A::benchNew' => [1]]);
+
+        [$status, $output] = self::bench('drift', $release, $head);
+        self::assertSame(0, $status, 'It gates nothing.');
+        self::assertStringContainsString('| A::benchX | +0.0 % | +10.0 % | +300.0 % |', $output, 'The tail the quartile doesn\'t see.');
+        self::assertStringContainsString('| A::benchNew | new | new | new |', $output);
     }
 
     public function testTheRecordTrustsOnlyAQuietGate(): void

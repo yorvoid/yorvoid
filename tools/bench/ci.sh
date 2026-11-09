@@ -117,7 +117,7 @@ case "${1:-}" in
 			echo '' >>"$summary"
 			echo "### Since $tag (gates nothing)" >>"$summary"
 			turns "$release" "$root"
-			compare "$(cat "$out/a.list")" "$(cat "$out/b.list")" || true
+			php "$root/tools/bench/bench.php" drift "$(cat "$out/a.list")" "$(cat "$out/b.list")" >>"$summary"
 		fi
 		;;
 	aa)

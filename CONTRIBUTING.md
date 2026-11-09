@@ -128,7 +128,7 @@ So each package directory carries what its repository needs on its own: a README
 **Read the benchmarks** (M2-8): the `Benchmarks` job of the commit you'll tag has the table, its p99s against OPS-042's targets, and the change since the last release.
 - Copy the table into [`docs/reference/performance.md`](docs/reference/performance.md), with the runner's CPU and PostgreSQL version.
 - A subject over its target needs a line in the release notes: "accepted, because …" or "fixed in …".
-- So does one more than 20 % slower than at the last release. Each pull request was within 20 %, but several can add up.
+- So does one whose median is more than 20 % slower than at the last release, or whose p99 grew as much. Each pull request was within 20 % on its lower quartile, but several can add up, and the tail isn't what a pull request's gate sees.
 
 A release whose measured time is above 15 minutes doesn't go out until the quickstart is shorter or clearer. Before YorvoID is on Packagist, run `QUICKSTART_PACKAGIST=1 php tools/quickstart/follow.php` once it is, to check the published packages install as the page says.
 

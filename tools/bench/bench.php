@@ -9,6 +9,8 @@ declare(strict_types=1);
  *   php tools/bench/bench.php compare <base.json> <head.json> [<changed>]  fails when a subject's lower quartile is
  *                                                                        more than 20 % above the base's
  *
+ *   php tools/bench/bench.php drift <release.json> <head.json>         the change since a release, in the p25, the
+ *                                                                        median and the p99; gates nothing
  *   php tools/bench/bench.php record <directory> <runs>                the A/A record from the runs' changes:
  *                                                                        fails on a failure, a subject whose
  *                                                                        worst |change| is over 15 %, or fewer
@@ -179,6 +181,27 @@ if ('compare' === $command && isset($argv[2], $argv[3])) {
     exit($failed ? 1 : 0);
 }
 
+if ('drift' === $command && isset($argv[2], $argv[3])) {
+    // Since the last release (main): the change in each statistic, gating nothing. The median and the
+    // p99 judge a release, as the lower quartile doesn't see a regression that only lengthens the tail.
+    $base = iterations($argv[2]);
+    $head = iterations($argv[3]);
+    echo "| Subject | p25 | Median | p99 |\n|---|---|---|---|\n";
+
+    foreach ($head as $subject => $times) {
+        if (!isset($base[$subject])) {
+            printf("| %s | new | new | new |\n", $subject);
+
+            continue;
+        }
+
+        $delta = static fn (float $before, float $after): string => sprintf('%+.1f %%', 100.0 * ($after - $before) / $before);
+        printf("| %s | %s | %s | %s |\n", $subject, $delta(p25($base[$subject]), p25($times)), $delta(median($base[$subject]), median($times)), $delta(p99($base[$subject]), p99($times)));
+    }
+
+    exit(0);
+}
+
 if ('record' === $command && isset($argv[2], $argv[3])) {
     // The A/A record (C1): each subject's largest |change| across the runs, and how many failed.
     $files = glob(rtrim($argv[2], '/').'/*.json');
@@ -214,5 +237,5 @@ if ('record' === $command && isset($argv[2], $argv[3])) {
     exit($over || $runs < (int) $argv[3] ? 1 : 0);
 }
 
-fwrite(\STDERR, "Usage: php tools/bench/bench.php report <run.json> | compare <base.json> <head.json> [<changed>] [<changes.json>] | record <directory> <runs>\n");
+fwrite(\STDERR, "Usage: php tools/bench/bench.php report <run.json> | compare <base.json> <head.json> [<changed>] [<changes.json>] | drift <release.json> <head.json> | record <directory> <runs>\n");
 exit(2);
