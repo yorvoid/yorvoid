@@ -140,6 +140,8 @@ final class YorvoIDBundle extends AbstractBundle
         $flows->scalarNode('script')->defaultValue('/bundles/yorvoid/browser/forms.js')->info('Where the pages load the browser client\'s form script from')->end();
         $children->arrayNode('intents')->addDefaultsIfNotSet()->children()
             ->scalarNode('summaries_domain')->defaultValue('messages')->info('The translation domain of your operations\' summaries')->end();
+        $children->arrayNode('ordered_conditions')->addDefaultsIfNotSet()->children()
+            ->booleanNode('pessimistic')->defaultFalse()->info('Whether rules decide an unknown ordered fact at its worst instead of as missing data (experimental)')->end();
     }
 
     public function prependExtension(ContainerConfigurator $container, ContainerBuilder $builder): void

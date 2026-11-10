@@ -89,6 +89,7 @@ use YorvoID\Policy\ForgetRolesOfDeletedPrincipals;
 use YorvoID\Policy\GroupChanges;
 use YorvoID\Policy\GroupRelations;
 use YorvoID\Policy\NoEscalation;
+use YorvoID\Policy\Ordered\OrderedConditions;
 use YorvoID\Policy\Policy;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\PolicyChanges;
@@ -290,6 +291,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(GroupChanges::class);
     $services->set(Attributes::class)->args([tagged_iterator('yorvoid.attribute_declarations'), service(AttributeStore::class), tagged_iterator('yorvoid.attribute_resolver')])->public();
     $services->set(AttributeChanges::class);
+    $services->set(OrderedConditions::class)->args([param('yorvoid.ordered_conditions.pessimistic')])->public();
     $services->set(Roles::class)->arg('$sources', tagged_iterator('yorvoid.role_source'))->arg('$relations', service(Relations::class))->public();
     $services->set(SessionStepUpCheck::class);
     $services->alias(StepUpCheck::class, SessionStepUpCheck::class);

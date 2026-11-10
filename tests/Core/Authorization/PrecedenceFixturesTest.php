@@ -33,7 +33,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
  *   the committed fixtures.json's, so the default is checked unchanged (MP-1);
  * - **extended**: every M2 extension point engaged, an OfflineDecider and an operation that accepts
  *   Permit-offline (XP-03); up to 4 elements, which unknowns an unreachable store caused, and what the
- *   decider says. XP-15 joins it with M2-11.
+ *   decider says. XP-15's ordered conditions are in it too, decided in tests/Policy/OrderedFixturesTest.php.
  */
 final class PrecedenceFixturesTest extends TestCase
 {
