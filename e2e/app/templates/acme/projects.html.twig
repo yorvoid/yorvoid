@@ -1,0 +1,22 @@
+{% extends 'acme/layout.html.twig' %}
+
+{% block title %}Projects{% endblock %}
+
+{% block content %}
+    {% if removed %}<p role="status">Removed “{{ removed }}”.</p>{% endif %}
+    {% if projects is empty %}
+        <p>There are no projects.</p>
+    {% else %}
+        <ul class="projects">
+            {% for id, name in projects %}
+                <li>
+                    <span>{{ name }}</span>
+                    <form method="post" action="/projects/{{ id }}/remove">
+                        <input type="hidden" name="_token" value="{{ csrf_token('acme') }}">
+                        <button type="submit" aria-label="Delete {{ name }}">Delete</button>
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endblock %}
