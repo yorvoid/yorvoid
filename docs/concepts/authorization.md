@@ -312,6 +312,8 @@ try {
 }
 ```
 
+In Symfony, you don't have to catch it: a refusal nothing catches is answered for the person ([refusals for people](symfony.md#refusals-for-people)).
+
 ## Explanations
 
 Every element's truth says what it rests on (`Truth::$grounds`, a list of `Ground`), and a decision says which row of the precedence decided (`Decision::$precedence`). `Explanation::of($decision)` puts them together for an explainer of yours to build its own text from: the row, the elements behind it (the forbids that held, the permits that held, the authority check...), their grounds, the remedies and the versions it read. It has no text for people. Both are experimental.

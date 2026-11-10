@@ -1,0 +1,22 @@
+{# An operation refused, as the person is shown it. summary: title, text; remedies: name, parameters,
+   message, action (url, label) or null; reference: the decision's, for support, or null. #}
+{% extends '@YorvoID/flow/layout.html.twig' %}
+
+{% block title %}{{ summary.title }}{% endblock %}
+
+{% block content %}
+    {% if summary.text %}<p>{{ summary.text }}</p>{% endif %}
+    {% if remedies is not empty %}
+        <ul data-yorvoid-remedies>
+            {% for remedy in remedies %}
+                <li data-yorvoid-remedy="{{ remedy.name }}">
+                    {% if remedy.name == 'wait' and remedy.parameters.until %}<time datetime="{{ remedy.parameters.until }}">{{ remedy.message }}</time>{% else %}{{ remedy.message }}{% endif %}
+                    {% if remedy.action %}<p><a href="{{ remedy.action.url }}">{{ remedy.action.label }}</a></p>{% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+    {% if reference %}<p><small>{{ reference }}</small></p>{% endif %}
+{% endblock %}
+
+{% block scripts %}{% endblock %}

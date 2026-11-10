@@ -1,4 +1,4 @@
-import { browserErrorCode, MESSAGES, YorvoIDError } from './errors.js';
+import { browserErrorCode, MESSAGES, notPermitted, YorvoIDError } from './errors.js';
 import { assertionJson, creationOptions, registrationJson, requestOptions } from './webauthn.js';
 /** What a flow answers with: a step, done; refused, gone or too soon (the progress says which). */
 const FLOW_ANSWERS = [200, 404, 410, 422, 429];
@@ -297,6 +297,10 @@ export class YorvoID {
         if (status === 429) {
             const seconds = Number(response.headers.get('Retry-After') ?? Number.NaN);
             return this.#error('too_many_attempts', { status, retryAfter: Number.isInteger(seconds) ? seconds : undefined }, message);
+        }
+        const refused = notPermitted(json?.['not_permitted']);
+        if (refused !== undefined) {
+            return this.#error('not_permitted', { status, notPermitted: refused }, message);
         }
         if (isObject(stepUp)) {
             return this.#error('step_up_required', { status, stepUp: { operation: typeof stepUp['operation'] === 'string' ? stepUp['operation'] : null, within: String(stepUp['within']) } }, message);

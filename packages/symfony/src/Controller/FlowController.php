@@ -26,6 +26,7 @@ use YorvoID\Passkeys\Flow\InvitationStep;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\Flow\RecoveryLinkStep;
 use YorvoID\Symfony\Flow\FlowContexts;
+use YorvoID\Symfony\LocalPath;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\Json;
 use YorvoID\Symfony\Templates\FlowPages;
@@ -59,8 +60,11 @@ final readonly class FlowController
         PasskeyFlows::INVITATION => ['token' => InvitationStep::TOKEN],
         PasskeyFlows::RECOVER_WITH_LINK => ['token' => RecoveryLinkStep::TOKEN],
         PasskeyFlows::VERIFY_EMAIL => ['token' => EmailVerificationStep::TOKEN],
-        PasskeyFlows::STEP_UP => ['operation' => 'step_up.operation', 'multi_factor' => 'step_up.multi_factor', 'within' => 'step_up.within'],
+        PasskeyFlows::STEP_UP => ['operation' => 'step_up.operation', 'multi_factor' => 'step_up.multi_factor', 'within' => 'step_up.within', 'return' => self::RETURN],
     ];
+
+    /** Where a flow goes back to once it completes, instead of where it's configured to: a path on this site */
+    public const string RETURN = 'flow.return';
 
     /**
      * @param array<string, string>                $completed Where to go when a flow completes, by flow; "default" for the others
@@ -95,13 +99,18 @@ final readonly class FlowController
                 // Seconds: a requirement fresher than the step-up's window, which the step then asks for.
                 $within = filter_var($value, \FILTER_VALIDATE_INT);
                 $data[$key] = \is_int($within) ? $within : null;
-            } elseif (\is_string($value)) {
+            } elseif (\is_string($value) || self::RETURN === $key && null !== $value) {
+                // Where to return to is a path, or the request is refused: never quietly somewhere else.
                 $data[$key] = $value;
             }
         }
 
         if (\is_string($data['step_up.operation'] ?? null) && (\strlen($data['step_up.operation']) > 191 || 1 !== preg_match(Operation::NAME, $data['step_up.operation']))) {
             throw new BadRequestHttpException('That isn\'t an operation\'s name.');
+        }
+
+        if (\array_key_exists(self::RETURN, $data) && (!\is_string($data[self::RETURN]) || !LocalPath::is($data[self::RETURN]))) {
+            throw new BadRequestHttpException('Where to return to must be a path on this site.');
         }
 
         try {
@@ -136,7 +145,10 @@ final readonly class FlowController
         return self::secured($this->answer($request, $progress, true));
     }
 
-    private static function secured(Response $response): Response
+    /**
+     * What every answer of YorvoID's pages carries, the refusals' included.
+     */
+    public static function secured(Response $response): Response
     {
         $response->headers->set('Cache-Control', 'no-store');
         $response->headers->set('Content-Security-Policy', self::CONTENT_SECURITY_POLICY);
@@ -165,7 +177,9 @@ final readonly class FlowController
         }
 
         $flow = $progress->state->flow;
-        $completed = $this->completed[$flow] ?? $this->completed['default'] ?? '/';
+        // Checked again here, not only when the flow started: what's in the state is what's followed.
+        $return = $progress->state->string(self::RETURN);
+        $completed = null !== $return && LocalPath::is($return) ? $return : $this->completed[$flow] ?? $this->completed['default'] ?? '/';
         $status = match (true) {
             FlowStatus::Failed === $progress->status => 410,
             null !== $progress->retryAfter => 429,

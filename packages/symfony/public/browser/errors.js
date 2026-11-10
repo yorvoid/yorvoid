@@ -12,6 +12,7 @@ export const MESSAGES = Object.freeze({
     too_many_attempts: 'Too many attempts. Please wait, then try again.',
     signed_out: 'You were signed out. Please sign in again.',
     step_up_required: 'Please confirm it\'s you.',
+    not_permitted: 'You can\'t do this right now.',
     network: 'The server couldn\'t be reached. Check your connection, then try again.',
     server: 'Something went wrong. Please try again later.',
     unknown: 'Something went wrong. Please try again.',
@@ -30,6 +31,8 @@ export class YorvoIDError extends Error {
     retryAfter;
     /** What to step up for, for `step_up_required` */
     stepUp;
+    /** What was refused, and what would satisfy it, for `not_permitted` */
+    notPermitted;
     constructor(code, message, details = {}) {
         super(message, { cause: details.cause });
         this.code = code;
@@ -37,6 +40,7 @@ export class YorvoIDError extends Error {
         this.reason = details.reason;
         this.retryAfter = details.retryAfter;
         this.stepUp = details.stepUp;
+        this.notPermitted = details.notPermitted;
     }
 }
 const BROWSER_ERRORS = Object.freeze({
@@ -52,4 +56,31 @@ const BROWSER_ERRORS = Object.freeze({
  */
 export function browserErrorCode(error) {
     return error instanceof Error && Object.hasOwn(BROWSER_ERRORS, error.name) ? BROWSER_ERRORS[error.name] : 'unknown';
+}
+/**
+ * A refusal's "not_permitted", as YorvoID answers it, or undefined if that isn't one. The remedies that
+ * don't have the documented shape are left out.
+ */
+export function notPermitted(value) {
+    const refusal = record(value);
+    if (refusal === undefined) {
+        return undefined;
+    }
+    const remedies = refusal['remedies'];
+    return {
+        verdict: typeof refusal['verdict'] === 'string' ? refusal['verdict'] : 'deny',
+        decision: typeof refusal['decision'] === 'string' ? refusal['decision'] : null,
+        remedies: Array.isArray(remedies) ? remedies.flatMap(remedy) : [],
+    };
+}
+function remedy(value) {
+    const { name, parameters, message, action } = record(value) ?? {};
+    const link = record(action);
+    if (typeof name !== 'string' || typeof message !== 'string' || (action !== null && (typeof link?.['url'] !== 'string' || typeof link['label'] !== 'string'))) {
+        return [];
+    }
+    return [{ name, parameters: (record(parameters) ?? {}), message, action: link === undefined ? null : { url: link['url'], label: link['label'] } }];
+}
+function record(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : undefined;
 }

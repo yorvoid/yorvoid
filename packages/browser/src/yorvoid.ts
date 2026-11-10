@@ -1,4 +1,4 @@
-import { browserErrorCode, MESSAGES, YorvoIDError, type ErrorCode, type ErrorDetails, type Messages } from './errors.ts';
+import { browserErrorCode, MESSAGES, notPermitted, YorvoIDError, type ErrorCode, type ErrorDetails, type Messages } from './errors.ts';
 import { assertionJson, creationOptions, registrationJson, requestOptions, type JsonObject, type PublicKeyCredentialStatics } from './webauthn.ts';
 
 type Signals = Required<Omit<PublicKeyCredentialStatics, 'isConditionalMediationAvailable'>>;
@@ -423,6 +423,12 @@ export class YorvoID {
       const seconds = Number(response.headers.get('Retry-After') ?? Number.NaN);
 
       return this.#error('too_many_attempts', { status, retryAfter: Number.isInteger(seconds) ? seconds : undefined }, message);
+    }
+
+    const refused = notPermitted(json?.['not_permitted']);
+
+    if (refused !== undefined) {
+      return this.#error('not_permitted', { status, notPermitted: refused }, message);
     }
 
     if (isObject(stepUp)) {

@@ -11,6 +11,7 @@
  * - `too_many_attempts`: try again after `retryAfter` seconds
  * - `signed_out`: the session ended; sign in again
  * - `step_up_required`: confirm it's you first, with `stepUp()`
+ * - `not_permitted`: the operation was refused; `notPermitted` says what would satisfy it, if anything
  * - `network`: the server couldn't be reached
  * - `server`: the server answered something unexpected
  * - `unknown`: anything else the browser reported
@@ -26,6 +27,7 @@ export type ErrorCode =
   | 'too_many_attempts'
   | 'signed_out'
   | 'step_up_required'
+  | 'not_permitted'
   | 'network'
   | 'server'
   | 'unknown';
@@ -46,6 +48,7 @@ export const MESSAGES: Readonly<Messages> = Object.freeze({
   too_many_attempts: 'Too many attempts. Please wait, then try again.',
   signed_out: 'You were signed out. Please sign in again.',
   step_up_required: 'Please confirm it\'s you.',
+  not_permitted: 'You can\'t do this right now.',
   network: 'The server couldn\'t be reached. Check your connection, then try again.',
   server: 'Something went wrong. Please try again later.',
   unknown: 'Something went wrong. Please try again.',
@@ -58,11 +61,36 @@ export interface StepUpRequirement {
   readonly within: string;
 }
 
+/**
+ * What would satisfy a refusal, as YorvoID's refusal pages show it: a message for people, and what to
+ * do about it if there's something to do now.
+ */
+export interface Remedy {
+  /** E.g. "step_up", "wait" */
+  readonly name: string;
+  readonly parameters: Readonly<Record<string, string | number | boolean | null>>;
+  /** For people, in the request's language: show it as text */
+  readonly message: string;
+  /** Where to go to satisfy it, e.g. the step-up's page, and its button's label */
+  readonly action: { readonly url: string; readonly label: string } | null;
+}
+
+/**
+ * An operation refused: Deny, or Indeterminate when it couldn't be decided.
+ */
+export interface NotPermitted {
+  readonly verdict: string;
+  /** The decision's ID, for support, if it was recorded */
+  readonly decision: string | null;
+  readonly remedies: readonly Remedy[];
+}
+
 export interface ErrorDetails {
   readonly status?: number;
   readonly reason?: string | undefined;
   readonly retryAfter?: number | undefined;
   readonly stepUp?: StepUpRequirement;
+  readonly notPermitted?: NotPermitted;
   readonly cause?: unknown;
 }
 
@@ -80,6 +108,8 @@ export class YorvoIDError extends Error {
   readonly retryAfter: number | undefined;
   /** What to step up for, for `step_up_required` */
   readonly stepUp: StepUpRequirement | undefined;
+  /** What was refused, and what would satisfy it, for `not_permitted` */
+  readonly notPermitted: NotPermitted | undefined;
 
   constructor(code: ErrorCode, message: string, details: ErrorDetails = {}) {
     super(message, { cause: details.cause });
@@ -88,6 +118,7 @@ export class YorvoIDError extends Error {
     this.reason = details.reason;
     this.retryAfter = details.retryAfter;
     this.stepUp = details.stepUp;
+    this.notPermitted = details.notPermitted;
   }
 }
 
@@ -105,4 +136,39 @@ const BROWSER_ERRORS: Readonly<Record<string, ErrorCode>> = Object.freeze({
  */
 export function browserErrorCode(error: unknown): ErrorCode {
   return error instanceof Error && Object.hasOwn(BROWSER_ERRORS, error.name) ? BROWSER_ERRORS[error.name] as ErrorCode : 'unknown';
+}
+
+/**
+ * A refusal's "not_permitted", as YorvoID answers it, or undefined if that isn't one. The remedies that
+ * don't have the documented shape are left out.
+ */
+export function notPermitted(value: unknown): NotPermitted | undefined {
+  const refusal = record(value);
+
+  if (refusal === undefined) {
+    return undefined;
+  }
+
+  const remedies = refusal['remedies'];
+
+  return {
+    verdict: typeof refusal['verdict'] === 'string' ? refusal['verdict'] : 'deny',
+    decision: typeof refusal['decision'] === 'string' ? refusal['decision'] : null,
+    remedies: Array.isArray(remedies) ? remedies.flatMap(remedy) : [],
+  };
+}
+
+function remedy(value: unknown): Remedy[] {
+  const { name, parameters, message, action } = record(value) ?? {};
+  const link = record(action);
+
+  if (typeof name !== 'string' || typeof message !== 'string' || (action !== null && (typeof link?.['url'] !== 'string' || typeof link['label'] !== 'string'))) {
+    return [];
+  }
+
+  return [{ name, parameters: (record(parameters) ?? {}) as Remedy['parameters'], message, action: link === undefined ? null : { url: link['url'] as string, label: link['label'] as string } }];
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }

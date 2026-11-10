@@ -10,22 +10,26 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\StepView;
 use YorvoID\Passkeys\Flow\View\StepUpView;
+use YorvoID\Symfony\Remedy\RemedyPrompts;
 
 /**
  * Renders the flow pages, with what every template gets: for the flows, the template gallery and the
  * template lint alike.
+ *
+ * @phpstan-import-type Prompt from RemedyPrompts
  *
  * @internal
  */
 final readonly class FlowPages
 {
     /** The browser client's error codes, for the pages to show its messages in the person's language */
-    public const array CLIENT_ERRORS = ['not_supported', 'cancelled', 'aborted', 'already_registered', 'user_verification_unavailable', 'wrong_site', 'refused', 'too_many_attempts', 'signed_out', 'step_up_required', 'network', 'server', 'unknown'];
+    public const array CLIENT_ERRORS = ['not_supported', 'cancelled', 'aborted', 'already_registered', 'user_verification_unavailable', 'wrong_site', 'refused', 'too_many_attempts', 'signed_out', 'step_up_required', 'not_permitted', 'network', 'server', 'unknown'];
 
     public function __construct(
         private TranslatorInterface $translator,
         private ?Environment $twig,
         private string $script,
+        private ?RemedyPrompts $remedies = null,
     ) {
     }
 
@@ -95,6 +99,17 @@ final readonly class FlowPages
     }
 
     /**
+     * An operation refused: what would satisfy it, if anything, and the decision's reference.
+     *
+     * @param array{title: string, text: string|null} $summary
+     * @param list<Prompt>                            $remedies
+     */
+    public function refused(array $summary, array $remedies, ?string $reference, string $locale): string
+    {
+        return $this->render('@YorvoID/flow/refused.html.twig', ['flow' => null, 'problems' => [], 'summary' => $summary, 'remedies' => $remedies, 'reference' => $reference], $locale);
+    }
+
+    /**
      * A sample page, for the gallery and the lint: its forms post to Sample::ACTION.
      */
     public function sample(Sample $sample, string $locale): string
@@ -102,8 +117,18 @@ final readonly class FlowPages
         return match ($sample->template) {
             'failed' => $this->failed($sample->flow, $sample->problems[0] ?? new Problem('yorvoid.flow.out_of_date'), Sample::START, $locale),
             'expired' => $this->expired($sample->flow, Sample::START, $locale),
+            'refused' => $this->sampleRefusal($sample, $locale),
             default => $this->step($sample->flow, $sample->template, $sample->view ?? new \YorvoID\Passkeys\Flow\View\SetupCodeView(), $sample->problems, Sample::ACTION, $locale),
         };
+    }
+
+    private function sampleRefusal(Sample $sample, string $locale): string
+    {
+        if (null === $this->remedies || null === $sample->decision) {
+            throw new IntegratorError('A refusal\'s sample needs its decision, and the remedies\' prompts.', 'Render it through the container\'s FlowPages.', 'concepts/symfony.md#flow-pages');
+        }
+
+        return $this->refused($this->remedies->summary($sample->decision, $locale), $this->remedies->of($sample->decision, Sample::START, $locale), $this->remedies->reference($sample->decision, $locale), $locale);
     }
 
     /**

@@ -1,2 +1,2 @@
 export { YorvoID } from './yorvoid.js';
-export { MESSAGES, YorvoIDError } from './errors.js';
+export { MESSAGES, YorvoIDError, notPermitted } from './errors.js';

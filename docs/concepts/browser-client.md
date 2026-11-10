@@ -114,6 +114,7 @@ Every failure is a `YorvoIDError` with a `code`, and a `message` to show:
 | `too_many_attempts` | `retryAfter` says how many seconds to wait |
 | `signed_out` | The session ended; sign in again |
 | `step_up_required` | `stepUp` says what for |
+| `not_permitted` | The operation was refused: `notPermitted` has the verdict, the decision's ID and the remedies, each with a `message` to show and an `action`, if there's something to do now |
 | `network` | The server couldn't be reached |
 | `server` | The server answered something unexpected |
 | `unknown` | Anything else the browser reported |
@@ -125,6 +126,8 @@ new YorvoID({ messages: { cancelled: 'Das wurde abgebrochen. Bitte versuch es no
 ```
 
 Your translation wins over the server's message, which wins over the client's own.
+
+`notPermitted(json.not_permitted)` reads a refusal your own endpoints pass on from YorvoID's [refusal pages](symfony.md#refusals-for-people), for a page that calls them with `fetch()`.
 
 ## How it talks to the server
 

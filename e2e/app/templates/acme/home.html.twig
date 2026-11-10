@@ -1,0 +1,14 @@
+{% extends 'acme/layout.html.twig' %}
+
+{% block title %}{{ email ? 'Welcome back' : 'Welcome' }}{% endblock %}
+
+{% block content %}
+    {% if email %}
+        <p data-testid="who">Signed in as {{ email }}</p>
+        <p>Your club's projects are under <a href="/projects">Projects</a>.</p>
+    {% else %}
+        <p data-testid="who">Not signed in</p>
+        <p><a href="/yorvoid/flows/yorvoid.sign_in">Sign in</a></p>
+        <p>Setting up Acme Team for the first time? <a href="/yorvoid/flows/yorvoid.setup">Use your setup code</a>.</p>
+    {% endif %}
+{% endblock %}

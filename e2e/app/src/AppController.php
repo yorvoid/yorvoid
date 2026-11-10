@@ -29,7 +29,7 @@ use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Security\CurrentSession;
 
 /**
- * The application's own pages, and endpoints only the browser tests use.
+ * The signing page's return, and endpoints only the browser tests use; Acme Team has the other pages.
  */
 final readonly class AppController
 {
@@ -43,17 +43,6 @@ final readonly class AppController
         private IntentSigning $signing,
         private FlowContexts $contexts,
     ) {
-    }
-
-    /**
-     * Who is signed in.
-     */
-    public function home(): Response
-    {
-        $session = $this->current->get();
-        $email = null === $session ? null : $this->principals->identifiers($session->realm, $session->principalId)[IdentifierKind::Email->value] ?? null;
-
-        return self::page('Home', null === $session ? '<p data-testid="who">Not signed in</p>' : \sprintf('<p data-testid="who">Signed in as %s</p>', htmlspecialchars((string) $email?->value)));
     }
 
     /**
@@ -71,13 +60,24 @@ final readonly class AppController
     {
         $this->connection->close();
 
-        foreach (['yorvoid.sqlite', 'verifier.json', 'verifier.jsonl', 'ran.txt'] as $file) {
+        foreach (['yorvoid.sqlite', 'verifier.json', 'verifier.jsonl', 'ran.txt', 'projects.json'] as $file) {
             @unlink(Kernel::data().'/'.$file);
         }
 
+        OffsetClock::reset();
         $console = new Application($this->kernel);
         $console->setAutoExit(false);
         $console->run(new ArrayInput(['command' => 'yorvoid:migrate']), new NullOutput());
+
+        return new Response(null, 204);
+    }
+
+    /**
+     * Moves the app's clock on, e.g. so a sign-in is older than a step-up's window.
+     */
+    public function clock(Request $request): Response
+    {
+        OffsetClock::advance($request->getPayload()->getInt('seconds'));
 
         return new Response(null, 204);
     }

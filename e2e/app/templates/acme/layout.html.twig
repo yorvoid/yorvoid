@@ -1,0 +1,41 @@
+{# Acme Team: the small application around YorvoID's flows, for the usability test (M2-10). #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{% endblock %} · Acme Team</title>
+    <style>
+        body { font: 1rem/1.5 system-ui, sans-serif; margin: 0; color: #1b1b1f; background: #fff; }
+        header, main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
+        header { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; align-items: center; border-bottom: 1px solid #ccc; }
+        header strong { margin-right: auto; }
+        nav ul { display: flex; flex-wrap: wrap; gap: 1rem; list-style: none; margin: 0; padding: 0; }
+        a { color: #0b57d0; }
+        button { font: inherit; padding: .5rem 1rem; min-height: 44px; }
+        input { font: inherit; padding: .5rem; min-height: 44px; width: 100%; max-width: 20rem; box-sizing: border-box; }
+        ul.projects { list-style: none; padding: 0; }
+        ul.projects li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; padding: .75rem 0; border-bottom: 1px solid #eee; }
+        [role="status"] { background: #e6f4ea; padding: .75rem; }
+    </style>
+</head>
+<body>
+<header>
+    <strong>Acme Team</strong>
+    {% if email %}
+        <nav aria-label="Main">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/projects">Projects</a></li>
+                <li><a href="/account">Account</a></li>
+            </ul>
+        </nav>
+        <form method="post" action="/sign-out"><button type="submit">Sign out</button></form>
+    {% endif %}
+</header>
+<main>
+    <h1>{{ block('title') }}</h1>
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>

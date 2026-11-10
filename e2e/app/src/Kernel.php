@@ -9,8 +9,14 @@ use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
 use Symfony\Bundle\TwigBundle\TwigBundle;
 use Symfony\Component\Config\Loader\LoaderInterface;
+use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\HttpKernel\Kernel as BaseKernel;
+use YorvoID\E2e\Acme\AcmeController;
+use YorvoID\E2e\Acme\AcmeDeclarations;
+use YorvoID\E2e\Acme\Projects;
+use YorvoID\E2e\Acme\RecentProofToRemove;
 use YorvoID\IntentVerifier\Verifier;
 use YorvoID\Symfony\Security\Authenticator\SessionAuthenticator;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
@@ -22,7 +28,7 @@ use YorvoID\Symfony\YorvoIDBundle;
  * would set them up, with a verifier of its own for signed operations (its signing pages are at
  * sign.localhost, see Signing), and endpoints only tests use.
  */
-final class Kernel extends BaseKernel
+final class Kernel extends BaseKernel implements CompilerPassInterface
 {
     public const string ORIGIN = 'http://localhost:8000';
 
@@ -63,6 +69,14 @@ final class Kernel extends BaseKernel
         return \dirname(__DIR__, 3).'/var/e2e';
     }
 
+    /**
+     * The clock /_e2e/clock moves on.
+     */
+    public function process(ContainerBuilder $container): void
+    {
+        $container->setDefinition('clock', new Definition(OffsetClock::class));
+    }
+
     public function registerContainerConfiguration(LoaderInterface $loader): void
     {
         $loader->load(static function (ContainerBuilder $container): void {
@@ -73,11 +87,12 @@ final class Kernel extends BaseKernel
                 'router' => ['resource' => __DIR__.'/../routes.php', 'type' => 'php', 'utf8' => true],
                 'session' => ['handler_id' => 'session.handler.native_file', 'save_path' => $data.'/sessions', 'cookie_secure' => 'auto', 'cookie_samesite' => 'lax'],
                 'translator' => ['default_path' => __DIR__.'/../translations', 'fallbacks' => ['en']],
+                'csrf_protection' => true,
             ]);
             $container->loadFromExtension('doctrine', ['dbal' => ['url' => 'sqlite:///'.$data.'/yorvoid.sqlite']]);
             $container->loadFromExtension('security', [
                 'providers' => ['yorvoid' => ['id' => PrincipalUserProvider::class]],
-                'firewalls' => ['main' => ['lazy' => true, 'provider' => 'yorvoid', 'user_checker' => PrincipalUserChecker::class, 'custom_authenticators' => [SessionAuthenticator::class]]],
+                'firewalls' => ['main' => ['lazy' => true, 'provider' => 'yorvoid', 'user_checker' => PrincipalUserChecker::class, 'custom_authenticators' => [SessionAuthenticator::class], 'logout' => ['path' => 'sign_out', 'target' => '/']]],
             ]);
             $container->loadFromExtension('yorvoid', [
                 'passkeys' => ['relying_party_id' => 'localhost', 'origins' => [self::ORIGIN]],
@@ -85,6 +100,11 @@ final class Kernel extends BaseKernel
             ]);
 
             $container->register(Verifier::class)->setPublic(true)->setFactory([Signing::class, 'verifier']);
+            // Acme Team's own operation, ability and policy element.
+            $container->register(Projects::class)->setAutoconfigured(true)->setPublic(true);
+            $container->register(AcmeDeclarations::class)->setAutoconfigured(true);
+            $container->register(RecentProofToRemove::class)->setAutowired(true)->setAutoconfigured(true);
+            $container->register(AcmeController::class)->setAutowired(true)->setPublic(true)->addTag('controller.service_arguments');
             $container->register(AppController::class)->setAutowired(true)->setPublic(true)->addTag('controller.service_arguments')->setArgument('$kernel', new \Symfony\Component\DependencyInjection\Reference('kernel'));
         });
     }

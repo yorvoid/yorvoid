@@ -372,5 +372,40 @@
                 "reason": null
             }
         ]
+    },
+    {
+        "template": "refused",
+        "state": "step_up",
+        "flow": "",
+        "view": null,
+        "problems": []
+    },
+    {
+        "template": "refused",
+        "state": "wait",
+        "flow": "",
+        "view": null,
+        "problems": []
+    },
+    {
+        "template": "refused",
+        "state": "wait_and_step_up",
+        "flow": "",
+        "view": null,
+        "problems": []
+    },
+    {
+        "template": "refused",
+        "state": "denied",
+        "flow": "",
+        "view": null,
+        "problems": []
+    },
+    {
+        "template": "refused",
+        "state": "indeterminate",
+        "flow": "",
+        "view": null,
+        "problems": []
     }
 ]

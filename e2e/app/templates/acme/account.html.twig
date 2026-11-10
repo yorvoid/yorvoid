@@ -1,0 +1,13 @@
+{% extends 'acme/layout.html.twig' %}
+
+{% block title %}Your account{% endblock %}
+
+{% block content %}
+    {% if changed %}<p role="status">Your email address is changed.</p>{% endif %}
+    <p>Your email address is <strong data-testid="email">{{ email }}</strong>.</p>
+    <form method="post" action="/account/email">
+        <input type="hidden" name="_token" value="{{ csrf_token('acme') }}">
+        <p><label for="email">New email address</label><br><input id="email" name="email" type="email" autocomplete="email" required></p>
+        <p><button type="submit">Change email address</button></p>
+    </form>
+{% endblock %}
