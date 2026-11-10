@@ -107,6 +107,8 @@ final class TestKernel extends Kernel implements CompilerPassInterface
             // Every statement the application's connection runs, for tests that count them.
             $container->register(StatementLog::class)->setPublic(true);
             $container->register('test.statement_log_middleware', LoggingMiddleware::class)->setArguments([new Reference(StatementLog::class)])->addTag('doctrine.middleware');
+            // Inserts that fail on every connection, for fault injection (AUD-006).
+            $container->register(FailingInserts::class)->addTag('doctrine.middleware');
             $container->loadFromExtension('framework', [
                 'test' => true,
                 'secret' => 'test',
@@ -123,6 +125,8 @@ final class TestKernel extends Kernel implements CompilerPassInterface
             $container->loadFromExtension('doctrine', ['dbal' => ['default_connection' => 'default', 'connections' => [
                 'default' => ['url' => $this->database ?? 'sqlite:///'.$this->directory.'/yorvoid.sqlite'],
                 'other' => ['url' => 'sqlite:///'.$this->directory.'/other.sqlite'],
+                // A connection of its own to the same database, for the decision log (AUD-006).
+                'audit' => ['url' => $this->database ?? 'sqlite:///'.$this->directory.'/yorvoid.sqlite'],
             ]]]);
             $container->loadFromExtension('security', [
                 'providers' => ['yorvoid' => ['id' => PrincipalUserProvider::class]],

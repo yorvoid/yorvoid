@@ -35,6 +35,7 @@ use YorvoID\Authn\StepUp\Storage\DbalCoolDownStore;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
+use YorvoID\Core\Authorization\DecisionLog\AuditFailure;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
@@ -127,6 +128,7 @@ use YorvoID\Symfony\Controller\CeremonyController;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Controller\TemplateGalleryController;
 use YorvoID\Symfony\Doctor\AssuranceCheck;
+use YorvoID\Symfony\Doctor\AuditCheck;
 use YorvoID\Symfony\Doctor\ClockCheck;
 use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
@@ -218,6 +220,8 @@ return static function (ContainerConfigurator $container): void {
 
     // What decisions read, kept against the realm's versions: once a request, and in the shared pool
     // the configuration names (cache.pool, set by the bundle).
+    // On the application's connection unless yorvoid.decision_log.connection names one of its own (YorvoIDBundle).
+    $services->get(DbalDecisionLogStore::class)->arg('$writes', null);
     $services->set(Installation::class)->factory([Installation::class, 'stored'])->args([service(Database::class)]);
     $services->set(VersionedCache::class)->args([null, service(Installation::class), service('logger')->nullOnInvalid()])->tag('kernel.reset', ['method' => 'reset']);
     $services->set(CachedPolicyStore::class)->args([service(DbalPolicyStore::class), service(VersionedCache::class)])->tag('kernel.reset', ['method' => 'reset']);
@@ -250,6 +254,8 @@ return static function (ContainerConfigurator $container): void {
             inline_service('array')->factory([Factories::class, 'recordingPermits'])->args([service(PolicyCatalogue::class)]),
             service('logger')->nullOnInvalid(),
             service(ClockInterface::class),
+            inline_service(AuditFailure::class)->factory([AuditFailure::class, 'from'])->args([param('yorvoid.audit.on_failure')]),
+            service('event_dispatcher'),
         ])
         ->tag('kernel.reset', ['method' => 'reset'])
         ->tag('kernel.event_listener', ['event' => 'kernel.terminate', 'method' => 'flush'])
@@ -380,6 +386,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(KeysCheck::class)->args([service(KeyFiles::class), service(Realm::class)])->tag('yorvoid.doctor_check', ['name' => 'Keys']);
     $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
     $services->set(LogCheckpointsCheck::class)->args([service(KeyFiles::class), param('yorvoid.log.checkpoint_file'), param('yorvoid.log.checkpoint_logger'), service(Realm::class), service(ClockInterface::class), param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Security log checkpoints']);
+    $services->set(AuditCheck::class)->args([inline_service(AuditFailure::class)->factory([AuditFailure::class, 'from'])->args([param('yorvoid.audit.on_failure')]), service(DecisionLogStore::class), param('yorvoid.decision_log.permits')])->tag('yorvoid.doctor_check', ['name' => 'Audit failures']);
     $services->set(LogGrantsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Security log privileges']);
     $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);
     $services->set(AssuranceCheck::class)->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle'), param('yorvoid.passkeys.user_verification')])->tag('yorvoid.doctor_check', ['name' => 'Assurance level']);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Authorization\DecisionLog\Storage;
 
+use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
@@ -28,14 +29,27 @@ final readonly class DbalDecisionLogStore implements DecisionLogStore
 
     private const array COLUMNS = ['id', 'realm', 'decided_at', 'name', 'actor', 'verdict', 'content', 'hash'];
 
+    /**
+     * @param Connection|null $writes A connection of its own to the same database, for writing records
+     *                                outside the application's transactions
+     */
     public function __construct(
         private Database $database,
+        private ?Connection $writes = null,
     ) {
+    }
+
+    /**
+     * Whether what it writes commits on its own, out of the application's transactions.
+     */
+    public function writesApart(): bool
+    {
+        return null !== $this->writes;
     }
 
     public function add(array $records): void
     {
-        $connection = $this->database->connection;
+        $connection = $this->writes ?? $this->database->connection;
         $time = Type::getType(Types::DATETIMETZ_IMMUTABLE);
         $platform = $connection->getDatabasePlatform();
 

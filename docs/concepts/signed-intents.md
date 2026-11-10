@@ -146,7 +146,7 @@ For reviewers: `Verifier` is the API, over two internal parts. `IntentChecks` ch
 
 ## Telling the owners
 
-The verifier's `VerifierNotifier` hears of every operation verified and every change to the keys: asked for, cancelled, taken effect, and every bootstrap secret created. Implement it on the privileged side, e.g. an email the privileged process sends itself: a channel the console doesn't control (INT-012). If it throws, the call fails, and an operation whose notice couldn't be sent doesn't run. `CollectingNotifier` keeps notices in memory, for tests or to send them afterwards.
+The verifier's `VerifierNotifier` hears of every operation verified and every change to the keys: asked for, cancelled, taken effect, and every bootstrap secret created. Implement it on the privileged side, e.g. an email the privileged process sends itself: a channel the console doesn't control (INT-012). If it throws, the call fails, and an operation whose notice couldn't be sent doesn't run. When an entry of the verifier's log can't be written, the notifier hears of that too (`audit_failed`, with what failed in `$error`), and the call fails as it would without the notice (AUD-006). `CollectingNotifier` keeps notices in memory, for tests or to send them afterwards.
 
 ## The console's side
 

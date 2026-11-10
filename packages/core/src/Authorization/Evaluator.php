@@ -209,7 +209,9 @@ final readonly class Evaluator implements Authorization
         // One realm, one moment: the versions are read once.
         $versions = $this->versionsOf($requests[0]);
 
-        return array_map(fn (Request $request): Decision => $this->evaluate($request, $versions), $requests);
+        $decided = array_map(fn (Request $request): array => [$request, $this->identify($request, $versions)], $requests);
+
+        return null === $this->decisions ? array_map(static fn (array $one): Decision => $one[1], $decided) : $this->decisions->recordAll($decided);
     }
 
     /**
@@ -253,14 +255,22 @@ final readonly class Evaluator implements Authorization
 
     /**
      * Decides, identifies the decision and records it: an operation's before it runs.
+     */
+    private function evaluate(Request $request): Decision
+    {
+        $decision = $this->identify($request);
+
+        return null === $this->decisions ? $decision : $this->decisions->record($request, $decision);
+    }
+
+    /**
+     * Decides and identifies the decision.
      *
      * @param array<string, int>|null $versions As read for the batch it's in
      */
-    private function evaluate(Request $request, ?array $versions = null): Decision
+    private function identify(Request $request, ?array $versions = null): Decision
     {
-        $decision = $this->judge($request)->identified((string) $this->ids->next(), $request->at, $versions ?? $this->versionsOf($request));
-
-        return null === $this->decisions ? $decision : $this->decisions->record($request, $decision);
+        return $this->judge($request)->identified((string) $this->ids->next(), $request->at, $versions ?? $this->versionsOf($request));
     }
 
     /**

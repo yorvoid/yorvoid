@@ -240,7 +240,7 @@ final class DecisionLogTest extends TestCase
         self::assertNotNull($this->store->find($this->realm, (string) $last->id));
     }
 
-    public function testAFailedWriteOfWaitingDecisionsIsReportedNotThrown(): void
+    public function testAFailedWriteOfWaitingDecisionsRaisesTheAlertNotAnError(): void
     {
         $logger = new class extends AbstractLogger {
             /** @var list<array{mixed, string, array<mixed>}> */
@@ -259,7 +259,7 @@ final class DecisionLogTest extends TestCase
         $this->store->failing = false;
         $log->flush();
 
-        self::assertSame([['error', 'YorvoID couldn\'t record {count} decisions: {message}', 1, 'The database went away.']], array_map(static fn (array $entry): array => [$entry[0], $entry[1], $entry[2]['count'], $entry[2]['message']], $logger->logs));
+        self::assertSame([['critical', 'YorvoID couldn\'t write {records} audit record(s) to the {log}{refused}: {message}', 1, '', 'The database went away.']], array_map(static fn (array $entry): array => [$entry[0], $entry[1], $entry[2]['records'], $entry[2]['refused'], $entry[2]['message']], $logger->logs));
         self::assertSame(0, $this->store->writes, 'What failed isn\'t written again.');
     }
 
