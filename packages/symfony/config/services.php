@@ -44,6 +44,8 @@ use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\OfflineDecider;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\StepUpCheck;
+use YorvoID\Core\Crypto\CryptoMode;
+use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\SecurityLog;
@@ -132,6 +134,7 @@ use YorvoID\Symfony\Doctor\AuditCheck;
 use YorvoID\Symfony\Doctor\ClockCheck;
 use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
+use YorvoID\Symfony\Doctor\CryptoCheck;
 use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\KeysCheck;
 use YorvoID\Symfony\Doctor\LogCheckpointsCheck;
@@ -237,7 +240,9 @@ return static function (ContainerConfigurator $container): void {
 
     // Policies from the configuration.
     $services->set(SessionPolicy::class)->factory([Factories::class, 'sessionPolicy'])->args([param('yorvoid.sessions.preset'), param('yorvoid.sessions.absolute'), param('yorvoid.sessions.idle')]);
-    $services->set(PasskeyPolicy::class)->factory([Factories::class, 'passkeyPolicy'])->args([param('yorvoid.passkeys.relying_party_id'), param('yorvoid.passkeys.origins'), param('yorvoid.passkeys.user_verification'), param('yorvoid.passkeys.clone_policy'), param('yorvoid.passkeys.timeout')]);
+    $services->set(PasskeyPolicy::class)->factory([Factories::class, 'passkeyPolicy'])->args([param('yorvoid.passkeys.relying_party_id'), param('yorvoid.passkeys.origins'), param('yorvoid.passkeys.user_verification'), param('yorvoid.passkeys.clone_policy'), param('yorvoid.passkeys.timeout'), service(CryptoPolicy::class)]);
+    // Probed when it's built: in the FIPS mode, at boot (YorvoIDBundle::boot()).
+    $services->set(CryptoPolicy::class)->factory([Factories::class, 'cryptoPolicy'])->args([param('yorvoid.crypto.mode'), service(KeyFiles::class)])->public();
     $services->set(AttemptLimits::class)->factory([Factories::class, 'attemptLimits'])->args([param('yorvoid.limits.per_account_and_address'), param('yorvoid.limits.per_account'), param('yorvoid.limits.per_address')]);
 
     // The signing keys: one file for every realm, or one for each (D-40).
@@ -386,6 +391,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(KeysCheck::class)->args([service(KeyFiles::class), service(Realm::class)])->tag('yorvoid.doctor_check', ['name' => 'Keys']);
     $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
     $services->set(LogCheckpointsCheck::class)->args([service(KeyFiles::class), param('yorvoid.log.checkpoint_file'), param('yorvoid.log.checkpoint_logger'), service(Realm::class), service(ClockInterface::class), param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Security log checkpoints']);
+    $services->set(CryptoCheck::class)->args([inline_service(CryptoMode::class)->factory([CryptoMode::class, 'from'])->args([param('yorvoid.crypto.mode')]), service_closure(CryptoPolicy::class)])->tag('yorvoid.doctor_check', ['name' => 'Cryptography']);
     $services->set(AuditCheck::class)->args([inline_service(AuditFailure::class)->factory([AuditFailure::class, 'from'])->args([param('yorvoid.audit.on_failure')]), service(DecisionLogStore::class), param('yorvoid.decision_log.permits')])->tag('yorvoid.doctor_check', ['name' => 'Audit failures']);
     $services->set(LogGrantsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Security log privileges']);
     $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);

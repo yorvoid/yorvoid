@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Symfony;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Clock\MockClock;
@@ -39,6 +40,7 @@ use YorvoID\Tests\Symfony\App\TestKernel;
  * reaches them; this test keeps it so. Intents in flight while the verifier's keys rotate are in
  * VerifierTest.
  */
+#[Group('ed25519-keys')]
 final class KeyRotationTest extends TestCase
 {
     private string $directory;

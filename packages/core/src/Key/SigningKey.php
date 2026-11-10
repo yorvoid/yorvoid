@@ -90,10 +90,7 @@ final readonly class SigningKey
 
     public function verify(string $message, string $signature): bool
     {
-        if (self::SIGNATURE !== \strlen($signature)) {
-            return false;
-        }
-
+        // A signature of another length than 64 bytes OpenSSL refuses itself.
         $key = openssl_pkey_new(['ed25519' => ['pub_key' => $this->publicKey]]);
 
         if (false === $key) {

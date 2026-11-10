@@ -9,6 +9,8 @@ use YorvoID\Authn\Attempt\AttemptLimits;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Core\Authorization\PolicyElement;
+use YorvoID\Core\Crypto\CryptoMode;
+use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Actor;
@@ -26,6 +28,7 @@ use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Flow\FlowCustomizer;
 use YorvoID\Symfony\Flow\FlowSource;
+use YorvoID\Symfony\Key\KeyFiles;
 use YorvoID\Symfony\Security\CurrentSession;
 
 /**
@@ -48,9 +51,26 @@ final class Factories
     /**
      * @param list<string> $origins
      */
-    public static function passkeyPolicy(string $relyingPartyId, array $origins, string $userVerification, string $clonePolicy, string $timeout): PasskeyPolicy
+    public static function passkeyPolicy(string $relyingPartyId, array $origins, string $userVerification, string $clonePolicy, string $timeout, ?CryptoPolicy $crypto = null): PasskeyPolicy
     {
-        return new PasskeyPolicy($relyingPartyId, $origins, UserVerification::from($userVerification), ClonePolicy::from($clonePolicy), Duration::parse($timeout));
+        return new PasskeyPolicy($relyingPartyId, $origins, UserVerification::from($userVerification), ClonePolicy::from($clonePolicy), Duration::parse($timeout), $crypto);
+    }
+
+    /**
+     * The crypto policy, refusing a FIPS mode in which the configured signing keys couldn't sign: without
+     * them, the security log's checkpoints stop (AUD-003), and a FIPS deployment would run without.
+     *
+     * @throws IntegratorError When the FIPS mode can't be had, or its provider can't use the keys
+     */
+    public static function cryptoPolicy(string $mode, KeyFiles $keys): CryptoPolicy
+    {
+        $policy = CryptoPolicy::of($mode);
+
+        if (CryptoMode::Fips === $policy->mode && !$policy->allowsEdDsa() && $keys->isConfigured()) {
+            throw new IntegratorError(\sprintf('The FIPS crypto mode is configured with signing keys, but %s has no Ed25519, which they sign with: the security log\'s checkpoints would stop.', $policy->provider()->openssl), 'Use a FIPS provider with EdDSA (FIPS 186-5), or leave the FIPS mode until YorvoID\'s ES256 keys are released.', 'concepts/cryptography.md#fips-mode');
+        }
+
+        return $policy;
     }
 
     public static function attemptLimits(string $perAccountAndAddress, string $perAccount, string $perAddress): AttemptLimits

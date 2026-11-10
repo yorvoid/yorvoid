@@ -26,6 +26,8 @@ final readonly class VerifierConfig
      * @param positive-int $intentLifetime How long, in seconds, an intent can be signed after it's prepared
      * @param int          $keyChangeDelay How long, in seconds, a change to the keys waits before it takes effect, while
      *                                     the owners can cancel it: a day by default, at most 30
+     * @param list<int>    $algorithms     The COSE algorithms the verifier's keys may use (CRY-01), among ES256 (-7),
+     *                                     EdDSA (-8) and RS256 (-257): leave EdDSA out under a FIPS provider without it
      */
     public function __construct(
         public string $audience,
@@ -34,7 +36,12 @@ final readonly class VerifierConfig
         public array $consoleOrigins,
         public int $intentLifetime = 300,
         public int $keyChangeDelay = 86400,
+        public array $algorithms = Key::ALGORITHMS,
     ) {
+        if ([] === $algorithms || [] !== array_diff($algorithms, Key::ALGORITHMS)) {
+            throw new ConfigurationError('The verifier\'s keys may use some of ES256 (-7), EdDSA (-8) and RS256 (-257), and nothing else.');
+        }
+
         if ('' === trim($audience) || [] === $origins || [] === $consoleOrigins || $intentLifetime < 10 || $intentLifetime > 3600) {
             throw new ConfigurationError('The verifier needs an audience, at least one signing origin and one console origin, and an intent lifetime between 10 seconds and an hour.');
         }

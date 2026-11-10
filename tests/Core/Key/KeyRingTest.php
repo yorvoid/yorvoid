@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Core\Key;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
 use YorvoID\Core\Exception\IntegratorError;
@@ -13,6 +14,7 @@ use YorvoID\Core\Key\KeyStatus;
 use YorvoID\Core\Key\SigningKey;
 use YorvoID\Core\Secret;
 
+#[Group('ed25519-keys')]
 final class KeyRingTest extends TestCase
 {
     /** RFC 8032, section 7.1, TEST 1 and TEST 2 */

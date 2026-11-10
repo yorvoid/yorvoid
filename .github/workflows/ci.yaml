@@ -123,6 +123,48 @@ jobs:
         if: failure()
         run: docker compose logs
 
+  # The tests under OpenSSL's FIPS provider alone (CRY-01): a FIPS-configured container, not a
+  # FIPS-enabled OS (docker/fips). The FIPS mode starts, and refuses Ed25519 signing keys, which this
+  # provider can't sign with; the tests of those keys are left out, alongside that assertion.
+  fips:
+    name: Tests (FIPS-configured OpenSSL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the development images
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        with:
+          pull: true
+          load: true
+          source: .
+          files: compose.yaml
+          targets: php,postgres
+          set: |
+            php.cache-from=type=gha,scope=dev-${{ github.ref }}
+            php.cache-from=type=gha,scope=dev-refs/heads/main
+      - name: Build the FIPS-configured image
+        run: docker compose --profile fips build php-fips
+      - name: Start services
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose --profile fips up --wait --no-build php-fips
+      - name: Install dependencies
+        run: docker compose exec -T php-fips composer install --no-interaction --no-progress
+      - name: Show the provider
+        run: docker compose exec -T php-fips openssl list -providers
+      - name: Run the tests
+        run: docker compose exec -T php-fips composer test-fips
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
   # The oldest PHP and Symfony YorvoID supports (PHP 8.4, Symfony 7.4 LTS, which Laravel 12 and
   # Drupal 11 are on): the tests and PHPStan with every Symfony component at 7.4, and YorvoID's
   # packages resolved next to both frameworks.

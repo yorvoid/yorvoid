@@ -103,6 +103,7 @@
             "@php tools/compat/bc-check.php"
         ],
         "test": "phpunit",
+        "test-fips": "phpunit --exclude-group ed25519-keys",
         "bench": [
             "Composer\\Config::disableProcessTimeout",
             "@php -d opcache.enable_cli=1 -d pcov.enabled=0 tools/bench/run.php --out=var/bench/run.json",

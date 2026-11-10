@@ -1,6 +1,6 @@
 # Keys
 
-YorvoID's key ring holds Ed25519 keys (RFC 8032, through libsodium), for what it will sign: the security log's checkpoints, tokens and other evidence, as they arrive. Nothing signs with them in 0.1.0 yet; keep them, and rotate them, so they're in place. Each signature will name the ID of its key, so keys can be rotated without breaking what was signed before.
+YorvoID's key ring holds Ed25519 keys (RFC 8032, through OpenSSL: [cryptography](cryptography.md)), for what it will sign: the security log's checkpoints, tokens and other evidence, as they arrive. Nothing signs with them in 0.1.0 yet; keep them, and rotate them, so they're in place. Each signature will name the ID of its key, so keys can be rotated without breaking what was signed before.
 
 A **key ring** holds the keys: exactly one is **active** and signs; every key in the ring verifies.
 

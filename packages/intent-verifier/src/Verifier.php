@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\IntentVerifier;
 
-use Cose\Algorithm\Signature\ECDSA\ES256;
-use Cose\Algorithm\Signature\EdDSA\Ed25519;
-use Cose\Algorithm\Signature\RSA\RS256;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Serializer\SerializerInterface;
 use Webauthn\AttestationStatement\AttestationStatementSupportManager;
@@ -125,7 +122,7 @@ final readonly class Verifier
                 PublicKeyCredentialRpEntity::create('', $this->config->relyingPartyId),
                 PublicKeyCredentialUserEntity::create($label, random_bytes(32), $label),
                 random_bytes(32),
-                [PublicKeyCredentialParameters::createPk(ES256::ID), PublicKeyCredentialParameters::createPk(Ed25519::ID), PublicKeyCredentialParameters::createPk(RS256::ID)],
+                array_map(PublicKeyCredentialParameters::createPk(...), $this->config->algorithms),
                 AuthenticatorSelectionCriteria::create(userVerification: AuthenticatorSelectionCriteria::USER_VERIFICATION_REQUIREMENT_REQUIRED, residentKey: AuthenticatorSelectionCriteria::RESIDENT_KEY_REQUIREMENT_DISCOURAGED),
                 PublicKeyCredentialCreationOptions::ATTESTATION_CONVEYANCE_PREFERENCE_NONE,
                 array_map(static fn (Key $key): PublicKeyCredentialDescriptor => PublicKeyCredentialDescriptor::create('public-key', $key->credentialId), $known),

@@ -322,6 +322,31 @@ final class VerifierTest extends TestCase
         self::assertSame(-8, $verifier->verify($prepared->intent->nonce, $edwards->signIn($prepared->options))->key->algorithm);
     }
 
+    public function testAVerifierWithoutEdDsaNeitherOffersNorAcceptsIt(): void
+    {
+        $this->verifier('memory');
+        $verifier = new Verifier(new VerifierConfig('acme-verifier:host-1', 'sign.acme.example', ['https://sign.acme.example'], ['https://acme.example'], algorithms: [-7, -257]), self::policy(), $this->store, $this->log, $this->notifier, $this->clock);
+        $secret = $verifier->createBootstrapSecret();
+        $registration = $verifier->prepareRegistration('Passkey', true);
+        $options = json_decode($registration->options, true, flags: \JSON_THROW_ON_ERROR);
+        \assert(\is_array($options) && \is_array($options['pubKeyCredParams']));
+        self::assertSame([-7, -257], array_column($options['pubKeyCredParams'], 'alg'));
+
+        // The WebAuthn checks have only the configured algorithms (CRY-01).
+        $edwards = new VirtualAuthenticator('https://sign.acme.example', edwards: true);
+        $this->refused(Refusal::InvalidRegistration, static fn () => $verifier->finishRegistration($registration->id, $edwards->register($registration->options)), 'An EdDSA key was registered.');
+        self::assertNotSame('', $secret);
+
+        foreach ([[], [-7, -35]] as $algorithms) {
+            try {
+                new VerifierConfig('acme-verifier:host-1', 'sign.acme.example', ['https://sign.acme.example'], ['https://acme.example'], algorithms: $algorithms);
+                self::fail('It was configured.');
+            } catch (ConfigurationError $e) {
+                self::assertSame('The verifier\'s keys may use some of ES256 (-7), EdDSA (-8) and RS256 (-257), and nothing else.', $e->getMessage());
+            }
+        }
+    }
+
     public function testARefusalSaysWhy(): void
     {
         self::assertSame('The verifier refused the intent: unknown intent.', new IntentRefused(Refusal::UnknownIntent)->getMessage());

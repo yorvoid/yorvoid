@@ -43,6 +43,10 @@ yorvoid:
 
         # A DoctrineBundle connection of its own to the same database, which writes decisions outside the application's transactions: give one with audit.on_failure: refuse
         connection:           null
+    crypto:
+
+        # Which algorithms YorvoID uses: standard, or fips, only with OpenSSL's FIPS provider alone active, which it checks at boot (CRY-01)
+        mode:                 standard # One of "standard"; "fips"
     audit:
 
         # What a decision whose record can't be written does: continue, or refuse, so that nothing is permitted without its record (AUD-006). The alert is raised either way

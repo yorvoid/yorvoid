@@ -14,6 +14,7 @@ use Cose\Key\Ec2Key;
 use Cose\Key\Key;
 use Cose\Key\OkpKey;
 use Cose\Key\RsaKey;
+use YorvoID\Core\Crypto\CryptoPolicy;
 
 /**
  * Whether a passkey's public key, as registration gives it (a COSE key), is one that can verify, and
@@ -27,7 +28,10 @@ use Cose\Key\RsaKey;
  */
 final class PublicKeyCheck
 {
-    public static function accepts(string $coseKey): bool
+    /**
+     * @param list<int> $algorithms The COSE algorithms allowed
+     */
+    public static function accepts(string $coseKey, array $algorithms = [ES256::ID, Ed25519::ID, RS256::ID]): bool
     {
         try {
             $decoded = Decoder::create()->decode(StringStream::create($coseKey));
@@ -41,7 +45,13 @@ final class PublicKeyCheck
             // The decoder gives integers as strings.
             $type = self::integer($data[Key::TYPE] ?? null);
 
-            return match (self::integer($data[Key::ALG] ?? null)) {
+            $algorithm = self::integer($data[Key::ALG] ?? null);
+
+            if (!\in_array($algorithm, $algorithms, true)) {
+                return false;
+            }
+
+            return match ($algorithm) {
                 ES256::ID => Key::TYPE_EC2 === $type && self::ec2(Ec2Key::create($data)),
                 Ed25519::ID => Key::TYPE_OKP === $type && self::okp(OkpKey::create($data)),
                 RS256::ID => Key::TYPE_RSA === $type && self::rsa(RsaKey::create($data)),
@@ -72,6 +82,6 @@ final class PublicKeyCheck
 
     private static function rsa(RsaKey $key): bool
     {
-        return \strlen(ltrim($key->n(), "\0")) >= 256 && "\x01\x00\x01" === $key->e();
+        return \strlen(ltrim($key->n(), "\0")) * 8 >= CryptoPolicy::MIN_RSA_BITS && "\x01\x00\x01" === $key->e();
     }
 }

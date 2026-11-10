@@ -3,7 +3,7 @@
 Every dependency is code that runs with YorvoID's privileges, so YorvoID has few, and each one is a decision.
 
 - **Few, and reviewed.** A new dependency needs a reason, a look at who maintains it and how actively, what it pulls in, and its security history.
-- **Proven cryptography only.** libsodium and OpenSSL through PHP, and established libraries for protocols (for example `web-auth/webauthn-lib` for passkeys, from 1.0's first milestone). YorvoID implements no cryptographic primitive itself.
+- **Proven cryptography only.** OpenSSL through PHP (and libsodium, which the WebAuthn library verifies EdDSA passkeys with), and established libraries for protocols (for example `web-auth/webauthn-lib` for passkeys, from 1.0's first milestone). YorvoID implements no cryptographic primitive itself.
 - **Known vulnerabilities fail the build.** CI runs `composer audit`; known-vulnerable versions are excluded by minimum versions (for example `web-auth/webauthn-lib` 5.3.1 or later, which fixed a user-verification downgrade).
 - **Pinned tools.** Development and verification tools are locked (`composer.lock`), the images CI runs in are pinned by digest, and the formal-model checkers are downloaded at fixed versions verified by SHA-256.
 - **Declared where used.** Each package requires everything it uses, PHP extensions included, and uses everything it requires: `composer dependencies` checks every package as if it were installed alone, in CI too. What a package uses only when it's there is a `suggest`, and the code checks for it first.
@@ -22,7 +22,7 @@ Every dependency is code that runs with YorvoID's privileges, so YorvoID has few
 | `symfony/uid` | UUIDv7 identifiers |
 | `ext-intl` | Comparing email addresses: one Unicode form (NFC), and domains in their ASCII form (IDNA) |
 | `ext-mbstring` | Text in any script |
-| `ext-sodium` | Ed25519 signing keys |
+| `ext-openssl` | Ed25519 signing keys and the security hashes, from a FIPS provider when one is configured ([cryptography](../concepts/cryptography.md)) |
 
 ## Current runtime dependencies of `yorvoid/authn`
 

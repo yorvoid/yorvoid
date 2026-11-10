@@ -25,6 +25,8 @@ use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Core\Crypto\CryptoPolicy;
+use YorvoID\Core\Crypto\CryptoProvider;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -556,6 +558,26 @@ final class PasskeysTest extends DatabaseTestCase
     }
 
     #[DataProvider('implementations')]
+    public function testWithoutEdDsaInTheCryptoPolicyEdDsaPasskeysArentOfferedOrAccepted(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation);
+        $session = $this->session();
+        $edwards = new VirtualAuthenticator(edwards: true);
+        $ceremony = $passkeys->beginRegistration($session);
+        Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $edwards->register($ceremony->options), 'Ed25519'), new Origin(OriginKind::Web), $session);
+
+        // The same passkeys, under a FIPS provider without Ed25519.
+        $fips = $this->passkeys($implementation, store: $this->stack->passkeys, crypto: CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.4', true, true, false, true)));
+        self::assertSame([-7, -257], array_column((array) self::json($fips->beginRegistration($session)->options)['pubKeyCredParams'], 'alg'));
+
+        $again = $fips->beginRegistration($session);
+        $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($fips->finishRegistration(...), new RegisterPasskey($session->realm, $again->id, new VirtualAuthenticator(edwards: true)->register($again->options), 'Ed25519 again'), new Origin(OriginKind::Web), $session), 'A new EdDSA passkey was accepted.');
+
+        $signIn = $fips->beginSignIn(new Realm('acme'));
+        $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($fips->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $edwards->signIn($signIn->options)), new Origin(OriginKind::Web)), 'An EdDSA passkey signed in.');
+    }
+
+    #[DataProvider('implementations')]
     public function testAPasskeyIsRegisteredOnce(string $implementation): void
     {
         $passkeys = $this->passkeys($implementation);
@@ -869,7 +891,7 @@ final class PasskeysTest extends DatabaseTestCase
         self::assertStringContainsString('excludeCredentials', $passkeys->beginRegistration($session)->options);
     }
 
-    private function passkeys(string $implementation, UserVerification $userVerification = UserVerification::Required, ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn, AttemptLimits $limits = new AttemptLimits(), ?PasskeyStore $store = null): Passkeys
+    private function passkeys(string $implementation, UserVerification $userVerification = UserVerification::Required, ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn, AttemptLimits $limits = new AttemptLimits(), ?PasskeyStore $store = null, ?CryptoPolicy $crypto = null): Passkeys
     {
         // Another store keeps the stack: the same passkeys, read through it.
         $this->stack = null === $store ? $this->stack($implementation) : $this->stack;
@@ -882,7 +904,7 @@ final class PasskeysTest extends DatabaseTestCase
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock);
         $this->credentials = new Credentials($this->stack->credentials, $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
 
-        return new Passkeys($store ?? $this->stack->passkeys, $this->stack->ceremonies, $this->credentials, $this->sessions, $this->principals, $log, $this->stack->transactions, new PasskeyPolicy('example.com', ['https://example.com'], $userVerification, $clonePolicy), new Attempts(new Throttle($this->stack->throttle, $this->clock), $limits), $ids, $this->clock);
+        return new Passkeys($store ?? $this->stack->passkeys, $this->stack->ceremonies, $this->credentials, $this->sessions, $this->principals, $log, $this->stack->transactions, new PasskeyPolicy('example.com', ['https://example.com'], $userVerification, $clonePolicy, crypto: $crypto), new Attempts(new Throttle($this->stack->throttle, $this->clock), $limits), $ids, $this->clock);
     }
 
     private function session(?string $email = null, ?string $username = null): Session

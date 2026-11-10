@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Core\Log\Checkpoint;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use Psr\Log\AbstractLogger;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Filesystem\Filesystem;
@@ -31,6 +32,7 @@ use YorvoID\Tests\Support\Stack;
  * What the chain can't find against a database writer, checkpoints kept outside the database find
  * (AUD-003, H-2): entries cut off from the end, and a history rewritten with its chain recomputed.
  */
+#[Group('ed25519-keys')]
 final class CheckpointsTest extends DatabaseTestCase
 {
     private string $file;

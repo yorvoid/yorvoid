@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Core\Key;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Core\Crypto\Digest;
@@ -17,6 +18,7 @@ use YorvoID\Core\Secret;
  */
 final class SigningKeyTest extends TestCase
 {
+    #[Group('ed25519-keys')]
     #[RequiresPhpExtension('sodium')]
     public function testOpenSslSignsAsLibsodiumDid(): void
     {
@@ -36,6 +38,7 @@ final class SigningKeyTest extends TestCase
         self::assertSame(sodium_crypto_sign_publickey(sodium_crypto_sign_seed_keypair($generated->seed->reveal())), $generated->publicKey);
     }
 
+    #[Group('ed25519-keys')]
     public function testAKnownVector(): void
     {
         // RFC 8032 §7.1, test 2.

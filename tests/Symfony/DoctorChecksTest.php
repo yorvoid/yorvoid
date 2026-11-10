@@ -12,6 +12,9 @@ use Symfony\Component\Filesystem\Filesystem;
 use YorvoID\Core\Authorization\DecisionLog\AuditFailure;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
+use YorvoID\Core\Crypto\CryptoMode;
+use YorvoID\Core\Crypto\CryptoPolicy;
+use YorvoID\Core\Crypto\CryptoProvider;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\Checkpoint\Checkpoint;
 use YorvoID\Core\Log\Checkpoint\FileCheckpoints;
@@ -23,6 +26,7 @@ use YorvoID\Symfony\Doctor\Check;
 use YorvoID\Symfony\Doctor\ClockCheck;
 use YorvoID\Symfony\Doctor\ConfigurationCheck;
 use YorvoID\Symfony\Doctor\CookiesCheck;
+use YorvoID\Symfony\Doctor\CryptoCheck;
 use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\Finding;
 use YorvoID\Symfony\Doctor\LogCheckpointsCheck;
@@ -256,6 +260,27 @@ final class DoctorChecksTest extends DatabaseTestCase
             'Decisions refuse when their record can\'t be written, but not every Permit of an ability is recorded, so those go ahead unrecorded.',
         ], array_map(static fn (Finding $finding): string => $finding->what, $findings));
         self::assertFalse($findings[0]->problem || $findings[1]->problem, 'Warnings: it works, less safely than configured.');
+    }
+
+    public function testReportsTheCryptoModeAndWhatTheProviderLacks(): void
+    {
+        $provider = static fn (bool $fipsOnly, bool $ed25519, ?bool $kernel): CryptoProvider => new CryptoProvider('OpenSSL 3.5.4', $fipsOnly, true, $ed25519, $kernel);
+        $check = static fn (CryptoMode $mode, CryptoProvider $found): CryptoCheck => new CryptoCheck($mode, static fn (): CryptoPolicy => CryptoMode::Fips === $mode ? CryptoPolicy::fips($found) : CryptoPolicy::standard($found));
+
+        $fips = $check(CryptoMode::Fips, $provider(true, true, true));
+        self::assertSame('fips mode, OpenSSL 3.5.4, only a FIPS provider active, kernel in FIPS mode', $fips->summary());
+        self::assertSame([], $this->whats($fips));
+
+        self::assertSame('standard mode, OpenSSL 3.5.4, kernel not in FIPS mode', $check(CryptoMode::Standard, $provider(false, true, false))->summary());
+        self::assertSame('standard mode, OpenSSL 3.5.4', $check(CryptoMode::Standard, $provider(false, true, null))->summary(), 'Nothing said of a kernel it can\'t read.');
+        self::assertSame(['The kernel runs in FIPS mode, but YorvoID\'s crypto mode is standard: it offers algorithms a FIPS provider may not have.'], $this->whats($check(CryptoMode::Standard, $provider(false, true, true))));
+
+        $noEdwards = iterator_to_array($check(CryptoMode::Fips, $provider(true, false, true))->findings(), false);
+        self::assertSame(['The FIPS provider has no Ed25519: passkeys made with EdDSA can\'t sign in, and new ones use ES256 or RS256.'], array_map(static fn (Finding $finding): string => $finding->what, $noEdwards));
+        self::assertFalse($noEdwards[0]->problem);
+
+        $this->expectException(IntegratorError::class);
+        iterator_to_array($check(CryptoMode::Fips, $provider(false, true, false))->findings());
     }
 
     public function testWarnsOfSettingsWeakerThanThePresetsOnly(): void
