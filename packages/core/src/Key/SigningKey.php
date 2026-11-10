@@ -8,7 +8,8 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Secret;
 
 /**
- * An Ed25519 key (libsodium; RFC 8032) with its ID and status. Signatures name the key's ID, so keys can
+ * An Ed25519 key (RFC 8032, through OpenSSL, so that a FIPS provider signs when one is configured:
+ * CRY-01) with its ID and status. Signatures name the key's ID, so keys can
  * be rotated without breaking what was signed before (OPS-001, D-13). Without its private part, a key
  * only verifies: that's what a separate verifier holds.
  *
@@ -19,6 +20,16 @@ final readonly class SigningKey
     public const string ALGORITHM = 'EdDSA';
 
     private const string ID = '/^[A-Za-z0-9._-]{1,64}$/D';
+
+    /** The lengths of an Ed25519 public key, its seed and a signature (RFC 8032) */
+    private const int PUBLIC_KEY = 32;
+
+    private const int SEED = 32;
+
+    private const int SIGNATURE = 64;
+
+    /** OpenSSL's "no digest": EdDSA hashes the message itself */
+    private const int NO_DIGEST = 0;
 
     /** @var non-empty-string */
     public string $publicKey;
@@ -33,18 +44,18 @@ final readonly class SigningKey
             throw new IntegratorError(\sprintf('The key ID "%s" is invalid.', $id), 'Use 1 to 64 letters, digits, dots, underscores or hyphens, e.g. "2026-10".', 'concepts/keys.md');
         }
 
-        if (\SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES !== \strlen($publicKey)) {
+        if (self::PUBLIC_KEY !== \strlen($publicKey)) {
             throw new IntegratorError(\sprintf('The public part of the key "%s" isn\'t an Ed25519 public key.', $id), 'Use the 32-byte public key, or generate the key with YorvoID.', 'concepts/keys.md');
         }
 
         $this->publicKey = $publicKey;
 
         if (null !== $seed) {
-            if (\SODIUM_CRYPTO_SIGN_SEEDBYTES !== \strlen($seed->reveal())) {
+            if (self::SEED !== \strlen($seed->reveal())) {
                 throw new IntegratorError(\sprintf('The private part of the key "%s" isn\'t an Ed25519 seed.', $id), 'Use the 32-byte seed, or generate the key with YorvoID.', 'concepts/keys.md');
             }
 
-            if (!hash_equals(sodium_crypto_sign_publickey(sodium_crypto_sign_seed_keypair($seed->reveal())), $publicKey)) {
+            if (!hash_equals(self::publicKeyOf($seed), $publicKey)) {
                 throw new IntegratorError(\sprintf('The public and private parts of the key "%s" don\'t belong together.', $id), 'Check the key\'s "x" and "d" values; they must come from the same generated key.', 'concepts/keys.md');
             }
         }
@@ -56,9 +67,9 @@ final readonly class SigningKey
 
     public static function generate(string $id, KeyStatus $status = KeyStatus::Active): self
     {
-        $seed = Secret::random(\SODIUM_CRYPTO_SIGN_SEEDBYTES);
+        $seed = Secret::random(self::SEED);
 
-        return new self($id, $status, sodium_crypto_sign_publickey(sodium_crypto_sign_seed_keypair($seed->reveal())), $seed);
+        return new self($id, $status, self::publicKeyOf($seed), $seed);
     }
 
     /**
@@ -70,18 +81,23 @@ final readonly class SigningKey
             throw new IntegratorError(\sprintf('The key "%s" isn\'t active, so it doesn\'t sign.', $this->id), 'Sign with KeyRing::signer(), the ring\'s active key.', 'concepts/keys.md');
         }
 
-        $secretKey = sodium_crypto_sign_secretkey(sodium_crypto_sign_seed_keypair($this->seed->reveal()));
-
-        try {
-            return sodium_crypto_sign_detached($message, $secretKey);
-        } finally {
-            sodium_memzero($secretKey);
+        if (!openssl_sign($message, $signature, self::privateKey($this->seed), self::NO_DIGEST) || !\is_string($signature) || self::SIGNATURE !== \strlen($signature)) {
+            throw new \RuntimeException(\sprintf('OpenSSL couldn\'t sign with the key "%s": %s', $this->id, self::error()));
         }
+
+        return $signature;
     }
 
     public function verify(string $message, string $signature): bool
     {
-        return \SODIUM_CRYPTO_SIGN_BYTES === \strlen($signature) && sodium_crypto_sign_verify_detached($signature, $message, $this->publicKey);
+        // A signature of another length than 64 bytes OpenSSL refuses itself.
+        $key = openssl_pkey_new(['ed25519' => ['pub_key' => $this->publicKey]]);
+
+        if (false === $key) {
+            throw new \RuntimeException(\sprintf('OpenSSL couldn\'t read the key "%s": %s', $this->id, self::error()));
+        }
+
+        return 1 === openssl_verify($message, $signature, $key, self::NO_DIGEST);
     }
 
     /**
@@ -90,5 +106,30 @@ final readonly class SigningKey
     public function withoutPrivatePart(): self
     {
         return new self($this->id, KeyStatus::VerifyOnly, $this->publicKey);
+    }
+
+    private static function privateKey(Secret $seed): \OpenSSLAsymmetricKey
+    {
+        $key = openssl_pkey_new(['ed25519' => ['priv_key' => $seed->reveal()]]);
+
+        return false === $key ? throw new \RuntimeException(\sprintf('OpenSSL couldn\'t make an Ed25519 key: %s', self::error())) : $key;
+    }
+
+    private static function publicKeyOf(Secret $seed): string
+    {
+        $details = openssl_pkey_get_details(self::privateKey($seed));
+        $public = \is_array($details) && \is_array($details['ed25519'] ?? null) ? ($details['ed25519']['pub_key'] ?? null) : null;
+
+        return \is_string($public) ? $public : throw new \RuntimeException('OpenSSL gave no Ed25519 public key.');
+    }
+
+    /**
+     * Why OpenSSL failed, as far as it says.
+     */
+    private static function error(): string
+    {
+        $error = openssl_error_string();
+
+        return false === $error ? 'Ed25519 isn\'t available' : $error;
     }
 }

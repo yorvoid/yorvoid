@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Symfony;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
@@ -22,6 +23,8 @@ use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\StepUp;
+use YorvoID\Core\Crypto\CryptoMode;
+use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -138,6 +141,47 @@ final class BundleTest extends TestCase
         self::assertEquals(new OrderedConditions(pessimistic: true), $this->boot(['ordered_conditions' => ['pessimistic' => true]], fresh: true)->get(OrderedConditions::class));
     }
 
+    public function testTheFipsModeRefusesToStartWithoutAFipsProviderAlone(): void
+    {
+        $container = $this->boot(fresh: true);
+        $standard = $container->get(CryptoPolicy::class);
+        \assert($standard instanceof CryptoPolicy);
+        self::assertSame(CryptoMode::Standard, $standard->mode, 'Standard by default (MP-1).');
+        $passkeys = $container->get(PasskeyPolicy::class);
+        \assert($passkeys instanceof PasskeyPolicy);
+        self::assertSame([-7, -8, -257], $passkeys->algorithms, 'Passkeys take the policy\'s algorithms.');
+
+        if ('1' === getenv('YORVOID_TEST_FIPS')) {
+            $fips = $this->boot(['crypto' => ['mode' => 'fips']], fresh: true)->get(CryptoPolicy::class);
+            \assert($fips instanceof CryptoPolicy);
+            self::assertSame(CryptoMode::Fips, $fips->mode, 'The FIPS-configured image starts in the FIPS mode.');
+
+            if ($fips->allowsEdDsa()) {
+                return;
+            }
+
+            // Its provider has no Ed25519: with signing keys, the checkpoints would stop, so it refuses (AUD-003).
+            new Filesystem()->mkdir($this->directory, 0o700);
+            file_put_contents($keys = $this->directory.'/keys.json', '{"keys": []}');
+
+            try {
+                $this->boot(['crypto' => ['mode' => 'fips'], 'keys' => ['file' => $keys]], fresh: true);
+                self::fail('It started with keys it can\'t sign with.');
+            } catch (IntegratorError $e) {
+                self::assertStringContainsString('has no Ed25519, which they sign with: the security log\'s checkpoints would stop.', $e->getMessage());
+            }
+
+            return;
+        }
+
+        try {
+            $this->boot(['crypto' => ['mode' => 'fips']], fresh: true);
+            self::fail('It started: the development image has OpenSSL\'s default provider.');
+        } catch (IntegratorError $e) {
+            self::assertStringContainsString('it computed MD5', $e->getMessage());
+        }
+    }
+
     public function testNotificationsOffNeedNoSettings(): void
     {
         $container = $this->boot(['notifications' => ['enabled' => false, 'application_name' => null, 'not_me_url' => null, 'from' => null]]);
@@ -247,6 +291,7 @@ final class BundleTest extends TestCase
         self::assertStringContainsString('is now the same as another one', (string) preg_replace('/\s+/', ' ', $normalize->getDisplay()));
     }
 
+    #[Group('ed25519-keys')]
     public function testChecksTheSecurityLogAgainstItsCheckpoints(): void
     {
         $keys = $this->directory.'/keys.json';

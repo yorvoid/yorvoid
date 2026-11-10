@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys;
 
+use Cose\Algorithm\Algorithm;
 use Cose\Algorithm\Manager;
 use Cose\Algorithm\Signature\ECDSA\ES256;
 use Cose\Algorithm\Signature\EdDSA\Ed25519;
@@ -129,7 +130,7 @@ final readonly class Passkeys implements OperationHandler
             // One user handle per principal, random: it's stored on authenticators, so it says nothing about them.
             PublicKeyCredentialUserEntity::create($name, ([] === $existing ? null : $existing[0]->userHandle) ?? random_bytes(32), $name),
             random_bytes(32),
-            [PublicKeyCredentialParameters::createPk(ES256::ID), PublicKeyCredentialParameters::createPk(Ed25519::ID), PublicKeyCredentialParameters::createPk(RS256::ID)],
+            array_map(PublicKeyCredentialParameters::createPk(...), $this->policy->algorithms),
             AuthenticatorSelectionCriteria::create(userVerification: $this->policy->userVerification->value, residentKey: AuthenticatorSelectionCriteria::RESIDENT_KEY_REQUIREMENT_REQUIRED),
             PublicKeyCredentialCreationOptions::ATTESTATION_CONVEYANCE_PREFERENCE_NONE,
             array_map(static fn (Passkey $passkey): PublicKeyCredentialDescriptor => PublicKeyCredentialDescriptor::create('public-key', $passkey->webauthnId, $passkey->transports), $existing),
@@ -170,7 +171,7 @@ final readonly class Passkeys implements OperationHandler
             throw new PasskeyRefused(Refusal::InvalidResponse, $exception);
         }
 
-        if (!PublicKeyCheck::accepts($record->credentialPublicKey)) {
+        if (!PublicKeyCheck::accepts($record->credentialPublicKey, $this->policy->algorithms)) {
             throw new PasskeyRefused(Refusal::InvalidResponse);
         }
 
@@ -515,7 +516,11 @@ final readonly class Passkeys implements OperationHandler
     {
         $steps = new CeremonyStepManagerFactory();
         $steps->setAllowedOrigins($this->policy->origins);
-        $steps->setAlgorithmManager(Manager::create()->add(ES256::create(), Ed25519::create(), RS256::create()));
+        $steps->setAlgorithmManager(Manager::create()->add(...array_map(static fn (int $algorithm): Algorithm => match ($algorithm) {
+            ES256::ID => ES256::create(),
+            Ed25519::ID => Ed25519::create(),
+            default => RS256::create(),
+        }, $this->policy->algorithms)));
         $steps->setCounterChecker($counter);
 
         return $steps;

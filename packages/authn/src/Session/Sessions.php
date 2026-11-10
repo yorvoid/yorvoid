@@ -13,6 +13,7 @@ use YorvoID\Authn\Session\Event\SessionRefreshed;
 use YorvoID\Authn\Session\Event\SessionStarted;
 use YorvoID\Authn\Session\Event\SessionStarting;
 use YorvoID\Authn\Session\Event\SessionSteppedUp;
+use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
@@ -429,6 +430,6 @@ final readonly class Sessions implements OperationHandler
 
     private static function hash(#[\SensitiveParameter] Secret $token): string
     {
-        return hash('sha256', $token->reveal());
+        return Digest::sha256($token->reveal());
     }
 }

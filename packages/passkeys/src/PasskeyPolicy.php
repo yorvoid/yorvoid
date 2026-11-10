@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys;
 
+use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
 
@@ -22,12 +23,16 @@ final readonly class PasskeyPolicy
     /** @var positive-int The timeout, as WebAuthn's options give it */
     public int $timeoutMilliseconds;
 
+    /** @var non-empty-list<int> The COSE algorithms passkeys may use, from the crypto policy (CRY-01) */
+    public array $algorithms;
+
     /**
-     * @param string        $relyingPartyId The domain passkeys belong to, e.g. "example.com": they then work on it
-     *                                      and its subdomains, and can't be used anywhere else. Browsers show it
-     *                                      when a passkey is created
-     * @param list<string>  $origins        Where the pages that use them are, e.g. ["https://example.com"]
-     * @param Duration|null $timeout        How long a ceremony may take, from 30 seconds to 10 minutes; 5 minutes if not given
+     * @param string            $relyingPartyId The domain passkeys belong to, e.g. "example.com": they then work on it
+     *                                          and its subdomains, and can't be used anywhere else. Browsers show it
+     *                                          when a passkey is created
+     * @param list<string>      $origins        Where the pages that use them are, e.g. ["https://example.com"]
+     * @param Duration|null     $timeout        How long a ceremony may take, from 30 seconds to 10 minutes; 5 minutes if not given
+     * @param CryptoPolicy|null $crypto         Which algorithms passkeys may use; the standard policy's if not given
      */
     public function __construct(
         public string $relyingPartyId,
@@ -35,6 +40,7 @@ final readonly class PasskeyPolicy
         public UserVerification $userVerification = UserVerification::Required,
         public ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn,
         ?Duration $timeout = null,
+        ?CryptoPolicy $crypto = null,
     ) {
         // A domain, and not an IP address: its last label isn't a number.
         if (1 !== preg_match('/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/D', $relyingPartyId) || 1 === preg_match('/(?:^|\.)[0-9]+$/', $relyingPartyId)) {
@@ -65,5 +71,6 @@ final readonly class PasskeyPolicy
         }
 
         $this->timeoutMilliseconds = $this->timeout->seconds * 1000;
+        $this->algorithms = ($crypto ?? CryptoPolicy::standard())->coseAlgorithms();
     }
 }

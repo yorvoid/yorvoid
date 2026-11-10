@@ -20,6 +20,27 @@ services:
       postgres:
         condition: service_healthy
 
+  # The FIPS-configured image (CRY-01): `docker compose --profile fips up -d --wait php-fips`, then
+  # `docker compose exec php-fips composer test-fips`. OpenSSL's FIPS provider alone, on the development image.
+  php-fips:
+    profiles: [fips]
+    image: ${IMAGES_PREFIX:-}yorvoid-php-fips
+    build:
+      context: docker/fips
+      args:
+        BASE: ${IMAGES_PREFIX:-}yorvoid-php-dev
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - .:/app
+    command: ["sleep", "infinity"]
+    init: true
+    environment:
+      YORVOID_TEST_POSTGRES_URL: "pdo-pgsql://yorvoid:yorvoid@postgres:5432/yorvoid"
+      YORVOID_TEST_REQUIRE_DATABASES: "postgresql"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # One image per supported version, pinned by digest in docker/postgres/<version>/Dockerfile.
   postgres:
     image: ${IMAGES_PREFIX:-}yorvoid-postgres-${POSTGRES_VERSION:-18}

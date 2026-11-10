@@ -10,6 +10,7 @@ use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Symfony\Component\Uid\Uuid;
 use YorvoID\Authn\Credential\CredentialId;
+use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
@@ -42,7 +43,7 @@ final readonly class DbalPasskeyStore implements PasskeyStore
                 'credential_id' => $passkey->credentialId->uuid->toRfc4122(),
                 'realm' => $passkey->realm->name,
                 'principal_id' => $passkey->principalId->uuid->toRfc4122(),
-                'webauthn_id_hash' => hash('sha256', $passkey->webauthnId),
+                'webauthn_id_hash' => Digest::sha256($passkey->webauthnId),
                 'webauthn_id' => self::encode($passkey->webauthnId),
                 'public_key' => self::encode($passkey->publicKey),
                 'user_handle' => self::encode($passkey->userHandle),
@@ -65,7 +66,7 @@ final readonly class DbalPasskeyStore implements PasskeyStore
     {
         $row = $this->database->connection->fetchAssociative(
             \sprintf('SELECT %s FROM %s WHERE realm = ? AND webauthn_id_hash = ?', self::COLUMNS, $this->database->table(self::TABLE)),
-            [$realm->name, hash('sha256', $webauthnId)],
+            [$realm->name, Digest::sha256($webauthnId)],
         );
 
         return false === $row ? null : $this->passkey($row);

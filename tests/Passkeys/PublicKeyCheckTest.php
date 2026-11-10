@@ -47,6 +47,7 @@ final class PublicKeyCheckTest extends TestCase
         yield 'X25519 under EdDSA' => [self::cose([1 => 1, 3 => -8, -1 => 4, -2 => $okp])];
         yield 'a short Ed25519 key' => [self::cose([1 => 1, 3 => -8, -1 => 6, -2 => substr($okp, 1)])];
         yield 'RSA 1024' => [self::rsa(1024)];
+        yield 'RSA 2040, just short' => [self::rsa(2040)];
         yield 'RSA 1024 padded to 2048 bits' => [self::rsa(1024, 256)];
         yield 'P-384 under ES256' => [self::p384()];
         yield 'RSA with e = 1' => [self::cose([1 => 3, 3 => -257, -1 => $rsa['n'], -2 => "\x01"])];
@@ -63,6 +64,17 @@ final class PublicKeyCheckTest extends TestCase
     public function testAcceptsKeysThatVerify(string $key): void
     {
         self::assertTrue(PublicKeyCheck::accepts($key));
+    }
+
+    public function testRefusesAKeyOfAnAlgorithmNotAllowed(): void
+    {
+        $okp = self::cose([1 => 1, 3 => -8, -1 => 6, -2 => sodium_crypto_sign_publickey(sodium_crypto_sign_keypair())]);
+
+        self::assertTrue(PublicKeyCheck::accepts($okp, [-7, -8, -257]));
+        self::assertFalse(PublicKeyCheck::accepts($okp, [-7, -257]), 'EdDSA, left out by the crypto policy.');
+        self::assertTrue(PublicKeyCheck::accepts(self::rsa(2048), [-257]));
+        [$x, $y] = self::p256();
+        self::assertFalse(PublicKeyCheck::accepts(self::cose([1 => 2, 3 => -35, -1 => 2, -2 => $x, -3 => $y]), [-7, -35]), 'An algorithm allowed that YorvoID doesn\'t check is refused.');
     }
 
     #[DataProvider('refused')]
@@ -87,6 +99,11 @@ final class PublicKeyCheckTest extends TestCase
      */
     private static function rsa(int $bits, int $padded = 0): string
     {
+        // A weak key is only a modulus of its length: a FIPS provider refuses to generate one.
+        if ($bits < 2048) {
+            return self::cose([1 => 3, 3 => -257, -1 => str_pad("\xc1".random_bytes(max(1, intdiv($bits, 8) - 1)), $padded, "\0", \STR_PAD_LEFT), -2 => "\x01\x00\x01"]);
+        }
+
         $details = self::details(['private_key_type' => \OPENSSL_KEYTYPE_RSA, 'private_key_bits' => $bits]);
         \assert(\is_array($details['rsa']) && \is_string($details['rsa']['n']) && \is_string($details['rsa']['e']));
 

@@ -1,0 +1,20 @@
+# OpenSSL with its FIPS provider alone (and the base provider, which has no algorithms, for encoding
+# and decoding keys): every algorithm is fetched with fips=yes.
+config_diagnostics = 1
+openssl_conf = openssl_init
+
+.include /opt/openssl-fips/fipsmodule.cnf
+
+[openssl_init]
+providers = provider_sect
+alg_section = algorithm_sect
+
+[provider_sect]
+fips = fips_sect
+base = base_sect
+
+[base_sect]
+activate = 1
+
+[algorithm_sect]
+default_properties = fips=yes

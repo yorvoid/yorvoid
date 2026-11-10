@@ -38,4 +38,10 @@ if ('symfony' === $package) {
     $config->ignoreErrorsOnPackage('symfony/framework-bundle', [ErrorType::UNUSED_DEPENDENCY]);
 }
 
+// EdDSA keys, which the WebAuthn library verifies with libsodium: required where they're offered, so
+// that they work on every host in the standard crypto mode (CRY-01).
+if (in_array($package, ['passkeys', 'intent-verifier'], true)) {
+    $config->ignoreErrorsOnExtension('ext-sodium', [ErrorType::UNUSED_DEPENDENCY]);
+}
+
 return $config;

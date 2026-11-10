@@ -21,6 +21,7 @@ use Twig\Extension\AbstractExtension;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\PolicyElement;
+use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
@@ -95,6 +96,8 @@ final class YorvoIDBundle extends AbstractBundle
             ->enumNode('permits')->values(['none', 'sampled', 'all'])->defaultValue('none')->info('Which permits of abilities are recorded: refusals, Indeterminate and every operation\'s decision always are')->end()
             ->floatNode('sample_rate')->min(0.0)->max(1.0)->defaultValue(0.01)->info('With permits: sampled, the share of requests whose permits are recorded')->end()
             ->scalarNode('connection')->defaultNull()->info('A DoctrineBundle connection of its own to the same database, which writes decisions outside the application\'s transactions: give one with audit.on_failure: refuse')->end();
+        $children->arrayNode('crypto')->addDefaultsIfNotSet()->children()
+            ->enumNode('mode')->values(['standard', 'fips'])->defaultValue('standard')->info('Which algorithms YorvoID uses: standard, or fips, only with OpenSSL\'s FIPS provider alone active, which it checks at boot (CRY-01)')->end();
         $children->arrayNode('audit')->addDefaultsIfNotSet()->children()
             ->enumNode('on_failure')->values(['continue', 'refuse'])->defaultValue('continue')->info('What a decision whose record can\'t be written does: continue, or refuse, so that nothing is permitted without its record (AUD-006). The alert is raised either way')->end();
         $children->arrayNode('cache')->addDefaultsIfNotSet()->children()
@@ -271,6 +274,11 @@ final class YorvoIDBundle extends AbstractBundle
     {
         if (class_exists(AbstractCloner::class)) {
             AbstractCloner::$defaultCasters[Secret::class] = [SecretCaster::class, 'cast'];
+        }
+
+        // The FIPS mode refuses to start unless OpenSSL runs with its FIPS provider alone (CRY-01).
+        if ('fips' === $this->container?->getParameter('yorvoid.crypto.mode')) {
+            $this->container->get(CryptoPolicy::class);
         }
     }
 

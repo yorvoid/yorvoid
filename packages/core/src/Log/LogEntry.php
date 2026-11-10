@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Core\Log;
 
 use Symfony\Component\Uid\Uuid;
+use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Operation;
@@ -112,7 +113,7 @@ final readonly class LogEntry
             return null;
         }
 
-        return hash($this->algorithm, self::json([
+        return Digest::of($this->algorithm, self::json([
             'format' => 1,
             'realm' => $this->realm->name,
             'sequence' => $this->sequence,

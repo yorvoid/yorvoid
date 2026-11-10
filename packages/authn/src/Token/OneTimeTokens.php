@@ -10,6 +10,7 @@ use Symfony\Component\Clock\NativeClock;
 use YorvoID\Authn\Session\InactivePrincipal;
 use YorvoID\Authn\Token\Event\OneTimeTokenConsumed;
 use YorvoID\Authn\Token\Event\OneTimeTokenIssued;
+use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
@@ -106,7 +107,7 @@ final readonly class OneTimeTokens implements OperationHandler
                 $this->store->deleteFor($principal->realm, $principal->id, $command->purpose);
             }
 
-            $this->store->add($token, hash('sha256', $verifier->reveal()));
+            $this->store->add($token, Digest::sha256($verifier->reveal()));
             $issued = new IssuedToken($token, Secret::fromString($selector.'.'.$verifier->reveal()));
 
             $this->transactions->afterCommit(function () use ($issued, $origin, $actor): void {
@@ -193,7 +194,7 @@ final readonly class OneTimeTokens implements OperationHandler
 
         $found = $this->store->find($realm, $parts[1], $purpose);
 
-        if (null === $found || $this->clock->now() >= $found[0]->expiresAt || !hash_equals($found[1], hash('sha256', $parts[2]))) {
+        if (null === $found || $this->clock->now() >= $found[0]->expiresAt || !hash_equals($found[1], Digest::sha256($parts[2]))) {
             return null;
         }
 

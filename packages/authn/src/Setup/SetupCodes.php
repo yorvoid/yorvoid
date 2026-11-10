@@ -14,6 +14,7 @@ use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\Outcome;
@@ -161,6 +162,6 @@ final readonly class SetupCodes implements OperationHandler
 
     private static function hash(string $code): string
     {
-        return hash('sha256', $code);
+        return Digest::sha256($code);
     }
 }

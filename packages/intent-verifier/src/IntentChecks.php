@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\IntentVerifier;
 
+use Cose\Algorithm\Algorithm;
 use Cose\Algorithm\Manager;
 use Cose\Algorithm\Signature\ECDSA\ES256;
 use Cose\Algorithm\Signature\EdDSA\Ed25519;
@@ -54,7 +55,7 @@ final readonly class IntentChecks
     {
         // Not one the verifier made: recorded by a short hash, whatever its size or encoding (FUZZ-08).
         if (1 !== preg_match(self::NONCE, $nonce)) {
-            $this->log->record('refused', ['nonce_hash' => substr(hash('sha256', $nonce), 0, 16), 'reason' => Refusal::UnknownIntent->value], $this->clock->now());
+            $this->log->record('refused', ['nonce_hash' => substr(Digest::sha256($nonce), 0, 16), 'reason' => Refusal::UnknownIntent->value], $this->clock->now());
 
             throw new IntentRefused(Refusal::UnknownIntent);
         }
@@ -198,7 +199,11 @@ final readonly class IntentChecks
         // Deliberate defence in depth: isOwnClientData() checks the origin first, so this second check
         // can't be told apart by mutation testing (infection.json5), but stays.
         $steps->setAllowedOrigins($this->config->origins);
-        $steps->setAlgorithmManager(Manager::create()->add(ES256::create(), Ed25519::create(), RS256::create()));
+        $steps->setAlgorithmManager(Manager::create()->add(...array_map(static fn (int $algorithm): Algorithm => match ($algorithm) {
+            ES256::ID => ES256::create(),
+            Ed25519::ID => Ed25519::create(),
+            default => RS256::create(),
+        }, $this->config->algorithms)));
 
         return $steps;
     }
