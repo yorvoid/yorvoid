@@ -144,10 +144,10 @@ vendor/bin/yorvoid-policy mutate --bootstrap=tests/policy.php
 
 ```text
 ✘ widen:acme.pages.delete:member: The role "member" has "acme.pages.delete". No case catches it.
-37 mutants: 36 caught, 1 survived, 0 ignored. Score 97.3% (at least 100%).
+39 mutants: 38 caught, 1 survived, 0 ignored. Score 97.44% (at least 100%).
 ```
 
-It fails below `--min-score`, 100 unless you say otherwise, and it mutates nothing while a case fails on the policy itself. `--format=json` gives every mutant and the case that caught it, for CI. YorvoID's own sample, 37 mutants against 32 cases, takes under a second.
+It fails below `--min-score`, 100 unless you say otherwise, and it mutates nothing while a case fails on the policy itself. `--format=json` gives every mutant and the case that caught it, for CI. YorvoID's own sample, 39 mutants against 34 cases, takes about a second.
 
 The mutants come from your policy. Each changes one thing:
 
@@ -160,6 +160,7 @@ The mutants come from your policy. Each changes one thing:
 | Scope widens | `scope_widens` | A role on a resource counts in the whole realm | Refused on another resource |
 | Groups don't count | `groups_dont_count` | Roles and relations through a group don't reach its members | A group's member permitted |
 | Parents don't count | `parents_dont_count` | Roles and relations on a parent don't reach its children | Permitted on a child |
+| Drop an implication | `drop_implication:<type>#<relation>:<implied by>` | A relation no longer comes with one that implies it (an editor isn't a viewer) | Permitted through the implying relation |
 | Drop a forbid | `drop_forbid:<element>` | A forbid never holds | One it must refuse |
 | Forbid everything | `forbid_everything:<element>` | A forbid holds whenever it matches | One it matches that's permitted |
 | A permit always | `permit_always:<element>` | A permit holds whenever it matches | One it matches that's refused |
@@ -177,11 +178,10 @@ The mutants come from what your policy declares, never from what your cases do, 
 
 That is a forbid no case saw hold, or an element no case saw unable to tell. In JSON, each survivor has `exercised`.
 
-**Not mutated, yet:**
-- **A relation that implies another** (`impliedBy`: an editor is a viewer). Follows before M2 closes.
+**Not mutated:**
 - **A step-up requirement:** cases ask abilities, and YorvoID asks for a recent proof only for sensitive operations. A remedy your own permit gives is dropped by "a permit always".
 
-In Symfony the bundle builds the policy through the mutants. Without it, pass what production's function builds through the `Mutants` it's given: its catalogue, schema, elements, authority check and stores. Production passes nothing:
+In Symfony the bundle builds the policy through the mutants, and builds its services again for a mutant of the schema, which they're built with. Without it, pass what production's function builds through the `Mutants` it's given: its catalogue, schema, elements, authority check and stores. Production passes nothing:
 
 ```php
 use YorvoID\Core\Authorization\Evaluator;

@@ -18,9 +18,13 @@ use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\Role;
 use YorvoID\Policy\RolePermit;
+use YorvoID\Policy\Rule\RuleElements;
+use YorvoID\Relations\RelationDeclarations;
+use YorvoID\Relations\RelationDefinition;
 use YorvoID\Relations\RelationPermit;
 use YorvoID\Relations\RelationSchema;
 use YorvoID\Relations\RelationStore;
+use YorvoID\Relations\ResourceType;
 
 /**
  * The mutants of a policy (AUZ-045), and the switch that turns one on. The policy under test is built
@@ -48,7 +52,7 @@ final class Mutants
 
     private ?RelationSchema $schema = null;
 
-    /** @var array<string, 'permit'|'forbid'> The application's own elements, by name */
+    /** @var array<string, 'permit'|'forbid'|'rule-permit'> The application's own elements, by name */
     private array $elements = [];
 
     /** @var list<string> Elements the cases saw holding */
@@ -67,11 +71,62 @@ final class Mutants
         return $this->catalogue = $catalogue;
     }
 
+    /**
+     * The schema, as the mutant on changes it: without one implication, a copy rebuilt from the
+     * declared types, the schema itself being final.
+     */
     public function schema(RelationSchema $schema): RelationSchema
     {
         $this->wired[] = 'schema';
+        $this->schema = $schema;
+        $active = $this->active;
 
-        return $this->schema = $schema;
+        return MutationOperator::DropImplication === $active?->operator ? self::without($schema, (string) $active->subject, (string) $active->role) : $schema;
+    }
+
+    /**
+     * A copy of the schema without one implication: "type#relation" no longer implied by $implied.
+     */
+    private static function without(RelationSchema $schema, string $relation, string $implied): RelationSchema
+    {
+        [$type, $name] = explode('#', $relation);
+        $types = [];
+
+        foreach ($schema->types() as $declared) {
+            $relations = [];
+
+            foreach ($declared->relations as $definition) {
+                $relations[] = $declared->name === $type && $definition->name === $name
+                    ? new RelationDefinition($definition->name, array_values(array_diff($definition->impliedBy, [$implied])), $definition->fromParents, $definition->grants)
+                    : $definition;
+            }
+
+            $types[] = new ResourceType($declared->name, $relations);
+        }
+
+        return RelationSchema::of([new readonly class($types) implements RelationDeclarations {
+            /**
+             * @param list<ResourceType> $types
+             */
+            public function __construct(
+                private array $types,
+            ) {
+            }
+
+            public function types(): iterable
+            {
+                return $this->types;
+            }
+        }]);
+    }
+
+    /**
+     * What the schema is built with, as the mutant on has it: what was built with another needs
+     * building again (in Symfony, PolicyKernel does it).
+     */
+    public function schemaKey(): ?string
+    {
+        return MutationOperator::DropImplication === $this->active?->operator ? $this->active->id() : null;
     }
 
     /**
@@ -87,7 +142,11 @@ final class Mutants
         foreach ($elements as $element) {
             // YorvoID's own: the grant operators break what they decide by.
             if (!$element instanceof RolePermit && !$element instanceof RelationPermit && !$element instanceof NoEscalation) {
-                $this->elements[$element->name()] = $element instanceof ForbidElement ? 'forbid' : 'permit';
+                $this->elements[$element->name()] = match (true) {
+                    $element instanceof ForbidElement => 'forbid',
+                    RuleElements::isPermitSide($element) => 'rule-permit',
+                    default => 'permit',
+                };
             }
 
             $wrapped[] = match (true) {
@@ -256,6 +315,14 @@ final class Mutants
             $mutants[] = new Mutant(MutationOperator::ParentsDontCount);
         }
 
+        foreach ($relations ? $this->schema?->types() ?? [] : [] as $type) {
+            foreach ($type->relations as $definition) {
+                foreach ($definition->impliedBy as $implied) {
+                    $mutants[] = new Mutant(MutationOperator::DropImplication, $type->name.'#'.$definition->name, $implied);
+                }
+            }
+        }
+
         $elements = $this->elements;
         ksort($elements, \SORT_STRING);
 
@@ -287,7 +354,7 @@ final class Mutants
     }
 
     /**
-     * @param 'permit'|'forbid' $kind
+     * @param 'permit'|'forbid'|'rule-permit' $kind
      *
      * @return list<Mutant>
      */
@@ -295,9 +362,8 @@ final class Mutants
     {
         return match (true) {
             'forbid' === $kind => [new Mutant(MutationOperator::DropForbid, $name), new Mutant(MutationOperator::ForbidEverything, $name), new Mutant(MutationOperator::CanTell, $name)],
-            // A rule's permit side ("<rule>:permit", as RuleElements names it) is never unknown: what
-            // the rule can't tell, its forbid side says.
-            str_ends_with($name, ':permit') => [new Mutant(MutationOperator::PermitAlways, $name), new Mutant(MutationOperator::PermitNever, $name)],
+            // A rule's permit side is never unknown: what the rule can't tell, its forbid side says.
+            'rule-permit' === $kind => [new Mutant(MutationOperator::PermitAlways, $name), new Mutant(MutationOperator::PermitNever, $name)],
             default => [new Mutant(MutationOperator::PermitAlways, $name), new Mutant(MutationOperator::PermitNever, $name), new Mutant(MutationOperator::CanTell, $name)],
         };
     }

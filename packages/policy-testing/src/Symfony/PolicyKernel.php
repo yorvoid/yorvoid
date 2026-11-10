@@ -39,11 +39,31 @@ final class PolicyKernel
     {
         $kernel->boot();
         $container = self::container($kernel);
-        $stores = $container->get(Stores::class);
-        $mutants = $container->get(Mutants::class);
-        \assert($stores instanceof Stores && $mutants instanceof Mutants);
 
-        return new PolicyUnderTest(static function () use ($container, $stores): PolicyServices {
+        // One Mutants for the kernel, which outlives its reboots; the seams are wired as the policy is built.
+        if ($container->initialized(Mutants::class)) {
+            $mutants = $container->get(Mutants::class);
+            \assert($mutants instanceof Mutants);
+        } else {
+            $mutants = new Mutants();
+            $container->set(Mutants::class, $mutants);
+            $container->get('yorvoid_policy_testing.policy');
+        }
+
+        $built = $mutants->schemaKey();
+
+        return new PolicyUnderTest(static function () use ($kernel, $mutants, &$built): PolicyServices {
+            // A mutant of the schema is in what the services are built with: they're built again.
+            if ($mutants->schemaKey() !== $built) {
+                $kernel->shutdown();
+                $kernel->boot();
+                self::container($kernel)->set(Mutants::class, $mutants);
+                $built = $mutants->schemaKey();
+            }
+
+            $container = self::container($kernel);
+            $stores = $container->get(Stores::class);
+            \assert($stores instanceof Stores);
             $stores->empty();
             $operations = $container->get('yorvoid_policy_testing.operations');
             $policy = $container->get('yorvoid_policy_testing.policy');

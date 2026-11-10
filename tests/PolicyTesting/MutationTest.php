@@ -92,6 +92,8 @@ final class MutationTest extends TestCase
             'scope_widens' => 'An editor of a page doesn\'t publish another',
             'groups_dont_count' => 'A group\'s editors publish',
             'parents_dont_count' => 'A viewer of a site views the drafts of its pages',
+            'drop_implication:server#viewer:admin' => 'A server\'s admin views the drafts of its pages',
+            'drop_implication:page#viewer:editor' => 'An editor of a page views its drafts',
             'drop_forbid:acme.help_drafts:forbid' => 'Archived help drafts are no one\'s',
             'forbid_everything:acme.help_drafts:forbid' => 'Help drafts are anyone\'s to view',
             'can_tell:acme.help_drafts:forbid' => 'A lost help draft isn\'t shown',
@@ -126,10 +128,13 @@ final class MutationTest extends TestCase
             'An editor of a page doesn\'t publish another' => 'scope_widens',
             'A site manager doesn\'t publish' => 'widen:acme.pages.publish:manager',
             'A group\'s editors publish' => 'groups_dont_count',
-            'A viewer of a site views the drafts of its pages' => 'parents_dont_count',
+            // The server's admin reaches the page through its parents too: without both, both live.
+            'A viewer of a site views the drafts of its pages|A server\'s admin views the drafts of its pages' => 'parents_dont_count|drop_implication:server#viewer:admin',
+            'A server\'s admin views the drafts of its pages' => 'drop_implication:server#viewer:admin',
+            'An editor of a page views its drafts' => 'drop_implication:page#viewer:editor',
         ] as $case => $mutant) {
-            $report = $this->sample(except: $case);
-            self::assertSame([$mutant], array_map(static fn (Mutant $one): string => $one->id(), $report->survived), $case);
+            $report = $this->sample(except: explode('|', $case));
+            self::assertSame(explode('|', $mutant), array_map(static fn (Mutant $one): string => $one->id(), $report->survived), $case);
             self::assertLessThan(100.0, $report->score());
         }
     }
@@ -164,7 +169,7 @@ final class MutationTest extends TestCase
         self::assertSame([], $report->survived);
         self::assertSame(['widen:acme.pages.publish:manager'], array_map(static fn (Mutant $one): string => $one->id(), $report->ignored));
         self::assertSame(100.0, $report->score(), 'Left out of the score.');
-        self::assertCount(36, $report->killed);
+        self::assertCount(38, $report->killed);
 
         $this->expectException(IntegratorError::class);
         $this->expectExceptionMessage('The ignored mutant "widen:acme.pages.publish:nobody" isn\'t one of the policy\'s.');
@@ -267,17 +272,17 @@ final class MutationTest extends TestCase
 
         self::assertSame(1, $tester->execute([]));
         self::assertStringContainsString('✘ widen:acme.pages.publish:manager: The role "manager" has "acme.pages.publish". No case catches it.', $tester->getDisplay());
-        self::assertStringContainsString('37 mutants: 36 caught, 1 survived, 0 ignored. Score 97.3% (at least 100%).', $tester->getDisplay());
-        self::assertSame(0, $tester->execute(['--min-score' => '97.29']));
-        self::assertSame(1, $tester->execute(['--min-score' => '97.3']));
+        self::assertStringContainsString('39 mutants: 38 caught, 1 survived, 0 ignored. Score 97.44% (at least 100%).', $tester->getDisplay());
+        self::assertSame(0, $tester->execute(['--min-score' => '97.43']));
+        self::assertSame(1, $tester->execute(['--min-score' => '97.44']));
         self::assertSame(0, $tester->execute(['--min-score' => '0']));
         self::assertSame(0, $tester->execute(['--ignore' => ['widen:acme.pages.publish:manager', 'authority_off']]));
-        self::assertStringContainsString('37 mutants: 35 caught, 0 survived, 2 ignored.', $tester->getDisplay());
+        self::assertStringContainsString('39 mutants: 37 caught, 0 survived, 2 ignored.', $tester->getDisplay());
 
         self::assertSame(1, $tester->execute(['--format' => 'json']));
         $report = json_decode($tester->getDisplay(), true, flags: \JSON_THROW_ON_ERROR);
         self::assertIsArray($report);
-        self::assertSame(97.3, $report['score'] ?? null);
+        self::assertSame(97.44, $report['score'] ?? null);
         self::assertSame([['id' => 'widen:acme.pages.publish:manager', 'description' => 'The role "manager" has "acme.pages.publish".', 'exercised' => true]], $report['survived'] ?? null);
         self::assertSame(0, $tester->execute(['--format' => 'json', '--ignore' => ['widen:acme.pages.publish:manager']]));
         $report = json_decode($tester->getDisplay(), true, flags: \JSON_THROW_ON_ERROR);
@@ -294,9 +299,9 @@ final class MutationTest extends TestCase
         $two = array_values(array_filter($cases, static fn (PolicyCase $case): bool => 'A site manager doesn\'t delete' !== $case->description));
         $rounded = new CommandTester(new PolicyMutateCommand(static fn (): PolicySuite => new PolicySuite(PolicyKernel::underTest($kernel), self::casesOf($two))));
         $rounded->execute([]);
-        self::assertStringContainsString('Score 94.59% (at least 100%).', $rounded->getDisplay(), 'To two places.');
+        self::assertStringContainsString('Score 94.87% (at least 100%).', $rounded->getDisplay(), 'To two places.');
         $rounded->execute(['--format' => 'json']);
-        self::assertStringContainsString('"score": 94.59,', $rounded->getDisplay());
+        self::assertStringContainsString('"score": 94.87,', $rounded->getDisplay());
     }
 
     public function testTheCommandMutatesNothingWhileACaseFails(): void
@@ -327,11 +332,11 @@ final class MutationTest extends TestCase
         $tester = new CommandTester(new Application($this->kernel())->find('yorvoid:policy:mutate'));
 
         self::assertSame(0, $tester->execute([]));
-        self::assertStringContainsString('37 mutants: 37 caught, 0 survived, 0 ignored. Score 100% (at least 100%).', $tester->getDisplay());
+        self::assertStringContainsString('39 mutants: 39 caught, 0 survived, 0 ignored. Score 100% (at least 100%).', $tester->getDisplay());
 
         self::assertSame(0, $tester->execute(['--ignore' => ['authority_off']]));
         self::assertStringContainsString('– authority_off: ignored as equivalent.', $tester->getDisplay());
-        self::assertStringContainsString('37 mutants: 36 caught, 0 survived, 1 ignored.', $tester->getDisplay());
+        self::assertStringContainsString('39 mutants: 38 caught, 0 survived, 1 ignored.', $tester->getDisplay());
 
         self::assertSame(0, $tester->execute(['--format' => 'json']));
         $report = json_decode($tester->getDisplay(), true, flags: \JSON_THROW_ON_ERROR);

@@ -9,6 +9,7 @@ use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Contracts\Service\ResetInterface;
 use YorvoID\Core\Authorization\Evaluator;
@@ -23,9 +24,11 @@ use YorvoID\Core\Storage\Transactions;
 use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\PolicyTesting\Console\PolicyTestCommand;
+use YorvoID\PolicyTesting\Mutation\Mutants;
 use YorvoID\PolicyTesting\Mutation\MutatedForbid;
 use YorvoID\PolicyTesting\Mutation\MutatedPermit;
 use YorvoID\PolicyTesting\Mutation\MutatedPolicyStore;
+use YorvoID\PolicyTesting\Mutation\PolicyMutation;
 use YorvoID\PolicyTesting\PolicyCase;
 use YorvoID\PolicyTesting\PolicyCases;
 use YorvoID\PolicyTesting\PolicyResult;
@@ -119,7 +122,7 @@ final class PolicyTestingBundleTest extends TestCase
         $suite = PolicyKernel::suite($kernel);
 
         self::assertSame([AcmeCases::class], array_map(static fn (PolicyCases $cases): string => $cases::class, $suite->cases));
-        self::assertCount(32, $suite->all());
+        self::assertCount(34, $suite->all());
     }
 
     public function testEmptiesTheStoresAndResetsTheServicesForEachCase(): void
@@ -168,12 +171,12 @@ final class PolicyTestingBundleTest extends TestCase
 
         self::assertSame(0, $tester->execute([]));
         self::assertStringContainsString('✔ An editor publishes', $tester->getDisplay());
-        self::assertStringContainsString('32 cases, 0 failed.', $tester->getDisplay());
+        self::assertStringContainsString('34 cases, 0 failed.', $tester->getDisplay());
 
         self::assertSame(0, $tester->execute(['--format' => 'json']));
         $report = json_decode($tester->getDisplay(), true, flags: \JSON_THROW_ON_ERROR);
         self::assertIsArray($report);
-        self::assertSame([32, 0], [$report['passed'] ?? null, $report['failed'] ?? null]);
+        self::assertSame([34, 0], [$report['passed'] ?? null, $report['failed'] ?? null]);
         self::assertIsArray($report['cases'] ?? null);
         self::assertSame(['description' => 'Anyone views pages', 'passed' => true, 'expected' => 'permit', 'verdict' => 'permit', 'failure' => null], $report['cases'][0] ?? null);
 
@@ -206,6 +209,28 @@ final class PolicyTestingBundleTest extends TestCase
         self::assertStringContainsString('"expected": "permit",'."\n".'            "verdict": null,', $json, 'Not decided: it couldn\'t be set up.');
     }
 
+    public function testThePolicyUnderTestIsBuiltThroughItsKernelsOneMutants(): void
+    {
+        $kernel = new TestKernel($this->directory, environment: YorvoIDPolicyTestingBundle::ENVIRONMENT);
+        $kernel->boot();
+        $this->kernels[] = $kernel;
+
+        try {
+            self::service($kernel, Mutants::class);
+            self::fail('The container made mutants of its own.');
+        } catch (ServiceNotFoundException $e) {
+            self::assertStringContainsString('is synthetic', $e->getMessage(), 'PolicyKernel sets them, so that they outlive a reboot.');
+        }
+
+        $first = PolicyKernel::underTest($kernel)->mutants;
+        self::assertNotNull($first);
+        self::assertSame($first, PolicyKernel::underTest($kernel)->mutants, 'The kernel\'s one.');
+
+        // Built at once: the seams are wired before any case runs.
+        $report = new PolicyMutation()->run(PolicyKernel::underTest($kernel), []);
+        self::assertNotSame([], $report->survived, 'With no cases, every mutant lives.');
+    }
+
     /**
      * @return list<PolicyElement>
      */
@@ -230,6 +255,11 @@ final class PolicyTestingBundleTest extends TestCase
         $kernel = new TestKernel($this->directory, environment: $environment);
         $kernel->boot();
         $this->kernels[] = $kernel;
+
+        // As every way into the policy under test does: the mutants it's built through.
+        if (YorvoIDPolicyTestingBundle::ENVIRONMENT === $environment) {
+            PolicyKernel::underTest($kernel);
+        }
 
         return $kernel;
     }
