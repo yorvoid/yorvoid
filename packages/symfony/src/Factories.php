@@ -13,8 +13,10 @@ use YorvoID\Core\Crypto\CryptoMode;
 use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Principal\Principal;
+use YorvoID\Core\Realm;
 use YorvoID\Flows\Flow;
 use YorvoID\Notifications\NotificationSettings;
 use YorvoID\Passkeys\ClonePolicy;
@@ -57,17 +59,20 @@ final class Factories
     }
 
     /**
-     * The crypto policy, refusing a FIPS mode in which the configured signing keys couldn't sign: without
-     * them, the security log's checkpoints stop (AUD-003), and a FIPS deployment would run without.
+     * The crypto policy, refusing a FIPS mode in which the active signing key couldn't sign: without it,
+     * the security log's checkpoints stop (AUD-003), and a FIPS deployment would run without. The shared
+     * key file is read here; per-realm rings, only by the doctor (KeyAlgorithmsCheck) and when used.
      *
-     * @throws IntegratorError When the FIPS mode can't be had, or its provider can't use the keys
+     * @throws IntegratorError When the FIPS mode can't be had, or its provider can't use the active key
      */
     public static function cryptoPolicy(string $mode, KeyFiles $keys): CryptoPolicy
     {
         $policy = CryptoPolicy::of($mode);
+        $file = $keys->isPerRealm() ? null : $keys->path(Realm::default());
 
-        if (CryptoMode::Fips === $policy->mode && !$policy->allowsEdDsa() && $keys->isConfigured()) {
-            throw new IntegratorError(\sprintf('The FIPS crypto mode is configured with signing keys, but %s has no Ed25519, which they sign with: the security log\'s checkpoints would stop.', $policy->provider()->openssl), 'Use a FIPS provider with EdDSA (FIPS 186-5), or leave the FIPS mode until YorvoID\'s ES256 keys are released.', 'concepts/cryptography.md#fips-mode');
+        // Reading the ring refuses an active key this OpenSSL can't sign with (SigningKey).
+        if (CryptoMode::Fips === $policy->mode && !$policy->allowsEdDsa() && null !== $file && file_exists($file)) {
+            KeyRing::fromFile($file);
         }
 
         return $policy;

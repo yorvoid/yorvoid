@@ -29,6 +29,7 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Key\KeyAlgorithm;
 use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Key\SigningKey;
 use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
@@ -160,16 +161,27 @@ final class BundleTest extends TestCase
                 return;
             }
 
-            // Its provider has no Ed25519: with signing keys, the checkpoints would stop, so it refuses (AUD-003).
+            // Its provider has no Ed25519: with an Ed25519 key active, the checkpoints would stop, so it refuses (AUD-003).
             new Filesystem()->mkdir($this->directory, 0o700);
-            file_put_contents($keys = $this->directory.'/keys.json', '{"keys": []}');
+            $seed = random_bytes(32);
+            $base64url = static fn (string $bytes): string => rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
+            file_put_contents($keys = $this->directory.'/keys.json', json_encode(['keys' => [['kid' => 'k', 'kty' => 'OKP', 'crv' => 'Ed25519', 'alg' => 'EdDSA', 'status' => 'verify-only', 'x' => $base64url(sodium_crypto_sign_publickey(sodium_crypto_sign_seed_keypair($seed)))]]]));
+            chmod($keys, 0o600);
+            $active = (string) file_get_contents($keys);
+            file_put_contents($keys, str_replace('"verify-only"', '"active"', substr($active, 0, -3)).',"d":"'.$base64url($seed).'"}]}');
 
             try {
                 $this->boot(['crypto' => ['mode' => 'fips'], 'keys' => ['file' => $keys]], fresh: true);
-                self::fail('It started with keys it can\'t sign with.');
+                self::fail('It started with a key it can\'t sign with.');
             } catch (IntegratorError $e) {
-                self::assertStringContainsString('has no Ed25519, which they sign with: the security log\'s checkpoints would stop.', $e->getMessage());
+                self::assertStringContainsString('The key "k" is active, but this OpenSSL can\'t sign with EdDSA', $e->getMessage());
             }
+
+            // With an ES256 key active, it starts.
+            new KeyRing([SigningKey::generate('es', algorithm: KeyAlgorithm::ES256)])->toFile($keys);
+            $started = $this->boot(['crypto' => ['mode' => 'fips'], 'keys' => ['file' => $keys]], fresh: true)->get(CryptoPolicy::class);
+            \assert($started instanceof CryptoPolicy);
+            self::assertSame(CryptoMode::Fips, $started->mode);
 
             return;
         }

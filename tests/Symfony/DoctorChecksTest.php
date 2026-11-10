@@ -6,6 +6,7 @@ namespace YorvoID\Tests\Symfony;
 
 use Doctrine\DBAL\Exception as DbalException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\Filesystem\Filesystem;
@@ -16,10 +17,16 @@ use YorvoID\Core\Crypto\CryptoMode;
 use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Crypto\CryptoProvider;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Key\KeyAlgorithm;
+use YorvoID\Core\Key\KeyRing;
+use YorvoID\Core\Key\SigningKey;
 use YorvoID\Core\Log\Checkpoint\Checkpoint;
 use YorvoID\Core\Log\Checkpoint\FileCheckpoints;
+use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
+use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Core\Storage\Migration\Migrator;
 use YorvoID\Symfony\Doctor\AuditCheck;
 use YorvoID\Symfony\Doctor\Check;
@@ -29,6 +36,7 @@ use YorvoID\Symfony\Doctor\CookiesCheck;
 use YorvoID\Symfony\Doctor\CryptoCheck;
 use YorvoID\Symfony\Doctor\EnvironmentCheck;
 use YorvoID\Symfony\Doctor\Finding;
+use YorvoID\Symfony\Doctor\KeyAlgorithmsCheck;
 use YorvoID\Symfony\Doctor\LogCheckpointsCheck;
 use YorvoID\Symfony\Doctor\LogGrantsCheck;
 use YorvoID\Symfony\Doctor\MailerCheck;
@@ -36,10 +44,12 @@ use YorvoID\Symfony\Doctor\MigrationsCheck;
 use YorvoID\Symfony\Doctor\PresetCheck;
 use YorvoID\Symfony\Doctor\ProxiesCheck;
 use YorvoID\Symfony\Doctor\TestHelpersCheck;
+use YorvoID\Symfony\Key\ConfiguredCheckpoints;
 use YorvoID\Symfony\Key\KeyFiles;
 use YorvoID\Symfony\Migrations;
 use YorvoID\Symfony\Presets;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\RecordingDispatcher;
 
 /**
  * yorvoid:doctor's checks on their own, for what an application's test kernel can't set up: other
@@ -281,6 +291,28 @@ final class DoctorChecksTest extends DatabaseTestCase
 
         $this->expectException(IntegratorError::class);
         iterator_to_array($check(CryptoMode::Fips, $provider(false, true, false))->findings());
+    }
+
+    #[Group('ed25519-keys')]
+    public function testInTheFipsModeWithoutEdDsaAnActiveEd25519KeyInAnyRealmIsAProblem(): void
+    {
+        $directory = \sprintf('%s/yorvoid-rings-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
+        new Filesystem()->mkdir($directory, 0o700);
+
+        try {
+            new KeyRing([SigningKey::generate('a')])->toFile($directory.'/acme.json');
+            new KeyRing([SigningKey::generate('g', algorithm: KeyAlgorithm::ES256)])->toFile($directory.'/globex.json');
+            $store = new InMemorySecurityLogStore();
+            $log = new SecurityLog($store, new InMemoryTransactions());
+            $check = static fn (CryptoPolicy $crypto): KeyAlgorithmsCheck => new KeyAlgorithmsCheck(new ConfiguredCheckpoints($store, $log, new KeyFiles(null, true, $directory), null, false, new MockClock(), $crypto, new RecordingDispatcher()), $directory);
+
+            $findings = iterator_to_array($check(CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.7', true, true, false, null)))->findings(), false);
+            self::assertSame(['The active signing key of the realm "acme" is Ed25519, which this FIPS provider doesn\'t have: its checkpoints can\'t be taken.'], array_map(static fn (Finding $finding): string => $finding->what, $findings));
+            self::assertTrue($findings[0]->problem);
+            self::assertSame([], $this->whats($check(CryptoPolicy::standard())), 'In the standard mode, Ed25519 signs.');
+        } finally {
+            new Filesystem()->remove($directory);
+        }
     }
 
     public function testWarnsOfSettingsWeakerThanThePresetsOnly(): void

@@ -41,6 +41,8 @@ final class Es256KeyTest extends TestCase
         }
 
         self::assertFalse($key->verify('m', substr($key->sign('m'), 1)), 'Another length.');
+        $signature = $key->sign('m');
+        self::assertFalse($key->verify('m', substr($signature, 0, 32)."\0".substr($signature, 32)), 'The same r and s, padded to 65 bytes: only the 64-byte form is the signature.');
         self::assertFalse($key->verify('m', str_repeat("\0", 64)), 'r and s of zero, which OpenSSL refuses.');
         self::assertFalse($key->verify('m', str_repeat("\xff", 64)), 'r and s beyond the order.');
     }

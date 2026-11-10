@@ -63,4 +63,23 @@ $ring = $rings->forRealm($realm);
 
 ## Algorithms
 
-Ed25519 is the only algorithm today. Keys and signatures record theirs (`EdDSA`), so post-quantum signatures (ML-DSA) can be added beside it once PHP offers them, without changing what's already stored.
+A key is Ed25519 (`EdDSA`, the default) or ECDSA on P-256 (`ES256`), for a FIPS provider without EdDSA ([cryptography](cryptography.md)). Both give 64-byte signatures. A signature names its key's ID, and the key decides the algorithm, so one algorithm's signature is never taken for the other's.
+
+In the key set, an ES256 key is a JSON Web Key of type `EC` (RFC 7518 §6.2): `{"kty": "EC", "crv": "P-256", "alg": "ES256", "x", "y", "d"}`. In plain PHP: `SigningKey::generate($id, algorithm: KeyAlgorithm::ES256)`.
+
+`yorvoid:keys:rotate` adds the crypto policy's algorithm, Ed25519 in the standard mode and ES256 in the FIPS mode, unless `--algorithm` says otherwise. Post-quantum signatures (ML-DSA) can be added the same way once PHP offers them.
+
+## Moving to ES256
+
+A FIPS provider without EdDSA, such as OpenSSL 3.1.2's, can't sign with Ed25519 keys or check what they signed. Move to ES256 keys in the standard crypto mode, before switching to the FIPS mode:
+
+1. `yorvoid:keys:rotate --algorithm=ES256` adds the ES256 key, verify-only. Deploy the public key set as for any rotation.
+2. `yorvoid:keys:rotate` makes it active. Because its algorithm differs from the old key's, the rotation then **anchors** the realm: it verifies the log against every checkpoint and signs an anchor with the new key. If anything fails to verify, the key ring stays as it was.
+3. With a key ring shared by several realms, anchor the others too: `yorvoid:log:anchor --all`, or `--realm` for each. `yorvoid:doctor` names every realm that still needs it.
+4. Keep the old key, verify-only, as long as you keep its checkpoints. Then switch to the FIPS mode (`yorvoid.crypto.mode: fips`).
+
+In the FIPS mode, YorvoID refuses to start while an Ed25519 key is active in the shared key file. With a ring for each realm, `yorvoid:doctor` reports an active Ed25519 key in any realm as a problem.
+
+**What an anchor certifies.** A checkpoint commits to the hash of the entry it names, and the chain links every earlier entry into that hash. An anchor at entry *N* therefore covers entries 1 to *N* as the Ed25519 checkpoints before it did, and certifies the tail after the last Ed25519 checkpoint just as any new checkpoint does. Under a provider without EdDSA, the Ed25519 checkpoints are reported as not checkable here, never as valid or failed, and verification passes only if an anchor at or after them covers them. What's lost there is only *when* the log was in each earlier state; that stays checkable in the standard mode.
+
+An anchor is signed as an anchor (`yorvoid-security-log-anchor/1`), so no ordinary checkpoint can be taken for one: with a shared ring, cron's first ES256 checkpoint of a realm covers nothing before it. Checkpoints already kept are unchanged.

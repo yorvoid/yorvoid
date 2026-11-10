@@ -63,7 +63,19 @@ final readonly class SigningKey
                 throw new IntegratorError(\sprintf('The private part of the key "%s" isn\'t %s.', $id, KeyAlgorithm::EdDSA === $algorithm ? 'an Ed25519 seed' : 'a P-256 private key'), 'Use the 32-byte private part, or generate the key with YorvoID.', 'concepts/keys.md');
             }
 
-            if (!hash_equals(self::publicKeyOf($seed, $algorithm), $publicKey)) {
+            try {
+                $derived = self::publicKeyOf($seed, $algorithm);
+            } catch (\RuntimeException $e) {
+                // This OpenSSL can't use the algorithm, e.g. Ed25519 under a FIPS provider without EdDSA:
+                // a verify-only key is kept, for where it can be checked; one that signs can't be.
+                if (KeyStatus::Active === $status) {
+                    throw new IntegratorError(\sprintf('The key "%s" is active, but this OpenSSL can\'t sign with %s: %s', $id, $algorithm->value, $e->getMessage()), 'Under a FIPS provider without EdDSA, rotate to an ES256 key in the standard crypto mode first (yorvoid:keys:rotate --algorithm=ES256, twice) and anchor every realm (yorvoid:log:anchor --all).', 'concepts/keys.md#moving-to-es256');
+                }
+
+                $derived = $publicKey;
+            }
+
+            if (!hash_equals($derived, $publicKey)) {
                 throw new IntegratorError(\sprintf('The public and private parts of the key "%s" don\'t belong together.', $id), 'Check the key\'s "x", "y" and "d" values; they must come from the same generated key.', 'concepts/keys.md');
             }
         }

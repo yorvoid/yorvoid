@@ -39,6 +39,20 @@ php bin/console yorvoid:keys:rotate [options]
 | `--remove` | Remove this verify-only key, once nothing it signed still needs checking |  |
 | `--public` | Print the public key set to deploy where signatures are checked, and change nothing |  |
 | `--realm` | The realm whose keys to rotate, with yorvoid.keys.per_realm | `default` |
+| `--algorithm` | The new key's algorithm, ES256 or EdDSA: the crypto policy's by default |  |
+
+## `yorvoid:log:anchor`
+
+Verify the security log against all its checkpoints, then sign an anchor.
+
+```bash
+php bin/console yorvoid:log:anchor [options]
+```
+
+| Argument or option | | Default |
+|---|---|---|
+| `--realm` | The realm | `default` |
+| `--all` | Every realm the checkpoint file has checkpoints of |  |
 
 ## `yorvoid:log:checkpoint`
 

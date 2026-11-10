@@ -21,6 +21,9 @@ final readonly class AuditFailed
 
     public const string VERIFIER_LOG = 'verifier_log';
 
+    /** A checkpoint or an anchor of the security log (AUD-003) */
+    public const string CHECKPOINTS = 'checkpoints';
+
     /**
      * @param string     $log     Which log: one of the constants
      * @param Realm|null $realm   The realm the records were for, when it's one
