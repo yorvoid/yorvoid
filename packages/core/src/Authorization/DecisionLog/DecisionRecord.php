@@ -9,6 +9,7 @@ use YorvoID\Core\Authorization\Reason;
 use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\ViewingAs;
@@ -155,7 +156,7 @@ final readonly class DecisionRecord
 
     public function hash(): string
     {
-        return hash(self::ALGORITHM, $this->json());
+        return Digest::of(self::ALGORITHM, $this->json());
     }
 
     /**

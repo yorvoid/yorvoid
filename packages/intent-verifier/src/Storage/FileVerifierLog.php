@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\IntentVerifier\Storage;
 
 use YorvoID\IntentVerifier\CanonicalJson;
+use YorvoID\IntentVerifier\Digest;
 use YorvoID\IntentVerifier\VerifierLog;
 
 /**
@@ -99,7 +100,7 @@ final readonly class FileVerifierLog implements VerifierLog
             unset($entry['hash']);
             $entry['details'] = (object) $entry['details'];
 
-            if (!hash_equals(hash('sha256', CanonicalJson::encode($entry)), $hash) || CanonicalJson::encode([...$entry, 'hash' => $hash]) !== $line) {
+            if (!hash_equals(Digest::sha256(CanonicalJson::encode($entry)), $hash) || CanonicalJson::encode([...$entry, 'hash' => $hash]) !== $line) {
                 return false;
             }
 
@@ -118,7 +119,7 @@ final readonly class FileVerifierLog implements VerifierLog
     {
         $entry = ['at' => $at->getTimestamp(), 'details' => (object) $details, 'event' => $event, 'previous' => $previous];
         LockedFile::expect(0 === fseek($file, 0, \SEEK_END), 'The verifier\'s log', $this->path);
-        LockedFile::expect(fwrite($file, CanonicalJson::encode([...$entry, 'hash' => hash('sha256', CanonicalJson::encode($entry))])."\n"), 'The verifier\'s log', $this->path);
+        LockedFile::expect(fwrite($file, CanonicalJson::encode([...$entry, 'hash' => Digest::sha256(CanonicalJson::encode($entry))])."\n"), 'The verifier\'s log', $this->path);
     }
 
     /**

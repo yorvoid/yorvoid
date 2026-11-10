@@ -29,7 +29,7 @@
         "php": ">=8.4",
         "ext-intl": "*",
         "ext-mbstring": "*",
-        "ext-sodium": "*",
+        "ext-openssl": "*",
         "doctrine/dbal": "^4.3",
         "psr/cache": "^2.0 || ^3.0",
         "psr/clock": "^1.0",

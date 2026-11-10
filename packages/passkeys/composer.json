@@ -29,6 +29,7 @@
         "php": ">=8.4",
         "ext-filter": "*",
         "ext-openssl": "*",
+        "ext-sodium": "*",
         "doctrine/dbal": "^4.3",
         "psr/clock": "^1.0",
         "spomky-labs/cbor-php": "^3.4",

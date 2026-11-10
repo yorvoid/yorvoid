@@ -86,7 +86,7 @@ final readonly class KeyRegistry
      */
     public function createSecret(VerifierState $state, string $secret, \DateTimeImmutable $expiresAt): void
     {
-        $state->bootstrapSecretHash = hash('sha256', $secret);
+        $state->bootstrapSecretHash = Digest::sha256($secret);
         $state->bootstrapSecretExpiresAt = $expiresAt;
         $this->log->record('bootstrap_secret_created', ['keys' => \count($state->keys), 'expires_at' => $expiresAt->getTimestamp()], $this->clock->now());
     }

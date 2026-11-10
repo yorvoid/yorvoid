@@ -54,7 +54,7 @@ final readonly class IntentChecks
     {
         // Not one the verifier made: recorded by a short hash, whatever its size or encoding (FUZZ-08).
         if (1 !== preg_match(self::NONCE, $nonce)) {
-            $this->log->record('refused', ['nonce_hash' => substr(hash('sha256', $nonce), 0, 16), 'reason' => Refusal::UnknownIntent->value], $this->clock->now());
+            $this->log->record('refused', ['nonce_hash' => substr(Digest::sha256($nonce), 0, 16), 'reason' => Refusal::UnknownIntent->value], $this->clock->now());
 
             throw new IntentRefused(Refusal::UnknownIntent);
         }

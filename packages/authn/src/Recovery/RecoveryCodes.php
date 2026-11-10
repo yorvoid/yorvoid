@@ -28,6 +28,7 @@ use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\HeldAfterRecovery;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
@@ -283,6 +284,6 @@ final readonly class RecoveryCodes implements OperationHandler
 
     private static function hash(#[\SensitiveParameter] string $code): string
     {
-        return hash('sha256', HumanCode::normalize($code));
+        return Digest::sha256(HumanCode::normalize($code));
     }
 }

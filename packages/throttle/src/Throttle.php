@@ -6,6 +6,7 @@ namespace YorvoID\Throttle;
 
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
+use YorvoID\Core\Crypto\Digest;
 
 /**
  * Throttling (ATN-040, ATN-041): at most so many attempts per period, per key, e.g. per account and
@@ -108,6 +109,6 @@ final readonly class Throttle
 
     private static function hash(string $key): string
     {
-        return hash('sha256', $key);
+        return Digest::sha256($key);
     }
 }

@@ -53,6 +53,6 @@ final readonly class Intent
      */
     public function challenge(): string
     {
-        return hash('sha256', self::DOMAIN.$this->canonical(), true);
+        return Digest::sha256(self::DOMAIN.$this->canonical(), true);
     }
 }
