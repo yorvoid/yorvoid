@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony\Templates;
 
+use YorvoID\Core\Authorization\IndeterminateReason;
+use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\WaitRemedy;
+use YorvoID\Core\Duration;
+use YorvoID\Core\Operation\Decision;
 use YorvoID\Flows\Problem;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\Flow\View\EmailVerificationView;
@@ -24,7 +29,7 @@ use YorvoID\Passkeys\Flow\View\StepUpView;
 final class Samples
 {
     /** The templates YorvoID ships, in "@YorvoID/flow/" */
-    public const array TEMPLATES = ['layout', 'fields', 'passkey', 'setup_code', 'passkey_registration', 'recovery_codes', 'invitation', 'verify_email', 'recovery_code', 'recovery_link', 'step_up', 'failed', 'expired'];
+    public const array TEMPLATES = ['layout', 'fields', 'passkey', 'setup_code', 'passkey_registration', 'recovery_codes', 'invitation', 'verify_email', 'recovery_code', 'recovery_link', 'step_up', 'failed', 'expired', 'refused'];
 
     private const string GET = '{"challenge":"c2FtcGxlLWNoYWxsZW5nZS1ub3QtZm9yLXVzZQ","rpId":"example.com","allowCredentials":[],"userVerification":"required","timeout":300000}';
 
@@ -62,7 +67,17 @@ final class Samples
             new Sample('step_up', 'signed_out', PasskeyFlows::STEP_UP, new StepUpView(null, 'acme.site.remove')),
             new Sample('failed', 'default', PasskeyFlows::INVITATION, null, [new Problem('yorvoid.flow.invitation.not_working')]),
             new Sample('expired', 'default', PasskeyFlows::SIGN_IN, null, [new Problem('yorvoid.flow.expired')]),
+            new Sample('refused', 'step_up', '', null, decision: self::refusal(Decision::deny('A recent proof is needed.', remedies: [new StepUpRemedy(Duration::minutes(5), operation: 'yorvoid.identifier.set')]))),
+            new Sample('refused', 'wait', '', null, decision: self::refusal(Decision::deny('The account was recovered recently.', remedies: [new WaitRemedy(new \DateTimeImmutable('+3 hours'))]))),
+            new Sample('refused', 'wait_and_step_up', '', null, decision: self::refusal(Decision::deny('Recovered, and no recent proof.', remedies: [new StepUpRemedy(Duration::minutes(5)), new WaitRemedy(new \DateTimeImmutable('+3 hours'))]))),
+            new Sample('refused', 'denied', '', null, decision: self::refusal(Decision::deny('No role gives it.'))),
+            new Sample('refused', 'indeterminate', '', null, decision: self::refusal(Decision::indeterminate([IndeterminateReason::StoreUnreachable], 'The policy store couldn\'t be read.'))),
         ];
+    }
+
+    private static function refusal(Decision $decision): Decision
+    {
+        return $decision->identified('019a6e2c-8a00-7000-8000-000000000001', new \DateTimeImmutable('2026-11-10T12:00:00Z'), []);
     }
 
     public static function find(string $template, string $state): ?Sample

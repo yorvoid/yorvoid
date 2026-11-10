@@ -230,6 +230,16 @@ describe('adding a passkey', () => {
     assert.deepEqual((await refusal(yorvoid.addPasskey('Laptop'))).stepUp, { operation: null, within: '15m' });
   });
 
+  test('says what would satisfy a refused operation', async () => {
+    const { server, yorvoid } = setUp();
+    const remedy = { name: 'wait', parameters: { until: '2026-11-10T15:00:00+00:00' }, message: 'In about 3 hours.', action: null };
+    server.on('/yorvoid/passkeys/options', json({ error: 'Before you can do this', not_permitted: { verdict: 'deny', decision: 'd-1', remedies: [remedy] } }, 403));
+
+    const error = await refusal(yorvoid.addPasskey('Laptop'));
+
+    assert.deepEqual([error.code, error.message, error.status, error.notPermitted], ['not_permitted', 'Before you can do this', 403, { verdict: 'deny', decision: 'd-1', remedies: [remedy] }]);
+  });
+
   test('the authenticator may have one already', async () => {
     const { server, credentials, yorvoid } = setUp();
     server.on('/yorvoid/passkeys/options', { ceremony: 'c2', options: CREATION_OPTIONS });

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony\Templates;
 
+use YorvoID\Core\Operation\Decision;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\StepView;
 
@@ -23,8 +24,9 @@ final readonly class Sample
     /**
      * @param string        $template E.g. "passkey", for "@YorvoID/flow/passkey.html.twig"
      * @param string        $state    E.g. "default", "problems", "can_skip"
-     * @param StepView|null $view     The step's view model; null for "failed" and "expired"
+     * @param StepView|null $view     The step's view model; null for "failed", "expired" and "refused"
      * @param list<Problem> $problems
+     * @param Decision|null $decision For "refused", the decision refused
      */
     public function __construct(
         public string $template,
@@ -32,6 +34,7 @@ final readonly class Sample
         public string $flow,
         public ?StepView $view,
         public array $problems = [],
+        public ?Decision $decision = null,
     ) {
     }
 }

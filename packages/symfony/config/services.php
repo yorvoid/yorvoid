@@ -153,6 +153,8 @@ use YorvoID\Symfony\Flow\SessionFlowStore;
 use YorvoID\Symfony\Key\ConfiguredCheckpoints;
 use YorvoID\Symfony\Key\KeyFiles;
 use YorvoID\Symfony\Limits;
+use YorvoID\Symfony\Remedy\NotPermittedListener;
+use YorvoID\Symfony\Remedy\RemedyPrompts;
 use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\RecoveryCodeAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\RecoveryLinkAuthenticator;
@@ -374,7 +376,11 @@ return static function (ContainerConfigurator $container): void {
     $services->set(FlowPages::class)
         ->arg('$translator', service('yorvoid.translator.used'))
         ->arg('$twig', service('twig')->nullOnInvalid())
-        ->arg('$script', param('yorvoid.flows.script'));
+        ->arg('$script', param('yorvoid.flows.script'))
+        ->arg('$remedies', service(RemedyPrompts::class));
+    // Refusals, for people (M2-10): after the application's own exception listeners, before Symfony's error page.
+    $services->set(RemedyPrompts::class)->arg('$translator', service('yorvoid.translator.used'));
+    $services->set(NotPermittedListener::class)->tag('kernel.event_listener', ['event' => 'kernel.exception', 'priority' => NotPermittedListener::PRIORITY]);
     $services->set(FlowController::class)->public()->tag('controller.service_arguments')
         ->arg('$completed', [])
         ->arg('$deviceCookie', param('yorvoid.cookies.device'))

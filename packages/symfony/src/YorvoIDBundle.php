@@ -47,6 +47,7 @@ use YorvoID\Symfony\Debug\SecretCaster;
 use YorvoID\Symfony\Flow\FlowCustomizer;
 use YorvoID\Symfony\Flow\FlowSource;
 use YorvoID\Symfony\Mail\SymfonyMailer;
+use YorvoID\Symfony\Remedy\NotPermittedListener;
 use YorvoID\Symfony\Security\PrincipalUsers;
 use YorvoID\Symfony\Twig\YorvoIDExtension;
 
@@ -138,13 +139,15 @@ final class YorvoIDBundle extends AbstractBundle
             ->validate()->ifTrue(static fn (mixed $value): bool => \is_array($value) && true === $value['enabled'] && (null === $value['application_name'] || null === $value['not_me_url'] || null === $value['from']))
             ->thenInvalid('Notifications need application_name, not_me_url and from; or turn them off with enabled: false.')->end();
         $path = static fn (NodeBuilder $node, string $name, string $default, string $info): NodeBuilder => $node->scalarNode($name)->defaultValue($default)->info($info)
-            ->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || !self::isLocalPath($value))->thenInvalid('%s is not a path on this site: start it with one "/", and use no "\\" or spaces.')->end()
+            ->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || !LocalPath::is($value))->thenInvalid('%s is not a path on this site: start it with one "/", and use no "\\" or spaces.')->end()
             ->end();
         $flows = $children->arrayNode('flows')->addDefaultsIfNotSet()->children();
         $path($flows, 'completed_path', '/', 'Where people go when a flow completes, e.g. after signing in');
         $flows->arrayNode('completed_paths')->useAttributeAsKey('flow')->info('Where to go after particular flows, e.g. {yorvoid.sign_in: /dashboard}')
-            ->scalarPrototype()->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || !self::isLocalPath($value))->thenInvalid('%s is not a path on this site: start it with one "/", and use no "\\" or spaces.')->end()->end()->end();
+            ->scalarPrototype()->validate()->ifTrue(static fn (mixed $value): bool => !\is_string($value) || !LocalPath::is($value))->thenInvalid('%s is not a path on this site: start it with one "/", and use no "\\" or spaces.')->end()->end()->end();
         $flows->scalarNode('script')->defaultValue('/bundles/yorvoid/browser/forms.js')->info('Where the pages load the browser client\'s form script from')->end();
+        $children->arrayNode('remedies')->addDefaultsIfNotSet()->children()
+            ->booleanNode('pages')->defaultTrue()->info('Whether an operation refused and not caught is answered with a page of what would satisfy it (403), or that it couldn\'t be checked (503); off, Symfony\'s error page shows')->end();
         $children->arrayNode('intents')->addDefaultsIfNotSet()->children()
             ->scalarNode('summaries_domain')->defaultValue('messages')->info('The translation domain of your operations\' summaries')->end();
         $children->arrayNode('ordered_conditions')->addDefaultsIfNotSet()->children()
@@ -213,6 +216,10 @@ final class YorvoIDBundle extends AbstractBundle
         // The flow pages' translations, when the application renders them with Twig.
         if (class_exists(AbstractExtension::class)) {
             $builder->register(YorvoIDExtension::class)->setAutowired(true)->setArgument('$translator', new Reference('yorvoid.translator.used'))->addTag('twig.extension');
+        }
+
+        if (true !== $settings['remedies.pages']) {
+            $builder->removeDefinition(NotPermittedListener::class);
         }
 
         $users = $settings['users'];
@@ -311,14 +318,5 @@ final class YorvoIDBundle extends AbstractBundle
         }
 
         return $flat;
-    }
-
-    /**
-     * Whether a configured path stays on this site. Browsers read "\" as "/", and drop tabs and line
-     * breaks from addresses, so "/\host", or "/", a tab and "/host", would lead to another site.
-     */
-    private static function isLocalPath(string $path): bool
-    {
-        return 1 === preg_match('#^/(?![/\\\\])[^\\\\\x00-\x20\x7f]*$#D', $path);
     }
 }

@@ -108,7 +108,7 @@ final class FlowPagesTest extends TestCase
         $messages = json_decode((string) $form->attr('data-yorvoid-messages'), true);
         self::assertIsArray($messages);
         self::assertSame('That was cancelled or took too long. Please try again.', $messages['cancelled']);
-        self::assertCount(13, $messages);
+        self::assertCount(14, $messages);
 
         $authenticator = new VirtualAuthenticator();
         $this->browser->submit($form->form(), ['response' => $authenticator->register((string) $form->attr('data-yorvoid-options')), 'label' => 'Laptop']);
@@ -287,6 +287,27 @@ final class FlowPagesTest extends TestCase
         $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove&within=60');
         self::assertMatchesRegularExpression('#^/yorvoid/flows/yorvoid\.step_up/#', (string) $this->browser->getResponse()->headers->get('Location'));
         self::assertSame('/stepped-up', $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove', 'within' => 'a minute'])['redirect']);
+    }
+
+    public function testAStepUpReturnsWhereItWasAskedToOnThisSiteOnly(): void
+    {
+        $this->boot(['flows' => ['completed_paths' => ['yorvoid.step_up' => '/stepped-up']]]);
+        [, $authenticator] = $this->account();
+        $this->signIn($authenticator);
+
+        // Signed in a moment ago, the step-up is done at once: back to the page that asked for it (M2-10).
+        self::assertSame('/projects?page=2', $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove', 'return' => '/projects?page=2'])['redirect']);
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove&return=%2Fprojects%3Fpage%3D2');
+        self::assertSame([303, '/projects?page=2'], [$this->statusCode(), $this->browser->getResponse()->headers->get('Location')]);
+        self::assertSame('/stepped-up', $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove'])['redirect'], 'Without one, where it\'s configured to.');
+
+        foreach (['//evil.example', '/\\evil.example', "/\t/evil.example", 'https://evil.example/', 'projects', '', '/'.str_repeat('a', 2048)] as $elsewhere) {
+            $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['return' => $elsewhere]);
+            self::assertSame(400, $this->statusCode(), json_encode($elsewhere, \JSON_THROW_ON_ERROR));
+        }
+
+        $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['return' => ['/projects']]);
+        self::assertSame(400, $this->statusCode(), 'Not a string.');
     }
 
     public function testExpiredAndUnknownFlows(): void

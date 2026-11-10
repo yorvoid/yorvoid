@@ -160,6 +160,35 @@ final readonly class AdminsFromSymfony implements RoleSource
 
 `admin` must be a declared role, here a super role. Without a role that has an ability, the operation throws `NotPermitted`. The console and jobs run operations as the host's `Operator`, which needs no ability.
 
+### Refusals for people
+
+A `NotPermitted` that your controller doesn't catch is answered for the person: a page saying what would satisfy the refusal, if anything, and a way to do it now (`@YorvoID/flow/refused.html.twig`, in the [reference templates](#the-reference-templates)).
+
+| The decision | Status | The page says |
+|---|---|---|
+| Deny, with [remedies](authorization.md#remedies) | 403 | Each remedy: "Confirm it's you, then try again", with a button to the step-up; "You can do this again in about 3 hours" |
+| Deny, without remedies | 403 | That the person doesn't have permission, and to ask whoever manages their account |
+| Indeterminate, or a Permit-offline the operation doesn't accept | 503 | That it couldn't be checked just now: monitoring sees a failure |
+
+Never why: a decision's reason is for the log, and saying which rule refused would describe your policy to whoever asks. The page shows the decision's ID as a reference, which finds the decision in the [decision log](security-log.md).
+
+Things to know:
+
+- **While there's a wait, there's no step-up button.** A step-up made during the wait would be stale when it ends, so the step-up is mentioned as what comes after.
+- **The step-up comes back.** After a GET, it returns to the page that was refused. After a POST, it returns to the page the form was on, if the `Referer` is this site, read with `trusted_hosts` and `trusted_proxies` as Symfony reads the request's host; otherwise to `flows.completed_path`. Only the path and query are kept, and a POST isn't replayed: the person tries again, and that's a new decision.
+- **JSON** for requests that ask for it (`Accept: application/json`): `{"error": "…", "not_permitted": {"verdict": "deny", "decision": "<id>", "remedies": [{"name", "parameters", "message", "action": {"url", "label"} | null}]}}`. The [browser client](browser-client.md#errors) reads it as `not_permitted`.
+- **Your own remedies** are shown with the message `yorvoid.remedy.<name>` in the `yorvoid` domain, with their parameters, if you translate it; otherwise as "Something more is needed". They have no button.
+- **Your exception listeners come first.** It listens at priority -64, after listeners at the default priority and before Symfony's error page, and leaves a refusal alone if one of yours answered it. Turn it off with `remedies.pages: false`.
+
+To show a refusal on a page of your own, `yorvoid_remedies(decision, return)` gives the same list as the JSON's `remedies`. Print its texts as they are: Twig escapes them.
+
+```twig
+{% for remedy in yorvoid_remedies(refused.decision, app.request.requestUri) %}
+    <p>{{ remedy.message }}</p>
+    {% if remedy.action %}<a href="{{ remedy.action.url }}">{{ remedy.action.label }}</a>{% endif %}
+{% endfor %}
+```
+
 ## Signing in
 
 The bundle gives you a user provider, a user checker and three authenticators. Put them in your own firewall, and import YorvoID's routes for the browser client:
@@ -266,6 +295,7 @@ Every step has an accessible, unstyled template, phone-first, in `@YorvoID/flow/
 | `recovery_link.html.twig` | `RecoveryLinkView` |
 | `step_up.html.twig` | `StepUpView` |
 | `failed.html.twig`, `expired.html.twig` | A flow that couldn't go on, or is gone |
+| `refused.html.twig` | An operation refused: what would satisfy it ([refusals for people](#refusals-for-people)) |
 
 - **Give them your look** by overriding `layout.html.twig`, or one block of it ([below](#changing-the-templates)).
 - **Change the wording through translations,** never in templates: every text is a message in the `yorvoid` domain, in English and German.

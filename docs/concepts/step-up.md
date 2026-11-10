@@ -48,6 +48,8 @@ $token = $passkeys->finishStepUp($session, $ceremonyId, $responseFromTheBrowser,
 // The session has a new token: replace the old one in its cookie, or in your session under a new ID.
 ```
 
+With the flow pages, send the person to `/yorvoid/flows/yorvoid.step_up`, with `operation`, `within` (seconds), `multi_factor=1` if it must be two factors, and `return`: the path to come back to once it's done, which must be a path on this site, or the request is refused. In Symfony, a refusal you don't catch links there itself ([refusals for people](symfony.md#refusals-for-people)).
+
 The proof is added to the session's [authentication context](sessions.md), and the session gets a new token: the old one stops working (SES-002). `SessionSteppedUp` follows the commit. A session's context keeps only the latest of identical proofs, so a long session doesn't grow with every step-up.
 
 ## The cool-down after a recovery

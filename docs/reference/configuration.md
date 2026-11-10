@@ -143,6 +143,10 @@ yorvoid:
 
         # Where the pages load the browser client's form script from
         script:               /bundles/yorvoid/browser/forms.js
+    remedies:
+
+        # Whether an operation refused and not caught is answered with a page of what would satisfy it (403), or that it couldn't be checked (503); off, Symfony's error page shows
+        pages:                true
     intents:
 
         # The translation domain of your operations' summaries
