@@ -108,11 +108,10 @@ final readonly class InMemoryStoresPass implements CompilerPassInterface
     {
         $container->setDefinition(InMemoryStorage::class, new Definition(InMemoryStorage::class));
 
+        // Set by PolicyKernel, so that it outlives a reboot: a mutant that changes the schema needs the
+        // services built again (Mutants::schemaKey()).
         $mutants = new Reference(Mutants::class);
-        $container->setDefinition(Mutants::class, new Definition(Mutants::class)
-            ->addMethodCall('catalogue', [new Reference(PolicyCatalogue::class)])
-            ->addMethodCall('schema', [new Reference(RelationSchema::class)])
-            ->setPublic(true));
+        $container->setDefinition(Mutants::class, new Definition(Mutants::class)->setSynthetic(true)->setPublic(true));
 
         foreach (self::STORES as $interface => $store) {
             // In place of the bridge's alias, as public as it was.
@@ -131,6 +130,12 @@ final readonly class InMemoryStoresPass implements CompilerPassInterface
         $evaluator = self::evaluator($container);
         $evaluator->replaceArgument(0, new Definition(AuthorityCheck::class)->setFactory([$mutants, 'authority'])->setArguments([$evaluator->getArgument(0)]));
         $evaluator->replaceArgument(3, new Definition('array')->setFactory([$mutants, 'elements'])->setArguments([$evaluator->getArgument(3)]));
+
+        // The catalogue and the schema, through the mutants, as they're built.
+        foreach ([PolicyCatalogue::class => 'catalogue', RelationSchema::class => 'schema'] as $id => $seam) {
+            $built = $container->findDefinition($id);
+            $container->setDefinition($id, new Definition($id)->setFactory([$mutants, $seam])->setArguments([$built])->setPublic($built->isPublic()));
+        }
 
         $container->setDefinition('yorvoid.connection', new Definition(Connection::class)->setFactory([Stores::class, 'noDatabase']));
         $container->setDefinition(Stores::class, new Definition(Stores::class)->setArguments([new Reference(InMemoryStorage::class), new Reference('services_resetter')])->setPublic(true));

@@ -16,8 +16,8 @@ namespace YorvoID\PolicyTesting\Mutation;
 final readonly class Mutant
 {
     /**
-     * @param string|null $subject The element or the ability it changes
-     * @param string|null $role    The role it changes
+     * @param string|null $subject The element or the ability it changes; for an implication, "type#relation"
+     * @param string|null $role    The role it changes; for an implication, the relation that implied it
      */
     public function __construct(
         public MutationOperator $operator,
@@ -49,6 +49,7 @@ final readonly class Mutant
             MutationOperator::ScopeWidens => 'A role on a resource counts in the whole realm.',
             MutationOperator::GroupsDontCount => 'Roles and relations through a group don\'t reach its members.',
             MutationOperator::ParentsDontCount => 'Roles and relations on a parent don\'t reach its children.',
+            MutationOperator::DropImplication => \sprintf('"%s" no longer comes with "%s".', $this->subject, $this->role),
             MutationOperator::AuthorityOff => 'An actor that isn\'t active passes the authority check.',
         };
     }

@@ -5,12 +5,9 @@ declare(strict_types=1);
 namespace YorvoID\Policy\Rule;
 
 use YorvoID\Core\Authorization\ForbidElement;
-use YorvoID\Core\Authorization\Ground;
-use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PermitElement;
+use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Authorization\Request;
-use YorvoID\Core\Authorization\Truth;
-use YorvoID\Core\Operation\AuthorizedBy;
 
 /**
  * A rule as the evaluator's elements: a forbid ("<name>:forbid") that holds when it refuses and is
@@ -36,71 +33,20 @@ final readonly class RuleElements
             return $answers[$request] ??= $rule->decide($request);
         };
 
-        $permit = new readonly class($rule, $answer) implements PermitElement {
-            /**
-             * @param \Closure(Request): RuleAnswer $answer
-             */
-            public function __construct(
-                private Rule $rule,
-                private \Closure $answer,
-            ) {
-            }
-
-            public function name(): string
-            {
-                return $this->rule->name().':permit';
-            }
-
-            public function basis(): AuthorizedBy
-            {
-                return AuthorizedBy::Ability;
-            }
-
-            public function matches(Request $request): bool
-            {
-                return $this->rule->matches($request);
-            }
-
-            public function evaluate(Request $request): Truth
-            {
-                $answer = ($this->answer)($request);
-
-                return RuleOutcome::Permit === $answer->outcome ? Truth::holds($answer->detail, Ground::rule($this->rule->name()), ...$answer->grounds) : Truth::fails(\sprintf('The rule doesn\'t permit it (%s).', $answer->outcome->value));
-            }
-        };
-
-        $forbid = new readonly class($rule, $answer) implements ForbidElement {
-            /**
-             * @param \Closure(Request): RuleAnswer $answer
-             */
-            public function __construct(
-                private Rule $rule,
-                private \Closure $answer,
-            ) {
-            }
-
-            public function name(): string
-            {
-                return $this->rule->name().':forbid';
-            }
-
-            public function matches(Request $request): bool
-            {
-                return $this->rule->matches($request);
-            }
-
-            public function evaluate(Request $request): Truth
-            {
-                $answer = ($this->answer)($request);
-
-                return match ($answer->outcome) {
-                    RuleOutcome::Forbid => Truth::holds($answer->detail, Ground::rule($this->rule->name()), ...$answer->grounds),
-                    RuleOutcome::Unknown => Truth::unknown($answer->reason ?? IndeterminateReason::EvaluationError, $answer->detail)->grounded(Ground::rule($this->rule->name()), ...$answer->grounds),
-                    RuleOutcome::Permit, RuleOutcome::Abstain => Truth::fails(\sprintf('The rule doesn\'t refuse it (%s).', $answer->outcome->value)),
-                };
-            }
-        };
+        $permit = new RulePermitSide($rule, $answer);
+        $forbid = new RuleForbidSide($rule, $answer);
 
         return [$permit, $forbid];
+    }
+
+    /**
+     * Whether the element is a rule's permit side, which is never unknown: e.g. for mutation testing,
+     * which has nothing to make it fail where it couldn't tell.
+     *
+     * @internal Used by yorvoid/policy-testing; it changes only in a minor release
+     */
+    public static function isPermitSide(PolicyElement $element): bool
+    {
+        return $element instanceof RulePermitSide;
     }
 }

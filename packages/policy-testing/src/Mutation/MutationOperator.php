@@ -50,6 +50,9 @@ enum MutationOperator: string
     /** Roles and relations on a parent don't reach its children */
     case ParentsDontCount = 'parents_dont_count';
 
+    /** A relation is no longer implied by another: one of a relation's impliedBy goes */
+    case DropImplication = 'drop_implication';
+
     /** A suspended, deleted or invited actor passes the authority check */
     case AuthorityOff = 'authority_off';
 }

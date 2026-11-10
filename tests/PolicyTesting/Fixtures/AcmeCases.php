@@ -62,6 +62,12 @@ final readonly class AcmeCases implements PolicyCases
         yield PolicyCase::that('A page whose lock can\'t be read isn\'t published')->given(roles: ['editor'])->asks('acme.pages.publish', new ResourceRef('page', 'unreadable'))->indeterminate([IndeterminateReason::UnknownForbid, IndeterminateReason::MissingData]);
         // A site's viewers view its pages' drafts.
         yield PolicyCase::that('A viewer of a site views the drafts of its pages')->before(static fn (Realm $realm): Command => new AddRelation($realm, $page, 'parent', new Subject(new ResourceRef('site', '1'))))->given(relations: [[new ResourceRef('site', '1'), 'viewer']])->asks('acme.pages.view_drafts', $page)->permits();
+        // An editor of a page is its viewer; a server's admin is its viewer, and so of its sites and pages.
+        yield PolicyCase::that('An editor of a page views its drafts')->given(relations: [[$page, 'editor']])->asks('acme.pages.view_drafts', $page)->permits();
+        yield PolicyCase::that('A server\'s admin views the drafts of its pages')->before(
+            static fn (Realm $realm): Command => new AddRelation($realm, $page, 'parent', new Subject(new ResourceRef('site', '1'))),
+            static fn (Realm $realm): Command => new AddRelation($realm, new ResourceRef('site', '1'), 'parent', new Subject(new ResourceRef('server', '1'))),
+        )->given(relations: [[new ResourceRef('server', '1'), 'admin']])->asks('acme.pages.view_drafts', $page)->permits();
         yield PolicyCase::that('A role created in the realm has what it\'s granted')->before(
             static fn (Realm $realm): Command => new CreateRole($realm, 'reviewer', 'Reviewer'),
             static fn (Realm $realm): Command => new GrantAbilities($realm, 'reviewer', ['acme.pages.view_drafts']),

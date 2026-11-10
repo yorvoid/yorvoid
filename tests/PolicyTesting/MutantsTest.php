@@ -29,6 +29,9 @@ use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\PolicyDeclarations;
 use YorvoID\Policy\Role;
 use YorvoID\Policy\RoleAssignment;
+use YorvoID\Policy\Rule\Rule;
+use YorvoID\Policy\Rule\RuleAnswer;
+use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\PolicyTesting\Mutation\Mutant;
@@ -223,7 +226,24 @@ final class MutantsTest extends TestCase
     public function testMakesTheMutantsThePolicyHas(): void
     {
         $mutants = self::mutants(relations: false);
-        $mutants->elements([self::forbid('acme.locked', Truth::fails('Open.')), self::forbid('acme.rule:forbid', Truth::fails('No.')), self::permit('acme.rule:permit', Truth::holds('Yes.'))]);
+        $rule = new readonly class implements Rule {
+            public function name(): string
+            {
+                return 'acme.rule';
+            }
+
+            public function matches(Request $request): bool
+            {
+                return true;
+            }
+
+            public function decide(Request $request): RuleAnswer
+            {
+                return RuleAnswer::permit('Yes.');
+            }
+        };
+        // A permit of the application's own that's named like a rule's permit side is told apart by what it is.
+        $mutants->elements([self::forbid('acme.locked', Truth::fails('Open.')), ...RuleElements::of($rule), self::permit('acme.own:permit', Truth::holds('Yes.'))]);
         $mutants->authority(new StubAuthority(Truth::holds('valid')));
 
         self::assertSame([
@@ -247,6 +267,9 @@ final class MutantsTest extends TestCase
             'drop_forbid:acme.locked',
             'forbid_everything:acme.locked',
             'can_tell:acme.locked',
+            'permit_always:acme.own:permit',
+            'permit_never:acme.own:permit',
+            'can_tell:acme.own:permit',
             'drop_forbid:acme.rule:forbid',
             'forbid_everything:acme.rule:forbid',
             'can_tell:acme.rule:forbid',
@@ -298,6 +321,35 @@ final class MutantsTest extends TestCase
         $parent->elements([]);
         $parent->authority(new StubAuthority(Truth::holds('valid')));
         self::assertContains('parents_dont_count', array_map(static fn (Mutant $mutant): string => $mutant->id(), $parent->all()), 'Roles on a parent are followed through "parent".');
+    }
+
+    public function testDropsOneImplicationAtATime(): void
+    {
+        $schema = RelationSchema::of([self::types(
+            new ResourceType('page', [new RelationDefinition('owner'), new RelationDefinition('editor', impliedBy: ['owner']), new RelationDefinition('viewer', impliedBy: ['editor', 'owner'])]),
+            new ResourceType('site', [new RelationDefinition('editor'), new RelationDefinition('viewer', impliedBy: ['editor'])]),
+        )]);
+        $mutants = self::mutants(schema: $schema);
+        $mutants->elements([]);
+        $mutants->authority(new StubAuthority(Truth::holds('valid')));
+        $dropped = array_values(array_filter($mutants->all(), static fn (Mutant $mutant): bool => MutationOperator::DropImplication === $mutant->operator));
+
+        self::assertSame(['drop_implication:page#editor:owner', 'drop_implication:page#viewer:editor', 'drop_implication:page#viewer:owner', 'drop_implication:site#viewer:editor'], array_map(static fn (Mutant $mutant): string => $mutant->id(), $dropped));
+        self::assertSame('"page#viewer" no longer comes with "editor".', $dropped[1]->description());
+        self::assertSame($schema, $mutants->schema($schema), 'With no mutant on, the schema itself.');
+        self::assertNull($mutants->schemaKey());
+
+        $mutants->activate($dropped[1]);
+        $mutated = $mutants->schema($schema);
+        self::assertSame('drop_implication:page#viewer:editor', $mutants->schemaKey());
+        self::assertSame(['owner'], $mutated->relation('page', 'viewer')?->impliedBy);
+        self::assertSame(['owner'], $mutated->relation('page', 'editor')?->impliedBy, 'Only that implication.');
+        self::assertSame(['editor'], $mutated->relation('site', 'viewer')?->impliedBy, 'Only in its type.');
+        self::assertSame(['editor', 'owner'], $schema->relation('page', 'viewer')?->impliedBy, 'The schema itself is as it was.');
+
+        $mutants->activate(new Mutant(MutationOperator::Widen, 'acme.read', 'reader'));
+        self::assertSame($schema, $mutants->schema($schema), 'Another mutant leaves the schema.');
+        self::assertNull($mutants->schemaKey());
     }
 
     /**
