@@ -6,11 +6,14 @@ namespace YorvoID\Core\Log;
 
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Symfony\Component\Clock\NativeClock;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
+use YorvoID\Core\Log\Event\AuditFailed;
 use YorvoID\Core\Log\Event\SecurityLogEntryRecorded;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Principal\PrincipalId;
@@ -29,11 +32,17 @@ use YorvoID\Core\Storage\Transactions;
  * Every entry recorded while an operation runs cites the decision that let it run: its ID, and the hash
  * of its record in the decision log. The chain then proves which decision allowed each change (ADR-09).
  *
+ * An entry that can't be written fails what it describes, in every configuration: the change and its
+ * entry are one transaction, so the log never lacks what was committed. That raises the audit alert
+ * ({@see AuditFailed}, AUD-006).
+ *
  * @api
  */
 final readonly class SecurityLog
 {
     private CurrentDecision $current;
+
+    private AuditAlarm $alarm;
 
     public function __construct(
         private SecurityLogStore $store,
@@ -41,8 +50,10 @@ final readonly class SecurityLog
         private EventDispatcherInterface $events = new NoEventListeners(),
         private IdGenerator $ids = new UuidV7Generator(),
         private ClockInterface $clock = new NativeClock(),
+        LoggerInterface $logger = new NullLogger(),
     ) {
         $this->current = new CurrentDecision();
+        $this->alarm = new AuditAlarm($events, $logger);
     }
 
     /**
@@ -112,28 +123,34 @@ final readonly class SecurityLog
             $details['decision'] = $decision;
         }
 
-        return $this->transactions->run(function () use ($realm, $action, $outcome, $origin, $actor, $subjectType, $subjectId, $details): LogEntry {
-            $entry = $this->store->append($realm, fn (int $sequence, ?string $previousHash): LogEntry => LogEntry::create(
-                $realm,
-                $sequence,
-                $this->ids->next(),
-                $this->clock->now(),
-                $action,
-                $outcome,
-                $origin,
-                $actor,
-                $subjectType,
-                $subjectId,
-                $details,
-                $previousHash ?? self::genesis($realm),
-            ));
+        try {
+            return $this->transactions->run(function () use ($realm, $action, $outcome, $origin, $actor, $subjectType, $subjectId, $details): LogEntry {
+                $entry = $this->store->append($realm, fn (int $sequence, ?string $previousHash): LogEntry => LogEntry::create(
+                    $realm,
+                    $sequence,
+                    $this->ids->next(),
+                    $this->clock->now(),
+                    $action,
+                    $outcome,
+                    $origin,
+                    $actor,
+                    $subjectType,
+                    $subjectId,
+                    $details,
+                    $previousHash ?? self::genesis($realm),
+                ));
 
-            $this->transactions->afterCommit(function () use ($entry): void {
-                $this->events->dispatch(new SecurityLogEntryRecorded($entry));
+                $this->transactions->afterCommit(function () use ($entry): void {
+                    $this->events->dispatch(new SecurityLogEntryRecorded($entry));
+                });
+
+                return $entry;
             });
+        } catch (\Throwable $e) {
+            $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_LOG, $realm, 1, true, $e));
 
-            return $entry;
-        });
+            throw $e;
+        }
     }
 
     /**

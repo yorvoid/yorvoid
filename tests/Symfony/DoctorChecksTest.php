@@ -9,12 +9,16 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\Filesystem\Filesystem;
+use YorvoID\Core\Authorization\DecisionLog\AuditFailure;
+use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
+use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\Checkpoint\Checkpoint;
 use YorvoID\Core\Log\Checkpoint\FileCheckpoints;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Migration\Migrator;
+use YorvoID\Symfony\Doctor\AuditCheck;
 use YorvoID\Symfony\Doctor\Check;
 use YorvoID\Symfony\Doctor\ClockCheck;
 use YorvoID\Symfony\Doctor\ConfigurationCheck;
@@ -232,6 +236,26 @@ final class DoctorChecksTest extends DatabaseTestCase
         // The application's own mailer, maybe without Symfony Mailer: its transports aren't YorvoID's to check.
         self::assertSame([], iterator_to_array(new MailerCheck(true, 'security@example.com', null, false, own: true)->findings(), false));
         self::assertCount(1, iterator_to_array(new MailerCheck(true, 'security', null, false, own: true)->findings(), false), 'The address is checked all the same.');
+    }
+
+    public function testRefusingWithoutARecordNeedsItsOwnConnectionAndEveryPermitRecorded(): void
+    {
+        $database = $this->database('sqlite');
+        $shared = new DbalDecisionLogStore($database);
+        $apart = new DbalDecisionLogStore($database, $this->connect('sqlite'));
+
+        self::assertSame([], $this->whats(new AuditCheck(AuditFailure::Continue, $shared, 'none')), 'Continuing promises nothing more.');
+        self::assertSame('decisions continue when their record can\'t be written', new AuditCheck(AuditFailure::Continue, $shared, 'none')->summary());
+        self::assertSame('decisions refuse when their record can\'t be written', new AuditCheck(AuditFailure::Refuse, $apart, 'all')->summary());
+        self::assertSame([], $this->whats(new AuditCheck(AuditFailure::Refuse, $apart, 'all')));
+        self::assertSame([], $this->whats(new AuditCheck(AuditFailure::Refuse, new InMemoryDecisionLogStore(), 'all')), 'A store of another kind is its own to judge.');
+
+        $findings = iterator_to_array(new AuditCheck(AuditFailure::Refuse, $shared, 'sampled')->findings(), false);
+        self::assertSame([
+            'Decisions are written on the application\'s connection: a transaction of the application\'s that rolls back takes their records with it, after what they allowed may have happened.',
+            'Decisions refuse when their record can\'t be written, but not every Permit of an ability is recorded, so those go ahead unrecorded.',
+        ], array_map(static fn (Finding $finding): string => $finding->what, $findings));
+        self::assertFalse($findings[0]->problem || $findings[1]->problem, 'Warnings: it works, less safely than configured.');
     }
 
     public function testWarnsOfSettingsWeakerThanThePresetsOnly(): void

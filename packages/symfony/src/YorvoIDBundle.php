@@ -19,6 +19,7 @@ use Symfony\Component\Translation\Translator;
 use Symfony\Component\VarDumper\Cloner\AbstractCloner;
 use Twig\Extension\AbstractExtension;
 use YorvoID\Authn\Session\Sessions;
+use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Secret;
@@ -92,7 +93,10 @@ final class YorvoIDBundle extends AbstractBundle
             ->booleanNode('checkpoint_logger')->defaultFalse()->info('Whether checkpoints also go to the application\'s logger, for a pipeline that ships logs elsewhere')->end();
         $children->arrayNode('decision_log')->addDefaultsIfNotSet()->children()
             ->enumNode('permits')->values(['none', 'sampled', 'all'])->defaultValue('none')->info('Which permits of abilities are recorded: refusals, Indeterminate and every operation\'s decision always are')->end()
-            ->floatNode('sample_rate')->min(0.0)->max(1.0)->defaultValue(0.01)->info('With permits: sampled, the share of requests whose permits are recorded')->end();
+            ->floatNode('sample_rate')->min(0.0)->max(1.0)->defaultValue(0.01)->info('With permits: sampled, the share of requests whose permits are recorded')->end()
+            ->scalarNode('connection')->defaultNull()->info('A DoctrineBundle connection of its own to the same database, which writes decisions outside the application\'s transactions: give one with audit.on_failure: refuse')->end();
+        $children->arrayNode('audit')->addDefaultsIfNotSet()->children()
+            ->enumNode('on_failure')->values(['continue', 'refuse'])->defaultValue('continue')->info('What a decision whose record can\'t be written does: continue, or refuse, so that nothing is permitted without its record (AUD-006). The alert is raised either way')->end();
         $children->arrayNode('cache')->addDefaultsIfNotSet()->children()
             ->scalarNode('pool')->defaultValue(self::CACHE_POOL)->info('The PSR-6 pool that servers share for what decisions read: roles, assignments, relations. yorvoid.cache is on cache.app; null keeps them for the request only')->end();
         $children->arrayNode('cookies')->addDefaultsIfNotSet()->children()
@@ -181,6 +185,12 @@ final class YorvoIDBundle extends AbstractBundle
         // DoctrineBundle adds a copy of it to that connection, as "<id>.<connection>": the one that sees the commits.
         $builder->getDefinition('yorvoid.transaction_middleware')->addTag('doctrine.middleware', ['connection' => $connection]);
         $builder->getDefinition(DbalTransactions::class)->setArgument(1, new Reference('yorvoid.transaction_middleware.'.$connection));
+        $decisions = $settings['decision_log.connection'];
+
+        if (null !== $decisions) {
+            \assert(\is_string($decisions));
+            $builder->getDefinition(DbalDecisionLogStore::class)->setArgument(1, new Reference(\sprintf('doctrine.dbal.%s_connection', $decisions)));
+        }
 
         $completed = $settings['flows.completed_paths'];
         \assert(\is_array($completed));

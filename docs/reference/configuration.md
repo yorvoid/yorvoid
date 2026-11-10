@@ -40,6 +40,13 @@ yorvoid:
 
         # With permits: sampled, the share of requests whose permits are recorded
         sample_rate:          0.01
+
+        # A DoctrineBundle connection of its own to the same database, which writes decisions outside the application's transactions: give one with audit.on_failure: refuse
+        connection:           null
+    audit:
+
+        # What a decision whose record can't be written does: continue, or refuse, so that nothing is permitted without its record (AUD-006). The alert is raised either way
+        on_failure:           continue # One of "continue"; "refuse"
     cache:
 
         # The PSR-6 pool that servers share for what decisions read: roles, assignments, relations. yorvoid.cache is on cache.app; null keeps them for the request only

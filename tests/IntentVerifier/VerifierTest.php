@@ -23,6 +23,7 @@ use YorvoID\IntentVerifier\Storage\InMemoryVerifierLog;
 use YorvoID\IntentVerifier\Storage\InMemoryVerifierStore;
 use YorvoID\IntentVerifier\Verifier;
 use YorvoID\IntentVerifier\VerifierConfig;
+use YorvoID\IntentVerifier\VerifierLog;
 use YorvoID\IntentVerifier\VerifierNotice;
 use YorvoID\IntentVerifier\VerifierNotifier;
 use YorvoID\IntentVerifier\VerifierStore;
@@ -83,6 +84,49 @@ final class VerifierTest extends TestCase
         // The secret works once.
         [$again, $other] = $this->registered($verifier, $this->owner, 'Passkey', true);
         $this->refused(Refusal::InvalidBootstrapSecret, fn () => $verifier->bootstrap($secret, $again->intent->nonce, $this->owner->signIn($again->options, $other)));
+    }
+
+    public function testAnEntryThatCantBeWrittenRefusesWhatItWasForAndAlertsTheOwners(): void
+    {
+        $failing = new class implements VerifierLog {
+            public function record(string $event, array $details, \DateTimeImmutable $at): void
+            {
+                throw new \RuntimeException('The disk is full.');
+            }
+
+            public function usedNonce(string $nonce, \DateTimeImmutable $since): bool
+            {
+                return false;
+            }
+        };
+        $notifier = new CollectingNotifier();
+        $clock = new MockClock('2026-11-10 18:00:00 UTC');
+        $verifier = new Verifier(self::config(86400), self::policy(), new InMemoryVerifierStore(), $failing, $notifier, $clock);
+
+        try {
+            $verifier->createBootstrapSecret(60);
+            self::fail('It was created without its entry.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('The disk is full.', $e->getMessage());
+        }
+
+        $notice = $notifier->notices[0] ?? null;
+        self::assertSame([VerifierNotice::AUDIT_FAILED, 'The "bootstrap_secret_created" entry couldn\'t be written: The disk is full.', $clock->now()->getTimestamp()], [$notice?->event, $notice?->error, $notice?->at->getTimestamp()]);
+        self::assertCount(1, $notifier->notices, 'Nothing else was done.');
+
+        $silent = new class implements VerifierNotifier {
+            public function notify(VerifierNotice $notice): void
+            {
+                throw new \LogicException('The mail is down too.');
+            }
+        };
+
+        try {
+            new Verifier(self::config(86400), self::policy(), new InMemoryVerifierStore(), $failing, $silent, $clock)->createBootstrapSecret(60);
+            self::fail('It was created without its entry.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('The disk is full.', $e->getMessage(), 'The log\'s failure is the one reported.');
+        }
     }
 
     public function testABootstrapSecretExpires(): void

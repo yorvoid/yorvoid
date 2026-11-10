@@ -14,6 +14,7 @@ use Symfony\Contracts\Service\ServiceProviderInterface;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Symfony\Doctor\Check;
 use YorvoID\Symfony\Doctor\Finding;
+use YorvoID\Symfony\Doctor\Reports;
 
 /**
  * Checks YorvoID's setup in the application, and says how to fix each problem (PLT-081): the
@@ -47,14 +48,15 @@ final class DoctorCommand extends Command
 
         foreach (array_keys($this->checks->getProvidedServices()) as $name) {
             $findings = $this->findings($name);
+            $title = $name.$this->summary($name);
 
             if ([] === $findings) {
-                $io->writeln(\sprintf(' <info>✔</info> %s', $name));
+                $io->writeln(\sprintf(' <info>✔</info> %s', $title));
 
                 continue;
             }
 
-            $io->writeln(\sprintf(' %s %s', array_any($findings, static fn (Finding $finding): bool => $finding->problem) ? '<error>✘</error>' : '<comment>!</comment>', $name));
+            $io->writeln(\sprintf(' %s %s', array_any($findings, static fn (Finding $finding): bool => $finding->problem) ? '<error>✘</error>' : '<comment>!</comment>', $title));
 
             foreach ($findings as $finding) {
                 $finding->problem ? ++$problems : ++$warnings;
@@ -83,6 +85,21 @@ final class DoctorCommand extends Command
         $io->warning($summary);
 
         return true === $input->getOption('strict') ? Command::FAILURE : Command::SUCCESS;
+    }
+
+    /**
+     * What a check that reports says, after its name.
+     */
+    private function summary(string $name): string
+    {
+        try {
+            $check = $this->checks->get($name);
+        } catch (\Throwable) {
+            // The findings report it.
+            return '';
+        }
+
+        return $check instanceof Reports ? ': '.$check->summary() : '';
     }
 
     /**

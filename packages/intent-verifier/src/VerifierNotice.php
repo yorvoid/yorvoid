@@ -29,11 +29,15 @@ final readonly class VerifierNotice
     /** The host's root created a bootstrap secret: the way to add a key without any other */
     public const string BOOTSTRAP_SECRET_CREATED = 'bootstrap_secret_created';
 
+    /** An entry of the verifier's log couldn't be written, so what it was for was refused (AUD-006): see $error */
+    public const string AUDIT_FAILED = 'audit_failed';
+
     /**
      * @param string         $event  One of the constants above
      * @param Intent|null    $intent The intent signed, if any
      * @param Key|null       $key    The key that signed, or that was added or removed
      * @param KeyChange|null $change The change to the keys, for the key-change events
+     * @param string|null    $error  What failed, for "audit_failed"
      */
     public function __construct(
         public string $event,
@@ -41,6 +45,7 @@ final readonly class VerifierNotice
         public ?Key $key,
         public \DateTimeImmutable $at,
         public ?KeyChange $change = null,
+        public ?string $error = null,
     ) {
     }
 }

@@ -63,6 +63,7 @@ final class DoctorTest extends TestCase
 
         self::assertStringContainsString('YorvoID\'s setup is ready.', $display);
         self::assertStringNotContainsString('0 problems', $display);
+        self::assertStringContainsString('✔ Audit failures: decisions continue when their record can\'t be written', $display, 'A check that reports says what it found.');
     }
 
     public function testWarnsWhereTheConfigurationFallsShortOfItsAssuranceLevel(): void

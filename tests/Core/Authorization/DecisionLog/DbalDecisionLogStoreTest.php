@@ -48,4 +48,32 @@ final class DbalDecisionLogStoreTest extends DatabaseTestCase
             }
         }
     }
+
+    /**
+     * With AuditFailure::Refuse, a record must be durable when the decision is returned: on a connection
+     * of its own, a rollback of the application's doesn't take it back; on the application's, it does.
+     */
+    #[DataProvider('platforms')]
+    public function testARecordWrittenApartOutlivesTheApplicationsRollback(string $platform): void
+    {
+        $database = $this->stack($platform)->database;
+        \assert($database instanceof Database);
+        $apart = new DbalDecisionLogStore($database, $this->connect($platform));
+        $shared = new DbalDecisionLogStore($database);
+        $acme = new Realm('acme');
+        $at = new \DateTimeImmutable('2026-11-10 18:00:00 UTC');
+        $kept = new DecisionRecord('01a1bb94-1a77-7914-84c3-24e0b5f324d0', $acme, $at, 'ability', 'acme.pages.edit', null, null, 'permit', 'ability', 'A permit applies.', [], [], [], [], ['web', 'r']);
+        $lost = new DecisionRecord('01a1bb94-1a77-7914-84c3-24e0b5f324d1', $acme, $at, 'ability', 'acme.pages.edit', null, null, 'permit', 'ability', 'A permit applies.', [], [], [], [], ['web', 'r']);
+
+        self::assertTrue($apart->writesApart());
+        self::assertFalse($shared->writesApart());
+
+        $database->connection->beginTransaction();
+        $apart->add([$kept]);
+        $shared->add([$lost]);
+        $database->connection->rollBack();
+
+        self::assertSame($kept->hash(), $shared->find($acme, $kept->id)?->hash());
+        self::assertNull($shared->find($acme, $lost->id), 'On the application\'s connection, the rollback took it.');
+    }
 }

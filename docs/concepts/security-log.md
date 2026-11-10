@@ -98,7 +98,7 @@ What's recorded, and when:
 
 - **An operation's decision**, whatever it is, at once and before the operation runs, in a statement of its own. The operation's transaction starts afterwards, so a change rolled back still has its decision; if you call `Operations::run()` inside a transaction of your own, the decision is part of yours. If it can't be written, the operation doesn't run.
 - **An ability's refusal or Indeterminate**, always, and its permit as configured: none by default, all, or a sampled share of requests, chosen per correlation ID so a request is recorded whole or not at all. An ability declared with `recordsPermits: true` records its permits whatever the configuration, e.g. one for explaining someone else's access.
-- Abilities' records wait for the end of what asked for them and are written together: call `DecisionLog::flush()` when a request, command or job ends (in Symfony, `kernel.terminate`, `console.terminate` and Messenger's handled and failed messages do), and whenever 100 are waiting. That's best effort: a process that dies before then loses them, and a write that fails is logged as an error, not thrown.
+- Abilities' records wait for the end of what asked for them and are written together: call `DecisionLog::flush()` when a request, command or job ends (in Symfony, `kernel.terminate`, `console.terminate` and Messenger's handled and failed messages do), and whenever 100 are waiting. That's best effort: a process that dies before then loses them, and a write that fails raises the [audit alert](#when-a-record-cant-be-written), not an error.
 
 ```php
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
@@ -115,3 +115,57 @@ Every security-log entry recorded while an operation runs, and the entry of an o
 Old decisions are pruned by `yorvoid:purge` (`--keep-decisions`, 90 days by default), or `DecisionLog::purge()`. The security log keeps the hashes of those it cites.
 
 In Symfony, `yorvoid.decision_log.permits` (`none`, `sampled` or `all`) and `sample_rate` configure it. A `DecisionLogStore` of your own passes `DecisionLogStoreContract` ([storage](storage.md#stores-of-your-own)).
+
+## When a record can't be written
+
+A record that can't be written, because the database is down, the disk is full or the connection was lost, is an audit failure (AUD-006, NIST AU-5). What happens depends on the log:
+
+- **A security-log entry** fails the change it describes, always. The change and its entry are one transaction, so the log never lacks what was committed. This isn't configurable.
+- **An operation's decision** has to be written before the operation runs, in every mode.
+- **An ability's decision** goes ahead by default, and its record is written at the end of the request. Configured to refuse, it waits for its record (below).
+
+Whatever the mode, every failed write raises the **audit alert**:
+
+- a `critical` entry in the PSR-3 logger;
+- then an `AuditFailed` event: which log, the realm, how many records were lost, and whether what they were for was refused.
+
+Neither needs the database. Route them to whoever must act, e.g. a Monolog handler that pages, or a listener. A listener that throws is logged as an error and doesn't change the outcome.
+
+```php
+use YorvoID\Core\Log\Event\AuditFailed;
+
+$dispatcher->addListener(AuditFailed::class, static function (AuditFailed $failure) use ($pager): void {
+    $pager->page(sprintf('YorvoID lost %d %s record(s): %s', $failure->records, $failure->log, $failure->error->getMessage()));
+});
+```
+
+### Refusing without a record
+
+With `AuditFailure::Refuse` (in Symfony, `yorvoid.audit.on_failure: refuse`), nothing is permitted without its record:
+
+- Every decision that's recorded is written **before it's returned**. Nothing waits for the end of the request, and a batch from `decideAbilities()` is one write.
+- If the write fails, a Permit or Permit-offline becomes **Indeterminate** with the reason `audit_unavailable`. It keeps its ID, and a refused operation's security-log entry cites that ID.
+- A Deny stays a Deny.
+- A voter then denies access, and `Operations::run()` throws `NotPermitted`; the handler doesn't run.
+
+```php
+use YorvoID\Core\Authorization\DecisionLog\AuditFailure;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
+use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
+use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
+
+$decisions = new DecisionLog(
+    new DbalDecisionLogStore($database, $auditConnection),
+    PermitRecording::All,
+    onFailure: AuditFailure::Refuse,
+    events: $dispatcher,
+);
+```
+
+Two settings keep that promise:
+
+- **A connection of its own.** On the application's connection, a record written inside a transaction of yours (a Messenger handler with `doctrine_transaction`, say) is rolled back with it, after what it allowed may already have happened, e.g. an e-mail sent. Give `DbalDecisionLogStore` a second connection to the same database (in Symfony, `yorvoid.decision_log.connection`, the name of a DoctrineBundle connection). Its records are committed when the decision is returned. That applies to operations' decisions in either mode too. On SQLite the second connection waits while the first one writes, so use it there for tests only.
+- **Every Permit recorded.** A Permit that sampling leaves out isn't an audit record, so a failure can't refuse it. Set `permits: all` if every Permit must be on record.
+
+`yorvoid:doctor` says which mode is configured, and warns when refusing lacks either setting. Refusing costs one write per recorded decision, where continuing writes at most one per request.
+

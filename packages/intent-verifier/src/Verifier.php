@@ -59,17 +59,21 @@ final readonly class Verifier
 
     private KeyRegistry $registry;
 
+    /** The log given, raising the alert when it fails */
+    private VerifierLog $log;
+
     public function __construct(
         private VerifierConfig $config,
         private OperationPolicy $policy,
         private VerifierStore $store,
-        private VerifierLog $log,
+        VerifierLog $log,
         private VerifierNotifier $notifier,
         private ClockInterface $clock = new SystemClock(),
     ) {
+        $this->log = new AlertingVerifierLog($log, $notifier, $clock);
         $this->serializer = new WebauthnSerializerFactory(new AttestationStatementSupportManager())->create();
-        $this->checks = new IntentChecks($config, $log, $clock, $this->serializer);
-        $this->registry = new KeyRegistry($config, $log, $this->checks, $clock);
+        $this->checks = new IntentChecks($config, $this->log, $clock, $this->serializer);
+        $this->registry = new KeyRegistry($config, $this->log, $this->checks, $clock);
     }
 
     /**
