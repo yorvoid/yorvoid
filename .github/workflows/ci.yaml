@@ -149,6 +149,10 @@ jobs:
             php.cache-from=type=gha,scope=dev-${{ github.ref }}
             php.cache-from=type=gha,scope=dev-refs/heads/main
       - name: Build the FIPS-configured image
+        # On the development image just loaded: Docker's own builder sees the images it holds, where
+        # setup-buildx-action's container builder would look for it on Docker Hub.
+        env:
+          BUILDX_BUILDER: default
         run: docker compose --profile fips build php-fips
       - name: Start services
         run: |
