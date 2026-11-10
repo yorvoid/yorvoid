@@ -42,6 +42,8 @@ final readonly class RuleElements
     /**
      * Whether the element is a rule's permit side, which is never unknown: e.g. for mutation testing,
      * which has nothing to make it fail where it couldn't tell.
+     *
+     * @internal Used by yorvoid/policy-testing; it changes only in a minor release
      */
     public static function isPermitSide(PolicyElement $element): bool
     {
