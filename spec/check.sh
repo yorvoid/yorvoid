@@ -52,6 +52,9 @@ holds "decisions: the fixtures the PHP tests decide are the model's (extended co
 # Ordered conditions (XP-15) in both configurations; "node decisions/fixtures.mjs ordered >
 # decisions/fixtures-ordered.json".
 holds "decisions: the fixtures the PHP tests decide are the model's (ordered conditions)" sh -c 'node decisions/fixtures.mjs ordered | cmp -s - decisions/fixtures-ordered.json'
+# Beside them, a seeded sample of 10000 requests of 3 and 4 elements, which the model decides one by one
+# (enumerating 4 would be about 1.4M); "node decisions/ordered-sample.mjs > decisions/fixtures-ordered-sample.json".
+holds "decisions: the sample of larger ordered requests is the model's" sh -c 'node decisions/ordered-sample.mjs | cmp -s - decisions/fixtures-ordered-sample.json'
 # MP-1: the default configuration's fixtures are the enterprise behaviour, so they don't change when an
 # extension point is added. A change to them is a change of the default, and needs this hash changed too,
 # in review.
