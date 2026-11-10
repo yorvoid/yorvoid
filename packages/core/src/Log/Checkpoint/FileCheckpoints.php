@@ -42,6 +42,35 @@ final readonly class FileCheckpoints implements CheckpointSink, CheckpointSource
         }
     }
 
+    /**
+     * The realms the file has checkpoints of, in the order they first appear.
+     *
+     * @return list<Realm>
+     */
+    public function realms(): array
+    {
+        $handle = is_file($this->path) ? @fopen($this->path, 'r') : false;
+        $realms = [];
+
+        if (false === $handle) {
+            return [];
+        }
+
+        try {
+            while (false !== ($line = fgets($handle))) {
+                $checkpoint = Checkpoint::fromArray(json_decode($line, true));
+
+                if (null !== $checkpoint) {
+                    $realms[$checkpoint->realm->name] ??= $checkpoint->realm;
+                }
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        return array_values($realms);
+    }
+
     public function read(Realm $realm): iterable
     {
         $handle = is_file($this->path) ? @fopen($this->path, 'r') : false;

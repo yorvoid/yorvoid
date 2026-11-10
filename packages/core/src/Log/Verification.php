@@ -15,6 +15,8 @@ final readonly class Verification
         public int $entriesChecked,
         public ?int $brokenAt = null,
         public ?string $problem = null,
+        /** Checkpoints signed with a key this OpenSSL can't verify, e.g. Ed25519 under a FIPS provider without EdDSA, covered by an anchor */
+        public int $uncheckable = 0,
     ) {
     }
 

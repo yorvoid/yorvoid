@@ -6,7 +6,7 @@ YorvoID signs and hashes through OpenSSL, in every configuration. The crypto mod
 
 | What | Algorithm | Through |
 |---|---|---|
-| Signing keys: the security log's checkpoints ([keys](keys.md)) | Ed25519 (EdDSA, RFC 8032) | OpenSSL |
+| Signing keys: the security log's checkpoints ([keys](keys.md)) | Ed25519 (EdDSA, RFC 8032), or ECDSA on P-256 (ES256) | OpenSSL |
 | Tokens, codes, the security log's chain, decision records, intents | SHA-256 | OpenSSL (`Digest`) |
 | Passkeys, and the intent verifier's keys | ES256 (P-256), EdDSA (Ed25519), RS256 (RSA ≥ 2048 bits) | OpenSSL; the WebAuthn library verifies EdDSA with libsodium |
 | Random values | the kernel's CSPRNG | `random_bytes()` |
@@ -38,7 +38,7 @@ In FIPS mode, YorvoID uses only what OpenSSL's provider offers, and it refuses t
 - **Ed25519 decides EdDSA.** A known RFC 8032 vector must sign and verify. EdDSA is in FIPS 186-5, but not every FIPS provider has it. Without it:
   - passkeys and the verifier offer only ES256 and RS256;
   - passkeys already made with EdDSA can't sign in, so their owners need to add another;
-  - YorvoID's Ed25519 signing keys can't sign or verify the security log's checkpoints. With signing keys configured, YorvoID **refuses to start**: checkpoints that silently stopped would leave the log open to a rewrite (AUD-003). ES256 signing keys, which work under such a provider, are coming before YorvoID 0.4.0.
+  - YorvoID's Ed25519 signing keys can't sign or verify the security log's checkpoints. Use ES256 keys, moved to in the standard mode first ([moving to ES256](keys.md#moving-to-es256)). With an Ed25519 key active, YorvoID **refuses to start**: checkpoints that silently stopped would leave the log open to a rewrite (AUD-003).
 
 For the intent verifier, which runs on its own, leave EdDSA out of `VerifierConfig`'s `algorithms` under such a provider: `algorithms: [-7, -257]`.
 
@@ -70,7 +70,7 @@ default_properties = fips=yes
 - **CI** runs YorvoID's tests in a **FIPS-configured** container (`docker/fips`), not a FIPS-enabled operating system: GitHub's runners can't boot with `fips=1`.
   - The provider is OpenSSL 3.1.2's FIPS provider, a validated provider: FIPS 140-3, [CMVP certificate #4985](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4985).
   - It's built from the release tarball, checked against its published SHA-256, installed with its self-test, and activated alone.
-  - It has no EdDSA. The job checks that YorvoID refuses to start in FIPS mode with Ed25519 signing keys, and leaves out the tests of those keys.
+  - It has no EdDSA. The job checks that YorvoID refuses to start in FIPS mode with an active Ed25519 key, and starts with an ES256 one. The tests of ES256 keys, checkpoints and anchors run there, and those that need Ed25519 keys are left out.
 - **Before a release**, a recorded run on a FIPS-enabled OS with the vendor's validated OpenSSL. It records `fips_enabled=1` and the provider's version.
 
 ## yorvoid:doctor

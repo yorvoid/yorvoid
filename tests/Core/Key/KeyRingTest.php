@@ -155,9 +155,11 @@ final class KeyRingTest extends TestCase
         yield 'no keys' => ['{"other": []}', 'has no list of keys'];
         yield 'keys not a list' => ['{"keys": {"a": {}}}', 'has no list of keys'];
         yield 'a key that isn\'t an object' => ['{"keys": ["k"]}', 'isn\'t a key'];
-        yield 'an RSA key' => [$key(['kty' => 'RSA']), 'isn\'t an Ed25519 key'];
-        yield 'another curve' => [$key(['crv' => 'X25519']), 'isn\'t an Ed25519 key'];
-        yield 'another algorithm' => [$key(['alg' => 'ES256']), 'isn\'t an Ed25519 key'];
+        yield 'an RSA key' => [$key(['kty' => 'RSA']), 'isn\'t an Ed25519 or a P-256 key'];
+        yield 'another curve' => [$key(['crv' => 'X25519']), 'isn\'t an Ed25519 or a P-256 key'];
+        yield 'another algorithm' => [$key(['alg' => 'ES256']), 'isn\'t an Ed25519 or a P-256 key'];
+        yield 'an Ed25519 key called EC' => [$key(['kty' => 'EC']), 'isn\'t an Ed25519 or a P-256 key'];
+        yield 'P-256 on an OKP key' => [$key(['crv' => 'P-256']), 'isn\'t an Ed25519 or a P-256 key'];
         yield 'no status' => [$key(['status' => null]), 'has no valid status'];
         yield 'an unknown status' => [$key(['status' => 'retired']), 'has no valid status'];
         yield 'no public part' => [$key(['x' => null]), 'isn\'t base64url'];

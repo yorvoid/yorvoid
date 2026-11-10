@@ -84,7 +84,7 @@ final class KeyRotationTest extends TestCase
         [, $display] = $this->command('yorvoid:keys:rotate');
         self::assertStringContainsString('2026-10-29.2 signs now, and 2026-10-29 only verifies. Once nothing 2026-10-29 signed still needs checking, run: yorvoid:keys:rotate --remove 2026-10-29', $display);
         self::assertSame(['2026-10-29' => KeyStatus::VerifyOnly, '2026-10-29.2' => KeyStatus::Active], $this->statuses());
-        self::assertStringContainsString('Key Status -------------- ------------- 2026-10-29 verify-only 2026-10-29.2 active', $display);
+        self::assertStringContainsString('Key Algorithm Status -------------- ----------- ------------- 2026-10-29 EdDSA verify-only 2026-10-29.2 EdDSA active', $display);
         $this->assertStillWorking($container, $signature, $session);
 
         [, $display] = $this->command('yorvoid:keys:rotate', ['--remove' => '2026-10-29']);

@@ -12,7 +12,8 @@ use YorvoID\Core\Secret;
  * (OPS-001). Rotating is: add a new verify-only key, make it active and the old one verify-only, and
  * remove the old one once nothing it signed needs checking.
  *
- * Keys are kept as a JSON Web Key Set (RFC 7517, Ed25519 keys as in RFC 8037), with a "status" member
+ * Keys are kept as a JSON Web Key Set (RFC 7517: Ed25519 keys as in RFC 8037, P-256 keys as in RFC 7518
+ * §6.2), with a "status" member
  * for each key, in an environment variable or a file only its owner can read (OPS-002); never in the
  * database next to what they sign.
  *
@@ -105,7 +106,7 @@ final readonly class KeyRing
     {
         $key = $this->known($id);
 
-        return new self(array_map(static fn (SigningKey $other): SigningKey => new SigningKey($other->id, $other === $key ? KeyStatus::Active : KeyStatus::VerifyOnly, $other->publicKey, $other->seed), $this->keys));
+        return new self(array_map(static fn (SigningKey $other): SigningKey => new SigningKey($other->id, $other === $key ? KeyStatus::Active : KeyStatus::VerifyOnly, $other->publicKey, $other->seed, $other->algorithm), $this->keys));
     }
 
     /**
@@ -155,7 +156,8 @@ final readonly class KeyRing
     }
 
     /**
-     * Reads a JSON Web Key Set: {"keys": [{"kid", "kty": "OKP", "crv": "Ed25519", "alg": "EdDSA", "x", "d", "status"}]}.
+     * Reads a JSON Web Key Set: {"keys": [{"kid", "kty": "OKP", "crv": "Ed25519", "alg": "EdDSA", "x", "d", "status"}]},
+     * or for ES256 keys {"kty": "EC", "crv": "P-256", "alg": "ES256", "x", "y", "d"}.
      */
     public static function fromJwks(Secret $json): self
     {
@@ -205,7 +207,10 @@ final readonly class KeyRing
 
         foreach ($this->keys as $key) {
             $status = $withPrivateParts ? $key->status : KeyStatus::VerifyOnly;
-            $jwk = ['kid' => $key->id, 'kty' => 'OKP', 'crv' => 'Ed25519', 'alg' => SigningKey::ALGORITHM, 'use' => 'sig', 'status' => $status->value, 'x' => self::base64url($key->publicKey)];
+            $jwk = match ($key->algorithm) {
+                KeyAlgorithm::EdDSA => ['kid' => $key->id, 'kty' => 'OKP', 'crv' => 'Ed25519', 'alg' => SigningKey::ALGORITHM, 'use' => 'sig', 'status' => $status->value, 'x' => self::base64url($key->publicKey)],
+                KeyAlgorithm::ES256 => ['kid' => $key->id, 'kty' => 'EC', 'crv' => 'P-256', 'alg' => KeyAlgorithm::ES256->value, 'use' => 'sig', 'status' => $status->value, 'x' => self::base64url(substr($key->publicKey, 0, 32)), 'y' => self::base64url(substr($key->publicKey, 32))],
+            };
 
             if ($withPrivateParts && null !== $key->seed) {
                 $jwk['d'] = self::base64url($key->seed->reveal());
@@ -227,9 +232,12 @@ final readonly class KeyRing
         $kid = $jwk['kid'] ?? null;
         $kid = \is_string($kid) ? $kid : '';
 
-        if ('OKP' !== ($jwk['kty'] ?? null) || 'Ed25519' !== ($jwk['crv'] ?? null) || SigningKey::ALGORITHM !== ($jwk['alg'] ?? SigningKey::ALGORITHM)) {
-            throw new IntegratorError(\sprintf('The key "%s" isn\'t an Ed25519 key.', $kid), 'YorvoID signs with Ed25519 keys: "kty": "OKP", "crv": "Ed25519".', 'concepts/keys.md');
-        }
+        // The key's type, curve and algorithm agree, or it isn't one YorvoID signs with.
+        $algorithm = match ([$jwk['kty'] ?? null, $jwk['crv'] ?? null, $jwk['alg'] ?? null]) {
+            ['OKP', 'Ed25519', SigningKey::ALGORITHM], ['OKP', 'Ed25519', null] => KeyAlgorithm::EdDSA,
+            ['EC', 'P-256', KeyAlgorithm::ES256->value], ['EC', 'P-256', null] => KeyAlgorithm::ES256,
+            default => throw new IntegratorError(\sprintf('The key "%s" isn\'t an Ed25519 or a P-256 key.', $kid), 'YorvoID signs with Ed25519 keys ("kty": "OKP", "crv": "Ed25519") or ES256 keys ("kty": "EC", "crv": "P-256").', 'concepts/keys.md'),
+        };
 
         $status = KeyStatus::tryFrom(\is_string($jwk['status'] ?? null) ? $jwk['status'] : '');
 
@@ -239,7 +247,9 @@ final readonly class KeyRing
 
         $d = $jwk['d'] ?? null;
 
-        return new SigningKey($kid, $status, self::decode($jwk['x'] ?? null, $kid), null === $d ? null : Secret::fromString(self::decode($d, $kid)));
+        $public = self::decode($jwk['x'] ?? null, $kid).(KeyAlgorithm::ES256 === $algorithm ? self::decode($jwk['y'] ?? null, $kid) : '');
+
+        return new SigningKey($kid, $status, $public, null === $d ? null : Secret::fromString(self::decode($d, $kid)), $algorithm);
     }
 
     private static function decode(mixed $value, string $kid): string
@@ -247,7 +257,7 @@ final readonly class KeyRing
         $decoded = \is_string($value) && 1 === preg_match('/^[A-Za-z0-9_-]+$/D', $value) ? base64_decode(strtr($value, '-_', '+/'), true) : false;
 
         if (false === $decoded) {
-            throw new IntegratorError(\sprintf('A part of the key "%s" isn\'t base64url.', $kid), '"x" and "d" are base64url without padding, as YorvoID writes them.', 'concepts/keys.md#where-keys-are-kept');
+            throw new IntegratorError(\sprintf('A part of the key "%s" isn\'t base64url.', $kid), '"x", "y" and "d" are base64url without padding, as YorvoID writes them.', 'concepts/keys.md#where-keys-are-kept');
         }
 
         return $decoded;

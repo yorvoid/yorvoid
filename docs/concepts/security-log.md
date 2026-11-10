@@ -85,6 +85,8 @@ $verification = $checkpoints->verify(Realm::default(), $file->read(Realm::defaul
 - `FileCheckpoints` appends one JSON line per checkpoint, and reads them back. Put the file on another disk or host, ideally append-only, and keep it with the database's backups.
 - `LoggerCheckpoints` gives each checkpoint to the application's logger (`yorvoid.log.checkpoint`, at notice), for a pipeline that ships logs elsewhere. To verify, read them back from there into a `CheckpointSource`.
 - A checkpoint the ring's keys didn't sign, or a line of the file that isn't one, fails verification. Keep the keys a checkpoint was signed with in the ring, verify-only, as long as you keep the checkpoint.
+- A checkpoint that can't be signed or kept raises the [audit alert](#when-a-record-cant-be-written), and `yorvoid:log:checkpoint` fails: a missing checkpoint is a lost audit record.
+- An **anchor** is a checkpoint signed only once the log verifies against every checkpoint before it (`Checkpoints::anchor()`, `yorvoid:log:anchor`). Moving the keys from Ed25519 to ES256 anchors each realm, so that under a FIPS provider without EdDSA the anchor covers what the Ed25519 checkpoints did ([moving to ES256](keys.md#moving-to-es256)).
 
 In Symfony, set `yorvoid.log.checkpoint_file` (or `checkpoint_logger`) next to `yorvoid.keys.file`, and run `yorvoid:log:checkpoint` from cron; `yorvoid:log:verify` checks the chain and the checkpoints. `yorvoid:doctor` warns outside development while there are none, or the newest is more than a day old.
 
