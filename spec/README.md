@@ -100,6 +100,7 @@ The fixtures:
 - `fixtures.json` (default, 2772) is unchanged by the second configuration, so "enterprise behaviour unchanged" is checked, not assumed. `check.sh` pins its hash too, so a change to it shows in review.
 - `fixtures-extended.json` (3960, up to 4 elements, 0.2 MB) adds which unknowns an unreachable store caused and what the decider says.
 - `fixtures-ordered.json` (7452, up to 2 elements on a scale of 0..3, 0.4 MB): plain elements and rules on the ordered fact, each authority, the fact known, or unknown with or without a last known value, and what each configuration decides.
+- `fixtures-ordered-sample.json` (10000, 3 and 4 elements, 0.5 MB): a sample drawn with a fixed seed (`ordered-sample.mjs`), each with at least one rule on the fact. Every request of 4 elements would be about 1.4M, so the model decides each sampled one as its own command, the request pinned in its `OrderedRequest`.
 - `tests/Core/Authorization/PrecedenceFixturesTest.php` decides the first two with the PHP evaluator: built without a decider, and with one for an operation that accepts it. `tests/Policy/OrderedFixturesTest.php` decides the ordered ones with rules on `OrderedConditions`, in both modes.
 
 The token, key and setup models have no extension point that changes their behaviour: for them, both configurations are one.

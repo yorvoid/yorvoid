@@ -32,15 +32,55 @@ use YorvoID\Tests\Policy\Fixtures\OrderedRule;
  * (spec/decisions/precedence.als; check.sh keeps the file the model's): every request of up to 2
  * matching elements, plain or rules on a readiness level from 0 to 3, with each authority and each state
  * of the level, in both configurations: by default an unknown level is missing data (MP-1); in the
- * extended one, PessimisticOrdering engaged, it's decided at its worst (R2).
+ * extended one, PessimisticOrdering engaged, it's decided at its worst (R2). Beside them, a seeded
+ * sample of 10000 requests of 3 and 4 elements, which the model decides one by one
+ * (decisions/ordered-sample.mjs): at 4 elements every request would be about 1.4M.
  */
 final class OrderedFixturesTest extends TestCase
 {
     public function testRulesOnAnOrderedFactDecideAsTheModel(): void
     {
-        $fixtures = json_decode((string) file_get_contents(__DIR__.'/../../spec/decisions/fixtures-ordered.json'), true, flags: \JSON_THROW_ON_ERROR);
-        \assert(\is_array($fixtures));
+        $fixtures = self::fixtures('fixtures-ordered.json');
         self::assertCount(7452, $fixtures, 'Every multiset of up to 2 elements the model enumerates, with each authority and state of the fact.');
+
+        self::assertGreaterThan(1000, self::decide($fixtures));
+    }
+
+    public function testLargerRequestsDecideAsTheModelsSample(): void
+    {
+        $fixtures = self::fixtures('fixtures-ordered-sample.json');
+        self::assertCount(10000, $fixtures);
+
+        foreach ($fixtures as $fixture) {
+            \assert(\is_array($fixture) && \is_string($fixture[0]));
+            $elements = explode(',', $fixture[0]);
+            self::assertContains(\count($elements), [3, 4], $fixture[0]);
+            self::assertNotSame([], preg_grep('/[<>]=/', $elements), 'Each has a rule on the fact.');
+        }
+
+        self::assertGreaterThan(1000, self::decide($fixtures));
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private static function fixtures(string $file): array
+    {
+        $fixtures = json_decode((string) file_get_contents(__DIR__.'/../../spec/decisions/'.$file), true, flags: \JSON_THROW_ON_ERROR);
+        \assert(\is_array($fixtures) && array_is_list($fixtures));
+
+        return $fixtures;
+    }
+
+    /**
+     * Decides each fixture in both configurations, as the model did.
+     *
+     * @param list<mixed> $fixtures
+     *
+     * @return int How many default decisions were Indeterminate for want of the fact (MP-1)
+     */
+    private static function decide(array $fixtures): int
+    {
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Ability], 'acme.badges.issue', null, IssueBadge::class, []);
         $command = new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7()));
         $actor = new Member(new Realm('acme'), new PrincipalId(new UuidV7()));
@@ -82,7 +122,7 @@ final class OrderedFixturesTest extends TestCase
             }
         }
 
-        self::assertGreaterThan(1000, $missing);
+        return $missing;
     }
 
     private static function truth(string $value): Truth
