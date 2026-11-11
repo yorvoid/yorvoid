@@ -74,6 +74,16 @@ interface PolicyStore
      */
     public function groupAssignments(Realm $realm, array $groups): array;
 
+    /**
+     * The roles given on any of the resources, to a principal or a group, expired ones too: what a
+     * resource placed within one of them would bring along (no-escalation weighs a parent link by it).
+     *
+     * @param list<ResourceRef> $resources
+     *
+     * @return list<string> Each once, sorted
+     */
+    public function rolesOn(Realm $realm, array $resources): array;
+
     /** Adds it, or replaces the one with its group, role and scope */
     public function assignGroup(GroupRoleAssignment $assignment): void;
 

@@ -150,6 +150,24 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
         return $assignments;
     }
 
+    public function rolesOn(Realm $realm, array $resources): array
+    {
+        $roles = [];
+
+        foreach ([...$this->assignments, ...$this->groupAssignments] as $assignment) {
+            foreach ($resources as $resource) {
+                if ($assignment->realm->equals($realm) && null !== $assignment->scope && $resource->equals($assignment->scope)) {
+                    $roles[] = $assignment->role;
+                }
+            }
+        }
+
+        $roles = array_unique($roles);
+        sort($roles, \SORT_STRING);
+
+        return $roles;
+    }
+
     public function assignGroup(GroupRoleAssignment $assignment): void
     {
         $this->groupAssignments[self::groupKey($assignment->realm, $assignment->group, $assignment->role, $assignment->scope)] = $assignment;

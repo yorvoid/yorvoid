@@ -42,6 +42,8 @@ use YorvoID\Policy\PolicyDeclarations;
 use YorvoID\Policy\RoleSource;
 use YorvoID\Policy\Rule\Rule;
 use YorvoID\Relations\RelationDeclarations;
+use YorvoID\Relations\ReservedRelation;
+use YorvoID\Relations\UnknownRelation;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Debug\SecretCaster;
 use YorvoID\Symfony\Flow\FlowCustomizer;
@@ -162,9 +164,14 @@ final class YorvoIDBundle extends AbstractBundle
             $builder->prependExtensionConfig('framework', ['translator' => ['paths' => self::TRANSLATIONS]]);
         }
 
-        // A pool of its own, not cache.app: what's in it decides who holds which role.
+        // A pool of its own, not cache.app: what's in it decides who holds which role. A relation of a
+        // reserved type, or one that isn't declared, is the request's mistake: a 400, never a 500 (M2-13).
         if ($builder->hasExtension('framework')) {
             $builder->prependExtensionConfig('framework', ['cache' => ['pools' => [self::CACHE_POOL => ['adapter' => 'cache.app']]]]);
+            $builder->prependExtensionConfig('framework', ['exceptions' => [
+                ReservedRelation::class => ['status_code' => 400, 'log_level' => 'notice'],
+                UnknownRelation::class => ['status_code' => 400, 'log_level' => 'notice'],
+            ]]);
         }
     }
 

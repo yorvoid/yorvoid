@@ -37,6 +37,6 @@ final readonly class GroupRelations implements RelationDeclarations
 
     public function types(): iterable
     {
-        yield new ResourceType(self::TYPE, [new RelationDefinition(self::MEMBER)]);
+        yield new ResourceType(self::TYPE, [new RelationDefinition(self::MEMBER)], reserved: true);
     }
 }

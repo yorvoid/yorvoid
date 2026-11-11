@@ -60,6 +60,7 @@ final class CreatePolicy implements Migration
             $table->addColumn(Column::editor()->setUnquotedName('expires_at')->setTypeName(Types::DATETIMETZ_IMMUTABLE)->setNotNull(false)->create());
             $table->addPrimaryKeyConstraint(PrimaryKeyConstraint::editor()->setUnquotedColumnNames('realm', 'principal_id', 'role', 'scope')->create());
             $table->addIndex(Index::editor()->setUnquotedName($context->name('policy_role_assignment_role'))->setUnquotedColumnNames('realm', 'role')->create());
+            $table->addIndex(Index::editor()->setUnquotedName($context->name('policy_role_assignment_scope'))->setUnquotedColumnNames('realm', 'scope')->create());
         });
 
         $context->createTable(DbalPolicyStore::VERSION_TABLE, static function (TableEditor $table): void {

@@ -80,6 +80,15 @@ final readonly class Request
     }
 
     /**
+     * The same request about another resource: to weigh what a change does to a resource it isn't
+     * about, as no-escalation does.
+     */
+    public function on(?ResourceRef $resource): self
+    {
+        return new self($this->name, $this->realm, $this->ability, $resource, $this->operation, $this->command, $this->actor, $this->origin, $this->at, $this->subject);
+    }
+
+    /**
      * The same request, asked by another actor: each side of a view-as.
      */
     public function by(Actor $actor): self

@@ -170,7 +170,12 @@ $operations->run(new AssignRole($realm, $principalId, 'manager', new ResourceRef
 
 Two rules hold for everyone but the host's operator:
 
-- **Nobody gives what they don't hold** (`NoEscalation`): a role whose abilities they don't all have, a super role unless they have one, an ability they lack.
+- **Nobody gives or takes what they don't hold** (`NoEscalation`). A change is weighed by what it does, to anyone, directly or through what follows from it:
+  - a role, as its abilities, and a super role only by someone with one; an ability, as itself;
+  - adding to or taking from a group, as the roles of the group and of the groups it's within;
+  - a relation, as what it gives on its resource; a link (`parent`, or a relation others are inherited through) also as what it brings along ([links](#relations));
+  - deleting a group or a role, as everything it takes away: the group's roles, and what's given to its members;
+  - nobody sets their own security attributes ([attributes](#attributes)).
 - **Giving a strict ability or a super role takes a recent proof** of who one is (AUZ-052): the role permit asks a `StepUpCheck` (in Symfony, the session's step-up, within `step_up.window`), and a refusal carries a `StepUpRemedy`. Without a `StepUpCheck`, only the operator gives them.
 
 ## Relations
@@ -200,7 +205,15 @@ final readonly class AcmeRelations implements RelationDeclarations
 - **It can be to a set of subjects**: `group:writers#member` is every member of the group, so `page:42#editor@group:writers#member` makes them all editors.
 - **It gives abilities on its resource** (`grants`): the relation permit (`RelationPermit`) lets an editor of page 42 publish page 42, and no other page.
 
-Relations are added and removed with `AddRelation` and `RemoveRelation` (`yorvoid.relation.add`, `.remove`, ability `yorvoid.relations.manage`), each recorded in the security log; nobody gives a relation that gives what they don't hold on the resource themselves. A deleted principal's relations go.
+Relations are added and removed with `AddRelation` and `RemoveRelation` (`yorvoid.relation.add`, `.remove`, ability `yorvoid.relations.manage`), each recorded in the security log. Nobody gives or takes a relation that gives what they don't hold on the resource themselves. A deleted principal's relations go.
+
+A link also brings along what follows through it, so it's weighed by that too. Making page 42 the child of page 7 needs, on page 42:
+
+- the abilities of the relations inherited through `parent` (page 7's viewers view page 42);
+- what those carry further down, to whatever is within page 42, which only a role (in the realm, or on page 42 or above it) holds for every descendant;
+- every ability of the roles given, to anyone, on page 7 and what it's within, and a super role among them only for someone with one.
+
+Taking a link away is weighed the same way. A type can be **reserved** (`new ResourceType('group', [...], reserved: true)`): its relations change only through its owner's operations, and `AddRelation` and `RemoveRelation` throw `ReservedRelation`, for the operator too; in Symfony, that and `UnknownRelation` answer 400.
 
 A role assigned on a resource also counts for what's within it, through `parent`: a manager of server 1 manages its sites. Relations are followed a level at a time, one query per level, at most 16 levels deep (`Relations::MAX_DEPTH`); what goes deeper can't be told, and the decision is Indeterminate, never a Permit.
 
@@ -214,11 +227,11 @@ A group's members are principals, or another group's members, so groups nest. A 
 | `yorvoid.group.add_member`, `.remove_member` | `AddGroupMember`, `RemoveGroupMember`, with `Subject::principal($id)` or `GroupRelations::members('writers')` |
 | `yorvoid.group.assign_role`, `.unassign_role` | `AssignGroupRole`, `UnassignGroupRole` |
 
-They need `yorvoid.roles.manage`. Adding someone to a group gives them its roles, so the same rules hold as for giving a role: nobody adds a member to a group with a role they don't hold, and a group with a super role takes a recent proof. Groups are relations of the type `group` (`GroupRelations`, which the Symfony bundle declares).
+They need `yorvoid.roles.manage`. Adding someone to a group gives them its roles, so the same rules hold as for giving a role: nobody adds a member to a group with a role they don't hold, and a group with a super role takes a recent proof. Deleting a group takes its roles and what's given to its members, and is weighed by that. Groups are relations of the type `group` (`GroupRelations`, which the Symfony bundle declares). The type is reserved, so the group operations are the only way to change a group.
 
 ## Attributes
 
-Security attributes are what decisions may read about a principal (IDN-055), e.g. a department or a clearance, kept apart from profile data, which decisions never read. Their owner declares them in a service implementing `AttributeDeclarations` (`SecurityAttribute`: a namespaced name, a label, a type: string, integer, boolean or a list of strings). `SetAttribute` (`yorvoid.attribute.set`, ability `yorvoid.principals.manage`) sets one or, with null, removes it; the security log names the attribute, never its value. A deleted principal's attributes go.
+Security attributes are what decisions may read about a principal (IDN-055), e.g. a department or a clearance, kept apart from profile data, which decisions never read. Their owner declares them in a service implementing `AttributeDeclarations` (`SecurityAttribute`: a namespaced name, a label, a type: string, integer, boolean or a list of strings). `SetAttribute` (`yorvoid.attribute.set`, ability `yorvoid.attributes.manage`) sets one or, with null, removes it. What an attribute decides is the application's rules', so nobody but the operator sets their own, and the ability is apart from managing accounts: no role has it until you give it; the security log names the attribute, never its value. A deleted principal's attributes go.
 
 A rule reads them through `Attributes`: the acting principal's (`principal()`), and the request's resource or environment (`resolve()`), which an `AttributeResolver` answers, e.g. whether a page is classified, or whether the request comes from the office. What isn't known throws `MissingAttribute`, and the decision is Indeterminate (`missing_data`), never a Permit. Any exception of yours implementing `MissingData` is read the same way.
 

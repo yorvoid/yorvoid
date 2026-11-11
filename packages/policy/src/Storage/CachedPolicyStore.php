@@ -70,6 +70,12 @@ final class CachedPolicyStore implements PolicyStore
         return $this->read($realm, \sprintf('principals.%s', $role), fn (): array => $this->store->principalsWith($realm, $role), static fn (mixed $principals): bool => self::isListOf($principals, static fn (mixed $principal): bool => $principal instanceof PrincipalId));
     }
 
+    public function rolesOn(Realm $realm, array $resources): array
+    {
+        // As JSON: resource IDs may hold any separator.
+        return $this->read($realm, \sprintf('roles_on.%s', json_encode(array_map(strval(...), $resources), \JSON_THROW_ON_ERROR)), fn (): array => $this->store->rolesOn($realm, $resources), static fn (mixed $roles): bool => self::isListOf($roles, \is_string(...)));
+    }
+
     public function assign(RoleAssignment $assignment): void
     {
         $this->changed($assignment->realm)->assign($assignment);

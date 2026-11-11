@@ -88,6 +88,11 @@ final readonly class MutatedPolicyStore implements PolicyStore
         return $this->inner->principalsWith($realm, $role);
     }
 
+    public function rolesOn(Realm $realm, array $resources): array
+    {
+        return $this->inner->rolesOn($realm, $resources);
+    }
+
     public function assign(RoleAssignment $assignment): void
     {
         $this->inner->assign($assignment);

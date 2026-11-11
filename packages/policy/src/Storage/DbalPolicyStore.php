@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy\Storage;
 
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Authorization\ResourceRef;
@@ -166,6 +168,19 @@ final readonly class DbalPolicyStore implements PolicyStore
     {
         $this->database->connection->delete($this->table(self::GROUP_ASSIGNMENT_TABLE), ['realm' => $realm->name, 'group_name' => $name]);
         $this->database->connection->delete($this->table(self::GROUP_TABLE), ['realm' => $realm->name, 'name' => $name]);
+    }
+
+    public function rolesOn(Realm $realm, array $resources): array
+    {
+        $scopes = array_map(strval(...), $resources);
+        // Role names are lowercase ASCII: every database sorts them alike.
+        $rows = $this->database->connection->fetchAllAssociative(
+            \sprintf('SELECT role FROM %s WHERE realm = ? AND scope IN (?) UNION SELECT role FROM %s WHERE realm = ? AND scope IN (?) ORDER BY role', $this->table(self::ASSIGNMENT_TABLE), $this->table(self::GROUP_ASSIGNMENT_TABLE)),
+            [$realm->name, $scopes, $realm->name, $scopes],
+            [ParameterType::STRING, ArrayParameterType::STRING, ParameterType::STRING, ArrayParameterType::STRING],
+        );
+
+        return array_map(static fn (array $row): string => Row::string($row, 'role'), $rows);
     }
 
     public function groupAssignments(Realm $realm, array $groups): array

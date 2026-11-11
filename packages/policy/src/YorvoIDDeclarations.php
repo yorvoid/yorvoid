@@ -21,6 +21,8 @@ final readonly class YorvoIDDeclarations implements PolicyDeclarations
 
     public const string SESSIONS_MANAGE = 'yorvoid.sessions.manage';
 
+    public const string ATTRIBUTES_MANAGE = 'yorvoid.attributes.manage';
+
     public const string ROLES_MANAGE = 'yorvoid.roles.manage';
 
     public const string PERMISSIONS_MANAGE = 'yorvoid.permissions.manage';
@@ -36,6 +38,7 @@ final readonly class YorvoIDDeclarations implements PolicyDeclarations
         yield new Ability(self::PRINCIPALS_MANAGE, 'Create, suspend and delete accounts, and change their identifiers', 'yorvoid', group: 'yorvoid');
         yield new Ability(self::PRINCIPALS_RECOVER, 'Issue a recovery link for someone\'s account', 'yorvoid', group: 'yorvoid', strict: true);
         yield new Ability(self::SESSIONS_MANAGE, 'Sign other people out', 'yorvoid', group: 'yorvoid');
+        yield new Ability(self::ATTRIBUTES_MANAGE, 'Set people\'s security attributes, which rules decide by', 'yorvoid', group: 'yorvoid');
         yield new Ability(self::ROLES_MANAGE, 'Create roles and give them to people', 'yorvoid', group: 'yorvoid');
         yield new Ability(self::PERMISSIONS_MANAGE, 'Change which roles have which abilities', 'yorvoid', group: 'yorvoid');
         yield new Ability(self::RELATIONS_MANAGE, 'Relate people and resources, e.g. make someone a page\'s editor', 'yorvoid', group: 'yorvoid');
