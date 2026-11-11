@@ -13,6 +13,7 @@ use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
 use YorvoID\Flows\Input;
+use YorvoID\Flows\Notice;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\Step;
 use YorvoID\Flows\StepResult;
@@ -29,6 +30,9 @@ use YorvoID\Passkeys\Refusal;
 final readonly class RecoveryCodeStep implements Step
 {
     public const string NAME = 'recovery_code';
+
+    /** Fewer codes left than this, and the notice suggests a new set: wording, not policy */
+    private const int FEW_LEFT = 3;
 
     /**
      * @param Duration|null $holds The cool-down the recovery starts (StepUp::coolDown()), for the page to say
@@ -67,6 +71,24 @@ final readonly class RecoveryCodeStep implements Step
             return StepResult::refused(new Problem(Refusal::PrincipalInactive->messageId()));
         }
 
-        return null === $started ? StepResult::refused(new Problem('yorvoid.flow.recovery_code.invalid', field: 'code')) : StepResult::done(signedIn: $started);
+        return null === $started ? StepResult::refused(new Problem('yorvoid.flow.recovery_code.invalid', field: 'code')) : StepResult::done(signedIn: $started, notice: $this->used($started->recoveryCodesLeft));
+    }
+
+    /**
+     * That the code is now used, and how many are left (U-5): none to say when the last is gone and
+     * nothing holds a new set, since RecoveryCodesStep shows one next. During a cool-down, a new set is
+     * held too (RecoveryCodes::generate()), so the hint says when.
+     */
+    private function used(?int $left): ?Notice
+    {
+        if (null === $left || (0 === $left && null === $this->holds)) {
+            return null;
+        }
+
+        return new Notice('yorvoid.flow.recovery_code.used', ['remaining' => $left, 'hint' => match (true) {
+            $left >= self::FEW_LEFT => 'none',
+            null !== $this->holds => 'after_wait',
+            default => 'new_set',
+        }]);
     }
 }

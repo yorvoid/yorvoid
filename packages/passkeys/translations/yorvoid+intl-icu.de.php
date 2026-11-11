@@ -11,6 +11,7 @@ return [
     'yorvoid.flow.email.invalid' => 'Geben Sie eine gültige E-Mail-Adresse ein, zum Beispiel name@example.com.',
     'yorvoid.flow.invitation.not_working' => 'Diese Einladung funktioniert nicht mehr. Bitten Sie um eine neue.',
     'yorvoid.flow.verify_email.not_working' => 'Dieser Link funktioniert nicht mehr: Er wurde schon benutzt, ist abgelaufen oder wurde durch einen neueren ersetzt.',
+    'yorvoid.flow.recovery_code.used' => '{remaining, plural, =0 {Dieser Wiederherstellungscode ist jetzt verbraucht, und es war Ihr letzter.} one {Dieser Wiederherstellungscode ist jetzt verbraucht. Sie haben noch #.} other {Dieser Wiederherstellungscode ist jetzt verbraucht. Sie haben noch #.}}{hint, select, new_set { Erstellen Sie in Ihrem Konto neue.} after_wait { Neue können Sie erstellen, sobald die Wartezeit nach der Wiederherstellung vorbei ist.} other {}}',
     'yorvoid.flow.recovery_code.invalid' => 'Dieser Code hat nicht funktioniert. Prüfen Sie ihn, oder verwenden Sie einen anderen.',
     'yorvoid.flow.recovery_link.not_working' => 'Dieser Link funktioniert nicht mehr. Bitten Sie um einen neuen.',
     'yorvoid.flow.recovery_codes.not_saved' => 'Bestätigen Sie, dass Sie Ihre Wiederherstellungscodes gespeichert haben.',

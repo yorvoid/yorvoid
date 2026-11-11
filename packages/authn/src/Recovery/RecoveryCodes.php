@@ -267,7 +267,8 @@ final readonly class RecoveryCodes implements OperationHandler
                 $this->events->dispatch(new RecoveryCodeUsed($realm, $principalId, $remaining, $origin));
             });
 
-            return $started;
+            // The count from this use, for the person too: one source, whatever's used after it.
+            return new StartedSession($started->session, $started->token, $started->deviceCookie, $started->newDevice, $remaining);
         });
     }
 

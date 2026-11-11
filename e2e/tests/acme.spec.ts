@@ -44,6 +44,7 @@ test('just after a recovery, changing the email address waits', async ({ page })
   await page.getByLabel('Recovery code').fill(codes[0] ?? '');
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Not now' }).click();
+  await expect(page.getByRole('status')).toHaveText('That recovery code is now used. You have 9 left.');
 
   await page.getByRole('navigation').getByRole('link', { name: 'Account' }).click();
   await expectAccessible(page);

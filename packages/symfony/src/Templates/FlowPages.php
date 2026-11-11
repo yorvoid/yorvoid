@@ -9,6 +9,7 @@ use Symfony\Component\Clock\NativeClock;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Flows\Notice;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\StepView;
 use YorvoID\Passkeys\Flow\View\StepUpView;
@@ -83,6 +84,14 @@ final readonly class FlowPages
         $text = $this->translator->trans($id, [], 'yorvoid', $locale);
 
         return $id === $text ? null : $text;
+    }
+
+    /**
+     * A notice a step left for the end of its flow, in the person's language.
+     */
+    public function notice(Notice $notice, string $locale): string
+    {
+        return $this->translator->trans($notice->message, $notice->parameters, 'yorvoid', $locale);
     }
 
     /**

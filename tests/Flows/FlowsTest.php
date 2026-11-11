@@ -36,6 +36,7 @@ use YorvoID\Flows\Flows;
 use YorvoID\Flows\FlowState;
 use YorvoID\Flows\FlowStatus;
 use YorvoID\Flows\Input;
+use YorvoID\Flows\Notice;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\StepFailed;
 use YorvoID\Flows\StepResult;
@@ -168,6 +169,45 @@ final class FlowsTest extends DatabaseTestCase
         $exact = $this->flows(new Flow('acme.code', [new TestStep('code', static fn (): never => throw new Throttled(new \DateTimeImmutable(), 120))]));
         $other = $exact->start('acme.code', new Realm('acme'), $this->context);
         self::assertEquals([new Problem('yorvoid.flow.too_many_attempts', ['minutes' => 2])], $exact->submit($other->state->id, 'code', new Input(), $this->context)?->problems);
+    }
+
+    public function testAStepsNoticeIsGivenOnceTheFlowCompletes(): void
+    {
+        $first = new TestStep('first', static fn (): StepResult => StepResult::done(notice: new Notice('acme.first', ['n' => 1])));
+        $second = new TestStep('second', static fn (): StepResult => StepResult::done(notice: new Notice('acme.second', ['n' => 2, 'left' => 'few'])));
+        $third = new TestStep('third');
+        $flows = $this->flows(new Flow('acme.onboarding', [$first, $second, $third]), new Flow('acme.other', [new TestStep('only')]));
+        $started = $flows->start('acme.onboarding', new Realm('acme'), $this->context);
+
+        $next = $flows->submit($started->state->id, 'first', new Input(), $this->context);
+        self::assertNull($next?->notice, 'Not before the flow completes.');
+        $flows->submit($started->state->id, 'second', new Input(), $this->context);
+        $done = $flows->submit($started->state->id, 'third', new Input(), $this->context);
+
+        self::assertEquals(new Notice('acme.second', ['n' => 2, 'left' => 'few']), $done?->notice, 'One: the latest.');
+        self::assertFalse($done?->state->has('flows.notice'), 'Given once: the state forgets it.');
+        self::assertFalse($this->events->of(FlowCompleted::class)[0]->state->has('flows.notice'));
+
+        $other = $flows->start('acme.other', new Realm('acme'), $this->context);
+        self::assertNull($flows->submit($other->state->id, 'only', new Input(), $this->context)?->notice, 'Another flow has none of it.');
+        self::assertNull(StepResult::done()->notice);
+    }
+
+    public function testAFlowThatFailsAfterANoticeGivesNone(): void
+    {
+        $flows = $this->flows(
+            new Flow('acme.invite', [new TestStep('note', static fn (): StepResult => StepResult::done(notice: new Notice('acme.noted'))), new TestStep('accept', static fn (): StepResult => StepResult::failed(new Problem('acme.invite.gone')))]),
+            new Flow('acme.other', [new TestStep('only')]),
+        );
+        $started = $flows->start('acme.invite', new Realm('acme'), $this->context);
+        $flows->submit($started->state->id, 'note', new Input(), $this->context);
+
+        $failed = $flows->submit($started->state->id, 'accept', new Input(), $this->context);
+        $other = $flows->start('acme.other', new Realm('acme'), $this->context);
+
+        self::assertSame(FlowStatus::Failed, $failed?->status);
+        self::assertNull($failed->notice);
+        self::assertNull($flows->submit($other->state->id, 'only', new Input(), $this->context)?->notice, 'Nor does a flow that completes after it.');
     }
 
     public function testAFailedFlowEnds(): void

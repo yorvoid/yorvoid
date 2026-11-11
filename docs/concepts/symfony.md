@@ -184,6 +184,8 @@ Things to know:
   ```
 
   It's set, not added, so there's never more than one. A layout that doesn't show flashes shows no notice, and nothing else changes. A JSON answer has it in `notice`.
+
+  A flow's own [notice](flows.md#writing-a-step), e.g. after a recovery code "You have 9 left.", is said the same way, in the same flash, and is the one said if a step-up left one too.
 - **JSON** for requests that ask for it (`Accept: application/json`): `{"error": "…", "not_permitted": {"verdict": "deny", "decision": "<id>", "remedies": [{"name", "parameters", "message", "action": {"url", "label"} | null}]}}`. The [browser client](browser-client.md#errors) reads it as `not_permitted`.
 - **Your own remedies** are shown with the message `yorvoid.remedy.<name>` in the `yorvoid` domain, with their parameters, if you translate it; otherwise as "Something more is needed". They have no button.
 - **Your exception listeners come first.** It listens at priority -64, after listeners at the default priority and before Symfony's error page, and leaves a refusal alone if one of yours answered it. Turn it off with `remedies.pages: false`.

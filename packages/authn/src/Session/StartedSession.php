@@ -16,16 +16,19 @@ use YorvoID\Core\Secret;
 final readonly class StartedSession
 {
     /**
-     * @param Secret|null $deviceCookie The device cookie to set, long-lived, when device recognition is on: the one
-     *                                  sent, or a new one for a device the principal hasn't used before
-     * @param bool        $newDevice    Whether the principal signed in from a device it hasn't used before, while
-     *                                  it has used others
+     * @param Secret|null $deviceCookie      The device cookie to set, long-lived, when device recognition is on: the one
+     *                                       sent, or a new one for a device the principal hasn't used before
+     * @param bool        $newDevice         Whether the principal signed in from a device it hasn't used before, while
+     *                                       it has used others
+     * @param int|null    $recoveryCodesLeft How many recovery codes the principal has left, when it got in with
+     *                                       one: the count the security log and RecoveryCodeUsed have
      */
     public function __construct(
         public Session $session,
         public Secret $token,
         public ?Secret $deviceCookie = null,
         public bool $newDevice = false,
+        public ?int $recoveryCodesLeft = null,
     ) {
     }
 }
