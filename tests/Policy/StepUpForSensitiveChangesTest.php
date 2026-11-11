@@ -10,6 +10,7 @@ use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Authorization\Precedence;
+use YorvoID\Core\Authorization\Reason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\StepUpCheck;
@@ -41,6 +42,7 @@ use YorvoID\Policy\Change\ResetAbilities;
 use YorvoID\Policy\Change\RevokeAbilities;
 use YorvoID\Policy\Change\SetAbilities;
 use YorvoID\Policy\Change\UnassignRole;
+use YorvoID\Policy\Effects;
 use YorvoID\Policy\GroupRelations;
 use YorvoID\Policy\GroupRoleAssignment;
 use YorvoID\Policy\NoEscalation;
@@ -153,7 +155,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
         ];
 
         foreach ($changes as $command) {
-            $this->assertWantsAProof($this->decide($actor, $command), 'Giving the strict ability "yorvoid.principals.recover" with the role "recoverer"', $command::class);
+            $this->assertWantsAProof($this->decide($actor, $command), 'Giving the strict ability "yorvoid.principals.recover"', $command::class);
         }
 
         $this->stepUp->proven = true;
@@ -221,8 +223,8 @@ final class StepUpForSensitiveChangesTest extends TestCase
         \assert(null !== $keeper->principalId);
         $this->relations->add(new RelationTuple($this->realm, $vault, 'keeper', Subject::principal($keeper->principalId)));
         $routes = [
-            'a rule' => [$recoverer, $assign, [...RuleElements::of($rule)], null, true, 'Giving the strict ability "yorvoid.principals.recover" with the role "recoverer"'],
-            'an ability policy' => [$recoverer, $assign, [], $policy, true, 'Giving the strict ability "yorvoid.principals.recover" with the role "recoverer"'],
+            'a rule' => [$recoverer, $assign, [...RuleElements::of($rule)], null, true, 'Giving the strict ability "yorvoid.principals.recover"'],
+            'an ability policy' => [$recoverer, $assign, [], $policy, true, 'Giving the strict ability "yorvoid.principals.recover"'],
             // The relation permit is YorvoID's own, always there.
             'a relation' => [$keeper, new AddRelation($this->realm, $vault, 'purger', Subject::principal($this->id())), [], null, false, 'Giving the strict ability "acme.pages.purge"'],
         ];
@@ -278,6 +280,36 @@ final class StepUpForSensitiveChangesTest extends TestCase
     }
 
     /**
+     * Taking needs no proof, but no-escalation still weighs it: a group's roles, taken from a member.
+     */
+    public function testTakingIsStillWeighed(): void
+    {
+        $other = $this->id();
+        $removed = $this->decide($this->actor('manager'), new RemoveGroupMember($this->realm, 'recoverers', Subject::principal($other)));
+        self::assertSame('A forbid applies: They\'d change what they don\'t hold themselves: yorvoid.principals.recover.', $removed->reason);
+        self::assertSame([], $removed->remedies);
+        self::assertSame([], $this->stepUp->asked);
+    }
+
+    public function testAnAbilityThatIsntDeclaredIsntSensitive(): void
+    {
+        $grant = $this->request($this->actor('manager'), new GrantAbilities($this->realm, 'editor', ['acme.nothing']));
+
+        self::assertSame('It gives no super role and no strict ability.', new StepUpForSensitiveChanges($this->roles, $this->stepUp)->evaluate($grant)->detail);
+    }
+
+    public function testBothForbidsWeighOneEffectPerRequest(): void
+    {
+        $request = $this->request($this->actor('manager'), new AssignRole($this->realm, $this->id(), 'recoverer'));
+        $effects = Effects::of($this->roles);
+
+        self::assertSame($effects, Effects::of($this->roles));
+        self::assertNotSame($effects, Effects::of(new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), new InMemoryPolicyStore())));
+        self::assertSame($effects->on($request), $effects->on($request));
+        self::assertNotSame($effects->on($request), $effects->on($this->request($this->actor('manager'), new AssignRole($this->realm, $this->id(), 'recoverer'))));
+    }
+
+    /**
      * A remedy is a promise: none when something else would refuse anyway.
      */
     public function testAProofIsOfferedOnlyWhenItWouldBeEnough(): void
@@ -308,6 +340,11 @@ final class StepUpForSensitiveChangesTest extends TestCase
         $unknown = $this->decide($actor, $assign, stepUp: self::check(Truth::unknown(IndeterminateReason::StoreUnreachable, 'down')));
         self::assertSame(Verdict::Indeterminate, $unknown->verdict);
         self::assertSame(Precedence::ForbidUnknown, $unknown->precedence);
+        self::assertSame('A forbid couldn\'t be ruled out: down', $unknown->reason);
+
+        $proved = $this->decide($actor, $assign, stepUp: self::check(Truth::holds('Proved recently.')));
+        self::assertSame(Verdict::Permit, $proved->verdict);
+        self::assertSame(['Giving the strict ability "yorvoid.principals.recover", and proved recently.'], array_values(array_map(static fn (Reason $reason): string => $reason->truth->detail, array_filter($proved->reasons, static fn (Reason $reason): bool => StepUpForSensitiveChanges::NAME === $reason->source))));
     }
 
     private function assertWantsAProof(Decision $decision, string $sensitive, string $what): void

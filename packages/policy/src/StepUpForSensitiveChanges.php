@@ -91,19 +91,17 @@ final readonly class StepUpForSensitiveChanges implements ForbidElement
     private function sensitive(Request $request): ?string
     {
         foreach (Effects::of($this->roles)->on($request)->gives as $part) {
+            $abilities = $part->abilities;
+
             foreach ($part->roles as $role) {
                 if (true === $this->roles->role($request->realm, $role)?->super) {
                     return \sprintf('Giving the super role "%s"', $role);
                 }
 
-                foreach ($this->roles->abilitiesOf($request->realm, $role) as $ability) {
-                    if (true === $this->roles->ability($ability)?->strict) {
-                        return \sprintf('Giving the strict ability "%s" with the role "%s"', $ability, $role);
-                    }
-                }
+                array_push($abilities, ...$this->roles->abilitiesOf($request->realm, $role));
             }
 
-            foreach ($part->abilities as $ability) {
+            foreach ($abilities as $ability) {
                 if (true === $this->roles->ability($ability)?->strict) {
                     return \sprintf('Giving the strict ability "%s"', $ability);
                 }

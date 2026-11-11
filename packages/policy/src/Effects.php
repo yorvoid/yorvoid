@@ -164,15 +164,9 @@ final class Effects
             }
         }
 
-        $parts = [new EffectPart(abilities: $abilities, on: $on)];
-
-        if ([] === $inherited && self::PARENT !== $tuple->relation) {
-            return $parts;
-        }
-
         // What it carries down to the resource's descendants: only a role, in the realm or on the resource
         // or above it, holds that for every one of them (C3).
-        $parts[] = new EffectPart(abilities: $this->carriedDown($schema, $inherited), on: $on, byRelation: false);
+        $parts = [new EffectPart(abilities: $abilities, on: $on), new EffectPart(abilities: $this->carriedDown($schema, $inherited), on: $on, byRelation: false)];
 
         if (self::PARENT !== $tuple->relation) {
             return $parts;

@@ -231,6 +231,28 @@ final class EvaluatorTest extends TestCase
         self::assertSame([], $this->decide([$wanting, new StubPermit('p', Truth::unknown(IndeterminateReason::MissingData, '?'))])->remedies, 'The permit couldn\'t be evaluated.');
         self::assertSame([], $this->decide([$wanting, new StubPermit('p', Truth::fails('Prove it again.', $wait))])->remedies, 'Nothing would permit it.');
         self::assertSame([], $this->decide([new StubForbid('f', Truth::holdsUnless('Nothing would lift it.')), $permit])->remedies);
+
+        // Told apart by name as well as parameters.
+        $approval = new readonly class($stepUp->parameters()) implements Remedy {
+            /**
+             * @param array<string, bool|float|int|string|null> $parameters
+             */
+            public function __construct(
+                private array $parameters,
+            ) {
+            }
+
+            public function name(): string
+            {
+                return 'approval';
+            }
+
+            public function parameters(): array
+            {
+                return $this->parameters;
+            }
+        };
+        self::assertSame([$stepUp, $approval], $this->decide([new StubForbid('f', Truth::holdsUnless('Prove it, or be approved.', $stepUp, $approval)), $permit])->remedies);
     }
 
     public function testAnElementIsntBuiltWithoutWhatItRequires(): void
