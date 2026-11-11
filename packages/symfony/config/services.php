@@ -100,6 +100,7 @@ use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\PolicyVersion;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Roles;
+use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Policy\Storage\CachedPolicyStore;
 use YorvoID\Policy\Storage\DbalAttributeStore;
 use YorvoID\Policy\Storage\DbalPolicyStore;
@@ -311,7 +312,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(Roles::class)->arg('$sources', tagged_iterator('yorvoid.role_source'))->arg('$relations', service(Relations::class))->public();
     $services->set(SessionStepUpCheck::class);
     $services->alias(StepUpCheck::class, SessionStepUpCheck::class);
-    $services->set(RolePermit::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]))->tag('yorvoid.policy_element');
+    $services->set(RolePermit::class)->tag('yorvoid.policy_element');
+    $services->set(StepUpForSensitiveChanges::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]))->tag('yorvoid.policy_element');
     $services->set(NoEscalation::class)->tag('yorvoid.policy_element');
     $services->set(PolicyChanges::class);
     $services->set(Views::class);

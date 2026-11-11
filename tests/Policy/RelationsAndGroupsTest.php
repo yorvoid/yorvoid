@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Policy;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\Anonymous;
@@ -217,12 +218,13 @@ final class RelationsAndGroupsTest extends TestCase
         $world->asOperator(new CreateGroup($world->realm, 'admins', 'Admins'));
         $world->asOperator(new AssignGroupRole($world->realm, 'admins', 'admin'));
 
-        foreach (['Giving the super role "admin" through the group "admins"' => new AddGroupMember($world->realm, 'admins', self::subject($world->principal())), 'Giving the super role "admin"' => new AssignGroupRole($world->realm, 'admins', 'admin')] as $what => $command) {
+        foreach (['through the group' => new AddGroupMember($world->realm, 'admins', self::subject($world->principal())), 'Giving the super role "admin"' => new AssignGroupRole($world->realm, 'admins', 'admin')] as $what => $command) {
             try {
                 $world->as($admin, $command);
                 self::fail($what);
             } catch (NotPermitted $refused) {
-                self::assertSame('Not proved recently.', $refused->decision->reason, $what);
+                self::assertSame('A forbid applies: Giving the super role "admin" takes a recent proof of who they are: not proved recently.', $refused->decision->reason, $what);
+                self::assertInstanceOf(StepUpRemedy::class, $refused->decision->remedies[0] ?? null, $what);
             }
         }
 

@@ -43,6 +43,7 @@ use YorvoID\Policy\Roles;
 use YorvoID\Policy\RoleSource;
 use YorvoID\Policy\Rule\Rule;
 use YorvoID\Policy\Rule\RuleElements;
+use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Policy\Storage\CachedPolicyStore;
 use YorvoID\Policy\ViewAs\Views;
 use YorvoID\Policy\YorvoIDDeclarations;
@@ -119,7 +120,7 @@ final class PolicyWorld
         $this->roles = new Roles($catalogue, $this->policyStore, $sources, $this->relations);
         $this->attributes = new Attributes([new AcmeAttributes()], $attributes, $resolvers);
         $log = new SecurityLog($stack->log ?? $this->memory->log, $transactions, clock: $this->clock);
-        $elements = [new RolePermit($this->roles, $stepUp, $window), new NoEscalation($this->roles), new RelationPermit($this->relations)];
+        $elements = [new RolePermit($this->roles), new NoEscalation($this->roles), new StepUpForSensitiveChanges($this->roles, $stepUp, $window), new RelationPermit($this->relations)];
 
         foreach ([...$rules, ...(null === $rulesOf ? [] : $rulesOf($this->attributes))] as $rule) {
             array_push($elements, ...RuleElements::of($rule));

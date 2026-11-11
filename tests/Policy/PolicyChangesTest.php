@@ -136,7 +136,7 @@ final class PolicyChangesTest extends TestCase
                 self::fail(\sprintf('%s ran without a recent proof.', $command::class));
             } catch (NotPermitted $refused) {
                 self::assertSame(Verdict::Deny, $refused->decision->verdict);
-                self::assertSame('Not proved recently.', $refused->decision->reason);
+                self::assertStringEndsWith('takes a recent proof of who they are: not proved recently.', $refused->decision->reason);
                 self::assertCount(1, $refused->decision->remedies);
                 self::assertInstanceOf(StepUpRemedy::class, $refused->decision->remedies[0]);
             }
@@ -172,7 +172,7 @@ final class PolicyChangesTest extends TestCase
             $world->as($admin, new AssignRole($world->realm, self::id($member), 'admin'));
             self::fail('A super role was given without a proof.');
         } catch (NotPermitted $refused) {
-            self::assertSame('Giving the super role "admin" takes a recent proof of who they are, and nothing checks one here.', $refused->decision->reason);
+            self::assertSame('A forbid applies: Giving the super role "admin" takes a recent proof of who they are, and nothing checks one here.', $refused->decision->reason);
             self::assertSame([], $refused->decision->remedies);
         }
 
@@ -187,14 +187,19 @@ final class PolicyChangesTest extends TestCase
         $world->asOperator(new GrantAbilities($world->realm, 'manager', [YorvoIDDeclarations::ROLES_MANAGE, YorvoIDDeclarations::PERMISSIONS_MANAGE]));
         $manager = $world->principal('manager');
         $world->asOperator(new GrantAbilities($world->realm, 'member', ['acme.pages.publish']));
+        // Resetting it gives it back to its default roles.
+        $world->asOperator(new RevokeAbilities($world->realm, 'editor', ['acme.pages.delete']));
 
         $refusals = [
-            'They\'d change what they don\'t hold themselves: acme.pages.publish.' => new ResetAbilities($world->realm),
-            'They\'d change what they don\'t hold themselves: acme.pages.delete.' => new ResetAbilities($world->realm, ['acme.pages.delete']),
-            'They\'d change what they don\'t hold themselves: acme.pages.publish, acme.pages.view_drafts, acme.pages.delete.' => new SetAbilities($world->realm, 'editor', ['acme.pages.publish']),
+            // What it gives back first, then what it takes.
+            'They\'d change what they don\'t hold themselves: acme.pages.delete.' => new ResetAbilities($world->realm),
+            'They\'d change what they don\'t hold themselves: acme.pages.publish.' => new ResetAbilities($world->realm, ['acme.pages.publish']),
+            // Only what changes: the editor keeps publish and has lost delete already.
+            'They\'d change what they don\'t hold themselves: acme.pages.view_drafts.' => new SetAbilities($world->realm, 'editor', ['acme.pages.publish']),
             '"admin" is a super role: only someone with one gives it or takes it.' => new AssignRole($world->realm, self::id($manager), 'admin'),
-            'They\'d change what they don\'t hold themselves: acme.pages.purge, acme.pages.publish.' => new SetAbilities($world->realm, 'member', ['acme.pages.purge']),
-            'They\'d change what they don\'t hold themselves: acme.pages.delete, acme.pages.purge, acme.pages.publish.' => new SetAbilities($world->realm, 'member', ['acme.pages.delete', 'acme.pages.purge']),
+            // What it gives is weighed before what it takes.
+            'They\'d change what they don\'t hold themselves: acme.pages.purge.' => new SetAbilities($world->realm, 'member', ['acme.pages.purge']),
+            'They\'d change what they don\'t hold themselves: acme.pages.delete, acme.pages.purge.' => new SetAbilities($world->realm, 'member', ['acme.pages.delete', 'acme.pages.purge']),
         ];
 
         foreach ($refusals as $reason => $command) {

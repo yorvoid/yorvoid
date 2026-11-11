@@ -9,6 +9,7 @@ use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\Preloads;
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\RequiresElements;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Operation\AuthorizedBy;
@@ -18,14 +19,16 @@ use YorvoID\Core\Realm;
 /**
  * The permit by relations: a request for an ability on a resource is let through when the actor has a
  * relation to the resource that gives the ability, e.g. an editor of the page edits it. For a batch,
- * each relation is checked for every resource at once: one store call per level.
+ * each relation is checked for every resource at once: one store call per level. A relation can give
+ * the abilities that change roles and relations, so the evaluator needs the policy package's
+ * NoEscalation and StepUpForSensitiveChanges beside it.
  *
  * @api
  *
  * @experimental Outside the 1.0 promise until an application uses it directly: it may change in a
  *               minor release ([compatibility](docs/compatibility.md)).
  */
-final readonly class RelationPermit implements PermitElement, Preloads
+final readonly class RelationPermit implements PermitElement, Preloads, RequiresElements
 {
     /** @var \WeakMap<Request, array<string, bool|null>> By request, what each relation gave */
     private \WeakMap $preloaded;
@@ -103,5 +106,16 @@ final readonly class RelationPermit implements PermitElement, Preloads
         return $tooDeep
             ? Truth::unknown(IndeterminateReason::EvaluationError, \sprintf('Their relations to %s go deeper than they\'re followed.', $resource))
             : Truth::fails(\sprintf('They have no relation to %s that gives "%s".', $resource, $ability));
+    }
+
+    /**
+     * Relations let changes through that no-escalation and the step-up weigh (C1), from yorvoid/policy.
+     */
+    public function requiredElements(): array
+    {
+        return [
+            'yorvoid.policy.no_escalation' => 'Add YorvoID\\Policy\\NoEscalation to the evaluator\'s elements: nobody gives or takes what they don\'t hold.',
+            'yorvoid.policy.step_up' => 'Add YorvoID\\Policy\\StepUpForSensitiveChanges to the evaluator\'s elements: giving a super role or a strict ability takes a recent proof.',
+        ];
     }
 }

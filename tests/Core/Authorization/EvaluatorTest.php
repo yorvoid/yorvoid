@@ -15,9 +15,11 @@ use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\MissingData;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\PolicyElement;
+use YorvoID\Core\Authorization\Precedence;
 use YorvoID\Core\Authorization\Reason;
 use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\RequiresElements;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\WaitRemedy;
@@ -203,6 +205,73 @@ final class EvaluatorTest extends TestCase
         self::assertSame([], $this->decide([...$wanting, new StubForbid('f', Truth::holds('Never.'))])->remedies, 'A forbid holds whatever the evidence.');
         self::assertSame([], $this->decide($wanting, Truth::fails('Suspended.'))->remedies, 'Invalid authority isn\'t fixed by evidence.');
         self::assertSame([], $this->decide([new StubPermit('p', Truth::fails('no'))])->remedies);
+    }
+
+    public function testAForbidForWantOfEvidenceOffersWhatWouldLiftItOnlyIfNothingElseRefuses(): void
+    {
+        $stepUp = new StepUpRemedy(Duration::minutes(5), operation: 'acme.badge.issue');
+        $wait = new WaitRemedy(new \DateTimeImmutable('2026-11-08 12:00:00 UTC'));
+        $wanting = new StubForbid('step-up', Truth::holdsUnless('Prove it again.', $stepUp));
+        $permit = new StubPermit('p', Truth::holds('yes'));
+
+        $denied = $this->decide([$wanting, $permit]);
+        self::assertSame(Verdict::Deny, $denied->verdict);
+        self::assertSame(Precedence::ForbidHolds, $denied->precedence);
+        self::assertSame('A forbid applies: Prove it again.', $denied->reason);
+        self::assertSame([$stepUp], $denied->remedies);
+
+        // Each forbid's, each once.
+        $both = $this->decide([$wanting, new StubForbid('wait', Truth::holdsUnless('Wait, and prove it again.', $wait, new StepUpRemedy(Duration::minutes(5), operation: 'acme.badge.issue'))), $permit]);
+        self::assertSame([$stepUp, $wait], $both->remedies);
+
+        // A promise only when it's kept: nothing else refuses, and something permits.
+        self::assertSame([], $this->decide([$wanting, new StubForbid('never', Truth::holds('Never.')), $permit])->remedies, 'Another forbid holds whatever the evidence.');
+        self::assertSame([], $this->decide([$wanting, new StubForbid('unknown', Truth::unknown(IndeterminateReason::MissingData, '?')), $permit])->remedies, 'Another forbid can\'t be ruled out.');
+        self::assertSame([], $this->decide([$wanting, $permit], Truth::fails('Suspended.'))->remedies, 'Invalid authority isn\'t fixed by evidence.');
+        self::assertSame([], $this->decide([$wanting, new StubPermit('p', Truth::unknown(IndeterminateReason::MissingData, '?'))])->remedies, 'The permit couldn\'t be evaluated.');
+        self::assertSame([], $this->decide([$wanting, new StubPermit('p', Truth::fails('Prove it again.', $wait))])->remedies, 'Nothing would permit it.');
+        self::assertSame([], $this->decide([new StubForbid('f', Truth::holdsUnless('Nothing would lift it.')), $permit])->remedies);
+    }
+
+    public function testAnElementIsntBuiltWithoutWhatItRequires(): void
+    {
+        $permit = new class implements PermitElement, RequiresElements {
+            public function name(): string
+            {
+                return 'p';
+            }
+
+            public function basis(): AuthorizedBy
+            {
+                return AuthorizedBy::Ability;
+            }
+
+            public function matches(Request $request): bool
+            {
+                return true;
+            }
+
+            public function evaluate(Request $request): Truth
+            {
+                return Truth::holds('yes');
+            }
+
+            public function requiredElements(): array
+            {
+                return ['guard' => 'Add the guard.', 'other' => 'Add the other.'];
+            }
+        };
+
+        foreach ([[$permit], [$permit, new StubForbid('guard', Truth::fails('no'))], [new StubForbid('other', Truth::fails('no')), $permit]] as $elements) {
+            try {
+                new Evaluator($elements, new StubAuthority(Truth::holds('valid')));
+                self::fail('Built without what the permit requires.');
+            } catch (IntegratorError $error) {
+                self::assertMatchesRegularExpression('/^The policy element "p" needs "(guard|other)", which isn\'t in the policy\.\n\nHow to fix it: Add the (guard|other)\./', $error->getMessage());
+            }
+        }
+
+        self::assertSame(Verdict::Permit, $this->decide([$permit, new StubForbid('guard', Truth::fails('no')), new StubForbid('other', Truth::fails('no'))])->verdict);
     }
 
     public function testAnUnknownForbidSaysWhenNothingCouldPermitAnyway(): void

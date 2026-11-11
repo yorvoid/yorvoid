@@ -18,6 +18,7 @@ use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Policy\NoEscalation;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\RoleAssignment;
 use YorvoID\Policy\RolePermit;
@@ -25,6 +26,7 @@ use YorvoID\Policy\Roles;
 use YorvoID\Policy\Rule\RuleAnswer;
 use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Policy\Rule\RuleOutcome;
+use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -99,7 +101,8 @@ final class RuleElementsTest extends TestCase
             $store->assign(new RoleAssignment(new Realm('acme'), self::id($member), $role, new \DateTimeImmutable()));
         }
 
-        $evaluator = new Evaluator([new RolePermit(new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $store)), ...RuleElements::of(self::rule($answer))], new StubAuthority(Truth::holds('valid')));
+        $roles = new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $store);
+        $evaluator = new Evaluator([new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles), ...RuleElements::of(self::rule($answer))], new StubAuthority(Truth::holds('valid')));
 
         return $evaluator->decideAbility($member, $ability, new Realm('acme'), new ResourceRef('page', 'locked'), new Origin(OriginKind::Web));
     }

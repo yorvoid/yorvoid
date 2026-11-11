@@ -25,26 +25,15 @@ use YorvoID\Policy\Change\UnassignGroupRole;
 use YorvoID\Policy\Change\UnassignRole;
 use YorvoID\Relations\Change\AddRelation;
 use YorvoID\Relations\Change\RemoveRelation;
-use YorvoID\Relations\RelationDefinition;
-use YorvoID\Relations\Relations;
-use YorvoID\Relations\RelationSchema;
-use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\Subject;
 use YorvoID\Relations\TooDeep;
 
 /**
  * Nobody gives or takes what they don't hold themselves (M2-13): each change is weighed by what it
- * does, to anyone, directly or through what follows from it, and refused when they couldn't give or
- * take that directly.
- *
- * - A role whose abilities they don't all have, a super role unless they have one, an ability they lack.
- * - Membership of a group, as the roles of the group and of the groups it's within.
- * - A relation, as what it gives on its resource. A link (a parent, or a relation another is inherited
- *   through) also as what it brings along: the relations inherited through it, what those carry further
- *   down, which only a role holds for every descendant, and, for a parent, the roles on the new parent
- *   and above it.
- * - Deleting a group or a role, as everything it takes away.
- * - Nobody sets their own security attributes: what they decide is the application's rules'.
+ * gives and takes, to anyone, directly or through what follows from it (Effects), and refused when they
+ * couldn't give or take that directly: a role whose abilities they don't all have, a super role unless
+ * they have one, an ability they lack. Nobody sets their own security attributes either: what they
+ * decide is the application's rules'.
  *
  * Managing roles doesn't make anyone more than they are. The host's operator is the final authority,
  * and isn't held to it.
@@ -53,8 +42,7 @@ use YorvoID\Relations\TooDeep;
  */
 final readonly class NoEscalation implements ForbidElement
 {
-    /** The relation roles follow to what a resource is within (Roles::within()) */
-    private const string PARENT = 'parent';
+    public const string NAME = 'yorvoid.policy.no_escalation';
 
     public function __construct(
         private Roles $roles,
@@ -63,7 +51,7 @@ final readonly class NoEscalation implements ForbidElement
 
     public function name(): string
     {
-        return 'yorvoid.policy.no_escalation';
+        return self::NAME;
     }
 
     public function matches(Request $request): bool
@@ -87,182 +75,28 @@ final readonly class NoEscalation implements ForbidElement
                 : Truth::fails('They set someone else\'s.');
         }
 
-        if ($command instanceof AddGroupMember || $command instanceof RemoveGroupMember) {
-            return $this->roles($request, $this->roles->rolesOfGroup($request->realm, $command->group));
-        }
+        $effect = Effects::of($this->roles)->on($request);
 
-        if ($command instanceof DeleteGroup) {
-            return $this->deleteGroup($request, $command->name);
-        }
+        foreach ([...$effect->gives, ...$effect->takes] as $part) {
+            $truth = $this->roles(null === $part->on ? $request : $request->on($part->on), $part->roles, $part->abilities, $part->byRelation);
 
-        if ($command instanceof AddRelation || $command instanceof RemoveRelation) {
-            return $this->relation($request, new RelationTuple($command->realm, $command->object, $command->relation, $command->subject));
-        }
-
-        [$role, $abilities] = match (true) {
-            $command instanceof AssignRole, $command instanceof UnassignRole, $command instanceof AssignGroupRole, $command instanceof UnassignGroupRole => [$command->role, []],
-            $command instanceof DeleteRole => [$command->name, []],
-            $command instanceof CreateRole && null !== $command->from => [$command->from, []],
-            $command instanceof GrantAbilities, $command instanceof RevokeAbilities => [null, $command->abilities],
-            $command instanceof SetAbilities => [null, [...$command->abilities, ...$this->roles->abilitiesOf($request->realm, $command->role)]],
-            $command instanceof ResetAbilities => [null, $command->abilities ?? $this->roles->changes($request->realm)->abilities()],
-            default => [null, []],
-        };
-
-        return null === $role ? $this->abilities($request, $abilities) : $this->roles($request, [$role]);
-    }
-
-    /**
-     * A relation given or taken, weighed on its resource (C2): what it gives there and, if it's a link,
-     * what it brings along.
-     */
-    private function relation(Request $request, RelationTuple $tuple): Truth
-    {
-        $relations = $this->roles->relations();
-
-        // Without relations, a relation's abilities aren't known: none is given.
-        if (null === $relations) {
-            return $this->abilities($request, []);
-        }
-
-        $schema = $relations->schema();
-        $on = $request->on($tuple->object);
-        $definitions = $schema->type($tuple->object->type)->relations ?? [];
-        $abilities = $schema->abilitiesGivenBy($tuple->object->type, $tuple->relation);
-        // The relations of the type inherited through it, and what they imply.
-        $inherited = [];
-
-        foreach ($definitions as $relation) {
-            if (\array_key_exists($tuple->relation, $relation->fromParents)) {
-                array_push($abilities, ...$schema->abilitiesGivenBy($tuple->object->type, $relation->name));
-                $inherited += $this->implied($definitions, $relation->name);
-            }
-        }
-
-        $truth = $this->abilities($on, $abilities);
-
-        if (self::refuses($truth) || [] === $inherited && self::PARENT !== $tuple->relation) {
-            return $truth;
-        }
-
-        // What it carries down to the resource's descendants: only a role, in the realm or on the resource
-        // or above it, holds that for every one of them (C3).
-        $truth = $this->abilities($on, $this->carriedDown($schema, $inherited), byRelation: false);
-
-        if (self::refuses($truth) || self::PARENT !== $tuple->relation) {
-            return $truth;
-        }
-
-        $parent = $tuple->subject->resource;
-        $above = $relations->ancestors($request->realm, $parent) ?? throw new TooDeep(\sprintf('The parents of %s', $parent));
-
-        // Those roles count on every descendant too (Roles::within()): only a role holds them for all (R1).
-        return $this->roles($on, $this->roles->rolesOn($request->realm, [$parent, ...$above]), byRelation: false);
-    }
-
-    /**
-     * The abilities of every relation inherited, through any link, from these or what they imply, to a
-     * fixpoint. The schema doesn't say what type a child is, so they're matched by name: that can count
-     * too much, never too little.
-     *
-     * @param array<string, string> $names The relations inherited on the resource, and what they imply, by name
-     *
-     * @return list<string>
-     */
-    private function carriedDown(RelationSchema $schema, array $names): array
-    {
-        do {
-            $before = \count($names);
-
-            foreach ($schema->types() as $type) {
-                foreach ($type->relations as $relation) {
-                    if ([] !== array_intersect($relation->fromParents, $names)) {
-                        $names += $this->implied($type->relations, $relation->name);
-                    }
-                }
-            }
-        } while (\count($names) > $before);
-
-        $abilities = [];
-
-        foreach ($schema->types() as $type) {
-            foreach ($type->relations as $relation) {
-                if ([] !== array_intersect($relation->fromParents, $names)) {
-                    array_push($abilities, ...$schema->abilitiesGivenBy($type->name, $relation->name));
-                }
-            }
-        }
-
-        return $abilities;
-    }
-
-    /**
-     * The relation and those of its type it implies: an editor is a viewer.
-     *
-     * @param array<string, RelationDefinition> $definitions The type's relations
-     *
-     * @return array<string, string> By name
-     */
-    private function implied(array $definitions, string $relation): array
-    {
-        $names = [$relation => $relation];
-        $pending = [$relation];
-
-        while (null !== $name = array_shift($pending)) {
-            foreach ($definitions as $other) {
-                if (!isset($names[$other->name]) && \in_array($name, $other->impliedBy, true)) {
-                    $names[$other->name] = $other->name;
-                    $pending[] = $other->name;
-                }
-            }
-        }
-
-        return $names;
-    }
-
-    /**
-     * Everything deleting the group takes away (C4): the roles of the group and of those it's within;
-     * whatever is given to the group, which goes with it; and what's given to the members of the groups
-     * it's within, which its members lose. Each relation is weighed on its own resource.
-     */
-    private function deleteGroup(Request $request, string $group): Truth
-    {
-        $truth = $this->roles($request, $this->roles->rolesOfGroup($request->realm, $group));
-        $relations = $this->roles->relations();
-
-        if (self::refuses($truth) || null === $relations) {
-            return $truth;
-        }
-
-        $subjects = [new Subject(GroupRelations::group($group)), GroupRelations::members($group)];
-
-        foreach ($this->roles->groupsAbove($request->realm, $group) as $parent) {
-            $subjects[] = GroupRelations::members($parent);
-        }
-
-        // A group's own relations among them are its members, whose roles are weighed above: as relations,
-        // they give nothing.
-        foreach ($relations->given($request->realm, $subjects) as $tuple) {
-            $truth = $this->relation($request, $tuple);
-
-            if (self::refuses($truth)) {
+            if (TruthValue::Fails !== $truth->value) {
                 return $truth;
             }
         }
 
-        return $truth;
+        return Truth::fails('They hold everything they change.');
     }
 
     /**
-     * Each role's abilities they hold, and a super role only if they have one.
+     * Each role's abilities they hold, and a super role only if they have one; and the abilities.
      *
      * @param list<string> $roles
+     * @param list<string> $abilities
      * @param bool         $byRelation Whether a relation to the request's resource holds an ability, or only a role does
      */
-    private function roles(Request $request, array $roles, bool $byRelation = true): Truth
+    private function roles(Request $request, array $roles, array $abilities, bool $byRelation): Truth
     {
-        $abilities = [];
-
         foreach ($roles as $role) {
             if (true === $this->roles->role($request->realm, $role)?->super && !$this->hasSuperRole($request)) {
                 return Truth::holds(\sprintf('"%s" is a super role: only someone with one gives it or takes it.', $role));
@@ -280,7 +114,7 @@ final readonly class NoEscalation implements ForbidElement
      *
      * @param list<string> $abilities
      */
-    private function abilities(Request $request, array $abilities, bool $byRelation = true): Truth
+    private function abilities(Request $request, array $abilities, bool $byRelation): Truth
     {
         $missing = array_filter($this->roles->missing($request, array_unique($abilities)), fn (string $ability): bool => !$byRelation || !$this->related($request, $ability));
 
@@ -312,11 +146,6 @@ final readonly class NoEscalation implements ForbidElement
         }
 
         return false;
-    }
-
-    private static function refuses(Truth $truth): bool
-    {
-        return TruthValue::Fails !== $truth->value;
     }
 
     private function hasSuperRole(Request $request): bool

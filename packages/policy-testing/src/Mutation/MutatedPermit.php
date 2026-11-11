@@ -8,6 +8,7 @@ use YorvoID\Core\Authorization\ChecksCatalogue;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\Preloads;
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\RequiresElements;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\OperationCatalogue;
@@ -17,7 +18,7 @@ use YorvoID\Core\Operation\OperationCatalogue;
  *
  * @internal
  */
-final readonly class MutatedPermit implements PermitElement, Preloads, ChecksCatalogue
+final readonly class MutatedPermit implements PermitElement, Preloads, ChecksCatalogue, RequiresElements
 {
     public function __construct(
         public PermitElement $inner,
@@ -57,5 +58,10 @@ final readonly class MutatedPermit implements PermitElement, Preloads, ChecksCat
         if ($this->inner instanceof ChecksCatalogue) {
             $this->inner->checkCatalogue($catalogue);
         }
+    }
+
+    public function requiredElements(): array
+    {
+        return $this->inner instanceof RequiresElements ? $this->inner->requiredElements() : [];
     }
 }

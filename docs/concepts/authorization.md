@@ -176,7 +176,23 @@ Two rules hold for everyone but the host's operator:
   - a relation, as what it gives on its resource; a link (`parent`, or a relation others are inherited through) also as what it brings along ([links](#relations));
   - deleting a group or a role, as everything it takes away: the group's roles, and what's given to its members;
   - nobody sets their own security attributes ([attributes](#attributes)).
-- **Giving a strict ability or a super role takes a recent proof** of who one is (AUZ-052): the role permit asks a `StepUpCheck` (in Symfony, the session's step-up, within `step_up.window`), and a refusal carries a `StepUpRemedy`. Without a `StepUpCheck`, only the operator gives them.
+- **Giving a strict ability or a super role takes a recent proof** of who one is (`StepUpForSensitiveChanges`, AUZ-052), whatever permits the change: a role, a relation, a rule or an `AbilityPolicy`. That's giving one directly, a role that has one, a group with such a role, a role copied from one, a reset that gives one back, or a relation that gives one, directly or through what follows from it. Taking never waits for a proof. It asks a `StepUpCheck` (in Symfony, the session's step-up, within `step_up.window`), and a refusal carries a `StepUpRemedy`, or a `WaitRemedy` after a recovery. Without a `StepUpCheck`, it refuses them to everyone but the operator.
+
+Both are forbids, `yorvoid.policy.no_escalation` and `yorvoid.policy.step_up`, and neither is optional: an evaluator with the role permit or the relation permit but without both fails when it's built. The Symfony bundle adds all four.
+
+```php
+use YorvoID\Authn\StepUp\SessionStepUpCheck;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Policy\NoEscalation;
+use YorvoID\Policy\RolePermit;
+use YorvoID\Policy\StepUpForSensitiveChanges;
+
+$evaluator = Evaluator::builtIn($authority, elements: [
+    new RolePermit($roles),
+    new NoEscalation($roles),
+    new StepUpForSensitiveChanges($roles, new SessionStepUpCheck($stepUp)),
+]);
+```
 
 ## Relations
 
@@ -304,6 +320,8 @@ A rule in PHP (`Rule`) permits, forbids, abstains, or can't tell (`RuleAnswer`).
 ## Remedies
 
 A Deny caused only by missing evidence carries remedies: what could satisfy the requirement, never a permission by itself. Satisfying one creates evidence, and the next request is a new decision.
+
+A forbid can hold for want of evidence too (`Truth::holdsUnless()`), as the step-up for sensitive changes does. Its Deny carries the remedies only when they'd be enough: every forbid that holds has one, and without them the request would be permitted. A remedy is a promise.
 
 | Remedy | Asks for |
 |---|---|
@@ -497,4 +515,4 @@ final readonly class NoBadgesAtNight implements ForbidElement
 }
 ```
 
-Read the time from `$request->at`: one moment for the whole decision. In Symfony, a service implementing `PolicyElement` is added to the evaluator by itself; in plain PHP, pass it to `Evaluator::builtIn(..., elements: [new NoBadgesAtNight()])`. Two elements with one name, or an element that's both a permit and a forbid, fail when the evaluator is built.
+Read the time from `$request->at`: one moment for the whole decision. In Symfony, a service implementing `PolicyElement` is added to the evaluator by itself; in plain PHP, pass it to `Evaluator::builtIn(..., elements: [new NoBadgesAtNight()])`. Two elements with one name, an element that's both a permit and a forbid, or an element without one it requires (`RequiresElements`, by name) fail when the evaluator is built.

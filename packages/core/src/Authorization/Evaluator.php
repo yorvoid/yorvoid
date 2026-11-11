@@ -36,7 +36,7 @@ use YorvoID\Core\Storage\StoreUnreachable;
  * Decides with the policy's elements and the actor's authority, by the precedence of 06 §3, the first
  * row that applies:
  *
- *   1. a forbid holds                → Deny
+ *   1. a forbid holds                → Deny, with what would lift it if nothing else would refuse
  *   2. a forbid is unknown           → Indeterminate (a forbid can't be ruled out)
  *   3. the authority is invalid      → Deny
  *   4. the authority is unknown      → Indeterminate
@@ -72,8 +72,9 @@ final readonly class Evaluator implements Authorization
      * @param IdGenerator             $ids       Each decision's ID
      * @param DecisionLog|null        $decisions Where decisions are recorded (AUZ-040); without it, nowhere
      *
-     * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, or a
-     *                         permit authorizes by Consequence, which only another operation's permit gives
+     * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, a
+     *                         permit authorizes by Consequence, which only another operation's permit gives,
+     *                         or an element lacks one it requires (RequiresElements)
      */
     public function __construct(
         iterable $elements,
@@ -109,6 +110,14 @@ final readonly class Evaluator implements Authorization
             }
 
             $list[$element->name()] = $element;
+        }
+
+        foreach ($list as $element) {
+            foreach ($element instanceof RequiresElements ? $element->requiredElements() : [] as $name => $how) {
+                if (!isset($list[$name])) {
+                    throw new IntegratorError(\sprintf('The policy element "%s" needs "%s", which isn\'t in the policy.', $element->name(), $name), $how, 'concepts/authorization.md#policy-elements');
+                }
+            }
         }
 
         // By name: the decision's reasons, and the detail it leads with, never depend on the order given.
@@ -470,9 +479,24 @@ final readonly class Evaluator implements Authorization
      */
     private function precedence(Request $request, array $forbids, Truth $authority, array $permits, array $reasons): Decision
     {
-        // 1.
+        // 1. With what would lift the forbids, only if each has a remedy and nothing else would refuse: a
+        // remedy is a promise.
         if ([] !== $forbids['holds']) {
-            return Decision::deny(\sprintf('A forbid applies: %s', $forbids['holds'][0]->detail), $reasons, precedence: Precedence::ForbidHolds);
+            $remedies = [];
+
+            foreach ($forbids['holds'] as $truth) {
+                if ([] === $truth->remedies) {
+                    $remedies = [];
+
+                    break;
+                }
+
+                array_push($remedies, ...$truth->remedies);
+            }
+
+            $lifted = [] === $remedies ? null : $this->precedence($request, ['holds' => [], 'unknown' => $forbids['unknown']], $authority, $permits, $reasons);
+
+            return Decision::deny(\sprintf('A forbid applies: %s', $forbids['holds'][0]->detail), $reasons, Precedence::PermitHolds === $lifted?->precedence ? self::once($remedies) : [], Precedence::ForbidHolds);
         }
 
         $couldPermit = [] !== $permits['holds'] || [] !== $permits['unknown'];
@@ -527,17 +551,33 @@ final readonly class Evaluator implements Authorization
         $remedies = [];
 
         foreach ($permits['fails'] as [, $truth]) {
-            foreach ($truth->remedies as $remedy) {
-                $remedies[json_encode([$remedy->name(), $remedy->parameters()], \JSON_THROW_ON_ERROR)] ??= $remedy;
-            }
+            array_push($remedies, ...$truth->remedies);
         }
 
         return Decision::deny(
             [] === $permits['fails'] ? \sprintf('No permit applies to "%s".', $request->name()) : $permits['fails'][0][1]->detail,
             $reasons,
-            array_values($remedies),
+            self::once($remedies),
             Precedence::NoPermit,
         );
+    }
+
+    /**
+     * Each remedy once.
+     *
+     * @param list<Remedy> $remedies
+     *
+     * @return list<Remedy>
+     */
+    private static function once(array $remedies): array
+    {
+        $once = [];
+
+        foreach ($remedies as $remedy) {
+            $once[json_encode([$remedy->name(), $remedy->parameters()], \JSON_THROW_ON_ERROR)] ??= $remedy;
+        }
+
+        return array_values($once);
     }
 
     /**
