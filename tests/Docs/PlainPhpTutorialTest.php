@@ -56,7 +56,7 @@ final class PlainPhpTutorialTest extends TestCase
                 Evaluator::builtIn($authority, elements: $elements);
                 self::fail('The role permit was built without its rules.');
             } catch (IntegratorError $error) {
-                self::assertStringStartsWith('The policy element "yorvoid.roles" needs "yorvoid.policy.', $error->getMessage());
+                self::assertStringStartsWith('The policy element "yorvoid.roles" needs the forbid "yorvoid.policy.', $error->getMessage());
             }
         }
 
