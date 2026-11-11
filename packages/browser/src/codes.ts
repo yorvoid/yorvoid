@@ -9,7 +9,8 @@
  * - [data-yorvoid-print] prints the page.
  *
  * The group's data-yorvoid-heading starts the file, e.g. "Recovery codes for", followed by the site
- * and the date.
+ * and the date. The site is the group's data-yorvoid-site, as the printout names it, or else the page's
+ * host name.
  */
 export interface CodesEnvironment {
   /** The site's host name, e.g. location.hostname */
@@ -38,8 +39,9 @@ export function wireCodes(root: ParentNode, browser: () => CodesEnvironment = br
   // Only on a page with the codes: the others don't need the browser's clipboard.
   const environment = browser();
   const codes = Array.from(root.querySelectorAll('[data-yorvoid-recovery-codes] code'), (code) => code.textContent?.trim() ?? '').filter((code) => code !== '');
-  const site = fileName(environment.hostname);
-  const text = (): string => `${group.dataset['yorvoidHeading'] ?? ''} ${environment.hostname}, ${environment.now().toISOString().slice(0, 10)}\n\n${codes.join('\n')}\n`;
+  const name = group.dataset['yorvoidSite'] || environment.hostname;
+  const site = fileName(name);
+  const text = (): string => `${group.dataset['yorvoidHeading'] ?? ''} ${name}, ${environment.now().toISOString().slice(0, 10)}\n\n${codes.join('\n')}\n`;
   const control = (selector: string): Control | null => group.querySelector(selector) as Control | null;
 
   control('[data-yorvoid-download]')?.addEventListener('click', () => environment.save(`${site}-recovery-codes.txt`, text()));

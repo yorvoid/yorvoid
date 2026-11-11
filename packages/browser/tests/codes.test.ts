@@ -24,9 +24,9 @@ class FakeControl {
   }
 }
 
-function codesPage(controls: Record<string, FakeControl | null>, heading: string | null = 'Recovery codes for') {
+function codesPage(controls: Record<string, FakeControl | null>, heading: string | null = 'Recovery codes for', site = '') {
   const group = Object.assign(new FakeControl(true), {
-    dataset: heading === null ? {} : { yorvoidHeading: heading },
+    dataset: { ...(heading === null ? {} : { yorvoidHeading: heading }), ...(site === '' ? {} : { yorvoidSite: site }) },
     querySelector: (selector: string) => controls[selector] ?? null,
   });
   const codes = [' ABCD-EFGH ', 'IJKL-MNOP', null].map((textContent) => ({ textContent }));
@@ -79,6 +79,15 @@ test('the codes can be downloaded, copied and printed, once the script shows the
   assert.equal(env.printed, 1);
   assert.deepEqual(copied, [TEXT]);
   assert.equal(controls['[data-yorvoid-copied]'].hidden, false);
+});
+
+test('the file names the site as the printout does, and the page\'s host only without one', () => {
+  const controls = { '[data-yorvoid-download]': new FakeControl() };
+  const env = environment();
+  wireCodes(codesPage(controls, 'Recovery codes for', 'Example.com').root, () => env);
+  controls['[data-yorvoid-download]'].click();
+
+  assert.deepEqual(env.saved, [['example.com-recovery-codes.txt', 'Recovery codes for Example.com, 2026-11-11\n\nABCD-EFGH\nIJKL-MNOP\n']]);
 });
 
 test('where the browser can\'t copy, there\'s no copy button; a failed copy says nothing', async () => {

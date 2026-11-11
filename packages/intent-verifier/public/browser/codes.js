@@ -6,8 +6,9 @@ export function wireCodes(root, browser = browserEnvironment) {
     // Only on a page with the codes: the others don't need the browser's clipboard.
     const environment = browser();
     const codes = Array.from(root.querySelectorAll('[data-yorvoid-recovery-codes] code'), (code) => code.textContent?.trim() ?? '').filter((code) => code !== '');
-    const site = fileName(environment.hostname);
-    const text = () => `${group.dataset['yorvoidHeading'] ?? ''} ${environment.hostname}, ${environment.now().toISOString().slice(0, 10)}\n\n${codes.join('\n')}\n`;
+    const name = group.dataset['yorvoidSite'] || environment.hostname;
+    const site = fileName(name);
+    const text = () => `${group.dataset['yorvoidHeading'] ?? ''} ${name}, ${environment.now().toISOString().slice(0, 10)}\n\n${codes.join('\n')}\n`;
     const control = (selector) => group.querySelector(selector);
     control('[data-yorvoid-download]')?.addEventListener('click', () => environment.save(`${site}-recovery-codes.txt`, text()));
     control('[data-yorvoid-print]')?.addEventListener('click', () => environment.print());

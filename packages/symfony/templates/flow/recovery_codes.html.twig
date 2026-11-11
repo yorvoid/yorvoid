@@ -19,7 +19,7 @@
         </ol>
     </div>
     {# Shown by the browser client: without it, the codes are still here to write down or print. #}
-    <div data-yorvoid-save-codes data-yorvoid-heading="{{ 'yorvoid.ui.recovery_codes.file_heading'|yorvoid_trans }}" hidden>
+    <div data-yorvoid-save-codes data-yorvoid-site="{{ site }}" data-yorvoid-heading="{{ 'yorvoid.ui.recovery_codes.file_heading'|yorvoid_trans }}" hidden>
         <p>
             <button type="button" data-yorvoid-download>{{ 'yorvoid.ui.recovery_codes.download'|yorvoid_trans }}</button>
             <button type="button" data-yorvoid-copy>{{ 'yorvoid.ui.recovery_codes.copy'|yorvoid_trans }}</button>
