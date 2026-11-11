@@ -202,7 +202,7 @@ test('the recovery codes can be downloaded, copied and printed', async ({ page, 
   expect(text.trim().split('\n').slice(2)).toEqual(codes);
 
   await page.getByRole('button', { name: 'Copy' }).click();
-  await expect(page.getByRole('status')).toHaveText('Copied.');
+  await expect(page.getByRole('status')).toHaveText('Copied. Paste them into your password manager now.');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);
 
   await page.getByRole('button', { name: 'Print' }).click();

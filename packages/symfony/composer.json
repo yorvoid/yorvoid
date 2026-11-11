@@ -36,6 +36,7 @@
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
         "psr/log": "^3.0",
+        "symfony/clock": "^7.4 || ^8.1",
         "symfony/config": "^7.4 || ^8.1",
         "symfony/console": "^7.4 || ^8.1",
         "symfony/dependency-injection": "^7.4 || ^8.1",

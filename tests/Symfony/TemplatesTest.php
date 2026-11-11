@@ -106,6 +106,10 @@ final class TemplatesTest extends TestCase
         self::assertLessThan(strpos($html, 'id="yorvoid-saved"'), strpos($html, 'data-yorvoid-save-codes'), 'The declaration comes after the ways to save them.');
         self::assertStringContainsString('A screenshot isn\'t safe', $page->filter('main p')->first()->text());
         self::assertStringContainsString('<style media="print">', $html);
+        $printed = $page->filter('[data-yorvoid-printed]');
+        self::assertMatchesRegularExpression('/^Recovery codes for example\.com, made \d{4}-\d{2}-\d{2}$/', $printed->filter('[data-yorvoid-printed-heading]')->text(), 'A printout says which site the codes are for, without the script too.');
+        self::assertCount(10, $printed->filter('[data-yorvoid-recovery-codes] code'));
+        self::assertStringContainsString('[data-yorvoid-printed], [data-yorvoid-printed] * { visibility: visible; }', $html, 'What prints is that region.');
     }
 
     public function testTheSignInButtonInvitesTryingAgainAfterACancel(): void
