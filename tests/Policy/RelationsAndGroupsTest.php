@@ -190,7 +190,7 @@ final class RelationsAndGroupsTest extends TestCase
             'They\'d change what they don\'t hold themselves: acme.pages.view_drafts, acme.pages.publish, acme.pages.delete.' => new AddGroupMember($world->realm, 'writers', self::subject($member)),
             '"admin" is a super role: only someone with one gives it or takes it.' => new AddGroupMember($world->realm, 'admins', self::subject($member)),
             'They\'d change what they don\'t hold themselves: acme.pages.view_drafts, acme.pages.publish, acme.pages.delete. ' => new AssignGroupRole($world->realm, 'writers', 'editor'),
-            'They\'d change what they don\'t hold themselves: acme.pages.publish, acme.pages.view_drafts.' => new AddRelation($world->realm, $page, 'editor', self::subject($member)),
+            'They\'d change what they don\'t hold themselves on page:1: acme.pages.publish, acme.pages.view_drafts.' => new AddRelation($world->realm, $page, 'editor', self::subject($member)),
         ];
 
         foreach ($refusals as $reason => $command) {

@@ -19,12 +19,14 @@ final readonly class ResourceType
 
     /**
      * @param list<RelationDefinition> $relations
+     * @param bool                     $reserved  Whether its relations change only through its owner's operations: AddRelation and RemoveRelation refuse it
      *
      * @throws IntegratorError When the name isn't a resource type's, or two relations share a name
      */
     public function __construct(
         public string $name,
         array $relations,
+        public bool $reserved = false,
     ) {
         new ResourceRef($name, 'x');
         $byName = [];

@@ -60,6 +60,9 @@ final class CachedPolicyStoreTest extends TestCase
         self::assertCount(1, $store->assignments($this->realm, $this->ada));
         self::assertCount(1, $store->principalsWith($this->realm, 'helper'));
         self::assertCount(1, $store->groupAssignments($this->realm, ['writers', 'admins']));
+        $this->hold('policy.0.'.hash('sha256', 'roles_on.["page:a","page:b|c"]'), ['helper']);
+        self::assertSame(['helper'], $store->rolesOn($this->realm, [new ResourceRef('page', 'a'), new ResourceRef('page', 'b|c')]));
+        self::assertSame([], $store->rolesOn($this->realm, [new ResourceRef('page', 'a|page:b'), new ResourceRef('page', 'c')]), 'Another list of resources.');
     }
 
     public function testWhatsNotWhatTheStoreGivesIsReadAgain(): void
@@ -73,6 +76,7 @@ final class CachedPolicyStoreTest extends TestCase
             'changes' => [['grant' => []]],
             'assignments.'.$this->ada => [[new RoleAssignment($this->realm, $bob, 'admin', $at)], [new RoleAssignment($other, $this->ada, 'admin', $at)], ['x' => new RoleAssignment($this->realm, $this->ada, 'admin', $at)], [new GroupRoleAssignment($this->realm, 'admins', 'admin', $at)]],
             'principals.admin' => [['not an id']],
+            hash('sha256', 'roles_on.["page:a"]') => [[7], ['x' => 'helper']],
             hash('sha256', 'group_assignments.writers|admins') => [[new GroupRoleAssignment($this->realm, 'admins2', 'admin', $at)], [new GroupRoleAssignment($other, 'writers', 'admin', $at)], [new RoleAssignment($this->realm, $this->ada, 'admin', $at)]],
         ];
 
@@ -88,6 +92,7 @@ final class CachedPolicyStoreTest extends TestCase
                 self::assertSame([], $store->assignments($this->realm, $this->ada), $what);
                 self::assertSame([], $store->principalsWith($this->realm, 'admin'), $what);
                 self::assertSame([], $store->groupAssignments($this->realm, ['writers', 'admins']), $what);
+                self::assertSame([], $store->rolesOn($this->realm, [new ResourceRef('page', 'a')]), $what);
             }
         }
     }

@@ -309,10 +309,36 @@ final readonly class Roles
      */
     public function rolesOfGroup(Realm $realm, string $group): array
     {
-        $within = null === $this->relations ? [] : $this->relations->memberships($realm, GroupRelations::members($group), GroupRelations::TYPE, GroupRelations::MEMBER) ?? throw new TooDeep(\sprintf('The groups "%s" is within', $group));
-        $groups = [$group, ...array_map(static fn (ResourceRef $parent): string => $parent->id, $within)];
+        $groups = [$group, ...$this->groupsAbove($realm, $group)];
 
         return array_values(array_unique(array_map(static fn (GroupRoleAssignment $assignment): string => $assignment->role, $this->store->groupAssignments($realm, $groups))));
+    }
+
+    /**
+     * The groups the group is within, through groups within groups too.
+     *
+     * @return list<string> Their names
+     *
+     * @throws TooDeep
+     */
+    public function groupsAbove(Realm $realm, string $group): array
+    {
+        $within = null === $this->relations ? [] : $this->relations->memberships($realm, GroupRelations::members($group), GroupRelations::TYPE, GroupRelations::MEMBER) ?? throw new TooDeep(\sprintf('The groups "%s" is within', $group));
+
+        return array_map(static fn (ResourceRef $parent): string => $parent->id, $within);
+    }
+
+    /**
+     * The roles given on any of the resources, to principals or groups: what a resource placed within
+     * one of them would bring along.
+     *
+     * @param list<ResourceRef> $resources
+     *
+     * @return list<string>
+     */
+    public function rolesOn(Realm $realm, array $resources): array
+    {
+        return $this->store->rolesOn($realm, $resources);
     }
 
     /**

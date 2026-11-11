@@ -165,6 +165,17 @@ final class SecurityTest extends TestCase
         }
     }
 
+    public function testARelationOfAReservedTypeOrAnUndeclaredOneIsABadRequest(): void
+    {
+        $this->boot();
+
+        // M2-13: AddRelation refuses a group's relations, for the operator too; neither is a 500.
+        foreach (['/relate/group/member', '/relate/page/owner'] as $path) {
+            $this->browser->request('POST', $path);
+            self::assertSame(400, $this->statusCode(), $path);
+        }
+    }
+
     public function testDoesntStartAPhpSessionForVisitors(): void
     {
         $this->boot();

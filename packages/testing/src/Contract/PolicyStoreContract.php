@@ -213,6 +213,39 @@ trait PolicyStoreContract
         self::assertCount(1, $store->groupAssignments($other, ['writers']));
     }
 
+    /**
+     * The roles given on resources, to principals and groups, expired ones too: what a resource placed
+     * within one would bring along (M2-13).
+     */
+    #[DataProvider('implementations')]
+    public function testTellsTheRolesGivenOnResources(string $implementation): void
+    {
+        $store = $this->policyStore($implementation);
+        $acme = new Realm('acme');
+        $other = new Realm('other');
+        $at = new \DateTimeImmutable('2026-11-08 02:00:00.000000 UTC');
+        $past = new \DateTimeImmutable('2026-11-09 02:00:00.000000 UTC');
+        $a = new ResourceRef('page', 'a');
+        $b = new ResourceRef('page', 'b');
+        $ada = new PrincipalId(new UuidV7());
+
+        self::assertSame([], $store->rolesOn($acme, []));
+        self::assertSame([], $store->rolesOn($acme, [$a]));
+
+        $store->assign(new RoleAssignment($acme, $ada, 'manager', $at, $a));
+        $store->assign(new RoleAssignment($acme, $ada, 'editor', $at));
+        $store->assign(new RoleAssignment($acme, $ada, 'admin', $at, $b, $past));
+        $store->assignGroup(new GroupRoleAssignment($acme, 'writers', 'editor', $at, $a));
+        $store->assignGroup(new GroupRoleAssignment($acme, 'writers', 'manager', $at, $b));
+        $store->assignGroup(new GroupRoleAssignment($acme, 'writers', 'member', $at, new ResourceRef('page', 'a|b')));
+        $store->assign(new RoleAssignment($other, $ada, 'owner', $at, $a));
+
+        self::assertSame(['editor', 'manager'], $store->rolesOn($acme, [$a]), 'A principal\'s and a group\'s, each once, sorted; not those in the whole realm.');
+        self::assertSame(['admin', 'editor', 'manager'], $store->rolesOn($acme, [$a, $b, $a]), 'Expired ones too.');
+        self::assertSame(['owner'], $store->rolesOn($other, [$a]), 'Only that realm\'s.');
+        self::assertSame([], $store->rolesOn($acme, [new ResourceRef('site', 'a')]), 'Only on those resources.');
+    }
+
     #[DataProvider('implementations')]
     public function testCountsEachRealmsVersion(string $implementation): void
     {

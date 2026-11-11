@@ -262,6 +262,31 @@ final readonly class Relations
         return [$pairs, $parents];
     }
 
+    /**
+     * Every tuple whose subject is one of these, whatever its relation: what those subjects are given,
+     * directly.
+     *
+     * @param list<Subject> $subjects
+     *
+     * @return list<RelationTuple>
+     */
+    public function given(Realm $realm, array $subjects): array
+    {
+        $relations = [];
+
+        foreach ($this->schema->types() as $type) {
+            $relations += array_combine(array_keys($type->relations), array_keys($type->relations));
+        }
+
+        $tuples = [];
+
+        foreach ($relations as $relation) {
+            array_push($tuples, ...$this->store->objects($realm, $subjects, $relation));
+        }
+
+        return $tuples;
+    }
+
     public function schema(): RelationSchema
     {
         return $this->schema;

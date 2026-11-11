@@ -18,7 +18,7 @@ use YorvoID\Policy\YorvoIDDeclarations;
  *
  * @api
  */
-#[Operation('yorvoid.attribute.set', 'Set a security attribute of a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: YorvoIDDeclarations::PRINCIPALS_MANAGE)]
+#[Operation('yorvoid.attribute.set', 'Set a security attribute of a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: YorvoIDDeclarations::ATTRIBUTES_MANAGE)]
 final readonly class SetAttribute implements Command
 {
     /**

@@ -46,11 +46,12 @@ final readonly class RelationChanges implements OperationHandler
     }
 
     /**
-     * @throws UnknownRelation
+     * @throws ReservedRelation|UnknownRelation
      */
     private function add(AddRelation $command, Permit $permit, Origin $origin): void
     {
         $permit->use($command);
+        $this->unreserved($command->object);
         $tuple = $this->tuple($command->realm, $command->object, $command->relation, $command->subject);
 
         $this->transactions->run(function () use ($tuple, $permit, $origin): void {
@@ -61,10 +62,13 @@ final readonly class RelationChanges implements OperationHandler
 
     /**
      * @return bool Whether the subject had it
+     *
+     * @throws ReservedRelation
      */
     private function remove(RemoveRelation $command, Permit $permit, Origin $origin): bool
     {
         $permit->use($command);
+        $this->unreserved($command->object);
         $tuple = new RelationTuple($command->realm, $command->object, $command->relation, $command->subject);
 
         return $this->transactions->run(function () use ($tuple, $permit, $origin): bool {
@@ -76,6 +80,20 @@ final readonly class RelationChanges implements OperationHandler
 
             return $had;
         });
+    }
+
+    /**
+     * A reserved type's relations change only through its owner's operations, e.g. a group's members
+     * through AddGroupMember, which weighs the group's roles: right after the permit, which every handler
+     * takes first, and before anything is written, for the operator too.
+     *
+     * @throws ReservedRelation
+     */
+    private function unreserved(ResourceRef $object): void
+    {
+        if (true === $this->schema->type($object->type)?->reserved) {
+            throw new ReservedRelation($object->type);
+        }
     }
 
     /**
