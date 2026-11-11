@@ -297,7 +297,7 @@ Every step has an accessible, unstyled template, phone-first, in `@YorvoID/flow/
 | `passkey.html.twig` | `PasskeySignInView`: passkeys in the email field's autofill, and a button that says "Try again with your passkey" after a cancel; a link to recovery |
 | `setup_code.html.twig` | `SetupCodeView` |
 | `passkey_registration.html.twig` | `PasskeyRegistrationView`: when the person may add one later (`canSkip`, after a recovery), it may be someone else's device: the page asks "Is this your own device?", and "Not now" comes first, so it's what Enter sends |
-| `recovery_codes.html.twig` | `RecoveryCodesView` |
+| `recovery_codes.html.twig` | `RecoveryCodesView`: the codes, and Download, Copy and Print buttons the browser client shows; without it, the codes are still there to write down or print, and printed, the page is only the codes |
 | `invitation.html.twig` | `InvitationView` |
 | `recovery_code.html.twig` | `RecoveryCodeView`: with a cool-down, how long getting back in this way holds changes (`holds`) |
 | `recovery_link.html.twig` | `RecoveryLinkView`: the account, and `holds` as for a code |

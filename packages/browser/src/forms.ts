@@ -1,3 +1,4 @@
+import { wireCodes } from './codes.ts';
 import { YorvoIDError, type Messages } from './errors.ts';
 import { YorvoID } from './yorvoid.ts';
 import type { JsonObject } from './webauthn.ts';
@@ -83,4 +84,5 @@ function messages(json: string | undefined): Partial<Messages> {
 
 if (typeof document !== 'undefined') {
   wireForms(document);
+  wireCodes(document);
 }

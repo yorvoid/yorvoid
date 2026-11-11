@@ -120,7 +120,13 @@ test('after a cancel, the button invites trying again', async () => {
   wire([other], new FakeCredentials(async () => null));
   const failed = new FakeButton({ 'data-yorvoid-retry': 'Try again with your passkey' }, 'Sign in with a passkey');
   other.send(failed);
+
+  const elsewhere = new FakeForm({ yorvoidCeremony: 'get', yorvoidOptions: JSON.stringify(REQUEST_OPTIONS) });
+  wire([elsewhere], new FakeCredentials(async () => { throw new DOMException('Wrong site', 'SecurityError'); }));
+  const refused = new FakeButton({ 'data-yorvoid-retry': 'Try again with your passkey' }, 'Sign in with a passkey');
+  elsewhere.send(refused);
   await settle();
+  assert.equal(refused.textContent, 'Sign in with a passkey', 'Not after another of YorvoID\'s errors.');
 
   assert.equal(button.textContent, 'Try again with your passkey');
   assert.equal(own.textContent, 'Sign in', 'Without a retry text, the button stays.');

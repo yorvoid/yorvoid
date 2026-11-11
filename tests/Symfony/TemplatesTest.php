@@ -93,6 +93,21 @@ final class TemplatesTest extends TestCase
         self::assertSame(['Add a passkey'], $own->filter('form button')->each(static fn (Crawler $button): string => $button->text()));
     }
 
+    public function testTheCodesCanBeSavedFromThePageAndItWorksWithoutTheScript(): void
+    {
+        $html = $this->service(FlowPages::class)->sample(Samples::find('recovery_codes', 'default') ?? self::fail(), 'en');
+        $page = new Crawler($html);
+        $save = $page->filter('[data-yorvoid-save-codes]');
+
+        self::assertSame('', $save->attr('hidden'), 'Hidden until the browser client shows it: without it, the codes are there to write down or print (U-3).');
+        self::assertSame('Recovery codes for', $save->attr('data-yorvoid-heading'));
+        self::assertSame([['button', 'Download'], ['button', 'Copy'], ['button', 'Print']], $save->filter('button')->each(static fn (Crawler $button): array => [(string) $button->attr('type'), $button->text()]));
+        self::assertSame(['status', ''], [$save->filter('[data-yorvoid-copied]')->attr('role'), $save->filter('[data-yorvoid-copied]')->attr('hidden')]);
+        self::assertLessThan(strpos($html, 'id="yorvoid-saved"'), strpos($html, 'data-yorvoid-save-codes'), 'The declaration comes after the ways to save them.');
+        self::assertStringContainsString('A screenshot isn\'t safe', $page->filter('main p')->first()->text());
+        self::assertStringContainsString('<style media="print">', $html);
+    }
+
     public function testTheSignInButtonInvitesTryingAgainAfterACancel(): void
     {
         $page = new Crawler($this->service(FlowPages::class)->sample(Samples::find('passkey', 'default') ?? self::fail(), 'en'));

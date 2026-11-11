@@ -131,6 +131,7 @@ Stricter passkey and intent checks, signed checkpoints of the security log, Symf
 - `StepUp::coolDown()`, the cool-down a recovery starts, and `holds` on `RecoveryCodeView` and `RecoveryLinkView`: the recovery pages say, before the person continues, that some changes will wait that long ([step-up](docs/concepts/step-up.md#the-cool-down-after-a-recovery)).
 - After a cancelled passkey prompt, the sign-in and step-up buttons say "Try again with your passkey" (`data-yorvoid-retry`, [browser client](docs/concepts/browser-client.md)).
 - After a recovery, the page that offers a passkey asks "Is this your own device?", and "Not now" comes first, so it's what Enter sends ([symfony](docs/concepts/symfony.md)).
+- The recovery codes' page has Download, Copy and Print buttons, shown by the browser client, and says a screenshot isn't a safe place for the codes ([browser client](docs/concepts/browser-client.md)).
 
 ### Fixed
 
