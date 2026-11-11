@@ -11,6 +11,7 @@ use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Filesystem\Filesystem;
+use YorvoID\Core\Crypto\CryptoProvider;
 use YorvoID\Symfony\Migrations;
 use YorvoID\Symfony\Templates\TemplatePublisher;
 use YorvoID\Tests\Symfony\App\TestKernel;
@@ -249,6 +250,12 @@ final class DoctorTest extends TestCase
     {
         if (null !== $this->kernel) {
             return;
+        }
+
+        // On a kernel in FIPS mode, the standard crypto mode is itself a warning (CryptoCheck): the
+        // tests here count the other checks' findings, so they run in the mode such a host should use.
+        if (!isset($yorvoid['crypto']) && true === CryptoProvider::probe()->kernelFips) {
+            $yorvoid['crypto'] = ['mode' => 'fips'];
         }
 
         $this->kernel = new TestKernel($this->directory, $yorvoid, debugging: $debugging);

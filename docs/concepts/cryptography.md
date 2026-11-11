@@ -71,7 +71,8 @@ default_properties = fips=yes
   - The provider is OpenSSL 3.1.2's FIPS provider, a validated provider: FIPS 140-3, [CMVP certificate #4985](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4985).
   - It's built from the release tarball, checked against its published SHA-256, installed with its self-test, and activated alone.
   - It has no EdDSA. The job checks that YorvoID refuses to start in FIPS mode with an active Ed25519 key, and starts with an ES256 one. The tests of ES256 keys, checkpoints and anchors run there, and those that need Ed25519 keys are left out.
-- **Before a release**, a recorded run on a FIPS-enabled OS with the vendor's validated OpenSSL. It records `fips_enabled=1` and the provider's version.
+- **Before a release**, a recorded run on an operating system booted in FIPS mode. It shows that the kernel runs with `fips_enabled=1`, that OpenSSL uses only the FIPS provider's algorithms, that MD5 is refused, and that the tests pass. Where the provider has Ed25519, the tests with Ed25519 keys run too: CI's provider can't run them. `tools/fips-host/run.sh` does it on a throwaway AlmaLinux 9 host, at a commit it names. The runs, with their reports: [FIPS runs](../../assurance/fips-runs.md).
+- Whether your provider is validated is a check for each deployment: look up the provider's version on its CMVP certificate.
 
 ## yorvoid:doctor
 
