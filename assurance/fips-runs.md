@@ -1,12 +1,12 @@
 # FIPS runs
 
-Before each release, YorvoID's tests run on an operating system booted in FIPS mode ([what this shows](../docs/concepts/cryptography.md#what-yorvoids-tests-show)). `tools/fips-host/run.sh` does the run on a throwaway AlmaLinux 9 host, and each section here is one run: the release, the commit, the date, and the report the script wrote, unedited.
+Before each release, YorvoID's tests run on an operating system booted in FIPS mode ([what this shows](../docs/concepts/cryptography.md#what-yorvoids-tests-show)). `tools/fips-host/run.sh` does the run on a throwaway AlmaLinux 9 host, and each section here is one run: the release, the commit, the date, and the report the script wrote, unedited. Each run's commit has a `fips-run/<version>` tag, which keeps it after the branch is squash-merged.
 
 A run shows the kernel in FIPS mode, OpenSSL using only its FIPS provider, MD5 refused, and the tests passing. It doesn't show that the provider is validated. That's on the provider's CMVP certificate, for the version you deploy.
 
 ## 0.4.0
 
-- **Commit:** `9b31482ad7870a7ad093336bd9c7c593c74cd752`
+- **Commit:** `9b31482ad7870a7ad093336bd9c7c593c74cd752` (tag `fips-run/0.4.0`; main squash-merges, so the tag keeps it)
 - **Date:** 2026-11-11, 09:37 UTC
 - **Host:** a throwaway DigitalOcean droplet, AlmaLinux 9.8 booted in FIPS mode by `fips-mode-setup --enable`, destroyed after the run.
 - **Provider:** AlmaLinux 9.8's build of the Red Hat Enterprise Linux OpenSSL FIPS Provider 3.5.8. It's not Red Hat's binary, and whether it's validated wasn't checked.
