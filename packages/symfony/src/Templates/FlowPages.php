@@ -81,6 +81,14 @@ final readonly class FlowPages
     }
 
     /**
+     * What the page a completed step-up returns to says: "yorvoid.ui.step_up.done".
+     */
+    public function stepUpDone(string $locale): string
+    {
+        return $this->translator->trans('yorvoid.ui.step_up.done', [], 'yorvoid', $locale);
+    }
+
+    /**
      * A flow that couldn't go on.
      *
      * @param string|null $start Where to start it again, if a request can
@@ -103,10 +111,11 @@ final readonly class FlowPages
      *
      * @param array{title: string, text: string|null} $summary
      * @param list<Prompt>                            $remedies
+     * @param string                                  $back     Where "Go back" goes: a path on this site
      */
-    public function refused(array $summary, array $remedies, ?string $reference, string $locale): string
+    public function refused(array $summary, array $remedies, ?string $reference, string $back, string $locale): string
     {
-        return $this->render('@YorvoID/flow/refused.html.twig', ['flow' => null, 'problems' => [], 'summary' => $summary, 'remedies' => $remedies, 'reference' => $reference], $locale);
+        return $this->render('@YorvoID/flow/refused.html.twig', ['flow' => null, 'problems' => [], 'summary' => $summary, 'remedies' => $remedies, 'reference' => $reference, 'back' => $back], $locale);
     }
 
     /**
@@ -128,7 +137,7 @@ final readonly class FlowPages
             throw new IntegratorError('A refusal\'s sample needs its decision, and the remedies\' prompts.', 'Render it through the container\'s FlowPages.', 'concepts/symfony.md#flow-pages');
         }
 
-        return $this->refused($this->remedies->summary($sample->decision, $locale), $this->remedies->of($sample->decision, Sample::START, $locale), $this->remedies->reference($sample->decision, $locale), $locale);
+        return $this->refused($this->remedies->summary($sample->decision, $locale), $this->remedies->of($sample->decision, Sample::START, $locale), $this->remedies->reference($sample->decision, $locale), Sample::START, $locale);
     }
 
     /**

@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\Session\FlashBagAwareSessionInterface;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
@@ -65,6 +66,9 @@ final readonly class FlowController
 
     /** Where a flow goes back to once it completes, instead of where it's configured to: a path on this site */
     public const string RETURN = 'flow.return';
+
+    /** The flash a completed step-up leaves for the page it returns to: at most one, its text */
+    public const string NOTICE = 'yorvoid.notice';
 
     /**
      * @param array<string, string>                $completed Where to go when a flow completes, by flow; "default" for the others
@@ -180,6 +184,7 @@ final readonly class FlowController
         // Checked again here, not only when the flow started: what's in the state is what's followed.
         $return = $progress->state->string(self::RETURN);
         $completed = null !== $return && LocalPath::is($return) ? $return : $this->completed[$flow] ?? $this->completed['default'] ?? '/';
+        $notice = FlowStatus::Completed === $progress->status && PasskeyFlows::STEP_UP === $flow && null !== $return ? $this->notice($request) : null;
         $status = match (true) {
             FlowStatus::Failed === $progress->status => 410,
             null !== $progress->retryAfter => 429,
@@ -196,6 +201,7 @@ final readonly class FlowController
                 'view' => $progress->view,
                 'problems' => $this->pages->problems(null === $progress->failure ? $progress->problems : [$progress->failure], $request->getLocale()),
                 'redirect' => FlowStatus::Completed === $progress->status ? $completed : null,
+                'notice' => $notice,
             ], $status),
             FlowStatus::Completed === $progress->status => new RedirectResponse($completed, 303),
             FlowStatus::Failed === $progress->status => new Response($this->pages->failed($flow, $progress->failure ?? new Problem('yorvoid.flow.out_of_date'), $this->startUrl($flow), $request->getLocale()), $status),
@@ -228,13 +234,34 @@ final readonly class FlowController
     private function expired(Request $request, string $flow): Response
     {
         return $this->wantsJson($request)
-            ? new JsonResponse(['flow' => $flow, 'id' => null, 'status' => 'expired', 'step' => null, 'view' => null, 'problems' => $this->pages->problems([new Problem('yorvoid.flow.expired')], $request->getLocale()), 'redirect' => null], 404)
+            ? new JsonResponse(['flow' => $flow, 'id' => null, 'status' => 'expired', 'step' => null, 'view' => null, 'problems' => $this->pages->problems([new Problem('yorvoid.flow.expired')], $request->getLocale()), 'redirect' => null, 'notice' => null], 404)
             : new Response($this->pages->expired($flow, $this->startUrl($flow), $request->getLocale()), 404);
     }
 
     private function startUrl(string $flow): ?string
     {
         return \array_key_exists($flow, $this->entrances) ? $this->urls->generate('yorvoid_flow_start', ['flow' => $flow]) : null;
+    }
+
+    /**
+     * After a step-up that returns to the page that asked for it, that page looks as it did: a flash
+     * says it's done, and to try again. Set, not added, so a layout that never shows flashes keeps at
+     * most one. A JSON answer says it in "notice" instead: the client may not go to that page. Without a
+     * session, there's no flash.
+     */
+    private function notice(Request $request): string
+    {
+        $text = $this->pages->stepUpDone($request->getLocale());
+
+        if (!$this->wantsJson($request) && $request->hasSession()) {
+            $session = $request->getSession();
+
+            if ($session instanceof FlashBagAwareSessionInterface) {
+                $session->getFlashBag()->set(self::NOTICE, [$text]);
+            }
+        }
+
+        return $text;
     }
 
     private function wantsJson(Request $request): bool

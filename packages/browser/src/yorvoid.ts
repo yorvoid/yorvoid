@@ -77,6 +77,8 @@ export interface FlowProgress {
   readonly problems: readonly FlowProblem[];
   /** Where to go, when it completed */
   readonly redirect: string | null;
+  /** What to tell the person there, e.g. after a step-up: "Now try again" */
+  readonly notice: string | null;
   /** Seconds to wait, after too many attempts */
   readonly retryAfter: number | undefined;
 }
@@ -329,6 +331,7 @@ export class YorvoID {
       view: isObject(json['view']) ? json['view'] : null,
       problems: Array.isArray(json['problems']) ? json['problems'] as FlowProblem[] : [],
       redirect: typeof json['redirect'] === 'string' ? json['redirect'] : null,
+      notice: typeof json['notice'] === 'string' ? json['notice'] : null,
       retryAfter: Number.isInteger(seconds) ? seconds : undefined,
     };
   }

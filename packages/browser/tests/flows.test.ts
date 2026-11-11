@@ -14,18 +14,18 @@ describe('flows', () => {
     const server = new FakeServer()
       .on('/yorvoid/flows/yorvoid.sign_in', STEP)
       .on('/yorvoid/flows/yorvoid.sign_in/f1', STEP)
-      .on('/yorvoid/flows/yorvoid.sign_in/f1/passkey', { ...STEP, status: 'completed', step: null, view: null, redirect: '/' });
+      .on('/yorvoid/flows/yorvoid.sign_in/f1/passkey', { ...STEP, status: 'completed', step: null, view: null, redirect: '/', notice: 'Now try again.' });
     const yorvoid = client(server);
 
     const started = await yorvoid.startFlow('yorvoid.sign_in');
-    assert.deepEqual(started, { flow: 'yorvoid.sign_in', id: 'f1', status: 'in_progress', step: 'passkey', view: { options: REQUEST_OPTIONS }, problems: [], redirect: null, retryAfter: undefined });
+    assert.deepEqual(started, { flow: 'yorvoid.sign_in', id: 'f1', status: 'in_progress', step: 'passkey', view: { options: REQUEST_OPTIONS }, problems: [], redirect: null, notice: null, retryAfter: undefined });
     assert.deepEqual(server.requests[0]?.init, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, credentials: 'same-origin', body: '{}' });
 
     assert.deepEqual(await yorvoid.resumeFlow('yorvoid.sign_in', 'f1'), started);
     assert.deepEqual(server.requests[1]?.init, { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'same-origin' });
 
     const done = await yorvoid.submitStep('yorvoid.sign_in', 'f1', 'passkey', { response: { id: 'x' } });
-    assert.deepEqual([done.status, done.step, done.view, done.redirect], ['completed', null, null, '/']);
+    assert.deepEqual([done.status, done.step, done.view, done.redirect, done.notice], ['completed', null, null, '/', 'Now try again.']);
     assert.deepEqual(server.requests[2]?.body, { response: { id: 'x' } });
     assert.equal(server.requests[2]?.init.method, 'POST');
   });

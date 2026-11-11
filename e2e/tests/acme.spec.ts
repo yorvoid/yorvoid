@@ -26,6 +26,7 @@ test('deletes a project once it\'s confirmed it\'s them, from the refusal', asyn
   await expect(page.getByRole('heading', { name: 'Confirm it\'s you' })).toBeVisible();
   await page.getByRole('button', { name: 'Confirm with a passkey' }).click();
   await expect(page).toHaveURL('/projects');
+  await expect(page.getByRole('status')).toHaveText('You\'ve confirmed it\'s you. Now try again.');
 
   await page.getByRole('button', { name: 'Delete Old newsletter' }).click();
   await expect(page.getByRole('status')).toHaveText('Removed “Old newsletter”.');
@@ -50,8 +51,10 @@ test('just after a recovery, changing the email address waits', async ({ page })
   await page.getByRole('button', { name: 'Change email address' }).click();
 
   await expect(page.getByRole('heading', { name: 'Before you can do this' })).toBeVisible();
-  await expect(page.locator('[data-yorvoid-remedy="wait"] time')).toHaveText('You can do this again in about 1 day.');
+  await expect(page.locator('[data-yorvoid-remedy="wait"] time')).toHaveText('Your account was recovered recently, so changes like this wait a while, to keep it safe. You can do this again in about 1 day.');
+  await expect(page.getByText('This wasn\'t done.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Confirm it\'s you' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Go back' })).toHaveAttribute('href', '/account');
   await expect(page.getByText(/^Reference: /)).toBeVisible();
   await expectAccessible(page);
 

@@ -176,6 +176,14 @@ Things to know:
 
 - **While there's a wait, there's no step-up button.** A step-up made during the wait would be stale when it ends, so the step-up is mentioned as what comes after.
 - **The step-up comes back.** After a GET, it returns to the page that was refused. After a POST, it returns to the page the form was on, if the `Referer` is this site, read with `trusted_hosts` and `trusted_proxies` as Symfony reads the request's host; otherwise to `flows.completed_path`. Only the path and query are kept, and a POST isn't replayed: the person tries again, and that's a new decision.
+- **The page says the operation wasn't done, and links back.** "This wasn't done." is about the refused operation only: what your controller did before it in that request isn't undone. "Go back" leads to the page the request came from, if it's on this site and isn't the refused page itself; otherwise to `flows.completed_path`.
+- **The page a step-up returns to says it's done.** A completed step-up with somewhere to return to leaves one flash, `yorvoid.notice`: "You've confirmed it's you. Now try again." Show it in your layout:
+
+  ```twig
+  {% for notice in app.flashes('yorvoid.notice') %}<p role="status">{{ notice }}</p>{% endfor %}
+  ```
+
+  It's set, not added, so there's never more than one. A layout that doesn't show flashes shows no notice, and nothing else changes. A JSON answer has it in `notice`.
 - **JSON** for requests that ask for it (`Accept: application/json`): `{"error": "…", "not_permitted": {"verdict": "deny", "decision": "<id>", "remedies": [{"name", "parameters", "message", "action": {"url", "label"} | null}]}}`. The [browser client](browser-client.md#errors) reads it as `not_permitted`.
 - **Your own remedies** are shown with the message `yorvoid.remedy.<name>` in the `yorvoid` domain, with their parameters, if you translate it; otherwise as "Something more is needed". They have no button.
 - **Your exception listeners come first.** It listens at priority -64, after listeners at the default priority and before Symfony's error page, and leaves a refusal alone if one of yours answered it. Turn it off with `remedies.pages: false`.

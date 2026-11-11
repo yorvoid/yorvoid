@@ -1,10 +1,12 @@
 {# An operation refused, as the person is shown it. summary: title, text; remedies: name, parameters,
-   message, action (url, label) or null; reference: the decision's, for support, or null. #}
+   message, action (url, label) or null; reference: the decision's, for support, or null; back: where
+   "Go back" goes, a path on this site. #}
 {% extends '@YorvoID/flow/layout.html.twig' %}
 
 {% block title %}{{ summary.title }}{% endblock %}
 
 {% block content %}
+    <p>{{ 'yorvoid.ui.refused.not_done'|yorvoid_trans }}</p>
     {% if summary.text %}<p>{{ summary.text }}</p>{% endif %}
     {% if remedies is not empty %}
         <ul data-yorvoid-remedies>
@@ -16,6 +18,7 @@
             {% endfor %}
         </ul>
     {% endif %}
+    <p><a href="{{ back }}" data-yorvoid-back>{{ 'yorvoid.ui.refused.back'|yorvoid_trans }}</a></p>
     {% if reference %}<p><small>{{ reference }}</small></p>{% endif %}
 {% endblock %}
 

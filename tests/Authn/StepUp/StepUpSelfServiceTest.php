@@ -20,6 +20,7 @@ use YorvoID\Core\Authorization\Ground;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\TruthValue;
+use YorvoID\Core\Authorization\WaitReason;
 use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
@@ -109,7 +110,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
             $identifiers->run(new SetIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email, 'thief@example.net'), $session, new Origin(OriginKind::Web));
             self::fail('The email address changed during the cool-down.');
         } catch (NotPermitted $exception) {
-            self::assertEquals([new WaitRemedy(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'))], $exception->decision->remedies);
+            self::assertEquals([new WaitRemedy(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'), WaitReason::Recovered)], $exception->decision->remedies);
         }
 
         self::assertSame([], $this->principals->identifiers(new Realm('acme'), $session->principalId));
@@ -127,7 +128,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
             $identifiers->run(new RemoveIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email), $session, new Origin(OriginKind::Web));
             self::fail('The email address went during the cool-down.');
         } catch (NotPermitted $exception) {
-            self::assertEquals([new WaitRemedy(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'))], $exception->decision->remedies);
+            self::assertEquals([new WaitRemedy(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'), WaitReason::Recovered)], $exception->decision->remedies);
         }
 
         self::assertSame('ana@example.com', $this->principals->identifiers(new Realm('acme'), $session->principalId)['email']->value);
@@ -233,7 +234,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
         $this->stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
         $held = $check->check($session, $required);
         self::assertSame('The account was recovered recently.', $held->detail);
-        self::assertEquals([new WaitRemedy($this->clock->now()->modify('+24 hours'))], $held->remedies, 'Held while a recovery cools down.');
+        self::assertEquals([new WaitRemedy($this->clock->now()->modify('+24 hours'), WaitReason::Recovered)], $held->remedies, 'Held while a recovery cools down.');
     }
 
     private function identifiers(string $implementation, ?Duration $coolDown = null): Operations

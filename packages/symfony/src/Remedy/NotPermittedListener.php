@@ -31,6 +31,8 @@ final readonly class NotPermittedListener
     public function __construct(
         private RemedyPrompts $prompts,
         private FlowPages $pages,
+        /** Where "Go back" goes when the request came from no page on this site: flows.completed_path */
+        private string $completedPath = '/',
     ) {
     }
 
@@ -51,7 +53,7 @@ final readonly class NotPermittedListener
 
         $response = self::wantsJson($request)
             ? new JsonResponse(['error' => $summary['text'] ?? $summary['title'], 'not_permitted' => ['verdict' => $decision->verdict->value, 'decision' => $decision->id, 'remedies' => $remedies]], $status)
-            : new Response($this->pages->refused($summary, $remedies, $this->prompts->reference($decision, $locale), $locale), $status);
+            : new Response($this->pages->refused($summary, $remedies, $this->prompts->reference($decision, $locale), $this->back($request), $locale), $status);
 
         $event->setResponse(FlowController::secured($response));
     }
@@ -69,16 +71,18 @@ final readonly class NotPermittedListener
             return LocalPath::is($path) ? $path : null;
         }
 
-        $parts = parse_url((string) $request->headers->get('Referer'));
+        return LocalPath::referer($request);
+    }
 
-        // The host is the request's own, as trusted_hosts and trusted_proxies let Symfony read it.
-        if (!\is_array($parts) || !isset($parts['scheme'], $parts['host']) || \sprintf('%s://%s', strtolower($parts['scheme']), strtolower($parts['host']).(isset($parts['port']) ? ':'.$parts['port'] : '')) !== $request->getSchemeAndHttpHost()) {
-            return null;
-        }
+    /**
+     * Where "Go back" goes: the page the request came from, if it's on this site and isn't the refused
+     * page itself (which would only refuse again); otherwise flows.completed_path.
+     */
+    private function back(Request $request): string
+    {
+        $referer = LocalPath::referer($request);
 
-        $path = ($parts['path'] ?? '/').(isset($parts['query']) ? '?'.$parts['query'] : '');
-
-        return LocalPath::is($path) ? $path : null;
+        return null !== $referer && $referer !== $request->getRequestUri() ? $referer : $this->completedPath;
     }
 
     private static function wantsJson(Request $request): bool

@@ -9,6 +9,7 @@ use YorvoID\Core\Authorization\Ground;
 use YorvoID\Core\Authorization\StepUpCheck;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Authorization\WaitReason;
 use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Operation\Actor;
 
@@ -36,7 +37,7 @@ final readonly class SessionStepUpCheck implements StepUpCheck
         } catch (StepUpRequired) {
             return Truth::fails('The session hasn\'t proved who it is recently enough.', $required);
         } catch (HeldAfterRecovery $held) {
-            return Truth::fails('The account was recovered recently.', new WaitRemedy($held->until));
+            return Truth::fails('The account was recovered recently.', new WaitRemedy($held->until, WaitReason::Recovered));
         }
 
         return Truth::holds('The session proved who it is recently.', Ground::evidence('step_up'));
