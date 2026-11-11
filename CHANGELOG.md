@@ -125,6 +125,9 @@ Stricter passkey and intent checks, signed checkpoints of the security log, Symf
 - Symfony 7.4 LTS is supported next to 8.1, and PHP 8.4 next to 8.5, so YorvoID installs in Laravel 12 and Drupal 11 applications.
 - `Sessions::check()` gives a valid session with its principal; the Symfony bridge loads the principal once a request instead of twice.
 - `FlowSource` in the Symfony bridge adds an application's own flows, and the ones a request may start.
+- `WaitRemedy` says why it waits (`WaitReason`, in its parameters as `reason`): YorvoID's waits after an account recovery say so, and the refusal page tells the person why ([remedies](docs/concepts/authorization.md#remedies)).
+- The refusal page says the operation wasn't done, and links back to the page the person came from, or to `flows.completed_path` ([symfony](docs/concepts/symfony.md)).
+- A completed step-up leaves one flash, `yorvoid.notice` ("You've confirmed it's you. Now try again."), for the page it returns to, and the flow's JSON answer has it in `notice` ([symfony](docs/concepts/symfony.md)).
 
 ### Fixed
 

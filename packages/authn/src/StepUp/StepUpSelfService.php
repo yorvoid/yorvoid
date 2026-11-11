@@ -7,6 +7,7 @@ namespace YorvoID\Authn\StepUp;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Authorization\WaitReason;
 use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Operation\Actor;
@@ -76,7 +77,7 @@ final readonly class StepUpSelfService implements SelfServicePolicy
         } catch (StepUpRequired) {
             return Truth::fails('The session hasn\'t proved who it is recently enough.', new StepUpRemedy($requirement->within, $requirement->multiFactor, $requirement->phishingResistant, $requirement->operation));
         } catch (HeldAfterRecovery $held) {
-            return Truth::fails('The account was recovered recently.', new WaitRemedy($held->until));
+            return Truth::fails('The account was recovered recently.', new WaitRemedy($held->until, WaitReason::Recovered));
         }
 
         return Truth::holds('The actor\'s own account, from its session, proved recently.');

@@ -13,6 +13,7 @@ final readonly class WaitRemedy implements Remedy
 {
     public function __construct(
         public \DateTimeImmutable $until,
+        public WaitReason $reason = WaitReason::Unspecified,
     ) {
     }
 
@@ -23,6 +24,6 @@ final readonly class WaitRemedy implements Remedy
 
     public function parameters(): array
     {
-        return ['until' => $this->until->format(\DATE_ATOM)];
+        return ['until' => $this->until->format(\DATE_ATOM), 'reason' => $this->reason->value];
     }
 }

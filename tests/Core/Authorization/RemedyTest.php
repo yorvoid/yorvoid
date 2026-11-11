@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Core\Authorization;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Authorization\WaitReason;
 use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 
@@ -30,7 +31,8 @@ final class RemedyTest extends TestCase
         $wait = new WaitRemedy(new \DateTimeImmutable('2026-11-08 12:00:00 UTC'));
 
         self::assertSame('wait', $wait->name());
-        self::assertSame(['until' => '2026-11-08T12:00:00+00:00'], $wait->parameters());
+        self::assertSame(['until' => '2026-11-08T12:00:00+00:00', 'reason' => 'unspecified'], $wait->parameters());
+        self::assertSame('recovered', new WaitRemedy(new \DateTimeImmutable('2026-11-08 12:00:00 UTC'), WaitReason::Recovered)->parameters()['reason'], 'And why, when it says.');
     }
 
     public function testAFailingConditionListsItsRemedies(): void

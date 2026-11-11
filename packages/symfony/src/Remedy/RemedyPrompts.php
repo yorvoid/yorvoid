@@ -9,6 +9,7 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\WaitReason;
 use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\Verdict;
@@ -113,7 +114,12 @@ final readonly class RemedyPrompts
     private function message(Remedy $remedy, string $locale): string
     {
         if ($remedy instanceof WaitRemedy) {
-            return $this->wait($remedy->until, $locale);
+            $when = $this->wait($remedy->until, $locale);
+
+            return match ($remedy->reason) {
+                WaitReason::Recovered => $this->trans('yorvoid.remedy.wait.recovered', [], $locale).' '.$when,
+                WaitReason::Unspecified => $when,
+            };
         }
 
         if ($remedy instanceof StepUpRemedy) {

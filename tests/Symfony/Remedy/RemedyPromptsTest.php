@@ -78,7 +78,7 @@ final class RemedyPromptsTest extends TestCase
         self::assertSame(['wait', 'step_up', 'acme_terms'], array_column($prompts, 'name'), 'Waits first, then step-ups, then the rest.');
         self::assertSame(['You can do this again in about 3 hours.', 'After that, you\'ll be asked to confirm it\'s you.', 'Something more is needed before you can do this. Please ask whoever manages your account.'], array_column($prompts, 'message'));
         self::assertSame([null, null, null], array_column($prompts, 'action'), 'A proof made during the wait would be stale when it ends.');
-        self::assertSame(['until' => '2026-11-10T15:00:00+00:00'], $prompts[0]['parameters']);
+        self::assertSame(['until' => '2026-11-10T15:00:00+00:00', 'reason' => 'unspecified'], $prompts[0]['parameters']);
     }
 
     /**

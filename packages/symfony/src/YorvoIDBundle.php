@@ -220,6 +220,8 @@ final class YorvoIDBundle extends AbstractBundle
 
         if (true !== $settings['remedies.pages']) {
             $builder->removeDefinition(NotPermittedListener::class);
+        } else {
+            $builder->getDefinition(NotPermittedListener::class)->setArgument('$completedPath', $settings['flows.completed_path']);
         }
 
         $users = $settings['users'];

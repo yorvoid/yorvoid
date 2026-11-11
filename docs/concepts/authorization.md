@@ -295,7 +295,7 @@ A Deny caused only by missing evidence carries remedies: what could satisfy the 
 | Remedy | Asks for |
 |---|---|
 | `StepUpRemedy` | A recent proof of who you are: within a time, and possibly two factors or a phishing-resistant one |
-| `WaitRemedy` | Trying again after a time, e.g. after the cool-down that follows an account recovery |
+| `WaitRemedy` | Trying again after a time (`until`), and why (`reason`, a `WaitReason`): e.g. `Recovered`, the cool-down that follows an account recovery. A wait for a reason of your own is a remedy of your own, with its own message |
 
 ```php
 use YorvoID\Core\Authorization\StepUpRemedy;

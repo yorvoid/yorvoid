@@ -214,6 +214,7 @@ export class YorvoID {
             view: isObject(json['view']) ? json['view'] : null,
             problems: Array.isArray(json['problems']) ? json['problems'] : [],
             redirect: typeof json['redirect'] === 'string' ? json['redirect'] : null,
+            notice: typeof json['notice'] === 'string' ? json['notice'] : null,
             retryAfter: Number.isInteger(seconds) ? seconds : undefined,
         };
     }

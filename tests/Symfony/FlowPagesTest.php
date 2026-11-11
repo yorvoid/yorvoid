@@ -165,7 +165,7 @@ final class FlowPagesTest extends TestCase
 
         $started = $this->json('POST', '/yorvoid/flows/yorvoid.sign_in', []);
         self::assertSame(200, $this->statusCode());
-        self::assertSame(['flow' => 'yorvoid.sign_in', 'status' => 'in_progress', 'step' => 'passkey', 'problems' => [], 'redirect' => null], array_diff_key($started, ['id' => 0, 'view' => 0]));
+        self::assertSame(['flow' => 'yorvoid.sign_in', 'status' => 'in_progress', 'step' => 'passkey', 'problems' => [], 'redirect' => null, 'notice' => null], array_diff_key($started, ['id' => 0, 'view' => 0]));
         $id = self::id($started);
         $options = (string) json_encode(((array) $started['view'])['options']);
 
@@ -175,7 +175,7 @@ final class FlowPagesTest extends TestCase
         $options = (string) json_encode(((array) $refused['view'])['options']);
 
         $done = $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.$id.'/passkey', ['response' => json_decode($authenticator->signIn($options), true)]);
-        self::assertSame(['flow' => 'yorvoid.sign_in', 'id' => $id, 'status' => 'completed', 'step' => null, 'view' => null, 'problems' => [], 'redirect' => '/'], $done);
+        self::assertSame(['flow' => 'yorvoid.sign_in', 'id' => $id, 'status' => 'completed', 'step' => null, 'view' => null, 'problems' => [], 'redirect' => '/', 'notice' => null], $done);
         self::assertSame((string) $ana->id, $this->get('/me')['user']);
         self::assertSame(['passkey'], $this->get('/me')['methods']);
         $log = $this->container->get(\YorvoID\Core\Log\SecurityLogStore::class);
@@ -310,6 +310,32 @@ final class FlowPagesTest extends TestCase
         self::assertSame(400, $this->statusCode(), 'Not a string.');
     }
 
+    public function testTheStepUpTellsThePageItReturnsToThatItsDone(): void
+    {
+        $this->boot();
+        [, $authenticator] = $this->account();
+        $this->signIn($authenticator);
+        $done = 'You\'ve confirmed it\'s you. Now try again.';
+
+        // A page: one flash, however many step-ups a layout that never shows flashes has seen (U-4).
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove&return=%2Fprojects');
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove&return=%2Fprojects');
+        self::assertSame([$done], $this->notices());
+
+        // A script: in the answer, and no flash for a page it may never go to.
+        $answer = $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove', 'return' => '/projects']);
+        self::assertSame($done, $answer['notice']);
+        self::assertSame([], $this->notices());
+        self::assertNull($this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove'])['notice'], 'Nowhere to return to: nothing to say.');
+
+        // Not done yet: the step-up asks for a proof, and says nothing has been confirmed.
+        $this->clock()->sleep(120);
+        $asking = $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove', 'within' => 60, 'return' => '/projects']);
+        self::assertSame(['step_up', null], [$asking['step'], $asking['notice']]);
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove&within=60&return=%2Fprojects');
+        self::assertSame([], $this->notices());
+    }
+
     public function testExpiredAndUnknownFlows(): void
     {
         $this->boot();
@@ -320,7 +346,7 @@ final class FlowPagesTest extends TestCase
         self::assertSame(['This page has expired', 'This page has expired. Start again.', '/yorvoid/flows/yorvoid.sign_in', 'yorvoid.sign_in'], [$page->filter('h1')->text(), $page->filter('[role="alert"]')->text(), $page->filter('a')->attr('href'), $page->filter('body')->attr('data-yorvoid-flow')]);
         self::assertCount(0, $page->filter('script'));
 
-        self::assertSame(['flow' => 'yorvoid.sign_in', 'id' => null, 'status' => 'expired', 'step' => null, 'view' => null, 'problems' => [['message' => 'This page has expired. Start again.', 'field' => null, 'reason' => null]], 'redirect' => null], $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.$id.'/passkey', []));
+        self::assertSame(['flow' => 'yorvoid.sign_in', 'id' => null, 'status' => 'expired', 'step' => null, 'view' => null, 'problems' => [['message' => 'This page has expired. Start again.', 'field' => null, 'reason' => null]], 'redirect' => null, 'notice' => null], $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.$id.'/passkey', []));
         self::assertSame(404, $this->statusCode());
 
         $started = $this->json('POST', '/yorvoid/flows/yorvoid.sign_in', []);
@@ -557,6 +583,21 @@ final class FlowPagesTest extends TestCase
         \assert(\is_string($id));
 
         return $id;
+    }
+
+    /**
+     * The step-up notices the session holds, taken out of it as a page showing them would.
+     *
+     * @return array<mixed>
+     */
+    private function notices(): array
+    {
+        $session = $this->browser->getRequest()->getSession();
+        \assert($session instanceof \Symfony\Component\HttpFoundation\Session\FlashBagAwareSessionInterface);
+        $notices = $session->getFlashBag()->get(FlowController::NOTICE);
+        $session->save();
+
+        return $notices;
     }
 
     private function statusCode(): int

@@ -102,8 +102,30 @@ final class RefusalPagesTest extends TestCase
 
         $html = (string) $this->answer($container, $refused, Request::create('/account/email'))->getContent();
 
-        self::assertMatchesRegularExpression('#<time datetime="[0-9T:+-]+">You can do this again in about 1 day\.</time>#', $html);
+        self::assertMatchesRegularExpression('#<time datetime="[0-9T:+-]+">Your account was recovered recently, so changes like this wait a while, to keep it safe\. You can do this again in about 1 day\.</time>#', $html);
         self::assertStringNotContainsString('yorvoid.step_up', $html);
+        self::assertStringContainsString('<p>This wasn&#039;t done.</p>', $html);
+        self::assertSame('recovered', $refused->decision->remedies[0]->parameters()['reason'], 'The wait says why (U-1).');
+    }
+
+    public function testGoBackLeadsToThePageTheRequestCameFromNeverTheRefusedOne(): void
+    {
+        $container = $this->boot(['flows' => ['completed_path' => '/home']]);
+        $decision = Decision::deny('No role gives it.');
+        $back = function (string $method, ?string $referer) use ($container, $decision): string {
+            $request = Request::create('http://acme.example/projects/7?tab=1', $method, server: array_filter(['HTTP_REFERER' => $referer], static fn (?string $value): bool => null !== $value));
+            $html = (string) $this->answer($container, new NotPermitted('acme.project.remove', $decision), $request)->getContent();
+            self::assertSame(1, preg_match('#<a href="([^"]*)" data-yorvoid-back>Go back</a>#', $html, $link), $html);
+
+            return html_entity_decode($link[1]);
+        };
+
+        self::assertSame('/projects?page=2', $back('GET', 'http://acme.example/projects?page=2'));
+        self::assertSame('/projects?page=2', $back('POST', 'http://acme.example/projects?page=2'));
+        self::assertSame('/home', $back('GET', 'http://acme.example/projects/7?tab=1'), 'Not the refused page itself: it would refuse again (D1).');
+        self::assertSame('/home', $back('GET', null), 'No Referer: flows.completed_path.');
+        self::assertSame('/home', $back('GET', 'http://evil.example/projects'), 'Another site: never.');
+        self::assertSame('/home', $back('POST', 'http://acme.example//evil.example/'));
     }
 
     public function testAWaitAndAStepUpGiveNoButtonUntilTheWaitIsOver(): void

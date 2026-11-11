@@ -6,6 +6,7 @@ namespace YorvoID\Symfony\Templates;
 
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\WaitReason;
 use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Operation\Decision;
@@ -68,8 +69,8 @@ final class Samples
             new Sample('failed', 'default', PasskeyFlows::INVITATION, null, [new Problem('yorvoid.flow.invitation.not_working')]),
             new Sample('expired', 'default', PasskeyFlows::SIGN_IN, null, [new Problem('yorvoid.flow.expired')]),
             new Sample('refused', 'step_up', '', null, decision: self::refusal(Decision::deny('A recent proof is needed.', remedies: [new StepUpRemedy(Duration::minutes(5), operation: 'yorvoid.identifier.set')]))),
-            new Sample('refused', 'wait', '', null, decision: self::refusal(Decision::deny('The account was recovered recently.', remedies: [new WaitRemedy(new \DateTimeImmutable('+3 hours'))]))),
-            new Sample('refused', 'wait_and_step_up', '', null, decision: self::refusal(Decision::deny('Recovered, and no recent proof.', remedies: [new StepUpRemedy(Duration::minutes(5)), new WaitRemedy(new \DateTimeImmutable('+3 hours'))]))),
+            new Sample('refused', 'wait', '', null, decision: self::refusal(Decision::deny('The account was recovered recently.', remedies: [new WaitRemedy(new \DateTimeImmutable('+3 hours'), WaitReason::Recovered)]))),
+            new Sample('refused', 'wait_and_step_up', '', null, decision: self::refusal(Decision::deny('Recovered, and no recent proof.', remedies: [new StepUpRemedy(Duration::minutes(5)), new WaitRemedy(new \DateTimeImmutable('+3 hours'), WaitReason::Recovered)]))),
             new Sample('refused', 'denied', '', null, decision: self::refusal(Decision::deny('No role gives it.'))),
             new Sample('refused', 'indeterminate', '', null, decision: self::refusal(Decision::indeterminate([IndeterminateReason::StoreUnreachable], 'The policy store couldn\'t be read.'))),
         ];

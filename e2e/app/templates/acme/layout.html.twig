@@ -35,6 +35,7 @@
 </header>
 <main>
     <h1>{{ block('title') }}</h1>
+    {% for notice in app.flashes('yorvoid.notice') %}<p role="status">{{ notice }}</p>{% endfor %}
     {% block content %}{% endblock %}
 </main>
 </body>
