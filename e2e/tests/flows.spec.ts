@@ -174,3 +174,42 @@ test('pages fit a 320 px phone', { tag: '@any-browser' }, async ({ page }) => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   }
 });
+
+test('the recovery codes can be downloaded, copied and printed', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.addInitScript(() => {
+    (window as unknown as { printed: number }).printed = 0;
+    window.print = () => { (window as unknown as { printed: number }).printed++; };
+  });
+  await Authenticator.on(page);
+  const code = await (await page.request.post('/_e2e/setup-code')).text();
+  await page.goto('/yorvoid/flows/yorvoid.setup');
+  await page.getByLabel('Setup code').fill(code);
+  await page.getByLabel('Email address').fill('ana@example.com');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('Name it').fill('Laptop');
+  await page.getByRole('button', { name: 'Add a passkey' }).click();
+  await expect(page.getByRole('heading', { name: 'Save your recovery codes' })).toBeVisible();
+  const codes = await page.locator('[data-yorvoid-recovery-codes] code').allTextContents();
+
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download' }).click();
+  const download = await downloading;
+  const host = new URL(page.url()).hostname;
+  expect(download.suggestedFilename()).toBe(`${host}-recovery-codes.txt`);
+  const text = await (await download.createReadStream()).toArray().then((chunks) => Buffer.concat(chunks).toString('utf8'));
+  expect(text.split('\n')[0]).toMatch(new RegExp(`^Recovery codes for ${host.replaceAll('.', '\\.')}, \\d{4}-\\d{2}-\\d{2}$`));
+  expect(text.trim().split('\n').slice(2)).toEqual(codes);
+
+  await page.getByRole('button', { name: 'Copy' }).click();
+  await expect(page.getByRole('status')).toHaveText('Copied. Paste them into your password manager now.');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);
+
+  await page.getByRole('button', { name: 'Print' }).click();
+  expect(await page.evaluate(() => (window as unknown as { printed: number }).printed)).toBe(1);
+  await expectAccessible(page);
+
+  await page.getByLabel('I saved my recovery codes').check();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page).toHaveURL('/');
+});

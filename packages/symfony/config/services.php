@@ -377,7 +377,9 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$translator', service('yorvoid.translator.used'))
         ->arg('$twig', service('twig')->nullOnInvalid())
         ->arg('$script', param('yorvoid.flows.script'))
-        ->arg('$remedies', service(RemedyPrompts::class));
+        ->arg('$remedies', service(RemedyPrompts::class))
+        ->arg('$site', param('yorvoid.passkeys.relying_party_id'))
+        ->arg('$clock', service(ClockInterface::class));
     // Refusals, for people (M2-10): after the application's own exception listeners, before Symfony's error page.
     $services->set(RemedyPrompts::class)->arg('$translator', service('yorvoid.translator.used'));
     $services->set(NotPermittedListener::class)->tag('kernel.event_listener', ['event' => 'kernel.exception', 'priority' => NotPermittedListener::PRIORITY]);

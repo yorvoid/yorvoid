@@ -1,3 +1,4 @@
+import { wireCodes } from './codes.js';
 import { YorvoIDError } from './errors.js';
 import { YorvoID } from './yorvoid.js';
 /**
@@ -69,4 +70,5 @@ function messages(json) {
 }
 if (typeof document !== 'undefined') {
     wireForms(document);
+    wireCodes(document);
 }

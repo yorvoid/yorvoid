@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony\Templates;
 
+use Psr\Clock\ClockInterface;
+use Symfony\Component\Clock\NativeClock;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
 use YorvoID\Core\Exception\IntegratorError;
@@ -30,6 +32,9 @@ final readonly class FlowPages
         private ?Environment $twig,
         private string $script,
         private ?RemedyPrompts $remedies = null,
+        /** The site, as people know it, e.g. on the recovery codes they print: the relying party ID */
+        private string $site = '',
+        private ClockInterface $clock = new NativeClock(),
     ) {
     }
 
@@ -171,6 +176,6 @@ final readonly class FlowPages
             throw new IntegratorError('YorvoID\'s flow pages need Twig.', 'Install symfony/twig-bundle, or use the flows from the browser client, which asks for JSON.', 'concepts/symfony.md#flow-pages');
         }
 
-        return $this->twig->render($template, $parameters + ['locale' => $locale, 'script' => $this->script]);
+        return $this->twig->render($template, $parameters + ['locale' => $locale, 'script' => $this->script, 'site' => $this->site, 'today' => $this->clock->now()->format('Y-m-d')]);
     }
 }

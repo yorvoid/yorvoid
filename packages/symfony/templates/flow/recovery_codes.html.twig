@@ -1,14 +1,32 @@
-{# New recovery codes, shown once. View: RecoveryCodesView. #}
+{# New recovery codes, shown once. View: RecoveryCodesView; site and today: for whoever prints them. #}
 {% extends '@YorvoID/flow/layout.html.twig' %}
 {% import '@YorvoID/flow/fields.html.twig' as fields %}
 
 {% block title %}{{ 'yorvoid.ui.recovery_codes.title'|yorvoid_trans }}{% endblock %}
 
+{% block head %}
+    {# Printed, the page is the codes: the browser client's Print button, or the browser's own. #}
+    <style media="print">body * { visibility: hidden; } [data-yorvoid-printed], [data-yorvoid-printed] * { visibility: visible; } [data-yorvoid-printed] { position: absolute; top: 0; }</style>
+{% endblock %}
+
 {% block content %}
     <p>{{ 'yorvoid.ui.recovery_codes.intro'|yorvoid_trans }}</p>
-    <ol data-yorvoid-recovery-codes>
-        {% for code in view.codes %}<li><code>{{ code }}</code></li>{% endfor %}
-    </ol>
+    {# What prints: which site the codes are for, and when they were made, then the codes. #}
+    <div data-yorvoid-printed>
+        <p data-yorvoid-printed-heading>{{ 'yorvoid.ui.recovery_codes.printed'|yorvoid_trans({site: site, date: today}) }}</p>
+        <ol data-yorvoid-recovery-codes>
+            {% for code in view.codes %}<li><code>{{ code }}</code></li>{% endfor %}
+        </ol>
+    </div>
+    {# Shown by the browser client: without it, the codes are still here to write down or print. #}
+    <div data-yorvoid-save-codes data-yorvoid-site="{{ site }}" data-yorvoid-heading="{{ 'yorvoid.ui.recovery_codes.file_heading'|yorvoid_trans }}" hidden>
+        <p>
+            <button type="button" data-yorvoid-download>{{ 'yorvoid.ui.recovery_codes.download'|yorvoid_trans }}</button>
+            <button type="button" data-yorvoid-copy>{{ 'yorvoid.ui.recovery_codes.copy'|yorvoid_trans }}</button>
+            <button type="button" data-yorvoid-print>{{ 'yorvoid.ui.recovery_codes.print'|yorvoid_trans }}</button>
+        </p>
+        <p role="status" data-yorvoid-copied hidden>{{ 'yorvoid.ui.recovery_codes.copied'|yorvoid_trans }}</p>
+    </div>
     <form method="post" action="{{ action }}">
         <p>
             <input id="yorvoid-saved" name="saved" type="checkbox" value="1" required
