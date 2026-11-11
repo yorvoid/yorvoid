@@ -21,7 +21,7 @@ if [ ! -f /opt/sqlite/.column-metadata ]; then
 	test "$(openssl dgst -sha3-256 sqlite.tar.gz | cut -d' ' -f2)" = "$sqlite_sha3" || { echo "SQLite's tarball doesn't match its published SHA3-256."; exit 1; }
 	tar xzf sqlite.tar.gz
 	cd "$sqlite"
-	CFLAGS="-O2 -DSQLITE_ENABLE_COLUMN_METADATA=1" ./configure -q --prefix=/opt/sqlite >/dev/null
+	CFLAGS="-O2 -DSQLITE_ENABLE_COLUMN_METADATA=1" ./configure --prefix=/opt/sqlite >/dev/null
 	make -s -j"$(nproc)" >/dev/null 2>&1
 	make -s install >/dev/null
 	touch /opt/sqlite/.column-metadata
