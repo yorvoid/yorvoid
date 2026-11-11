@@ -242,7 +242,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
     {
         [$ana, , $codes] = $this->account();
         $flow = $this->flows->start(PasskeyFlows::RECOVER_WITH_CODE, $this->realm, $this->context);
-        self::assertSame([], $flow->view?->jsonSerialize());
+        self::assertSame(['holds' => null], $flow->view?->jsonSerialize(), 'No cool-down: nothing held to say.');
 
         $invalid = [new Problem('yorvoid.flow.recovery_code.invalid', field: 'code')];
         self::assertEquals($invalid, $this->submit($flow, 'recovery_code', ['email' => 'ana@example.com', 'code' => 'wrong'])->problems);
@@ -272,14 +272,14 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         [$ana] = $this->account();
         $link = Permits::call($this->recoveryLinks->issue(...), new IssueRecoveryLink($this->realm, $ana->id), new Origin(OriginKind::Console));
         $flow = $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $link->secret->reveal()]);
-        self::assertSame(['account' => 'ana@example.com'], $flow->view?->jsonSerialize(), 'The page names whose account the link opens (login CSRF).');
-        self::assertSame(['account' => null], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => 'wrong'])->view?->jsonSerialize());
+        self::assertSame(['account' => 'ana@example.com', 'holds' => null], $flow->view?->jsonSerialize(), 'The page names whose account the link opens (login CSRF).');
+        self::assertSame(['account' => null, 'holds' => null], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => 'wrong'])->view?->jsonSerialize());
         $both = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'bo@example.com', username: 'bo'), new Origin(OriginKind::Console));
         $bos = Permits::call($this->recoveryLinks->issue(...), new IssueRecoveryLink($this->realm, $both->id), new Origin(OriginKind::Console));
-        self::assertSame(['account' => 'bo@example.com'], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $bos->secret->reveal()])->view?->jsonSerialize(), 'The email address first.');
+        self::assertSame(['account' => 'bo@example.com', 'holds' => null], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $bos->secret->reveal()])->view?->jsonSerialize(), 'The email address first.');
         $named = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, username: 'cy'), new Origin(OriginKind::Console));
         $cys = Permits::call($this->recoveryLinks->issue(...), new IssueRecoveryLink($this->realm, $named->id), new Origin(OriginKind::Console));
-        self::assertSame(['account' => 'cy'], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $cys->secret->reveal()])->view?->jsonSerialize());
+        self::assertSame(['account' => 'cy', 'holds' => null], $this->flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $cys->secret->reveal()])->view?->jsonSerialize());
 
         $recovered = $this->submit($flow, 'recovery_link', []);
         self::assertSame([AuthenticationMethod::RecoveryLink, 'passkey_registration'], [$recovered->signedIn?->session->authentication->factors[0]->method, $recovered->step]);
@@ -397,6 +397,17 @@ final class PasskeyFlowsTest extends DatabaseTestCase
 
         self::assertSame(FlowStatus::Failed, $flow->status);
         self::assertStringStartsWith('yorvoid.passkey.', (string) $flow->failure?->message);
+    }
+
+    public function testTheRecoveryPagesSayWhatTheCoolDownHolds(): void
+    {
+        $stepUp = new StepUp($this->sessions, $this->stack->coolDowns, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->clock, Duration::hours(24));
+        $flows = new Flows(new PasskeyFlows($this->operations, $this->passkeys, $this->principals, $this->invitations, $this->recoveryCodes, $this->recoveryLinks, $stepUp, Duration::minutes(5))->all(), new InMemoryFlowStore(), $this->sessions, clock: $this->clock);
+        [$ana] = $this->account();
+        $link = Permits::call($this->recoveryLinks->issue(...), new IssueRecoveryLink($this->realm, $ana->id), new Origin(OriginKind::Console));
+
+        self::assertSame(['holds' => 86400], $flows->start(PasskeyFlows::RECOVER_WITH_CODE, $this->realm, $this->context)->view?->jsonSerialize());
+        self::assertSame(['account' => 'ana@example.com', 'holds' => 86400], $flows->start(PasskeyFlows::RECOVER_WITH_LINK, $this->realm, $this->context, [RecoveryLinkStep::TOKEN => $link->secret->reveal()])->view?->jsonSerialize());
     }
 
     public function testNoNewRecoveryCodesWhileTheCoolDownAfterARecoveryLasts(): void

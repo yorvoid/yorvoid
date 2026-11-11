@@ -128,6 +128,9 @@ Stricter passkey and intent checks, signed checkpoints of the security log, Symf
 - `WaitRemedy` says why it waits (`WaitReason`, in its parameters as `reason`): YorvoID's waits after an account recovery say so, and the refusal page tells the person why ([remedies](docs/concepts/authorization.md#remedies)).
 - The refusal page says the operation wasn't done, and links back to the page the person came from, or to `flows.completed_path` ([symfony](docs/concepts/symfony.md)).
 - A completed step-up leaves one flash, `yorvoid.notice` ("You've confirmed it's you. Now try again."), for the page it returns to, and the flow's JSON answer has it in `notice` ([symfony](docs/concepts/symfony.md)).
+- `StepUp::coolDown()`, the cool-down a recovery starts, and `holds` on `RecoveryCodeView` and `RecoveryLinkView`: the recovery pages say, before the person continues, that some changes will wait that long ([step-up](docs/concepts/step-up.md#the-cool-down-after-a-recovery)).
+- After a cancelled passkey prompt, the sign-in and step-up buttons say "Try again with your passkey" (`data-yorvoid-retry`, [browser client](docs/concepts/browser-client.md)).
+- After a recovery, the page that offers a passkey asks "Is this your own device?", and "Not now" comes first, so it's what Enter sends ([symfony](docs/concepts/symfony.md)).
 
 ### Fixed
 

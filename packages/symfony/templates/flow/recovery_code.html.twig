@@ -9,6 +9,7 @@
     <form method="post" action="{{ action }}">
         {{ fields.input('email', 'yorvoid.ui.recovery_code.email'|yorvoid_trans, 'email', 'username', field_problems, {required: 'required'}) }}
         {{ fields.input('code', 'yorvoid.ui.recovery_code.code'|yorvoid_trans, 'text', 'off', field_problems, {autocapitalize: 'characters', spellcheck: 'false', required: 'required'}) }}
+        {{ fields.holds(view.holds) }}
         <p><button type="submit">{{ 'yorvoid.ui.recovery_code.submit'|yorvoid_trans }}</button></p>
     </form>
 {% endblock %}

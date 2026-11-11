@@ -68,5 +68,6 @@ $stepUp = new StepUp($sessions, $coolDownStore, $log, coolDown: Duration::hours(
 - Removing a credential and replacing recovery codes wait it out. Adding one doesn't: someone who lost their passkeys recovers to add a new one.
 - The owner can't remove a passkey an attacker added during the cool-down either. The "This wasn't me" link in the [notification](notifications.md) disables it at once, and ends the attacker's sessions.
 - A held operation throws `HeldAfterRecovery` with the moment it's possible again. Stepping up doesn't help; tell the person when.
+- Tell them before, too: `StepUp::coolDown()` is the cool-down a recovery starts, or null. The recovery pages' views carry it (`RecoveryCodeView::$holds`, `RecoveryLinkView::$holds`), and the reference pages say it before the person continues.
 - The recovery flows' recovery-codes step is passed over while it lasts: the person generates new codes once it ends.
 - `coolDownEndsAt()` tells whether a principal is cooling down, e.g. to show it on their security page. Purge ended cool-downs daily with `$stepUp->purge()`.

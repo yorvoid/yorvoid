@@ -96,7 +96,7 @@ test('recovers with a code, and adds a passkey later', async ({ page }) => {
   await page.getByLabel('Email address').fill('ana@example.com');
   await page.getByLabel('Recovery code').fill(codes[0] ?? '');
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'Add a passkey' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Is this your own device?' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Not now' }).click();
   await expect(page.getByTestId('who')).toHaveText('Signed in as ana@example.com');

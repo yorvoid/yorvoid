@@ -6,6 +6,7 @@ namespace YorvoID\Passkeys\Flow;
 
 use YorvoID\Authn\Recovery\RecoverWithCode;
 use YorvoID\Authn\Session\InactivePrincipal;
+use YorvoID\Core\Duration;
 use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -29,8 +30,12 @@ final readonly class RecoveryCodeStep implements Step
 {
     public const string NAME = 'recovery_code';
 
+    /**
+     * @param Duration|null $holds The cool-down the recovery starts (StepUp::coolDown()), for the page to say
+     */
     public function __construct(
         private Operations $operations,
+        private ?Duration $holds = null,
     ) {
     }
 
@@ -51,7 +56,7 @@ final readonly class RecoveryCodeStep implements Step
 
     public function view(FlowState $state): StepView
     {
-        return new RecoveryCodeView();
+        return new RecoveryCodeView($this->holds);
     }
 
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult

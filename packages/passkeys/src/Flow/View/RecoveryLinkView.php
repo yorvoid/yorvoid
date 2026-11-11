@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow\View;
 
+use YorvoID\Core\Duration;
 use YorvoID\Flows\StepView;
 
 /**
@@ -15,16 +16,18 @@ use YorvoID\Flows\StepView;
 final readonly class RecoveryLinkView implements StepView
 {
     /**
-     * @param string|null $account The account the link is for, as the person knows it, e.g. their email
-     *                             address; null if the link doesn't work any more
+     * @param string|null   $account The account the link is for, as the person knows it, e.g. their email
+     *                               address; null if the link doesn't work any more
+     * @param Duration|null $holds   How long sensitive changes wait once someone gets back in this way; null if they don't
      */
     public function __construct(
         public ?string $account = null,
+        public ?Duration $holds = null,
     ) {
     }
 
     public function jsonSerialize(): array
     {
-        return ['account' => $this->account];
+        return ['account' => $this->account, 'holds' => $this->holds?->seconds];
     }
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { MESSAGES, YorvoID, type Messages } from '../src/index.ts';
 import { wireForms } from '../src/forms.ts';
-import { FakeForm, page, settle } from './dom.ts';
+import { FakeButton, FakeForm, page, settle } from './dom.ts';
 import { assertion, attestation, CREATION_OPTIONS, FakeCredentials, FakeServer, REQUEST_OPTIONS, statics, untilAborted } from './support.ts';
 
 function wire(forms: FakeForm[], credentials: FakeCredentials, conditional = true, problems: { focused: boolean } | null = null): Partial<Messages>[] {
@@ -102,6 +102,29 @@ test('shows what went wrong, in the page\'s language', async () => {
   assert.deepEqual(given, [{ cancelled: 'Abgebrochen.' }]);
   assert.deepEqual(form.error, { textContent: 'Abgebrochen.', hidden: false });
   assert.equal(form.submitted, 0);
+});
+
+test('after a cancel, the button invites trying again', async () => {
+  const cancel = async () => { throw new DOMException('Timed out', 'NotAllowedError'); };
+  const form = new FakeForm({ yorvoidCeremony: 'get', yorvoidOptions: JSON.stringify(REQUEST_OPTIONS) });
+  wire([form], new FakeCredentials(cancel));
+  const button = new FakeButton({ 'data-yorvoid-retry': 'Try again with your passkey' }, 'Sign in with a passkey');
+  form.send(button);
+
+  const plain = new FakeForm({ yorvoidCeremony: 'get', yorvoidOptions: JSON.stringify(REQUEST_OPTIONS) });
+  wire([plain], new FakeCredentials(cancel));
+  const own = new FakeButton({}, 'Sign in');
+  plain.send(own);
+
+  const other = new FakeForm({ yorvoidCeremony: 'get', yorvoidOptions: JSON.stringify(REQUEST_OPTIONS) });
+  wire([other], new FakeCredentials(async () => null));
+  const failed = new FakeButton({ 'data-yorvoid-retry': 'Try again with your passkey' }, 'Sign in with a passkey');
+  other.send(failed);
+  await settle();
+
+  assert.equal(button.textContent, 'Try again with your passkey');
+  assert.equal(own.textContent, 'Sign in', 'Without a retry text, the button stays.');
+  assert.equal(failed.textContent, 'Sign in with a passkey', 'Only after a cancel.');
 });
 
 test('what can\'t be shown is left alone', async () => {

@@ -6,6 +6,7 @@ namespace YorvoID\Passkeys\Flow;
 
 use YorvoID\Authn\Recovery\RecoveryLinks;
 use YorvoID\Authn\Recovery\UseRecoveryLink;
+use YorvoID\Core\Duration;
 use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -37,11 +38,13 @@ final readonly class RecoveryLinkStep implements Step
 
     /**
      * @param Principals|null $principals To name the account on the page; without it, it isn't named
+     * @param Duration|null   $holds      The cool-down the recovery starts (StepUp::coolDown()), for the page to say
      */
     public function __construct(
         private Operations $operations,
         private RecoveryLinks $links,
         private ?Principals $principals = null,
+        private ?Duration $holds = null,
     ) {
     }
 
@@ -70,7 +73,7 @@ final readonly class RecoveryLinkStep implements Step
 
     public function view(FlowState $state): StepView
     {
-        return new RecoveryLinkView($state->string(self::ACCOUNT));
+        return new RecoveryLinkView($state->string(self::ACCOUNT), $this->holds);
     }
 
     public function submit(FlowState $state, FlowContext $context, Input $input): StepResult

@@ -124,6 +124,7 @@ final class StepUpTest extends DatabaseTestCase
         $stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
 
         self::assertNull($stepUp->coolDownEndsAt(new Realm('acme'), $session->principalId));
+        self::assertNull($stepUp->coolDown(), 'Nothing for the recovery pages to say.');
         self::assertSame($entries, iterator_count($this->stack->log->entries(new Realm('acme'), 1)), 'A cool-down that doesn\'t exist was recorded.');
         $stepUp->require($session, new AuthenticationRequirement(Duration::minutes(5), heldAfterRecovery: true));
     }
@@ -139,6 +140,7 @@ final class StepUpTest extends DatabaseTestCase
         $stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
         $until = new \DateTimeImmutable('2026-10-29 18:45:30 UTC');
         self::assertEquals($until, $stepUp->coolDownEndsAt(new Realm('acme'), $session->principalId));
+        self::assertEquals(Duration::hours(24), $stepUp->coolDown(), 'What the recovery pages say is what was applied.');
         self::assertNull($stepUp->coolDownEndsAt(new Realm('globex'), $session->principalId));
 
         $entry = iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false)[2];

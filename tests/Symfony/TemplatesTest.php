@@ -55,7 +55,7 @@ final class TemplatesTest extends TestCase
 
         self::assertSame([], array_map(strval(...), $lint->lint()));
         self::assertSame([], array_map(strval(...), $lint->lint('de')));
-        self::assertSame('Command OK: 28 pages checked: each has what its step needs.', 'Command OK: '.trim((string) preg_replace('/\s+/', ' ', strtr($this->command('yorvoid:templates:lint')[1], ['[OK]' => '']))));
+        self::assertSame('Command OK: 30 pages checked: each has what its step needs.', 'Command OK: '.trim((string) preg_replace('/\s+/', ' ', strtr($this->command('yorvoid:templates:lint')[1], ['[OK]' => '']))));
     }
 
     public function testTheStepUpPageSaysWhatItConfirmsWhenItHasTheWords(): void
@@ -65,6 +65,39 @@ final class TemplatesTest extends TestCase
         self::assertStringContainsString('This confirms: removing a sign-in method from your account.', $pages->sample(Samples::find('step_up', 'default') ?? self::fail(), 'en'));
         self::assertStringNotContainsString('This confirms', $pages->sample(Samples::find('step_up', 'problems') ?? self::fail(), 'en'), 'An operation without words is named by nothing, not by its ID.');
         self::assertNull($pages->operation(null, 'en'));
+    }
+
+    public function testTheRecoveryPagesSayWhatGettingBackInHolds(): void
+    {
+        $pages = $this->service(FlowPages::class);
+        $text = static fn (string $template, string $state): string => new Crawler($pages->sample(Samples::find($template, $state) ?? self::fail(), 'en'))->filter('[data-yorvoid-holds]')->each(static fn (Crawler $node): string => $node->text())[0] ?? '';
+
+        self::assertSame('For your safety, some changes, like your email address, will wait 1 day after you get back in this way.', $text('recovery_code', 'holds'));
+        self::assertSame('For your safety, some changes, like your email address, will wait 6 hours after you get back in this way.', $text('recovery_link', 'holds'));
+        self::assertSame('', $text('recovery_code', 'default'), 'Nothing held: nothing said (U-2).');
+        self::assertSame('', $text('recovery_link', 'default'));
+        $holds = new Crawler($pages->sample(Samples::find('recovery_code', 'holds') ?? self::fail(), 'en'));
+        self::assertSame(['86400'], $holds->filter('form [data-yorvoid-holds]')->each(static fn (Crawler $node): string => (string) $node->attr('data-yorvoid-holds')), 'In the form, before Continue.');
+        self::assertSame('Continue', $holds->filter('[data-yorvoid-holds] + p button')->text(), 'Continue comes right after it.');
+    }
+
+    public function testAfterARecoveryAddingAPasskeyAsksWhetherTheDeviceIsTheirs(): void
+    {
+        $pages = $this->service(FlowPages::class);
+        $later = new Crawler($pages->sample(Samples::find('passkey_registration', 'can_skip') ?? self::fail(), 'en'));
+        $own = new Crawler($pages->sample(Samples::find('passkey_registration', 'default') ?? self::fail(), 'en'));
+
+        self::assertSame('Is this your own device?', $later->filter('h1')->text());
+        self::assertSame([['action', 'Not now'], ['', 'Add a passkey on this device']], $later->filter('form button')->each(static fn (Crawler $button): array => [(string) $button->attr('name'), $button->text()]), '"Not now" first: what Enter sends (U-6).');
+        self::assertSame('Add a passkey', $own->filter('h1')->text(), 'Where it can\'t be skipped, it\'s the person\'s own.');
+        self::assertSame(['Add a passkey'], $own->filter('form button')->each(static fn (Crawler $button): string => $button->text()));
+    }
+
+    public function testTheSignInButtonInvitesTryingAgainAfterACancel(): void
+    {
+        $page = new Crawler($this->service(FlowPages::class)->sample(Samples::find('passkey', 'default') ?? self::fail(), 'en'));
+
+        self::assertSame('Try again with your passkey', $page->filter('form button[type="submit"]')->attr('data-yorvoid-retry'));
     }
 
     public function testTheLintFindsWhatAnApplicationsTemplatesLeftOut(): void

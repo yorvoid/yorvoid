@@ -10,6 +10,8 @@ import { YorvoID } from './yorvoid.js';
  * - a button named "action" ("Not now") sends the form without a ceremony;
  * - what goes wrong shows in the form's [data-yorvoid-error], in the page's language
  *   (data-yorvoid-messages);
+ * - after a cancel, a button with data-yorvoid-retry says that instead, e.g. "Try again with your
+ *   passkey", so trying again reads as the way on;
  * - the page's problems, if any, get the focus, so screen readers read them first.
  */
 export function wireForms(root, create = (messages) => new YorvoID({ messages })) {
@@ -33,7 +35,14 @@ export function wireForms(root, create = (messages) => new YorvoID({ messages })
             }
             event.preventDefault();
             // A YorvoIDError, or a TypeError when the browser gave no passkey.
-            run(false).then(send, (error) => show(form, error));
+            const button = event.submitter;
+            run(false).then(send, (error) => {
+                show(form, error);
+                const retry = button?.getAttribute('data-yorvoid-retry');
+                if (button && retry && error instanceof YorvoIDError && error.code === 'cancelled') {
+                    button.textContent = retry;
+                }
+            });
         });
         if ('yorvoidConditional' in form.dataset) {
             // Stopped when the person uses the button, or not available: the button still works.

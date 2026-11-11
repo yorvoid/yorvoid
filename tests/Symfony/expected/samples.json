@@ -254,14 +254,27 @@
         "template": "recovery_code",
         "state": "default",
         "flow": "yorvoid.recover_with_code",
-        "view": [],
+        "view": {
+            "holds": null
+        },
+        "problems": []
+    },
+    {
+        "template": "recovery_code",
+        "state": "holds",
+        "flow": "yorvoid.recover_with_code",
+        "view": {
+            "holds": 86400
+        },
         "problems": []
     },
     {
         "template": "recovery_code",
         "state": "problems",
         "flow": "yorvoid.recover_with_code",
-        "view": [],
+        "view": {
+            "holds": null
+        },
         "problems": [
             {
                 "message": "yorvoid.flow.recovery_code.invalid",
@@ -275,7 +288,9 @@
         "template": "recovery_code",
         "state": "too_many_attempts",
         "flow": "yorvoid.recover_with_code",
-        "view": [],
+        "view": {
+            "holds": null
+        },
         "problems": [
             {
                 "message": "yorvoid.flow.too_many_attempts",
@@ -292,7 +307,18 @@
         "state": "default",
         "flow": "yorvoid.recover_with_link",
         "view": {
-            "account": "ana@example.com"
+            "account": "ana@example.com",
+            "holds": null
+        },
+        "problems": []
+    },
+    {
+        "template": "recovery_link",
+        "state": "holds",
+        "flow": "yorvoid.recover_with_link",
+        "view": {
+            "account": "ana@example.com",
+            "holds": 21600
         },
         "problems": []
     },
