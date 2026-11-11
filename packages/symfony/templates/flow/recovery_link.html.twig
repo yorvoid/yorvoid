@@ -1,5 +1,6 @@
 {# Recovering with a recovery link: the person confirms. View: RecoveryLinkView. #}
 {% extends '@YorvoID/flow/layout.html.twig' %}
+{% import '@YorvoID/flow/fields.html.twig' as fields %}
 
 {% block title %}{{ 'yorvoid.ui.recovery_link.title'|yorvoid_trans }}{% endblock %}
 
@@ -9,6 +10,7 @@
     {% endif %}
     <p>{{ 'yorvoid.ui.recovery_link.intro'|yorvoid_trans }}</p>
     <form method="post" action="{{ action }}">
+        {{ fields.holds(view.holds) }}
         <p><button type="submit">{{ 'yorvoid.ui.recovery_link.submit'|yorvoid_trans }}</button></p>
     </form>
 {% endblock %}

@@ -3,8 +3,22 @@ import assert from 'node:assert/strict';
 /**
  * A page's forms, as the forms script sees them: enough of the DOM to test it without a browser.
  */
+export class FakeButton {
+  readonly #attributes: Record<string, string>;
+  textContent: string;
+
+  constructor(attributes: Record<string, string>, textContent = '') {
+    this.#attributes = attributes;
+    this.textContent = textContent;
+  }
+
+  getAttribute(name: string): string | null {
+    return this.#attributes[name] ?? null;
+  }
+}
+
 export interface FakeEvent {
-  readonly submitter: { getAttribute(name: string): string | null } | null;
+  readonly submitter: { getAttribute(name: string): string | null; textContent?: string | null } | null;
   prevented: boolean;
   preventDefault(): void;
 }
@@ -35,8 +49,9 @@ export class FakeForm {
     this.submitted++;
   }
 
-  send(button: string | null = null): FakeEvent {
-    const event: FakeEvent = { submitter: button === null ? null : { getAttribute: (name) => name === 'name' ? button : null }, prevented: false, preventDefault() { this.prevented = true; } };
+  send(button: string | FakeButton | null = null): FakeEvent {
+    const submitter = typeof button === 'string' ? new FakeButton({ name: button }) : button;
+    const event: FakeEvent = { submitter, prevented: false, preventDefault() { this.prevented = true; } };
     this.#listener?.(event);
 
     return event;

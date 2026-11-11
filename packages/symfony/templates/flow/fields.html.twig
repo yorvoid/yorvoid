@@ -22,3 +22,15 @@
     <p role="alert" data-yorvoid-error hidden></p>
     <noscript><p>{{ 'yorvoid.ui.needs_javascript'|yorvoid_trans }}</p></noscript>
 {% endmacro %}
+
+{# What a recovery holds, before the person continues: holds, a Duration, or null when nothing's held. #}
+{% macro holds(holds) %}
+    {%- if holds is not null -%}
+        {%- set seconds = holds.seconds -%}
+        <p data-yorvoid-holds="{{ seconds }}">
+            {%- if seconds % 86400 == 0 -%}{{ 'yorvoid.ui.recovery.holds.days'|yorvoid_trans({count: seconds // 86400}) }}
+            {%- elseif seconds % 3600 == 0 -%}{{ 'yorvoid.ui.recovery.holds.hours'|yorvoid_trans({count: seconds // 3600}) }}
+            {%- else -%}{{ 'yorvoid.ui.recovery.holds.minutes'|yorvoid_trans({count: (seconds + 59) // 60}) }}{%- endif -%}
+        </p>
+    {%- endif -%}
+{% endmacro %}

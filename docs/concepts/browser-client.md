@@ -96,7 +96,7 @@ if (progress.status === 'completed') {
 
 ### The flow pages' script
 
-`@yorvoid/browser/forms` runs the passkey ceremonies of the [reference pages](symfony.md#the-reference-templates), and of yours if they follow them: a form with `data-yorvoid-ceremony="get"` or `"create"` and `data-yorvoid-options` runs it when sent, puts the answer in its `response` field, and is sent; `data-yorvoid-conditional` offers passkeys in autofill as soon as the page loads. The Symfony bridge ships it, built, in its public files.
+`@yorvoid/browser/forms` runs the passkey ceremonies of the [reference pages](symfony.md#the-reference-templates), and of yours if they follow them: a form with `data-yorvoid-ceremony="get"` or `"create"` and `data-yorvoid-options` runs it when sent, puts the answer in its `response` field, and is sent; `data-yorvoid-conditional` offers passkeys in autofill as soon as the page loads. After a cancel, a submit button with `data-yorvoid-retry` takes that text, e.g. "Try again with your passkey". The Symfony bridge ships it, built, in its public files.
 
 ## Errors
 

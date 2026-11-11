@@ -14,7 +14,7 @@
         {% endif %}
         <form method="post" action="{{ action }}" {{ fields.ceremony('get', view.options, client_messages) }}>
             {{ fields.ceremony_fields() }}
-            <p><button type="submit">{{ 'yorvoid.ui.step_up.submit'|yorvoid_trans }}</button></p>
+            <p><button type="submit" data-yorvoid-retry="{{ 'yorvoid.ui.passkey.retry'|yorvoid_trans }}">{{ 'yorvoid.ui.step_up.submit'|yorvoid_trans }}</button></p>
         </form>
     {% endif %}
 {% endblock %}

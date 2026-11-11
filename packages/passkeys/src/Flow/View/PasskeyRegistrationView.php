@@ -16,7 +16,7 @@ final readonly class PasskeyRegistrationView implements StepView
 {
     /**
      * @param string|null $options navigator.credentials.create()'s options, as JSON; null when no one is signed in
-     * @param bool        $canSkip Whether the person may add one later, e.g. on a borrowed device
+     * @param bool        $canSkip Whether the person may add one later, e.g. on a borrowed device: YorvoID's page reads it as "this may be someone else's device", and asks before adding one
      */
     public function __construct(
         public ?string $options,

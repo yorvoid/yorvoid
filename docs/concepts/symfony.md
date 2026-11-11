@@ -294,13 +294,13 @@ Every step has an accessible, unstyled template, phone-first, in `@YorvoID/flow/
 
 | Template | View model |
 |---|---|
-| `passkey.html.twig` | `PasskeySignInView`: passkeys in the email field's autofill, and a button; a link to recovery |
+| `passkey.html.twig` | `PasskeySignInView`: passkeys in the email field's autofill, and a button that says "Try again with your passkey" after a cancel; a link to recovery |
 | `setup_code.html.twig` | `SetupCodeView` |
-| `passkey_registration.html.twig` | `PasskeyRegistrationView`: "Not now" when the person may add one later |
+| `passkey_registration.html.twig` | `PasskeyRegistrationView`: when the person may add one later (`canSkip`, after a recovery), it may be someone else's device: the page asks "Is this your own device?", and "Not now" comes first, so it's what Enter sends |
 | `recovery_codes.html.twig` | `RecoveryCodesView` |
 | `invitation.html.twig` | `InvitationView` |
-| `recovery_code.html.twig` | `RecoveryCodeView` |
-| `recovery_link.html.twig` | `RecoveryLinkView` |
+| `recovery_code.html.twig` | `RecoveryCodeView`: with a cool-down, how long getting back in this way holds changes (`holds`) |
+| `recovery_link.html.twig` | `RecoveryLinkView`: the account, and `holds` as for a code |
 | `step_up.html.twig` | `StepUpView` |
 | `failed.html.twig`, `expired.html.twig` | A flow that couldn't go on, or is gone |
 | `refused.html.twig` | An operation refused: what would satisfy it ([refusals for people](#refusals-for-people)) |

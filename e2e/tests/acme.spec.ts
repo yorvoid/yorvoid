@@ -72,3 +72,33 @@ test('Acme Team\'s pages fit a 320 px phone', async ({ page }) => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   }
 });
+
+test('after a recovery, Enter on the passkey page skips it, with no passkey prompt', async ({ page }) => {
+  await withoutAutofill(page);
+  const authenticator = await Authenticator.on(page);
+  const codes = await claim(page);
+  await signOut(page);
+  await page.addInitScript(() => {
+    const create = navigator.credentials.create.bind(navigator.credentials);
+    (window as unknown as { creates: number }).creates = 0;
+    navigator.credentials.create = (options) => {
+      (window as unknown as { creates: number }).creates++;
+
+      return create(options);
+    };
+  });
+
+  await page.goto('/yorvoid/flows/yorvoid.recover_with_code');
+  await page.getByLabel('Email address').fill('ana@example.com');
+  await page.getByLabel('Recovery code').fill(codes[0] ?? '');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Is this your own device?' })).toBeVisible();
+  await expectAccessible(page);
+  const passkeys = await authenticator.passkeys();
+  await page.getByLabel('Name it').press('Enter');
+
+  await expect(page.getByRole('heading', { name: 'Is this your own device?' })).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { creates: number }).creates)).toBe(0);
+  expect(await authenticator.passkeys()).toBe(passkeys);
+});

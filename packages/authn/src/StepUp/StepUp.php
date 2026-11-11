@@ -66,6 +66,15 @@ final readonly class StepUp
     }
 
     /**
+     * How long sensitive operations are held after an account recovery, as startCoolDown() applies it:
+     * null when there's no cool-down. What the recovery pages say they hold.
+     */
+    public function coolDown(): ?Duration
+    {
+        return $this->coolDown;
+    }
+
+    /**
      * Starts the cool-down after an account recovery, if one is configured. For the ways to recover.
      */
     public function startCoolDown(Realm $realm, PrincipalId $principalId, Origin $origin): void

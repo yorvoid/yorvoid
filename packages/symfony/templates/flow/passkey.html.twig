@@ -8,7 +8,7 @@
     <form method="post" action="{{ action }}" {{ fields.ceremony('get', view.options, client_messages, true) }}>
         {{ fields.input('username', 'yorvoid.ui.passkey.username'|yorvoid_trans, 'email', 'username webauthn', field_problems) }}
         {{ fields.ceremony_fields() }}
-        <p><button type="submit">{{ 'yorvoid.ui.passkey.submit'|yorvoid_trans }}</button></p>
+        <p><button type="submit" data-yorvoid-retry="{{ 'yorvoid.ui.passkey.retry'|yorvoid_trans }}">{{ 'yorvoid.ui.passkey.submit'|yorvoid_trans }}</button></p>
     </form>
     {% block alternatives %}
         <p><a href="{{ path('yorvoid_flow_start', {flow: 'yorvoid.recover_with_code'}) }}">{{ 'yorvoid.ui.passkey.lost'|yorvoid_trans }}</a></p>
