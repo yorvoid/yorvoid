@@ -56,7 +56,8 @@ final class CryptoPolicyTest extends TestCase
         self::assertTrue($provider->sha256);
         self::assertNull($provider->kernelFips, 'It can\'t tell.');
         self::assertFalse(openssl_error_string(), 'The probe leaves nothing in OpenSSL\'s error queue.');
-        self::assertEquals($provider, CryptoPolicy::standard()->provider(), 'The standard mode probes when asked.');
+        $probed = CryptoPolicy::standard()->provider();
+        self::assertEquals([$provider->openssl, $provider->fipsOnly, $provider->sha256, $provider->ed25519], [$probed->openssl, $probed->fipsOnly, $probed->sha256, $probed->ed25519], 'The standard mode probes when asked; only the kernel, read from its real path, may differ.');
 
         if (self::fips()) {
             self::assertTrue($provider->fipsOnly, 'The FIPS-configured image runs its FIPS provider alone.');

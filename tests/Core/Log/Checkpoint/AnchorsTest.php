@@ -194,7 +194,9 @@ final class AnchorsTest extends TestCase
         $pair = sodium_crypto_sign_seed_keypair($seed);
         $old = new SigningKey('old', KeyStatus::VerifyOnly, sodium_crypto_sign_publickey($pair), Secret::fromString($seed));
         $ring = new KeyRing([$old, SigningKey::generate('new', algorithm: KeyAlgorithm::ES256)]);
-        $crypto = self::fips() ? CryptoPolicy::fips() : self::withoutEdDsa();
+        // A FIPS provider may have EdDSA (FIPS 186-5), as Red Hat's does; this is about one without it.
+        $fips = self::fips() && !CryptoPolicy::fips()->allowsEdDsa();
+        $crypto = $fips ? CryptoPolicy::fips() : self::withoutEdDsa();
         self::assertFalse($crypto->allowsEdDsa());
 
         $this->record(2);
@@ -206,7 +208,7 @@ final class AnchorsTest extends TestCase
         self::assertFalse($this->checkpoints($ring, $crypto)->verify($this->realm, $this->kept)->isIntact(), 'Nothing covers the old checkpoint yet.');
 
         // Anchored where it could be checked (the standard mode), then verified under the provider.
-        $this->checkpoints($ring, self::fips() ? null : CryptoPolicy::standard())->anchor($this->realm, self::fips() ? [] : $this->kept);
+        $this->checkpoints($ring, $fips ? null : CryptoPolicy::standard())->anchor($this->realm, $fips ? [] : $this->kept);
         $this->record(1);
         $this->checkpoints($ring, $crypto)->take($this->realm);
 
