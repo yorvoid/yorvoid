@@ -184,7 +184,7 @@ final readonly class FlowController
         // Checked again here, not only when the flow started: what's in the state is what's followed.
         $return = $progress->state->string(self::RETURN);
         $completed = null !== $return && LocalPath::is($return) ? $return : $this->completed[$flow] ?? $this->completed['default'] ?? '/';
-        $notice = FlowStatus::Completed === $progress->status && PasskeyFlows::STEP_UP === $flow && null !== $return ? $this->notice($request) : null;
+        $notice = FlowStatus::Completed === $progress->status ? $this->notice($request, $progress, PasskeyFlows::STEP_UP === $flow && null !== $return) : null;
         $status = match (true) {
             FlowStatus::Failed === $progress->status => 410,
             null !== $progress->retryAfter => 429,
@@ -248,10 +248,21 @@ final readonly class FlowController
      * says it's done, and to try again. Set, not added, so a layout that never shows flashes keeps at
      * most one. A JSON answer says it in "notice" instead: the client may not go to that page. Without a
      * session, there's no flash.
+     *
+     * A step's notice for the end of its flow (Progress::$notice) is said the same way, and is the one
+     * said if there were both.
      */
-    private function notice(Request $request): string
+    private function notice(Request $request, Progress $progress, bool $steppedUp): ?string
     {
-        $text = $this->pages->stepUpDone($request->getLocale());
+        $text = match (true) {
+            null !== $progress->notice => $this->pages->notice($progress->notice, $request->getLocale()),
+            $steppedUp => $this->pages->stepUpDone($request->getLocale()),
+            default => null,
+        };
+
+        if (null === $text) {
+            return null;
+        }
 
         if (!$this->wantsJson($request) && $request->hasSession()) {
             $session = $request->getSession();

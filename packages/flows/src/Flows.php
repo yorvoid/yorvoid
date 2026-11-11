@@ -39,6 +39,9 @@ final class Flows
 
     private const string NEW_DEVICE = 'flows.signed_in.new_device';
 
+    /** The notice a step left for the flow's end (StepResult::done(notice: …)) */
+    private const string NOTICE = 'flows.notice';
+
     private const string CONFIRM_AGAIN = 'yorvoid.flow.confirm_again';
 
     private const string HELD = 'yorvoid.flow.held_after_recovery';
@@ -169,6 +172,10 @@ final class Flows
         self::refuseReservedKeys($current, [...array_keys($result->data), ...$result->forget]);
         $state = $state->with($result->data)->without($result->forget)->passing($current->name());
 
+        if (null !== $result->notice) {
+            $state = $state->with([self::NOTICE => ['message' => $result->notice->message, 'parameters' => $result->notice->parameters]]);
+        }
+
         if (null !== $result->signedIn) {
             $context = $context->withSession($result->signedIn->session);
             $state = $state->with([
@@ -237,9 +244,11 @@ final class Flows
 
         $this->store->delete($state->id);
         [$state, $signedIn] = $this->release($state, $context);
+        $notice = self::notice($state);
+        $state = $state->without([self::NOTICE]);
         $this->events->dispatch(new FlowCompleted($state, $context->origin));
 
-        return new Progress(FlowStatus::Completed, $state, signedIn: $signedIn, renewedToken: $renewedToken);
+        return new Progress(FlowStatus::Completed, $state, signedIn: $signedIn, renewedToken: $renewedToken, notice: $notice);
     }
 
     /**
@@ -289,6 +298,17 @@ final class Flows
                 throw new IntegratorError(\sprintf('The step "%s" keeps "%s" in the flow\'s state: "flows." and "yorvoid." are reserved.', $step->name(), $key), 'Keep a step\'s data under a prefix of your own, e.g. its name: "acme_terms.accepted".', 'concepts/flows.md#writing-a-step');
             }
         }
+    }
+
+    /**
+     * The notice a step left in the state, if any: only Flows keeps it there, as done() puts it.
+     */
+    private static function notice(FlowState $state): ?Notice
+    {
+        /** @var array{message: string, parameters: array<string, string|int|float>}|null $kept */
+        $kept = $state->get(self::NOTICE);
+
+        return null === $kept ? null : new Notice($kept['message'], $kept['parameters']);
     }
 
     private function fail(FlowState $state, Problem $failure): Progress

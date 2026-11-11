@@ -40,6 +40,7 @@ use YorvoID\Flows\Flows;
 use YorvoID\Flows\FlowState;
 use YorvoID\Flows\FlowStatus;
 use YorvoID\Flows\Input;
+use YorvoID\Flows\Notice;
 use YorvoID\Flows\Problem;
 use YorvoID\Flows\Progress;
 use YorvoID\Flows\Storage\InMemoryFlowStore;
@@ -50,6 +51,7 @@ use YorvoID\Notifications\Translations;
 use YorvoID\Passkeys\Flow\InvitationStep;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
 use YorvoID\Passkeys\Flow\RecoveryCodesStep;
+use YorvoID\Passkeys\Flow\RecoveryCodeStep;
 use YorvoID\Passkeys\Flow\RecoveryLinkStep;
 use YorvoID\Passkeys\Flow\View\InvitationView;
 use YorvoID\Passkeys\Flow\View\PasskeyRegistrationView;
@@ -399,6 +401,32 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertStringStartsWith('yorvoid.passkey.', (string) $flow->failure?->message);
     }
 
+    public function testAfterACodeTheFlowSaysItsUsedAndHowManyAreLeft(): void
+    {
+        [, , $codes] = $this->account();
+        $state = new FlowState('id', PasskeyFlows::RECOVER_WITH_CODE, $this->realm, $this->clock->now()->modify('+30 minutes'));
+        $now = new RecoveryCodeStep($this->operations);
+        $held = new RecoveryCodeStep($this->operations, Duration::hours(24));
+        $use = static fn (RecoveryCodeStep $step, string $code, string $email = 'ana@example.com'): ?Notice => $step->submit($state, new FlowContext(new Origin(OriginKind::Web)), new Input(['email' => $email, 'code' => $code]))->notice;
+
+        self::assertEquals(new Notice('yorvoid.flow.recovery_code.used', ['remaining' => 9, 'hint' => 'none']), $use($now, $codes[0]));
+        foreach (\array_slice($codes, 1, 5) as $code) {
+            $use($now, $code);
+        }
+        self::assertEquals(new Notice('yorvoid.flow.recovery_code.used', ['remaining' => 3, 'hint' => 'none']), $use($now, $codes[6]), 'Three is enough.');
+        self::assertEquals(new Notice('yorvoid.flow.recovery_code.used', ['remaining' => 2, 'hint' => 'new_set']), $use($now, $codes[7]), 'Fewer: make a new set.');
+        self::assertEquals(new Notice('yorvoid.flow.recovery_code.used', ['remaining' => 1, 'hint' => 'after_wait']), $use($held, $codes[8]), 'During a cool-down, a new set waits too.');
+        self::assertEquals(new Notice('yorvoid.flow.recovery_code.used', ['remaining' => 0, 'hint' => 'after_wait']), $use($held, $codes[9]), 'The last, during a cool-down: said, since no new set comes next.');
+        self::assertNull($use($now, $codes[9]), 'A used code: refused, and nothing to say.');
+
+        [, , $more] = $this->account('bo@example.com');
+        foreach (\array_slice($more, 0, 8) as $code) {
+            $use($now, $code, 'bo@example.com');
+        }
+        self::assertEquals(new Notice('yorvoid.flow.recovery_code.used', ['remaining' => 1, 'hint' => 'new_set']), $use($now, $more[8], 'bo@example.com'));
+        self::assertNull($use($now, $more[9], 'bo@example.com'), 'The last, with nothing holding a new set: RecoveryCodesStep shows one next.');
+    }
+
     public function testTheRecoveryPagesSayWhatTheCoolDownHolds(): void
     {
         $stepUp = new StepUp($this->sessions, $this->stack->coolDowns, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->clock, Duration::hours(24));
@@ -474,9 +502,9 @@ final class PasskeyFlowsTest extends DatabaseTestCase
      *
      * @return array{Principal, VirtualAuthenticator, list<string>}
      */
-    private function account(): array
+    private function account(string $email = 'ana@example.com'): array
     {
-        $ana = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, email: 'ana@example.com'), new Origin(OriginKind::Console));
+        $ana = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, email: $email), new Origin(OriginKind::Console));
         $session = $this->session($ana);
         $authenticator = new VirtualAuthenticator();
         $ceremony = $this->passkeys->beginRegistration($session);

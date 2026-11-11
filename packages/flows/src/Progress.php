@@ -23,6 +23,7 @@ final readonly class Progress
      * @param StartedSession|null $signedIn     A session a step started: hold it, so the person is signed in
      * @param Secret|null         $renewedToken The current session's new token: hold it in place of the old one
      * @param Problem|null        $failure      Why the flow couldn't go on, when it failed
+     * @param Notice|null         $notice       What to tell the person, once the flow completed: a step's
      */
     public function __construct(
         public FlowStatus $status,
@@ -35,6 +36,7 @@ final readonly class Progress
         #[\SensitiveParameter]
         public ?Secret $renewedToken = null,
         public ?Problem $failure = null,
+        public ?Notice $notice = null,
     ) {
     }
 }

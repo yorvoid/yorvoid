@@ -66,6 +66,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 
 ### Fixed
 
+- The recovery pages say they sign you out "on your other devices and browsers", not "everywhere else", and the emails after a recovery code or link say "your other devices and browsers were signed out", not "everyone else".
 - The packages require each other at the version they're released with (`^0.4` for 0.4), so a release installs as a set. 0.2.0 and 0.3.0 required `^0.1` of each other and don't install together from Packagist: stay on 0.1.0, or take 0.4.0. Every release now checks this before it's published, and installs from Packagist afterwards.
 
 ## 0.3.0 (2026-11-06)
@@ -132,6 +133,8 @@ Stricter passkey and intent checks, signed checkpoints of the security log, Symf
 - After a cancelled passkey prompt, the sign-in and step-up buttons say "Try again with your passkey" (`data-yorvoid-retry`, [browser client](docs/concepts/browser-client.md)).
 - After a recovery, the page that offers a passkey asks "Is this your own device?", and "Not now" comes first, so it's what Enter sends ([symfony](docs/concepts/symfony.md)).
 - The recovery codes' page has Download, Copy and Print buttons, shown by the browser client; printed, it names the site and the date; and it says a screenshot isn't a safe place for the codes ([browser client](docs/concepts/browser-client.md)).
+- A step can leave a notice for its flow's end (`Notice`, `StepResult::done(notice:)`, `Progress::$notice`), which the Symfony bridge says on the page the flow ends on, in the `yorvoid.notice` flash and the JSON's `notice` ([flows](docs/concepts/flows.md#writing-a-step)).
+- After recovering with a code, the flow says it's used and how many are left, and with fewer than 3, when a new set can be made. `StartedSession::$recoveryCodesLeft` is that count, the one the security log and `RecoveryCodeUsed` have ([recovery codes](docs/concepts/recovery-codes.md#using-a-code)).
 
 ### Fixed
 

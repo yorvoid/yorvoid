@@ -141,6 +141,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
 
             if ($this->customize) {
                 $container->register(TermsCustomizer::class)->setAutoconfigured(true);
+                $container->register(NoticeCustomizer::class)->setAutoconfigured(true);
             }
 
             // An application's own abilities, decided by YorvoID's evaluator through isGranted().

@@ -32,6 +32,7 @@ final readonly class StepResult
         public ?int $retryAfter = null,
         public ?Problem $failure = null,
         public array $reopen = [],
+        public ?Notice $notice = null,
     ) {
     }
 
@@ -42,10 +43,11 @@ final readonly class StepResult
      * @param list<string>         $forget       What to remove from it, e.g. recovery codes once shown
      * @param StartedSession|null  $signedIn     The session the step started: the application holds it, and the next steps run in it
      * @param Secret|null          $renewedToken The current session's new token, e.g. after a step-up
+     * @param Notice|null          $notice       What to tell the person once the flow completes
      */
-    public static function done(array $data = [], array $forget = [], ?StartedSession $signedIn = null, #[\SensitiveParameter] ?Secret $renewedToken = null): self
+    public static function done(array $data = [], array $forget = [], ?StartedSession $signedIn = null, #[\SensitiveParameter] ?Secret $renewedToken = null, ?Notice $notice = null): self
     {
-        return new self(true, $data, $forget, $signedIn, $renewedToken);
+        return new self(true, $data, $forget, $signedIn, $renewedToken, notice: $notice);
     }
 
     /**

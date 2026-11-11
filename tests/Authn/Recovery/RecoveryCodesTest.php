@@ -147,6 +147,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
         self::assertNotNull($this->sessions->validate(new Realm('acme'), $started->token));
         self::assertSame(SessionEndReason::Recovered, $this->sessions->get(new Realm('acme'), $session->id)?->endReason, 'A session from before the recovery survived it.');
         self::assertSame(9, $codes->remaining(new Realm('acme'), $session->principalId));
+        self::assertSame(9, $started->recoveryCodesLeft, 'The count the log and the event have: one source.');
         self::assertEquals($this->clock->now(), $this->credentials->of(new Realm('acme'), $session->principalId)[0]->lastUsedAt);
 
         $used = array_values(array_filter($this->entries(), static fn (LogEntry $entry): bool => 'yorvoid.recovery_code.use' === $entry->action));
@@ -434,6 +435,26 @@ final class RecoveryCodesTest extends DatabaseTestCase
         }
 
         self::assertSame(10, $codes->remaining(new Realm('acme'), $session->principalId));
+    }
+
+    #[DataProvider('implementations')]
+    public function testAfterTheLastCodeANewSetWaitsOutTheCoolDown(string $implementation): void
+    {
+        $this->codes($implementation, Duration::hours(24));
+        $codes = new RecoveryCodes($this->stack->recoveryCodes, $this->credentials, $this->sessions, $this->stepUp, $this->attempts, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, $this->principals, clock: $this->clock, count: 1);
+        $session = $this->session();
+        $last = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session)[0];
+
+        $recovered = Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $last), new Origin(OriginKind::Web));
+        self::assertSame(0, $recovered?->recoveryCodesLeft);
+
+        // What the page says after the last code: a new set once the wait is over, not now (U-5).
+        try {
+            Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $recovered->session);
+            self::fail('A new set was made during the cool-down.');
+        } catch (HeldAfterRecovery $held) {
+            self::assertEquals($this->clock->now()->modify('+24 hours'), $held->until);
+        }
     }
 
     public function testTheSizeOfASetIsConfigurable(): void

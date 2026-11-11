@@ -11,6 +11,7 @@ return [
     'yorvoid.flow.email.invalid' => 'Enter a valid email address, like name@example.com.',
     'yorvoid.flow.invitation.not_working' => 'This invitation doesn\'t work any more. Ask for a new one.',
     'yorvoid.flow.verify_email.not_working' => 'This link doesn\'t work any more: it was used, it expired, or a newer one replaced it.',
+    'yorvoid.flow.recovery_code.used' => '{remaining, plural, =0 {That recovery code is now used, and it was your last.} one {That recovery code is now used. You have # left.} other {That recovery code is now used. You have # left.}}{hint, select, new_set { Make a new set in your account.} after_wait { You can make a new set once the wait after getting back in is over.} other {}}',
     'yorvoid.flow.recovery_code.invalid' => 'That code didn\'t work. Check it, or use another one.',
     'yorvoid.flow.recovery_link.not_working' => 'This link doesn\'t work any more. Ask for a new one.',
     'yorvoid.flow.recovery_codes.not_saved' => 'Confirm that you saved your recovery codes.',

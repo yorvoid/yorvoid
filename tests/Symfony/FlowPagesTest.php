@@ -321,6 +321,8 @@ final class FlowPagesTest extends TestCase
         $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove&return=%2Fprojects');
         $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove&return=%2Fprojects');
         self::assertSame([$done], $this->notices());
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove');
+        self::assertSame([303, []], [$this->statusCode(), $this->notices()], 'Nowhere to return to, nothing to say: no flash.');
 
         // A script: in the answer, and no flash for a page it may never go to.
         $answer = $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove', 'return' => '/projects']);
@@ -334,6 +336,45 @@ final class FlowPagesTest extends TestCase
         self::assertSame(['step_up', null], [$asking['step'], $asking['notice']]);
         $this->browser->request('GET', '/yorvoid/flows/yorvoid.step_up?operation=acme.site.remove&within=60&return=%2Fprojects');
         self::assertSame([], $this->notices());
+    }
+
+    public function testAfterACodeThePageItEndsOnSaysHowManyAreLeft(): void
+    {
+        $this->boot();
+        [, , $codes] = $this->account();
+        $used = 'That recovery code is now used. You have 9 left.';
+
+        $started = $this->json('POST', '/yorvoid/flows/yorvoid.recover_with_code', []);
+        $this->json('POST', '/yorvoid/flows/yorvoid.recover_with_code/'.self::id($started).'/recovery_code', ['email' => 'ana@example.com', 'code' => $codes[0]]);
+        $done = $this->json('POST', '/yorvoid/flows/yorvoid.recover_with_code/'.self::id($started).'/passkey_registration', ['action' => 'skip']);
+        self::assertSame(['completed', $used], [$done['status'], $done['notice']], 'In the answer, at the end of the flow (U-5).');
+        self::assertSame([], $this->notices(), 'A script: no flash.');
+
+        // The pages: a flash for the page the flow ends on, once it ends.
+        $this->browser->request('GET', '/yorvoid/flows/yorvoid.recover_with_code');
+        $code = (string) $this->browser->getResponse()->headers->get('Location');
+        $this->browser->request('POST', $code.'/recovery_code', ['email' => 'ana@example.com', 'code' => $codes[1]]);
+        self::assertSame(303, $this->statusCode());
+        self::assertSame([], $this->notices(), 'Not before the flow ends.');
+        $passkey = (string) $this->browser->getResponse()->headers->get('Location');
+        $this->browser->request('POST', $passkey.'/passkey_registration', ['action' => 'skip']);
+        self::assertSame([303, '/'], [$this->statusCode(), $this->browser->getResponse()->headers->get('Location')]);
+        self::assertSame(['That recovery code is now used. You have 8 left.'], $this->notices());
+    }
+
+    public function testAFlowsOwnNoticeIsTheOneSaidAfterAStepUp(): void
+    {
+        $this->boot(customize: true);
+        [, $authenticator] = $this->account();
+        $started = $this->json('POST', '/yorvoid/flows/yorvoid.sign_in', []);
+        $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.self::id($started).'/passkey', ['response' => json_decode($authenticator->signIn((string) json_encode(((array) $started['view'])['options'])), true)]);
+        self::assertSame('completed', $this->json('POST', '/yorvoid/flows/yorvoid.sign_in/'.self::id($started).'/terms', ['accepted' => '1'])['status'], 'Signed in, with the terms this application asks for.');
+
+        $asking = $this->json('POST', '/yorvoid/flows/yorvoid.step_up', ['operation' => 'acme.site.remove', 'return' => '/projects']);
+        self::assertSame('acme_noted', $asking['step']);
+        $done = $this->json('POST', '/yorvoid/flows/yorvoid.step_up/'.self::id($asking).'/acme_noted', []);
+
+        self::assertSame(['completed', '/projects', 'acme.noted'], [$done['status'], $done['redirect'], $done['notice']], 'One notice, the flow\'s.');
     }
 
     public function testExpiredAndUnknownFlows(): void
@@ -587,6 +628,8 @@ final class FlowPagesTest extends TestCase
 
     /**
      * The step-up notices the session holds, taken out of it as a page showing them would.
+     *
+     * @phpstan-impure
      *
      * @return array<mixed>
      */
