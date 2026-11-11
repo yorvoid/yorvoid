@@ -74,7 +74,7 @@ final readonly class Evaluator implements Authorization
      *
      * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, a
      *                         permit authorizes by Consequence, which only another operation's permit gives,
-     *                         or an element lacks one it requires (RequiresElements)
+     *                         or an element lacks a forbid it requires (RequiresForbids)
      */
     public function __construct(
         iterable $elements,
@@ -112,17 +112,31 @@ final readonly class Evaluator implements Authorization
             $list[$element->name()] = $element;
         }
 
-        foreach ($list as $element) {
-            foreach ($element instanceof RequiresElements ? $element->requiredElements() : [] as $name => $how) {
-                if (!isset($list[$name])) {
-                    throw new IntegratorError(\sprintf('The policy element "%s" needs "%s", which isn\'t in the policy.', $element->name(), $name), $how, 'concepts/authorization.md#policy-elements');
-                }
-            }
-        }
-
         // By name: the decision's reasons, and the detail it leads with, never depend on the order given.
         ksort($list, \SORT_STRING);
         $this->elements = $list;
+
+        foreach ($list as $element) {
+            if ($element instanceof RequiresForbids) {
+                $this->requireForbids(\sprintf('The policy element "%s"', $element->name()), $element);
+            }
+        }
+    }
+
+    /**
+     * That the policy has the forbids something needs, as forbids.
+     *
+     * @param string $what Who needs them, for the error, e.g. 'The policy element "yorvoid.roles"'
+     *
+     * @throws IntegratorError When one isn't in the policy, or isn't a forbid
+     */
+    public function requireForbids(string $what, RequiresForbids $needing): void
+    {
+        foreach ($needing->requiredForbids() as $name => $how) {
+            if (!($this->elements[$name] ?? null) instanceof ForbidElement) {
+                throw new IntegratorError(\sprintf('%s needs the forbid "%s", which isn\'t in the policy.', $what, $name), $how, 'concepts/authorization.md#policy-elements');
+            }
+        }
     }
 
     /**

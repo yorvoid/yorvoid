@@ -8,7 +8,7 @@ use YorvoID\Core\Authorization\ChecksCatalogue;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\Preloads;
 use YorvoID\Core\Authorization\Request;
-use YorvoID\Core\Authorization\RequiresElements;
+use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\AuthorizedBy;
@@ -21,7 +21,7 @@ use YorvoID\Core\Operation\OperationCatalogue;
  *
  * @api
  */
-final readonly class RolePermit implements PermitElement, ChecksCatalogue, Preloads, RequiresElements
+final readonly class RolePermit implements PermitElement, ChecksCatalogue, Preloads, RequiresForbids
 {
     /** What every permit that lets policy changes through needs beside it */
     public const array SAFETY = [
@@ -77,7 +77,7 @@ final readonly class RolePermit implements PermitElement, ChecksCatalogue, Prelo
     /**
      * Roles let changes through that no-escalation and the step-up weigh (C1).
      */
-    public function requiredElements(): array
+    public function requiredForbids(): array
     {
         return self::SAFETY;
     }

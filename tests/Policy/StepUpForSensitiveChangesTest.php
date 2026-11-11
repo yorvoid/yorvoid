@@ -19,18 +19,28 @@ use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Operation\AbilityPolicy;
 use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Operation\Authorization;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\OperationDescription;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Policy\Ability;
 use YorvoID\Policy\AbilityChanges;
+use YorvoID\Policy\Attribute\AttributeChanges;
 use YorvoID\Policy\Change\AddGroupMember;
 use YorvoID\Policy\Change\AssignGroupRole;
 use YorvoID\Policy\Change\AssignRole;
@@ -43,10 +53,12 @@ use YorvoID\Policy\Change\RevokeAbilities;
 use YorvoID\Policy\Change\SetAbilities;
 use YorvoID\Policy\Change\UnassignRole;
 use YorvoID\Policy\Effects;
+use YorvoID\Policy\GroupChanges;
 use YorvoID\Policy\GroupRelations;
 use YorvoID\Policy\GroupRoleAssignment;
 use YorvoID\Policy\NoEscalation;
 use YorvoID\Policy\PolicyCatalogue;
+use YorvoID\Policy\PolicyChanges;
 use YorvoID\Policy\PolicyDeclarations;
 use YorvoID\Policy\Role;
 use YorvoID\Policy\RoleAssignment;
@@ -60,6 +72,7 @@ use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\Relations\Change\AddRelation;
 use YorvoID\Relations\Change\RemoveRelation;
+use YorvoID\Relations\RelationChanges;
 use YorvoID\Relations\RelationDeclarations;
 use YorvoID\Relations\RelationDefinition;
 use YorvoID\Relations\RelationPermit;
@@ -82,6 +95,7 @@ use YorvoID\Tests\Policy\Fixtures\StubStepUpCheck;
  * - keyholder: rotates keys, by default (strict)
  * - manager: manages roles, abilities and relations
  * - vault: a keeper relates people and purges (strict); a purger purges
+ * - safe, in a vault: its openers are the vault's keepers; box, in a safe: its crackers, the safe's openers, purge
  */
 final class StepUpForSensitiveChangesTest extends TestCase
 {
@@ -110,9 +124,19 @@ final class StepUpForSensitiveChangesTest extends TestCase
             public function types(): iterable
             {
                 yield new ResourceType('vault', [
+                    new RelationDefinition('parent'),
                     new RelationDefinition('keeper', grants: [YorvoIDDeclarations::RELATIONS_MANAGE, 'acme.pages.purge']),
                     new RelationDefinition('purger', grants: ['acme.pages.purge']),
                     new RelationDefinition('looker', grants: ['acme.pages.view']),
+                ]);
+                // A safe's openers are its vault's keepers; a box's crackers, its safe's openers.
+                yield new ResourceType('safe', [
+                    new RelationDefinition('vault'),
+                    new RelationDefinition('opener', fromParents: ['vault' => 'keeper'], grants: ['acme.pages.view']),
+                ]);
+                yield new ResourceType('box', [
+                    new RelationDefinition('safe'),
+                    new RelationDefinition('cracker', fromParents: ['safe' => 'opener'], grants: ['acme.pages.purge']),
                 ]);
             }
         }]);
@@ -242,6 +266,81 @@ final class StepUpForSensitiveChangesTest extends TestCase
             $permitted = $this->decide($actor, $command, $elements, $abilities);
             self::assertSame(Verdict::Permit, $permitted->verdict, $route);
             self::assertSame(AuthorizedBy::Ability, $permitted->basis, $route);
+        }
+    }
+
+    /**
+     * Every part of what a change gives: what a link carries down, the roles above a new parent, and the
+     * roles of the groups a group is within (R2).
+     */
+    public function testWhatFollowsFromAChangeTakesAProofToo(): void
+    {
+        $this->policy->saveRole($this->realm, 'cleaner', 'Cleaner');
+        $this->policy->saveChanges($this->realm, new AbilityChanges([...$this->policy->changes($this->realm)->grant, 'acme.pages.purge' => ['cleaner']]));
+        $top = new ResourceRef('vault', 'top');
+        $this->relations->add(new RelationTuple($this->realm, new ResourceRef('vault', 'mid'), 'parent', new Subject($top)));
+        $this->policy->assign(new RoleAssignment($this->realm, $this->id(), 'cleaner', new \DateTimeImmutable(), $top));
+        // inner is within outer, whose role is super.
+        $this->policy->saveGroup($this->realm, 'outer', 'Outer');
+        $this->policy->saveGroup($this->realm, 'inner', 'Inner');
+        $this->policy->assignGroup(new GroupRoleAssignment($this->realm, 'outer', 'admin', new \DateTimeImmutable()));
+        $this->relations->add(new RelationTuple($this->realm, GroupRelations::group('outer'), GroupRelations::MEMBER, GroupRelations::members('inner')));
+        $changes = [
+            'carried down' => [$this->actor('manager', 'cleaner'), new AddRelation($this->realm, new ResourceRef('safe', 's'), 'vault', new Subject(new ResourceRef('vault', 'v'))), 'Giving the strict ability "acme.pages.purge"'],
+            'above a parent' => [$this->actor('manager', 'cleaner'), new AddRelation($this->realm, new ResourceRef('vault', 'new'), 'parent', new Subject(new ResourceRef('vault', 'mid'))), 'Giving the strict ability "acme.pages.purge"'],
+            'within a group' => [$this->actor('manager', 'admin'), new AddGroupMember($this->realm, 'inner', Subject::principal($this->id())), 'Giving the super role "admin"'],
+        ];
+
+        foreach ($changes as $what => [$actor, $command, $sensitive]) {
+            $this->stepUp->proven = false;
+            $this->assertWantsAProof($this->decide($actor, $command), $sensitive, $what);
+            $this->stepUp->proven = true;
+            self::assertSame(Verdict::Permit, $this->decide($actor, $command)->verdict, $what);
+        }
+    }
+
+    /**
+     * The changes are held to the forbids whatever permits them: an ability policy alone doesn't run
+     * them (R1).
+     */
+    public function testTheChangesArentRunWithoutTheForbids(): void
+    {
+        $everyone = new class implements AbilityPolicy {
+            public function holds(Actor $actor, string $ability, Command $command): bool
+            {
+                return true;
+            }
+        };
+        $log = new SecurityLog(new InMemorySecurityLogStore(), new InMemoryTransactions());
+        $changing = array_values(array_filter($this->world->handlers, static fn (OperationHandler $handler): bool => $handler instanceof PolicyChanges || $handler instanceof GroupChanges || $handler instanceof RelationChanges || $handler instanceof AttributeChanges));
+        self::assertCount(4, $changing);
+
+        foreach ($changing as $handler) {
+            $lacking = $handler instanceof AttributeChanges ? [[], [new StepUpForSensitiveChanges($this->roles)]] : [[], [new NoEscalation($this->roles)], [new StepUpForSensitiveChanges($this->roles)]];
+
+            foreach ($lacking as $elements) {
+                try {
+                    new Operations(OperationCatalogue::of([$handler]), Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $everyone, elements: $elements), $log, [$handler]);
+                    self::fail(\sprintf('%s ran without its forbids.', $handler::class));
+                } catch (IntegratorError $error) {
+                    self::assertStringStartsWith(\sprintf('The handler %s needs the forbid "yorvoid.policy.', $handler::class), $error->getMessage());
+                }
+            }
+
+            $catalogue = OperationCatalogue::of([$handler]);
+            new Operations($catalogue, Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $everyone, elements: [new NoEscalation($this->roles), new StepUpForSensitiveChanges($this->roles)]), $log, [$handler]);
+
+            try {
+                new Operations($catalogue, new class implements Authorization {
+                    public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
+                    {
+                        return Decision::deny('Never.');
+                    }
+                }, $log, [$handler]);
+                self::fail('Another authorization can\'t be checked for them.');
+            } catch (IntegratorError $error) {
+                self::assertSame(\sprintf('The handler %s needs forbids that only the Evaluator is checked for.', $handler::class), strtok($error->getMessage(), "\n"));
+            }
         }
     }
 

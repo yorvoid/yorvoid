@@ -19,7 +19,7 @@ use YorvoID\Core\Authorization\Precedence;
 use YorvoID\Core\Authorization\Reason;
 use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Authorization\Request;
-use YorvoID\Core\Authorization\RequiresElements;
+use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\WaitRemedy;
@@ -255,9 +255,9 @@ final class EvaluatorTest extends TestCase
         self::assertSame([$stepUp, $approval], $this->decide([new StubForbid('f', Truth::holdsUnless('Prove it, or be approved.', $stepUp, $approval)), $permit])->remedies);
     }
 
-    public function testAnElementIsntBuiltWithoutWhatItRequires(): void
+    public function testAnElementIsntBuiltWithoutTheForbidsItRequires(): void
     {
-        $permit = new class implements PermitElement, RequiresElements {
+        $permit = new class implements PermitElement, RequiresForbids {
             public function name(): string
             {
                 return 'p';
@@ -278,18 +278,19 @@ final class EvaluatorTest extends TestCase
                 return Truth::holds('yes');
             }
 
-            public function requiredElements(): array
+            public function requiredForbids(): array
             {
                 return ['guard' => 'Add the guard.', 'other' => 'Add the other.'];
             }
         };
 
-        foreach ([[$permit], [$permit, new StubForbid('guard', Truth::fails('no'))], [new StubForbid('other', Truth::fails('no')), $permit]] as $elements) {
+        // A permit of that name isn't one.
+        foreach ([[$permit], [$permit, new StubForbid('guard', Truth::fails('no'))], [new StubForbid('other', Truth::fails('no')), $permit], [$permit, new StubPermit('guard', Truth::fails('no')), new StubForbid('other', Truth::fails('no'))]] as $elements) {
             try {
                 new Evaluator($elements, new StubAuthority(Truth::holds('valid')));
                 self::fail('Built without what the permit requires.');
             } catch (IntegratorError $error) {
-                self::assertMatchesRegularExpression('/^The policy element "p" needs "(guard|other)", which isn\'t in the policy\.\n\nHow to fix it: Add the (guard|other)\./', $error->getMessage());
+                self::assertMatchesRegularExpression('/^The policy element "p" needs the forbid "(guard|other)", which isn\'t in the policy\.\n\nHow to fix it: Add the (guard|other)\./', $error->getMessage());
             }
         }
 

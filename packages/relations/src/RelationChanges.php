@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Relations;
 
+use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Log\Outcome;
@@ -24,7 +25,7 @@ use YorvoID\Relations\Change\RemoveRelation;
  * @experimental Outside the 1.0 promise until an application uses it directly: it may change in a
  *               minor release ([compatibility](docs/compatibility.md)).
  */
-final readonly class RelationChanges implements OperationHandler
+final readonly class RelationChanges implements OperationHandler, RequiresForbids
 {
     /** The ability to change relations; yorvoid/policy declares it */
     public const string ABILITY = 'yorvoid.relations.manage';
@@ -115,5 +116,13 @@ final readonly class RelationChanges implements OperationHandler
     private function record(string $action, RelationTuple $tuple, Permit $permit, Origin $origin): void
     {
         $this->log->record($tuple->realm, $action, Outcome::Success, $origin, $permit->actor->principalId, $tuple->object->type, $tuple->object->id, ['relation' => $tuple->relation, 'subject' => (string) $tuple->subject]);
+    }
+
+    /**
+     * What it changes is safe only weighed by no-escalation and the step-up, whatever permits it (M2-13).
+     */
+    public function requiredForbids(): array
+    {
+        return RelationPermit::SAFETY;
     }
 }

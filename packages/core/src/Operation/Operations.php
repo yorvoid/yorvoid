@@ -7,6 +7,7 @@ namespace YorvoID\Core\Operation;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Remedy;
+use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\IdGenerator;
@@ -35,8 +36,8 @@ final readonly class Operations
      * @param iterable<OperationHandler> $handlers
      *
      * @throws IntegratorError When two handlers run one command, an OfflineDecider and the operations that
-     *                         accept Permit-offline don't go together, or a policy element refuses an operation,
-     *                         e.g. one whose ability isn't declared
+     *                         accept Permit-offline don't go together, a policy element refuses an operation,
+     *                         e.g. one whose ability isn't declared, or a handler's forbids aren't in the policy
      */
     public function __construct(
         private OperationCatalogue $catalogue,
@@ -48,6 +49,18 @@ final readonly class Operations
         $map = [];
 
         foreach ($handlers as $handler) {
+            // The changes that only the policy's forbids keep safe, e.g. giving roles, need them whatever permits
+            // them (M2-13).
+            if ($handler instanceof RequiresForbids) {
+                $what = \sprintf('The handler %s', $handler::class);
+
+                if (!$authorization instanceof Evaluator) {
+                    throw new IntegratorError(\sprintf('%s needs forbids that only the Evaluator is checked for.', $what), 'Decide with the Evaluator, given the forbids they need.', 'concepts/authorization.md#policy-elements');
+                }
+
+                $authorization->requireForbids($what, $handler);
+            }
+
             foreach ($handler->operations() as $command => $method) {
                 if (isset($map[$command])) {
                     throw new IntegratorError(\sprintf('Two handlers run %s.', $command), 'Give each command one handler.', 'concepts/operations-and-events.md#operations');
@@ -58,6 +71,7 @@ final readonly class Operations
         }
 
         $this->handlers = $map;
+
         if ($authorization instanceof Evaluator) {
             $authorization->checkCatalogue($catalogue);
         }

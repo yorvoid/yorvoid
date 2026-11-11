@@ -9,7 +9,7 @@ use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\Preloads;
 use YorvoID\Core\Authorization\Request;
-use YorvoID\Core\Authorization\RequiresElements;
+use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Operation\AuthorizedBy;
@@ -28,8 +28,14 @@ use YorvoID\Core\Realm;
  * @experimental Outside the 1.0 promise until an application uses it directly: it may change in a
  *               minor release ([compatibility](docs/compatibility.md)).
  */
-final readonly class RelationPermit implements PermitElement, Preloads, RequiresElements
+final readonly class RelationPermit implements PermitElement, Preloads, RequiresForbids
 {
+    /** What lets relations change needs beside it: yorvoid/policy's forbids, by name */
+    public const array SAFETY = [
+        'yorvoid.policy.no_escalation' => 'Add YorvoID\\Policy\\NoEscalation to the evaluator\'s elements: nobody gives or takes what they don\'t hold.',
+        'yorvoid.policy.step_up' => 'Add YorvoID\\Policy\\StepUpForSensitiveChanges to the evaluator\'s elements: giving a super role or a strict ability takes a recent proof.',
+    ];
+
     /** @var \WeakMap<Request, array<string, bool|null>> By request, what each relation gave */
     private \WeakMap $preloaded;
 
@@ -111,11 +117,8 @@ final readonly class RelationPermit implements PermitElement, Preloads, Requires
     /**
      * Relations let changes through that no-escalation and the step-up weigh (C1), from yorvoid/policy.
      */
-    public function requiredElements(): array
+    public function requiredForbids(): array
     {
-        return [
-            'yorvoid.policy.no_escalation' => 'Add YorvoID\\Policy\\NoEscalation to the evaluator\'s elements: nobody gives or takes what they don\'t hold.',
-            'yorvoid.policy.step_up' => 'Add YorvoID\\Policy\\StepUpForSensitiveChanges to the evaluator\'s elements: giving a super role or a strict ability takes a recent proof.',
-        ];
+        return self::SAFETY;
     }
 }

@@ -18,6 +18,7 @@ use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\CreatePrincipal;
@@ -79,6 +80,9 @@ final class PolicyWorld
 
     public readonly Operations $operations;
 
+    /** @var list<OperationHandler> */
+    public readonly array $handlers;
+
     public readonly OperationCatalogue $catalogue;
 
     public readonly Policy $policy;
@@ -136,6 +140,7 @@ final class PolicyWorld
             new AttributeChanges($this->attributes, $attributes, $principals, $log, $transactions),
             new Views($this->roles, $principals, $log, $this->clock),
         ];
+        $this->handlers = $handlers;
         $this->catalogue = OperationCatalogue::of($handlers);
         $this->operations = new Operations($this->catalogue, $evaluator, $log, $handlers);
         $this->policy = new Policy($evaluator, $this->roles);

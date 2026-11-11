@@ -80,6 +80,6 @@ final class RelationPermitTest extends TestCase
 
     public function testItRequiresNoEscalationAndTheStepUp(): void
     {
-        self::assertSame(['yorvoid.policy.no_escalation', 'yorvoid.policy.step_up'], array_keys(new RelationPermit(new Relations(RelationSchema::of([]), new InMemoryRelationStore(), 2))->requiredElements()));
+        self::assertSame(['yorvoid.policy.no_escalation', 'yorvoid.policy.step_up'], array_keys(new RelationPermit(new Relations(RelationSchema::of([]), new InMemoryRelationStore(), 2))->requiredForbids()));
     }
 }
