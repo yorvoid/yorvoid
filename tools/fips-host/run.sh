@@ -32,7 +32,12 @@ if [ "$(ssh_ -n cat /proc/sys/crypto/fips_enabled)" != 1 ]; then
 	echo "Switching it to FIPS mode, and rebooting"
 	ssh_ -n 'fips-mode-setup --enable >/dev/null'
 	ssh_ -n 'systemctl reboot' || true
-	for _ in $(seq 1 60); do ssh_ -n true 2>/dev/null && break; sleep 5; done
+	# Until it's back in FIPS mode: right after the reboot command, the old system may still answer.
+	for _ in $(seq 1 60); do
+		sleep 5
+		[ "$(ssh_ -n cat /proc/sys/crypto/fips_enabled 2>/dev/null)" = 1 ] && break
+	done
+	[ "$(ssh_ -n cat /proc/sys/crypto/fips_enabled)" = 1 ] || { echo "The host didn't come back in FIPS mode."; exit 1; }
 fi
 echo "Installing PHP 8.4"
 ssh_ 'bash -s' < tools/fips-host/setup.sh
