@@ -26,7 +26,7 @@ final class Signing
 
     public static function config(): VerifierConfig
     {
-        return new VerifierConfig('e2e-verifier', 'sign.localhost', [self::ORIGIN], [Kernel::ORIGIN]);
+        return new VerifierConfig('e2e-verifier', 'sign.localhost', [self::ORIGIN], [Kernel::origin()]);
     }
 
     public static function verifier(): Verifier
@@ -47,7 +47,7 @@ final class Signing
             static function (VerifiedIntent $verified): void {
                 file_put_contents(self::ran(), \sprintf('Ran %s: site=%s', $verified->intent->action, json_encode($verified->intent->parameters['site'] ?? null)));
             },
-            Kernel::ORIGIN.'/signed',
+            Kernel::origin().'/signed',
             static fn (Intent $intent): ?string => 'acme.site.remove' === $intent->action && \is_string($intent->parameters['site'] ?? null) ? \sprintf('Remove the site %s', $intent->parameters['site']) : null,
         );
     }

@@ -30,7 +30,18 @@ use YorvoID\Symfony\YorvoIDBundle;
  */
 final class Kernel extends BaseKernel implements CompilerPassInterface
 {
+    /** Where the browser tests reach it: YORVOID_E2E_ORIGIN, for another copy, e.g. a usability session's */
     public const string ORIGIN = 'http://localhost:8000';
+
+    /**
+     * The app's origin; the passkeys' relying party is its host, so the two can't disagree.
+     */
+    public static function origin(): string
+    {
+        $origin = getenv('YORVOID_E2E_ORIGIN');
+
+        return \is_string($origin) && '' !== $origin ? $origin : self::ORIGIN;
+    }
 
     public function __construct()
     {
@@ -66,7 +77,9 @@ final class Kernel extends BaseKernel implements CompilerPassInterface
      */
     public static function data(): string
     {
-        return \dirname(__DIR__, 3).'/var/e2e';
+        $data = getenv('YORVOID_E2E_DATA');
+
+        return \is_string($data) && '' !== $data ? $data : \dirname(__DIR__, 3).'/var/e2e';
     }
 
     /**
@@ -95,7 +108,7 @@ final class Kernel extends BaseKernel implements CompilerPassInterface
                 'firewalls' => ['main' => ['lazy' => true, 'provider' => 'yorvoid', 'user_checker' => PrincipalUserChecker::class, 'custom_authenticators' => [SessionAuthenticator::class], 'logout' => ['path' => 'sign_out', 'target' => '/']]],
             ]);
             $container->loadFromExtension('yorvoid', [
-                'passkeys' => ['relying_party_id' => 'localhost', 'origins' => [self::ORIGIN]],
+                'passkeys' => ['relying_party_id' => (string) parse_url(self::origin(), \PHP_URL_HOST), 'origins' => [self::origin()]],
                 'notifications' => ['enabled' => false],
             ]);
 
