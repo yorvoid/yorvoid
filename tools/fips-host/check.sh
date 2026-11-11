@@ -23,5 +23,16 @@ php -r 'require "vendor/autoload.php"; $p = YorvoID\Core\Crypto\CryptoProvider::
 
 echo "== The tests (composer test-fips)"
 echo "SQLite for the tests: $(LD_LIBRARY_PATH=/opt/sqlite/lib php -r 'echo (new PDO("sqlite::memory:"))->query("select sqlite_version()")->fetchColumn();')"
-YORVOID_TEST_FIPS=1 LD_LIBRARY_PATH=/opt/sqlite/lib php -d memory_limit=2G -d zend.assertions=1 vendor/bin/phpunit --exclude-group ed25519-keys --no-progress > ~/phpunit.txt 2>&1 || true
+# The tests with Ed25519 keys run when the provider has Ed25519: CI's FIPS provider doesn't, so only
+# such a host tests the FIPS mode with EdDSA.
+if php -r 'require "vendor/autoload.php"; exit(YorvoID\Core\Crypto\CryptoProvider::probe()->ed25519 ? 0 : 1);'; then
+	echo "Ed25519 in the provider: the tests with Ed25519 keys run"
+	exclude=()
+else
+	echo "No Ed25519 in the provider: the tests with Ed25519 keys are left out"
+	exclude=(--exclude-group ed25519-keys)
+fi
+status=0
+YORVOID_TEST_FIPS=1 LD_LIBRARY_PATH=/opt/sqlite/lib php -d memory_limit=2G -d zend.assertions=1 vendor/bin/phpunit "${exclude[@]}" --no-progress > ~/phpunit.txt 2>&1 || status=$?
 cat ~/phpunit.txt
+exit "$status"

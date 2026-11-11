@@ -7,16 +7,20 @@ dnf install -q -y epel-release https://rpms.remirepo.net/enterprise/remi-release
 dnf module reset -q -y php >/dev/null
 dnf module enable -q -y php:remi-8.4 >/dev/null
 dnf install -q -y php-cli php-mbstring php-xml php-intl php-pdo php-pgsql php-sodium php-process git unzip gcc make >/dev/null
+# Composer's installer, without its signature check: acceptable on a throwaway host, not elsewhere.
 curl -fsSL https://getcomposer.org/installer | php -- --quiet --install-dir=/usr/local/bin --filename=composer
 # RHEL 9's SQLite (3.34) has no RETURNING, which YorvoID needs (3.35 or later): the tests use one of
 # their own, built with the column metadata RHEL's pdo_sqlite links against. It isn't cryptography, so
 # it changes nothing FIPS checks.
+# The release and the SHA3-256 sqlite.org publishes for it (download.html).
+sqlite=sqlite-autoconf-3540100
+sqlite_sha3=b6ced585c750916b1052667239a12c25a7ff34e7f06e1e6e01ecb0427657d9c4
 if [ ! -f /opt/sqlite/.column-metadata ]; then
 	cd /tmp
-	curl -fsSLo sqlite.tar.gz https://www.sqlite.org/2024/sqlite-autoconf-3460100.tar.gz
-	echo "SQLite source SHA3-256: $(openssl dgst -sha3-256 sqlite.tar.gz | cut -d' ' -f2)"
+	curl -fsSLo sqlite.tar.gz "https://www.sqlite.org/2026/$sqlite.tar.gz"
+	test "$(openssl dgst -sha3-256 sqlite.tar.gz | cut -d' ' -f2)" = "$sqlite_sha3" || { echo "SQLite's tarball doesn't match its published SHA3-256."; exit 1; }
 	tar xzf sqlite.tar.gz
-	cd sqlite-autoconf-3460100
+	cd "$sqlite"
 	CFLAGS="-O2 -DSQLITE_ENABLE_COLUMN_METADATA=1" ./configure -q --prefix=/opt/sqlite >/dev/null
 	make -s -j"$(nproc)" >/dev/null 2>&1
 	make -s install >/dev/null

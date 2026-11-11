@@ -68,5 +68,6 @@ Documentation for two readers: **integrators**, who add YorvoID to an applicatio
 - [Assurance levels](security/assurance-levels.md): NIST SP 800-63B-4 levels and the configurations that reach them.
 - [Dependencies](security/dependencies.md): how dependencies are chosen and checked.
 - [OWASP ASVS 5.0 traceability](../assurance/asvs-5.0.yaml): every requirement of the standard, and what YorvoID does about it.
+- [FIPS runs](../assurance/fips-runs.md): the tests on an operating system booted in FIPS mode, before each release.
 - [Formal models](../spec/README.md): the semantics specified and checked by machine.
 
