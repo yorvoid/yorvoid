@@ -78,6 +78,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 
 ### Fixed
 
+- Signing out, here or everywhere, works without a self-service policy (`NoSelfService`), which refused it.
 - The recovery pages say they sign you out "on your other devices and browsers", not "everywhere else", and the emails after a recovery code or link say "your other devices and browsers were signed out", not "everyone else".
 - The packages require each other at the version they're released with (`^0.4` for 0.4), so a release installs as a set. 0.2.0 and 0.3.0 required `^0.1` of each other and don't install together from Packagist: stay on 0.1.0, or take 0.4.0. Every release now checks this before it's published, and installs from Packagist afterwards.
 

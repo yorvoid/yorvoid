@@ -25,6 +25,7 @@ use YorvoID\Authn\Token\RevokeTokens;
 use YorvoID\Core\Authorization\BuiltIn\SelfServiceForOwnAccount;
 use YorvoID\Core\Authorization\BuiltIn\SelfServicePermit;
 use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\Request;
@@ -44,7 +45,9 @@ use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\NoSelfService;
 use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\Operator;
+use YorvoID\Core\Operation\SelfServicePolicy;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\ActivatePrincipal;
 use YorvoID\Core\Principal\CreatePrincipal;
@@ -204,6 +207,13 @@ final class OwnAccountTest extends TestCase
         $other = $this->actor(false, 'fresh')->principalId;
         self::assertSame(Verdict::Permit, $this->decide($byRole, new SetIdentifier($this->realm, $other, IdentifierKind::Email, 'bob@example.org'), $session)->verdict, 'Someone else changes it.');
 
+        // C5: anyone still signs out, here or everywhere.
+        $plain = $this->actor(false, 'fresh');
+        $noSelfService = Evaluator::builtIn($this->authority, clock: $this->clock);
+        self::assertSame(Verdict::Permit, $this->decide($noSelfService, new EndSession($this->realm, $plain->id, SessionEndReason::SignedOut), $plain)->verdict);
+        self::assertSame(Verdict::Permit, $this->decide($byRole, new EndSessions($this->realm, $session->principalId, SessionEndReason::SignedOut), $session)->verdict);
+        self::assertSame(Verdict::Deny, $this->decide($byRole, new SetIdentifier($this->realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session)->verdict);
+
         $policy = new StepUpSelfService($this->stepUp);
         new Evaluator([new SelfServicePermit($policy), new SelfServiceForOwnAccount($policy)], $this->authority);
 
@@ -250,6 +260,24 @@ final class OwnAccountTest extends TestCase
             $held = $this->actor($manager, 'hold');
             self::assertSame(Verdict::Permit, $this->decide($this->evaluator(), new IssueBadge($this->realm, $held->principalId), $held)->verdict, 'Not held.');
         }
+    }
+
+    /**
+     * A policy that can't tell leaves the decision undecided, as any forbid that can't be ruled out does.
+     */
+    public function testAPolicyThatCantTellDecidesNothing(): void
+    {
+        $session = $this->actor(true, 'fresh');
+        $unknown = new class implements SelfServicePolicy {
+            public function decide(OperationDescription $operation, Command $command, Actor $actor): Truth
+            {
+                return Truth::unknown(IndeterminateReason::StoreUnreachable, 'The sessions are out of reach.');
+            }
+        };
+        $decision = $this->decide(Evaluator::builtIn($this->authority, selfService: $unknown, clock: $this->clock), new SetIdentifier($this->realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session);
+
+        self::assertSame(Verdict::Indeterminate, $decision->verdict);
+        self::assertSame('A forbid couldn\'t be ruled out: The sessions are out of reach.', $decision->reason);
     }
 
     /**
