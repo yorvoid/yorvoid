@@ -68,6 +68,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 ### Security
 
 - Before 0.4.0, from the authorization audit (M2-13): giving a role that has a strict ability, adding to a group with one (its own roles and those of the groups it's within), resetting a revoked strict default back, and a relation that gives one now take a recent proof, as does setting or removing a security attribute. So does any such change a rule, an `AbilityPolicy` or a relation permits, which skipped it before. Setting and resetting abilities are weighed by what they change. An application whose rules gave such things without a proof now sees a Deny with a step-up remedy.
+- Before 0.4.0, from the authorization audit (M2-13): two reads of relations or groups whose IDs spelled each other, e.g. a group whose ID held `#` and `|`, shared one cache entry, in a request and in a shared pool, so one could read another's memberships. `VersionedCache` encodes a read's arguments itself, and its keys start with `yorvoid.v2`, so the old entries are never read. An entry from the pool is read only if it answers the read, and memberships take only the tuples about those asked. The in-memory relation store told such tuples apart by their written form too, and now by their parts; the store contract checks it (`RelationStoreContract`).
 
 ### Fixed
 

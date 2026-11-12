@@ -65,7 +65,7 @@ final class InstallationTest extends DatabaseTestCase
         };
         $pool = new ArrayAdapter();
         $reads = 0;
-        new VersionedCache($pool, $installation, $logger)->get(new Realm('acme'), 'policy', 1, 'roles', static function () use (&$reads): array {
+        new VersionedCache($pool, $installation, $logger)->get(new Realm('acme'), 'policy', 1, 'roles', [], static function () use (&$reads): array {
             ++$reads;
 
             return ['read'];

@@ -10,11 +10,15 @@ use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationTuple;
 
 /**
- * A relation store that counts the reads of subjects: one per level of a check.
+ * A relation store that counts the reads of subjects: one per level of a check. It can give more objects
+ * than asked for, as a store of one's own might.
  */
 final class CountingRelationStore implements RelationStore
 {
     public int $reads = 0;
+
+    /** @var list<RelationTuple> Given with every read of objects */
+    public array $extra = [];
 
     public function __construct(
         private readonly RelationStore $store,
@@ -40,7 +44,7 @@ final class CountingRelationStore implements RelationStore
 
     public function objects(Realm $realm, array $subjects, string $relation): array
     {
-        return $this->store->objects($realm, $subjects, $relation);
+        return [...$this->store->objects($realm, $subjects, $relation), ...$this->extra];
     }
 
     public function of(Realm $realm, ResourceRef $object): array

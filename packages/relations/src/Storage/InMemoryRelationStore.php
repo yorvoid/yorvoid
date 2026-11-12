@@ -25,19 +25,19 @@ final class InMemoryRelationStore implements RelationStore, InMemoryStore
 
     public function add(RelationTuple $tuple): void
     {
-        if (!isset($this->tuples[$tuple->realm->name][(string) $tuple])) {
-            $this->tuples[$tuple->realm->name][(string) $tuple] = $tuple;
+        if (!isset($this->tuples[$tuple->realm->name][self::key($tuple)])) {
+            $this->tuples[$tuple->realm->name][self::key($tuple)] = $tuple;
             $this->bump($tuple->realm);
         }
     }
 
     public function remove(RelationTuple $tuple): bool
     {
-        if (!isset($this->tuples[$tuple->realm->name][(string) $tuple])) {
+        if (!isset($this->tuples[$tuple->realm->name][self::key($tuple)])) {
             return false;
         }
 
-        unset($this->tuples[$tuple->realm->name][(string) $tuple]);
+        unset($this->tuples[$tuple->realm->name][self::key($tuple)]);
         $this->bump($tuple->realm);
 
         return true;
@@ -45,16 +45,12 @@ final class InMemoryRelationStore implements RelationStore, InMemoryStore
 
     public function subjects(Realm $realm, array $of): array
     {
-        $wanted = array_map(static fn (array $pair): string => $pair[0].'#'.$pair[1], $of);
-
-        return self::sorted(array_filter($this->tuples[$realm->name] ?? [], static fn (RelationTuple $tuple): bool => \in_array($tuple->object.'#'.$tuple->relation, $wanted, true)));
+        return self::sorted(array_filter($this->tuples[$realm->name] ?? [], static fn (RelationTuple $tuple): bool => [] !== array_filter($of, static fn (array $pair): bool => $tuple->object->equals($pair[0]) && $tuple->relation === $pair[1])));
     }
 
     public function objects(Realm $realm, array $subjects, string $relation): array
     {
-        $wanted = array_map(strval(...), $subjects);
-
-        return self::sorted(array_filter($this->tuples[$realm->name] ?? [], static fn (RelationTuple $tuple): bool => $tuple->relation === $relation && \in_array((string) $tuple->subject, $wanted, true)));
+        return self::sorted(array_filter($this->tuples[$realm->name] ?? [], static fn (RelationTuple $tuple): bool => $tuple->relation === $relation && [] !== array_filter($subjects, $tuple->subject->equals(...))));
     }
 
     public function of(Realm $realm, ResourceRef $object): array
@@ -109,5 +105,13 @@ final class InMemoryRelationStore implements RelationStore, InMemoryStore
         usort($tuples, static fn (RelationTuple $a, RelationTuple $b): int => (string) $a <=> (string) $b);
 
         return $tuples;
+    }
+
+    /**
+     * A tuple, unambiguously: its string can't tell the parts apart when IDs hold "#" or "@".
+     */
+    private static function key(RelationTuple $tuple): string
+    {
+        return json_encode([$tuple->object->type, $tuple->object->id, $tuple->relation, $tuple->subject->resource->type, $tuple->subject->resource->id, $tuple->subject->relation], \JSON_THROW_ON_ERROR);
     }
 }

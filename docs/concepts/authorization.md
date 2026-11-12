@@ -423,7 +423,7 @@ A request reads the realm's versions once, and the policy and relations once at 
 
 Given a shared PSR-6 pool, the cache keeps what was read for the other servers too, against the version it was read at. A change increments the version, so what was read before it is never read again, on any server; nothing waits for an entry to expire (D-10). Only data is kept, never decisions: those depend on the moment, the session's evidence and the attributes.
 
-- **Keys** start with the installation's ID, then the realm: `yorvoid.v1.{installation}.{realm}.policy.{version}.assignments.{principal}`. The ID is random, made by the migration and kept in the database (`Installation`), so installations sharing a pool never read each other's entries, though each has a realm "default" at version 1.
+- **Keys** start with the installation's ID, then the realm: `yorvoid.v2.{installation}.{realm}.policy.{version}.assignments-{hash}`, where the hash is of the read's arguments, here the principal, so no two reads share an entry whatever their IDs hold. The ID is random, made by the migration and kept in the database (`Installation`), so installations sharing a pool never read each other's entries, though each has a realm "default" at version 1.
 - **A pool that fails** is passed over until the request ends, with a warning: the stores are read instead, slower and as correct.
 - **The pool is trusted as the database is**: what's in it decides who holds which role. Give it a store only YorvoID's servers reach.
 - **Between requests**, and between a worker's messages, the cache and the stores forget (`reset()`; in Symfony, `kernel.reset` does it). A long console command decides by the state it started with, apart from its own changes.
