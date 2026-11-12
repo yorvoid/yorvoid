@@ -32,7 +32,6 @@ use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Operator;
-use YorvoID\Core\Operation\SelfOperation;
 use YorvoID\Core\Operation\SelfServicePolicy;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
@@ -132,14 +131,16 @@ final class DecisionPointPropertiesTest extends TestCase
             $inRealm = \in_array($who, ['own', 'other'], true);
             $allowed = [
                 AuthorizedBy::Operator->value => 'operator' === $who && (OriginKind::System === $kind || ($commandLine && \in_array($kind, [OriginKind::Console, OriginKind::Job], true))),
-                AuthorizedBy::Self->value => 'own' === $who && TruthValue::Holds === $selfService,
+                AuthorizedBy::Self->value => 'own' === $who,
                 AuthorizedBy::Ability->value => $inRealm && true === $holds,
                 AuthorizedBy::Authentication->value => true,
                 AuthorizedBy::Consequence->value => false,
             ];
             $expected = null;
+            // One's own account asks the self-service policy whatever permits it (M2-13, H-4).
+            $ownRefused = 'own' === $who && TruthValue::Holds !== $selfService;
 
-            foreach ($rules as $rule) {
+            foreach ($ownRefused ? [] : $rules as $rule) {
                 if ($allowed[$rule->value]) {
                     $expected = $rule;
                     break;
@@ -176,7 +177,7 @@ final class DecisionPointPropertiesTest extends TestCase
             {
             }
 
-            public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Truth
+            public function decide(OperationDescription $operation, Command $command, Actor $actor): Truth
             {
                 return match ($this->value) {
                     TruthValue::Holds => Truth::holds('Their own.'),

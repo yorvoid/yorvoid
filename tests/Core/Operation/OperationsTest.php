@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
-use YorvoID\Core\Authorization\IndeterminateReason;
+use YorvoID\Core\Authorization\Precedence;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
@@ -152,9 +152,11 @@ final class OperationsTest extends TestCase
             $operations->run(new IssueBadge($this->realm, $this->ana), new Member($this->realm, $this->ana), new Origin(OriginKind::Web));
             self::fail('It was permitted.');
         } catch (NotPermitted $refused) {
-            self::assertSame(Verdict::Indeterminate, $refused->decision->verdict);
-            self::assertSame('A permit couldn\'t be evaluated: No self-service policy says what "acme.badge.issue" needs.', $refused->decision->reason);
-            self::assertSame([IndeterminateReason::MissingData], $refused->decision->indeterminate);
+            self::assertSame(Verdict::Deny, $refused->decision->verdict);
+            self::assertSame(Precedence::ForbidHolds, $refused->decision->precedence);
+            self::assertSame('A forbid applies: On one\'s own account: this application has no self-service: someone else changes one\'s own account.', $refused->decision->reason);
+            self::assertSame([], $refused->decision->remedies);
+            self::assertSame([], $refused->decision->indeterminate, 'A choice, not a gap.');
         }
     }
 

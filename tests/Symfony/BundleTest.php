@@ -23,6 +23,7 @@ use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\StepUp;
+use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Crypto\CryptoMode;
 use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Duration;
@@ -202,6 +203,15 @@ final class BundleTest extends TestCase
         self::assertFalse($container->has(EmailVerification::class), 'Without a mailer, nothing sends the link.');
         self::assertTrue($this->boot(fresh: true)->has(EmailVerification::class));
         self::assertTrue($this->kernel?->getContainer()->has(EmailVerification::class), 'The application can send a link again.');
+    }
+
+    public function testATokenRefusalWarnsInTheApplicationsLogger(): void
+    {
+        $container = $this->boot();
+        $tokens = $container->get(OneTimeTokens::class);
+        \assert($tokens instanceof OneTimeTokens);
+
+        self::assertSame($container->get('logger'), (new \ReflectionProperty(OneTimeTokens::class, 'logger'))->getValue($tokens), 'Not a logger of its own, which nobody reads.');
     }
 
     public function testAddsTheMiddlewareToYorvoIDsConnectionOnly(): void

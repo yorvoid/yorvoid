@@ -12,14 +12,16 @@ use YorvoID\Core\Operation\SelfOperation;
 use YorvoID\Core\Operation\SelfServicePolicy;
 
 /**
- * Someone acting on their own account, in its realm, with what the self-service policy asks for.
+ * Someone acting on their own account, in its realm. What the self-service policy asks for it, e.g. a recent
+ * step-up, is asked by the forbid every evaluator has beside it, of every basis (SelfServiceForOwnAccount):
+ * so lifting it, by the remedy it names, is what permits (M2-13).
  *
  * @internal
  */
 final readonly class SelfServicePermit implements PermitElement
 {
     public function __construct(
-        private SelfServicePolicy $policy,
+        public SelfServicePolicy $policy,
     ) {
     }
 
@@ -40,8 +42,6 @@ final readonly class SelfServicePermit implements PermitElement
 
     public function evaluate(Request $request): Truth
     {
-        \assert($request->command instanceof SelfOperation && null !== $request->operation);
-
-        return $this->policy->decide($request->operation, $request->command, $request->actor);
+        return Truth::holds('The actor\'s own account.');
     }
 }
