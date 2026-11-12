@@ -6969,7 +6969,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "f229739d5840dd9edf3531afd046cd2dd015919d"
+                "reference": "74a11d8c364f366cbd27aa4ce26113e2eb07975f"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -6978,6 +6978,7 @@
                 "php": ">=8.4",
                 "psr/clock": "^1.0",
                 "psr/event-dispatcher": "^1.0",
+                "psr/log": "^3.0",
                 "symfony/clock": "^7.4 || ^8.1",
                 "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/core": "^0.4",
@@ -12403,5 +12404,5 @@
         "php": ">=8.4"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.9.0"
+    "plugin-api-version": "2.11.0"
 }

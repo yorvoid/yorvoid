@@ -6,6 +6,8 @@ namespace YorvoID\Authn\Token;
 
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Symfony\Component\Clock\NativeClock;
 use YorvoID\Authn\Session\InactivePrincipal;
 use YorvoID\Authn\Token\Event\OneTimeTokenConsumed;
@@ -60,6 +62,7 @@ final readonly class OneTimeTokens implements OperationHandler
         private Transactions $transactions,
         private EventDispatcherInterface $events = new NoEventListeners(),
         private ClockInterface $clock = new NativeClock(),
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -212,6 +215,18 @@ final readonly class OneTimeTokens implements OperationHandler
         }
 
         $operation = 'yorvoid.token.'.$what;
+        // Also as a warning: refused inside another operation's transaction, the record goes with its rollback,
+        // and a permit misused by a listener is what most needs a trace (N1).
+        $this->logger->warning('YorvoID refused to {what} a token for its own purpose {purpose}: {reason}', array_filter([
+            'what' => $what,
+            'purpose' => $purpose,
+            'consequence_of' => $permit->parent?->operation,
+            'decision' => $permit->decisionId,
+            'realm' => $realm->name,
+            'principal' => (string) $principalId,
+            'actor' => null === $permit->actor->principalId ? null : (string) $permit->actor->principalId,
+            'reason' => $refusal,
+        ], static fn (?string $value): bool => null !== $value));
         $this->log->record($realm, $operation, Outcome::Denied, $origin, $permit->actor->principalId, 'principal', (string) $principalId, array_filter([
             'purpose' => $purpose,
             'consequence_of' => $permit->parent?->operation,
