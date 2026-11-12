@@ -124,7 +124,11 @@ final class BenchTest extends TestCase
     }
 
     /**
+     * Runs the tool against what's on disk now, so the same arguments can answer differently.
+     *
      * @return array{int, string}
+     *
+     * @phpstan-impure
      */
     private static function bench(string ...$arguments): array
     {
