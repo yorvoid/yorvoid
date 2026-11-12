@@ -41,6 +41,7 @@ use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Policy\Ability;
 use YorvoID\Policy\AbilityChanges;
 use YorvoID\Policy\Attribute\AttributeChanges;
+use YorvoID\Policy\Attribute\SetAttribute;
 use YorvoID\Policy\Change\AddGroupMember;
 use YorvoID\Policy\Change\AssignGroupRole;
 use YorvoID\Policy\Change\AssignRole;
@@ -158,6 +159,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
             YorvoIDDeclarations::ROLES_MANAGE => ['manager'],
             YorvoIDDeclarations::PERMISSIONS_MANAGE => ['manager'],
             YorvoIDDeclarations::RELATIONS_MANAGE => ['manager'],
+            YorvoIDDeclarations::ATTRIBUTES_MANAGE => ['manager'],
         ]));
         $this->policy->saveGroup($this->realm, 'recoverers', 'Recoverers');
         $this->policy->assignGroup(new GroupRoleAssignment($this->realm, 'recoverers', 'recoverer', new \DateTimeImmutable()));
@@ -190,6 +192,33 @@ final class StepUpForSensitiveChangesTest extends TestCase
 
         self::assertSame('yorvoid.role.assign', $this->stepUp->asked[0]->operation);
         self::assertSame(300, $this->stepUp->asked[0]->within->seconds);
+    }
+
+    /**
+     * N5: what an attribute gives is the rules' that read it, which can't be weighed, so setting or removing
+     * one always takes a proof; the operator still sets them without.
+     */
+    public function testSettingASecurityAttributeTakesAProof(): void
+    {
+        $actor = $this->actor('manager');
+        $other = $this->id();
+        $changes = [
+            'Setting' => new SetAttribute($this->realm, $other, 'acme.clearance', 5),
+            'Removing' => new SetAttribute($this->realm, $other, 'acme.clearance', null),
+        ];
+
+        foreach ($changes as $what => $command) {
+            $this->assertWantsAProof($this->decide($actor, $command), \sprintf('%s the security attribute "acme.clearance"', $what), $what);
+        }
+
+        self::assertSame('yorvoid.attribute.set', $this->stepUp->asked[0]->operation);
+        $this->stepUp->proven = true;
+
+        foreach ($changes as $what => $command) {
+            self::assertSame(Verdict::Permit, $this->decide($actor, $command)->verdict, $what);
+        }
+
+        self::assertFalse(new StepUpForSensitiveChanges($this->roles, $this->stepUp)->matches($this->request(new Operator(), $changes['Setting'])));
     }
 
     /**
@@ -316,9 +345,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
         self::assertCount(4, $changing);
 
         foreach ($changing as $handler) {
-            $lacking = $handler instanceof AttributeChanges ? [[], [new StepUpForSensitiveChanges($this->roles)]] : [[], [new NoEscalation($this->roles)], [new StepUpForSensitiveChanges($this->roles)]];
-
-            foreach ($lacking as $elements) {
+            foreach ([[], [new NoEscalation($this->roles)], [new StepUpForSensitiveChanges($this->roles)]] as $elements) {
                 try {
                     new Operations(OperationCatalogue::of([$handler]), Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $everyone, elements: $elements), $log, [$handler]);
                     self::fail(\sprintf('%s ran without its forbids.', $handler::class));
