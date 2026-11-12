@@ -50,9 +50,9 @@ final class CachedPolicyStoreTest extends TestCase
         $this->hold('policy.0.roles', ['helper' => 'Helper']);
         $this->hold('policy.0.groups', ['writers' => 'Writers']);
         $this->hold('policy.0.changes', new AbilityChanges(['acme.pages.view' => ['helper']]));
-        $this->hold('policy.0.assignments.'.$this->ada, [new RoleAssignment($this->realm, $this->ada, 'helper', $at)]);
-        $this->hold('policy.0.principals.helper', [$this->ada]);
-        $this->hold('policy.0.'.hash('sha256', 'group_assignments.writers|admins'), [new GroupRoleAssignment($this->realm, 'writers', 'helper', $at)]);
+        $this->hold('policy.0.'.self::read('assignments', [(string) $this->ada]), [new RoleAssignment($this->realm, $this->ada, 'helper', $at)]);
+        $this->hold('policy.0.'.self::read('principals', ['helper']), [$this->ada]);
+        $this->hold('policy.0.'.self::read('group_assignments', ['writers', 'admins']), [new GroupRoleAssignment($this->realm, 'writers', 'helper', $at)]);
 
         self::assertSame(['helper' => 'Helper'], $store->roles($this->realm));
         self::assertSame(['writers' => 'Writers'], $store->groups($this->realm));
@@ -60,7 +60,7 @@ final class CachedPolicyStoreTest extends TestCase
         self::assertCount(1, $store->assignments($this->realm, $this->ada));
         self::assertCount(1, $store->principalsWith($this->realm, 'helper'));
         self::assertCount(1, $store->groupAssignments($this->realm, ['writers', 'admins']));
-        $this->hold('policy.0.'.hash('sha256', 'roles_on.["page:a","page:b|c"]'), ['helper']);
+        $this->hold('policy.0.'.self::read('roles_on', ['page:a', 'page:b|c']), ['helper']);
         self::assertSame(['helper'], $store->rolesOn($this->realm, [new ResourceRef('page', 'a'), new ResourceRef('page', 'b|c')]));
         self::assertSame([], $store->rolesOn($this->realm, [new ResourceRef('page', 'a|page:b'), new ResourceRef('page', 'c')]), 'Another list of resources.');
     }
@@ -74,10 +74,10 @@ final class CachedPolicyStoreTest extends TestCase
             'roles' => [['helper' => 1], [7 => 'Helper'], 'not labels'],
             'groups' => [['writers' => null]],
             'changes' => [['grant' => []]],
-            'assignments.'.$this->ada => [[new RoleAssignment($this->realm, $bob, 'admin', $at)], [new RoleAssignment($other, $this->ada, 'admin', $at)], ['x' => new RoleAssignment($this->realm, $this->ada, 'admin', $at)], [new GroupRoleAssignment($this->realm, 'admins', 'admin', $at)]],
-            'principals.admin' => [['not an id']],
-            hash('sha256', 'roles_on.["page:a"]') => [[7], ['x' => 'helper']],
-            hash('sha256', 'group_assignments.writers|admins') => [[new GroupRoleAssignment($this->realm, 'admins2', 'admin', $at)], [new GroupRoleAssignment($other, 'writers', 'admin', $at)], [new RoleAssignment($this->realm, $this->ada, 'admin', $at)]],
+            self::read('assignments', [(string) $this->ada]) => [[new RoleAssignment($this->realm, $bob, 'admin', $at)], [new RoleAssignment($other, $this->ada, 'admin', $at)], ['x' => new RoleAssignment($this->realm, $this->ada, 'admin', $at)], [new GroupRoleAssignment($this->realm, 'admins', 'admin', $at)]],
+            self::read('principals', ['admin']) => [['not an id']],
+            self::read('roles_on', ['page:a']) => [[7], ['x' => 'helper']],
+            self::read('group_assignments', ['writers', 'admins']) => [[new GroupRoleAssignment($this->realm, 'admins2', 'admin', $at)], [new GroupRoleAssignment($other, 'writers', 'admin', $at)], [new RoleAssignment($this->realm, $this->ada, 'admin', $at)]],
         ];
 
         foreach ($cases as $what => $values) {
@@ -149,10 +149,10 @@ final class CachedPolicyStoreTest extends TestCase
         $inner = new InMemoryRelationStore();
         $page = new ResourceRef('page', '1');
         $tuple = new RelationTuple($this->realm, $page, 'editor', Subject::principal($this->ada));
-        $this->hold('relations.0.'.hash('sha256', 'of.page:1'), [$tuple]);
-        $this->hold('relations.0.'.hash('sha256', 'subjects.page:1#editor'), [new RelationTuple(new Realm('other'), $page, 'editor', Subject::principal($this->ada))]);
-        $this->hold('relations.0.'.hash('sha256', 'objects.editor.principal:'.$this->ada), 'not a list');
-        $this->hold('relations.0.'.hash('sha256', 'objects.viewer.principal:'.$this->ada), ['not a tuple']);
+        $this->hold('relations.0.'.self::read('of', ['page:1']), [$tuple]);
+        $this->hold('relations.0.'.self::read('subjects', ['page:1', 'editor']), [new RelationTuple(new Realm('other'), $page, 'editor', Subject::principal($this->ada))]);
+        $this->hold('relations.0.'.self::read('objects', ['editor', 'principal', (string) $this->ada, '']), 'not a list');
+        $this->hold('relations.0.'.self::read('objects', ['viewer', 'principal', (string) $this->ada, '']), ['not a tuple']);
         $store = new CachedRelationStore($inner, $this->cache());
 
         self::assertSame([], $store->objects($this->realm, [Subject::principal($this->ada)], 'editor'), 'Not a list.');
@@ -185,9 +185,9 @@ final class CachedPolicyStoreTest extends TestCase
             fn (CachedRelationStore $store) => $store->forget($this->realm, $page),
         ] as $i => $change) {
             $store = new CachedRelationStore($inner, $this->cache());
-            $this->hold(\sprintf('relations.%d.%s', $store->version($this->realm), hash('sha256', 'of.page:1')), []);
+            $this->hold(\sprintf('relations.%d.%s', $store->version($this->realm), self::read('of', ['page:1'])), []);
             $change($store);
-            $this->hold(\sprintf('relations.%d.%s', $inner->version($this->realm), hash('sha256', 'of.page:1')), []);
+            $this->hold(\sprintf('relations.%d.%s', $inner->version($this->realm), self::read('of', ['page:1'])), []);
             $inner->add(new RelationTuple($this->realm, $page, 'viewer', Subject::principal($this->ada)));
             self::assertNotSame([], $store->of($this->realm, $page), 'Change '.$i.': not the pool\'s.');
             self::assertCount(\count($inner->of($this->realm, $page)), $store->of($this->realm, $page), 'Change '.$i);
@@ -207,6 +207,16 @@ final class CachedPolicyStoreTest extends TestCase
 
     private function hold(string $what, mixed $value): void
     {
-        $this->pool->save($this->pool->getItem('yorvoid.v1.test.acme.'.$what)->set($value));
+        $this->pool->save($this->pool->getItem('yorvoid.v2.test.acme.'.$what)->set($value));
+    }
+
+    /**
+     * A read's place in the pool: its name, and its arguments hashed.
+     *
+     * @param list<string> $of
+     */
+    private static function read(string $read, array $of): string
+    {
+        return [] === $of ? $read : $read.'-'.hash('sha256', json_encode($of, \JSON_THROW_ON_ERROR));
     }
 }

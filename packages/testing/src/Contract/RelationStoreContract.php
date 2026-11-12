@@ -140,6 +140,37 @@ trait RelationStoreContract
         self::assertSame(0, $store->version(new Realm('globex')), 'Each realm has its own.');
     }
 
+    /**
+     * IDs may hold "#", "@" and "|": tuples and subjects that would read the same written out are apart.
+     */
+    #[DataProvider('implementations')]
+    public function testKeepsApartWhatReadsTheSameWrittenOut(string $implementation): void
+    {
+        $store = $this->relationStore($implementation);
+        $acme = new Realm('acme');
+        $set = new Subject(new ResourceRef('group', 'a'), 'member');
+        $spelled = new Subject(new ResourceRef('group', 'a#member'));
+        $page = new ResourceRef('page', '1');
+        $spelledPage = new ResourceRef('page', '1#editor');
+        $store->add(new RelationTuple($acme, new ResourceRef('group', 'g1'), 'member', $set));
+        $store->add(new RelationTuple($acme, new ResourceRef('group', 'g2'), 'member', $spelled));
+        $store->add(new RelationTuple($acme, $page, 'editor', $set));
+        $store->add(new RelationTuple($acme, $spelledPage, 'editor', $set));
+        $store->add(new RelationTuple($acme, new ResourceRef('page', 'x'), 'editor', new Subject(new ResourceRef('principal', 'y@page:x#editor'))));
+        $store->add(new RelationTuple($acme, new ResourceRef('page', 'x#editor@principal:y'), 'editor', new Subject(new ResourceRef('page', 'x'))));
+
+        $store->add(new RelationTuple($acme, new ResourceRef('doc', '1'), 'editor', $set));
+
+        self::assertSame(7, $store->version($acme), 'Seven tuples, each its own.');
+        self::assertCount(1, $store->of($acme, new ResourceRef('doc', '1')), 'Another type of object, with the same ID.');
+        self::assertSame(['g1'], array_map(static fn (RelationTuple $tuple): string => $tuple->object->id, $store->objects($acme, [$set], 'member')));
+        self::assertSame(['g2'], array_map(static fn (RelationTuple $tuple): string => $tuple->object->id, $store->objects($acme, [$spelled], 'member')));
+        self::assertCount(1, $store->subjects($acme, [[$page, 'editor']]));
+        self::assertCount(1, $store->subjects($acme, [[$spelledPage, 'editor']]));
+        self::assertTrue($store->remove(new RelationTuple($acme, new ResourceRef('group', 'g2'), 'member', $spelled)));
+        self::assertSame(['g1'], array_map(static fn (RelationTuple $tuple): string => $tuple->object->id, $store->objects($acme, [$set], 'member')), 'Removing one leaves the other.');
+    }
+
     #[DataProvider('implementations')]
     public function testFindsManyPairsAtOnce(string $implementation): void
     {

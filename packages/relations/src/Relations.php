@@ -205,9 +205,15 @@ final readonly class Relations
 
         for ($depth = 0; $depth < $this->maxDepth; ++$depth) {
             $next = [];
+            $asked = [];
+
+            foreach ($frontier as $member) {
+                $asked[self::key($member)] = true;
+            }
 
             foreach ($this->store->objects($realm, $frontier, $relation) as $tuple) {
-                if ($tuple->object->type === $type && !isset($found[(string) $tuple->object])) {
+                // Only what answers the read: a store may give more (M-4).
+                if ($tuple->relation === $relation && ($asked[self::key($tuple->subject)] ?? false) && $tuple->object->type === $type && !isset($found[(string) $tuple->object])) {
                     $found[(string) $tuple->object] = $tuple->object;
                     $next[] = new Subject($tuple->object, $relation);
                 }
@@ -290,5 +296,13 @@ final readonly class Relations
     public function schema(): RelationSchema
     {
         return $this->schema;
+    }
+
+    /**
+     * A subject, unambiguously: its string can't tell group:a#member from group:a with the relation member.
+     */
+    private static function key(Subject $subject): string
+    {
+        return json_encode([$subject->resource->type, $subject->resource->id, $subject->relation], \JSON_THROW_ON_ERROR);
     }
 }

@@ -58,14 +58,14 @@ final class CacheTest extends TestCase
             return ['read'];
         };
 
-        $this->cache($container)->get(new Realm('acme'), 'policy', 1, 'roles', $read, \is_array(...));
-        self::assertTrue($pool->getItem(\sprintf('yorvoid.v1.%s.acme.policy.1.roles', $installation->id()))->isHit());
+        $this->cache($container)->get(new Realm('acme'), 'policy', 1, 'roles', [], $read, \is_array(...));
+        self::assertTrue($pool->getItem(\sprintf('yorvoid.v2.%s.acme.policy.1.roles', $installation->id()))->isHit());
 
         $resetter = $container->get('services_resetter');
         \assert($resetter instanceof ResetInterface);
         $resetter->reset();
         $pool->clear();
-        $this->cache($container)->get(new Realm('acme'), 'policy', 1, 'roles', $read, \is_array(...));
+        $this->cache($container)->get(new Realm('acme'), 'policy', 1, 'roles', [], $read, \is_array(...));
         self::assertSame(2, $reads, 'The request\'s memo is reset with the container.');
     }
 
@@ -81,11 +81,11 @@ final class CacheTest extends TestCase
             return ['read'];
         };
 
-        $this->cache($container)->get(new Realm('acme'), 'policy', 1, 'roles', $read, \is_array(...));
-        $this->cache($container)->get(new Realm('acme'), 'policy', 1, 'roles', $read, \is_array(...));
+        $this->cache($container)->get(new Realm('acme'), 'policy', 1, 'roles', [], $read, \is_array(...));
+        $this->cache($container)->get(new Realm('acme'), 'policy', 1, 'roles', [], $read, \is_array(...));
 
         self::assertSame(1, $reads);
-        self::assertFalse($pool->hasItem(\sprintf('yorvoid.v1.%s.acme.policy.1.roles', $this->installation($container))));
+        self::assertFalse($pool->hasItem(\sprintf('yorvoid.v2.%s.acme.policy.1.roles', $this->installation($container))));
     }
 
     /**

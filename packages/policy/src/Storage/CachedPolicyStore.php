@@ -37,7 +37,7 @@ final class CachedPolicyStore implements PolicyStore
 
     public function roles(Realm $realm): array
     {
-        return $this->read($realm, 'roles', fn (): array => $this->store->roles($realm), self::isLabels(...));
+        return $this->read($realm, 'roles', [], fn (): array => $this->store->roles($realm), self::isLabels(...));
     }
 
     public function saveRole(Realm $realm, string $name, string $label): void
@@ -52,7 +52,7 @@ final class CachedPolicyStore implements PolicyStore
 
     public function changes(Realm $realm): AbilityChanges
     {
-        return $this->read($realm, 'changes', fn (): AbilityChanges => $this->store->changes($realm), static fn (mixed $changes): bool => $changes instanceof AbilityChanges);
+        return $this->read($realm, 'changes', [], fn (): AbilityChanges => $this->store->changes($realm), static fn (mixed $changes): bool => $changes instanceof AbilityChanges);
     }
 
     public function saveChanges(Realm $realm, AbilityChanges $changes): void
@@ -62,18 +62,17 @@ final class CachedPolicyStore implements PolicyStore
 
     public function assignments(Realm $realm, PrincipalId $principalId): array
     {
-        return $this->read($realm, \sprintf('assignments.%s', $principalId), fn (): array => $this->store->assignments($realm, $principalId), static fn (mixed $assignments): bool => self::isListOf($assignments, static fn (mixed $assignment): bool => $assignment instanceof RoleAssignment && $assignment->realm->equals($realm) && $assignment->principalId->equals($principalId)));
+        return $this->read($realm, 'assignments', [(string) $principalId], fn (): array => $this->store->assignments($realm, $principalId), static fn (mixed $assignments): bool => self::isListOf($assignments, static fn (mixed $assignment): bool => $assignment instanceof RoleAssignment && $assignment->realm->equals($realm) && $assignment->principalId->equals($principalId)));
     }
 
     public function principalsWith(Realm $realm, string $role): array
     {
-        return $this->read($realm, \sprintf('principals.%s', $role), fn (): array => $this->store->principalsWith($realm, $role), static fn (mixed $principals): bool => self::isListOf($principals, static fn (mixed $principal): bool => $principal instanceof PrincipalId));
+        return $this->read($realm, 'principals', [$role], fn (): array => $this->store->principalsWith($realm, $role), static fn (mixed $principals): bool => self::isListOf($principals, static fn (mixed $principal): bool => $principal instanceof PrincipalId));
     }
 
     public function rolesOn(Realm $realm, array $resources): array
     {
-        // As JSON: resource IDs may hold any separator.
-        return $this->read($realm, \sprintf('roles_on.%s', json_encode(array_map(strval(...), $resources), \JSON_THROW_ON_ERROR)), fn (): array => $this->store->rolesOn($realm, $resources), static fn (mixed $roles): bool => self::isListOf($roles, \is_string(...)));
+        return $this->read($realm, 'roles_on', array_map(strval(...), $resources), fn (): array => $this->store->rolesOn($realm, $resources), static fn (mixed $roles): bool => self::isListOf($roles, \is_string(...)));
     }
 
     public function assign(RoleAssignment $assignment): void
@@ -98,7 +97,7 @@ final class CachedPolicyStore implements PolicyStore
 
     public function groups(Realm $realm): array
     {
-        return $this->read($realm, 'groups', fn (): array => $this->store->groups($realm), self::isLabels(...));
+        return $this->read($realm, 'groups', [], fn (): array => $this->store->groups($realm), self::isLabels(...));
     }
 
     public function saveGroup(Realm $realm, string $name, string $label): void
@@ -113,7 +112,7 @@ final class CachedPolicyStore implements PolicyStore
 
     public function groupAssignments(Realm $realm, array $groups): array
     {
-        return $this->read($realm, \sprintf('group_assignments.%s', implode('|', $groups)), fn (): array => $this->store->groupAssignments($realm, $groups), static fn (mixed $assignments): bool => self::isListOf($assignments, static fn (mixed $assignment): bool => $assignment instanceof GroupRoleAssignment && $assignment->realm->equals($realm) && \in_array($assignment->group, $groups, true)));
+        return $this->read($realm, 'group_assignments', $groups, fn (): array => $this->store->groupAssignments($realm, $groups), static fn (mixed $assignments): bool => self::isListOf($assignments, static fn (mixed $assignment): bool => $assignment instanceof GroupRoleAssignment && $assignment->realm->equals($realm) && \in_array($assignment->group, $groups, true)));
     }
 
     public function assignGroup(GroupRoleAssignment $assignment): void
@@ -162,19 +161,20 @@ final class CachedPolicyStore implements PolicyStore
     /**
      * @template T
      *
-     * @param \Closure(): T         $read
+     * @param list<string>          $of    The read's arguments
+     * @param \Closure(): T         $load
      * @param \Closure(mixed): bool $valid
      *
      * @return T
      */
-    private function read(Realm $realm, string $what, \Closure $read, \Closure $valid): mixed
+    private function read(Realm $realm, string $read, array $of, \Closure $load, \Closure $valid): mixed
     {
         if ($this->changed[$realm->name] ?? false) {
-            return $read();
+            return $load();
         }
 
         // The version first: what's read after it is at least as new as it, never older.
-        return $this->cache->get($realm, 'policy', $this->version($realm), $what, $read, $valid);
+        return $this->cache->get($realm, 'policy', $this->version($realm), $read, $of, $load, $valid);
     }
 
     private static function isLabels(mixed $labels): bool

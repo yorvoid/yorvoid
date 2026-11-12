@@ -26,9 +26,12 @@ use YorvoID\Core\Realm;
 final class VersionedCache
 {
     /** The shape of what's kept: entries of another shape are never read. */
-    private const string FORMAT = 'v1';
+    private const string FORMAT = 'v2';
 
-    /** @var array<string, mixed> What the request read, by realm, area, version and what */
+    /** A read's name: never data */
+    private const string READ = '/^[a-z][a-z_]*$/D';
+
+    /** @var array<string, mixed> What the request read, by realm, area, version, read and arguments */
     private array $memo = [];
 
     /** Once the pool fails, the request reads from the stores. */
@@ -49,20 +52,33 @@ final class VersionedCache
     }
 
     /**
-     * What $read gives at this version of the realm's data in the area, read once.
+     * What $load gives at this version of the realm's data in the area, read once.
+     *
+     * The read's arguments are encoded here, never by the caller: as JSON, so two different lists never
+     * share an entry, whatever the strings hold (M-4).
      *
      * @template T
      *
      * @param string                $area  Whose version it is, e.g. "policy"
-     * @param string                $what  What's read, e.g. "assignments.<principal>"
-     * @param \Closure(): T         $read  Reads it from the store
-     * @param \Closure(mixed): bool $valid Whether what the pool holds is what $read gives: anything else is read again
+     * @param string                $read  What's read, a name like "assignments": lowercase letters and underscores
+     * @param list<string>          $of    Its arguments, in order, e.g. the principal's ID
+     * @param \Closure(): T         $load  Reads it from the store
+     * @param \Closure(mixed): bool $valid Whether what the pool holds is what $load gives: anything else is read again
      *
      * @return T
+     *
+     * @throws \LogicException When the read's name or its arguments aren't of that shape
      */
-    public function get(Realm $realm, string $area, int $version, string $what, \Closure $read, \Closure $valid): mixed
+    public function get(Realm $realm, string $area, int $version, string $read, array $of, \Closure $load, \Closure $valid): mixed
     {
-        $local = \sprintf('%s.%s.%d.%s', $realm->name, $area, $version, $what);
+        if (1 !== preg_match(self::READ, $read)) {
+            throw new \LogicException(\sprintf('"%s" isn\'t the name of a read: use lowercase letters and underscores.', $read));
+        }
+
+        self::checkArguments($read, $of);
+
+        $arguments = json_encode($of, \JSON_THROW_ON_ERROR);
+        $local = \sprintf("%s.%s.%d.%s\0%s", $realm->name, $area, $version, $read, $arguments);
 
         if (\array_key_exists($local, $this->memo)) {
             /* @var T */
@@ -72,11 +88,11 @@ final class VersionedCache
         $pool = $this->failed ? null : $this->pool;
 
         if (null === $pool) {
-            return $this->memo[$local] = $read();
+            return $this->memo[$local] = $load();
         }
 
         try {
-            $item = $pool->getItem($this->key($realm, $area, $version, $what));
+            $item = $pool->getItem($this->key($realm, $area, $version, $read, [] === $of ? null : $arguments));
             $value = $item->isHit() ? $item->get() : null;
 
             if (null !== $value && $valid($value)) {
@@ -86,10 +102,10 @@ final class VersionedCache
         } catch (\Throwable $e) {
             $this->warn($e);
 
-            return $this->memo[$local] = $read();
+            return $this->memo[$local] = $load();
         }
 
-        $value = $read();
+        $value = $load();
 
         try {
             $pool->save($item->set($value));
@@ -110,14 +126,27 @@ final class VersionedCache
     }
 
     /**
-     * Installation first, then realm: e.g. "yorvoid.v1.<installation>.acme.policy.7.changes". What's read
-     * is hashed when it has more than PSR-6 keys may hold.
+     * Installation first, then realm: e.g. "yorvoid.v2.<installation>.acme.policy.7.assignments-<sha256>".
+     * The arguments are always hashed, and a read's name has no "-", so a key reads back one way only.
      */
-    private function key(Realm $realm, string $area, int $version, string $what): string
+    private function key(Realm $realm, string $area, int $version, string $read, ?string $arguments): string
     {
         \assert(null !== $this->installation);
 
-        return \sprintf('yorvoid.%s.%s.%s.%s.%d.%s', self::FORMAT, $this->installation->id(), $realm->name, $area, $version, 1 === preg_match('/^[A-Za-z0-9_.-]{1,80}$/D', $what) ? $what : hash('sha256', $what));
+        return \sprintf('yorvoid.%s.%s.%s.%s.%d.%s', self::FORMAT, $this->installation->id(), $realm->name, $area, $version, null === $arguments ? $read : $read.'-'.hash('sha256', $arguments));
+    }
+
+    /**
+     * Only strings encode one way each, so the types are checked as it runs, not only by the docs: an
+     * object without public properties would be "{}" whatever it is (C1).
+     *
+     * @param array<mixed> $of
+     */
+    private static function checkArguments(string $read, array $of): void
+    {
+        if (!array_is_list($of) || [] !== array_filter($of, static fn (mixed $argument): bool => !\is_string($argument))) {
+            throw new \LogicException(\sprintf('The arguments of the read "%s" must be a list of strings.', $read));
+        }
     }
 
     private function warn(\Throwable $e): void
