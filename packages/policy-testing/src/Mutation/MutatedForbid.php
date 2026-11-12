@@ -8,6 +8,7 @@ use YorvoID\Core\Authorization\ChecksCatalogue;
 use YorvoID\Core\Authorization\ForbidElement;
 use YorvoID\Core\Authorization\Preloads;
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Operation\OperationCatalogue;
 
@@ -16,7 +17,7 @@ use YorvoID\Core\Operation\OperationCatalogue;
  *
  * @internal
  */
-final readonly class MutatedForbid implements ForbidElement, Preloads, ChecksCatalogue
+final readonly class MutatedForbid implements ForbidElement, Preloads, ChecksCatalogue, RequiresForbids
 {
     public function __construct(
         public ForbidElement $inner,
@@ -51,5 +52,10 @@ final readonly class MutatedForbid implements ForbidElement, Preloads, ChecksCat
         if ($this->inner instanceof ChecksCatalogue) {
             $this->inner->checkCatalogue($catalogue);
         }
+    }
+
+    public function requiredForbids(): array
+    {
+        return $this->inner instanceof RequiresForbids ? $this->inner->requiredForbids() : [];
     }
 }

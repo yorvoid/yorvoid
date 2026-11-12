@@ -36,7 +36,7 @@ use YorvoID\Core\Storage\StoreUnreachable;
  * Decides with the policy's elements and the actor's authority, by the precedence of 06 §3, the first
  * row that applies:
  *
- *   1. a forbid holds                → Deny
+ *   1. a forbid holds                → Deny, with what would lift it if nothing else would refuse
  *   2. a forbid is unknown           → Indeterminate (a forbid can't be ruled out)
  *   3. the authority is invalid      → Deny
  *   4. the authority is unknown      → Indeterminate
@@ -72,8 +72,9 @@ final readonly class Evaluator implements Authorization
      * @param IdGenerator             $ids       Each decision's ID
      * @param DecisionLog|null        $decisions Where decisions are recorded (AUZ-040); without it, nowhere
      *
-     * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, or a
-     *                         permit authorizes by Consequence, which only another operation's permit gives
+     * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, a
+     *                         permit authorizes by Consequence, which only another operation's permit gives,
+     *                         or an element lacks a forbid it requires (RequiresForbids)
      */
     public function __construct(
         iterable $elements,
@@ -114,6 +115,28 @@ final readonly class Evaluator implements Authorization
         // By name: the decision's reasons, and the detail it leads with, never depend on the order given.
         ksort($list, \SORT_STRING);
         $this->elements = $list;
+
+        foreach ($list as $element) {
+            if ($element instanceof RequiresForbids) {
+                $this->requireForbids(\sprintf('The policy element "%s"', $element->name()), $element);
+            }
+        }
+    }
+
+    /**
+     * That the policy has the forbids something needs, as forbids.
+     *
+     * @param string $what Who needs them, for the error, e.g. 'The policy element "yorvoid.roles"'
+     *
+     * @throws IntegratorError When one isn't in the policy, or isn't a forbid
+     */
+    public function requireForbids(string $what, RequiresForbids $needing): void
+    {
+        foreach ($needing->requiredForbids() as $name => $how) {
+            if (!($this->elements[$name] ?? null) instanceof ForbidElement) {
+                throw new IntegratorError(\sprintf('%s needs the forbid "%s", which isn\'t in the policy.', $what, $name), $how, 'concepts/authorization.md#policy-elements');
+            }
+        }
     }
 
     /**
@@ -470,9 +493,24 @@ final readonly class Evaluator implements Authorization
      */
     private function precedence(Request $request, array $forbids, Truth $authority, array $permits, array $reasons): Decision
     {
-        // 1.
+        // 1. With what would lift the forbids, only if each has a remedy and nothing else would refuse: a
+        // remedy is a promise.
         if ([] !== $forbids['holds']) {
-            return Decision::deny(\sprintf('A forbid applies: %s', $forbids['holds'][0]->detail), $reasons, precedence: Precedence::ForbidHolds);
+            $remedies = [];
+
+            foreach ($forbids['holds'] as $truth) {
+                if ([] === $truth->remedies) {
+                    $remedies = [];
+
+                    break;
+                }
+
+                array_push($remedies, ...$truth->remedies);
+            }
+
+            $lifted = [] === $remedies ? null : $this->precedence($request, ['holds' => [], 'unknown' => $forbids['unknown']], $authority, $permits, $reasons);
+
+            return Decision::deny(\sprintf('A forbid applies: %s', $forbids['holds'][0]->detail), $reasons, Precedence::PermitHolds === $lifted?->precedence ? self::once($remedies) : [], Precedence::ForbidHolds);
         }
 
         $couldPermit = [] !== $permits['holds'] || [] !== $permits['unknown'];
@@ -527,17 +565,33 @@ final readonly class Evaluator implements Authorization
         $remedies = [];
 
         foreach ($permits['fails'] as [, $truth]) {
-            foreach ($truth->remedies as $remedy) {
-                $remedies[json_encode([$remedy->name(), $remedy->parameters()], \JSON_THROW_ON_ERROR)] ??= $remedy;
-            }
+            array_push($remedies, ...$truth->remedies);
         }
 
         return Decision::deny(
             [] === $permits['fails'] ? \sprintf('No permit applies to "%s".', $request->name()) : $permits['fails'][0][1]->detail,
             $reasons,
-            array_values($remedies),
+            self::once($remedies),
             Precedence::NoPermit,
         );
+    }
+
+    /**
+     * Each remedy once.
+     *
+     * @param list<Remedy> $remedies
+     *
+     * @return list<Remedy>
+     */
+    private static function once(array $remedies): array
+    {
+        $once = [];
+
+        foreach ($remedies as $remedy) {
+            $once[json_encode([$remedy->name(), $remedy->parameters()], \JSON_THROW_ON_ERROR)] ??= $remedy;
+        }
+
+        return array_values($once);
     }
 
     /**

@@ -6,6 +6,17 @@ namespace YorvoID\Tests\Docs;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\PrincipalAuthority;
+use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Principal\Storage\InMemoryPrincipalStore;
+use YorvoID\Policy\NoEscalation;
+use YorvoID\Policy\PolicyCatalogue;
+use YorvoID\Policy\RolePermit;
+use YorvoID\Policy\Roles;
+use YorvoID\Policy\StepUpForSensitiveChanges;
+use YorvoID\Policy\Storage\InMemoryPolicyStore;
+use YorvoID\Policy\YorvoIDDeclarations;
 
 /**
  * docs/tutorials/plain-php.md runs as it's written: its PHP blocks, in order, are one script; the
@@ -29,6 +40,28 @@ final class PlainPhpTutorialTest extends TestCase
         } finally {
             new Filesystem()->remove($directory);
         }
+    }
+
+    /**
+     * The tutorial's old wiring, the role permit alone, fails to build: no-escalation and the step-up
+     * aren't optional (M2-13).
+     */
+    public function testTheRolePermitIsntBuiltWithoutItsRules(): void
+    {
+        $roles = new Roles(PolicyCatalogue::of([new YorvoIDDeclarations()]), new InMemoryPolicyStore());
+        $authority = new PrincipalAuthority(new InMemoryPrincipalStore());
+
+        foreach ([[new RolePermit($roles)], [new RolePermit($roles), new NoEscalation($roles)], [new RolePermit($roles), new StepUpForSensitiveChanges($roles)]] as $elements) {
+            try {
+                Evaluator::builtIn($authority, elements: $elements);
+                self::fail('The role permit was built without its rules.');
+            } catch (IntegratorError $error) {
+                self::assertStringStartsWith('The policy element "yorvoid.roles" needs the forbid "yorvoid.policy.', $error->getMessage());
+            }
+        }
+
+        Evaluator::builtIn($authority, elements: [new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles)]);
+        self::assertStringContainsString('new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles, new SessionStepUpCheck($stepUp))', (string) file_get_contents(self::TUTORIAL));
     }
 
     /**

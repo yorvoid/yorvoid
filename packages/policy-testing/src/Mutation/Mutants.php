@@ -19,6 +19,7 @@ use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\Role;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Rule\RuleElements;
+use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Relations\RelationDeclarations;
 use YorvoID\Relations\RelationDefinition;
 use YorvoID\Relations\RelationPermit;
@@ -141,7 +142,7 @@ final class Mutants
 
         foreach ($elements as $element) {
             // YorvoID's own: the grant operators break what they decide by.
-            if (!$element instanceof RolePermit && !$element instanceof RelationPermit && !$element instanceof NoEscalation) {
+            if (!$element instanceof RolePermit && !$element instanceof RelationPermit && !$element instanceof NoEscalation && !$element instanceof StepUpForSensitiveChanges) {
                 $this->elements[$element->name()] = match (true) {
                     $element instanceof ForbidElement => 'forbid',
                     RuleElements::isPermitSide($element) => 'rule-permit',

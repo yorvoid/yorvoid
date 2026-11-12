@@ -13,7 +13,7 @@ final readonly class Truth
 {
     /**
      * @param string       $detail   For the log and for developers, e.g. "The actor holds "acme.badge.issue"."
-     * @param list<Remedy> $remedies What could make a failing permit hold
+     * @param list<Remedy> $remedies What could make a failing permit hold, or lift a forbid that holds
      * @param list<Ground> $grounds  What it rests on, for explainers (experimental)
      */
     private function __construct(
@@ -31,6 +31,17 @@ final readonly class Truth
     public static function holds(string $detail, Ground ...$grounds): self
     {
         return new self(TruthValue::Holds, $detail, grounds: array_values($grounds));
+    }
+
+    /**
+     * A forbid that holds only for want of evidence: these remedies would lift it, e.g. a step-up. The
+     * decision offers them only when nothing else would refuse.
+     *
+     * @param Remedy ...$remedies What would lift it
+     */
+    public static function holdsUnless(string $detail, Remedy ...$remedies): self
+    {
+        return new self(TruthValue::Holds, $detail, remedies: array_values($remedies));
     }
 
     /**

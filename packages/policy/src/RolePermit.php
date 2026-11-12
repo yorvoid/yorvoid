@@ -8,42 +8,30 @@ use YorvoID\Core\Authorization\ChecksCatalogue;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\Preloads;
 use YorvoID\Core\Authorization\Request;
-use YorvoID\Core\Authorization\StepUpCheck;
-use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Authorization\Truth;
-use YorvoID\Core\Authorization\TruthValue;
-use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\OperationCatalogue;
-use YorvoID\Policy\Change\AddGroupMember;
-use YorvoID\Policy\Change\AssignGroupRole;
-use YorvoID\Policy\Change\AssignRole;
-use YorvoID\Policy\Change\CreateRole;
-use YorvoID\Policy\Change\GrantAbilities;
-use YorvoID\Policy\Change\SetAbilities;
 
 /**
  * The permit by roles: a request that needs an ability is let through when a role the actor has, in the
  * realm or on the request's resource, has that ability, or is a super role and the ability isn't strict.
- * Giving a strict ability or a super role also takes a recent proof of who one is (AUZ-052): without a
- * StepUpCheck, only the host's operator gives them.
+ * The evaluator needs NoEscalation and StepUpForSensitiveChanges beside it.
  *
  * @api
  */
-final readonly class RolePermit implements PermitElement, ChecksCatalogue, Preloads
+final readonly class RolePermit implements PermitElement, ChecksCatalogue, Preloads, RequiresForbids
 {
-    private Duration $window;
+    /** What every permit that lets policy changes through needs beside it */
+    public const array SAFETY = [
+        NoEscalation::NAME => 'Add new NoEscalation($roles) to the evaluator\'s elements: nobody gives or takes what they don\'t hold.',
+        StepUpForSensitiveChanges::NAME => 'Add new StepUpForSensitiveChanges($roles, $stepUpCheck) to the evaluator\'s elements: giving a super role or a strict ability takes a recent proof.',
+    ];
 
-    /**
-     * @param Duration|null $window How recent the proof must be for a sensitive change: 5 minutes if not given
-     */
     public function __construct(
         private Roles $roles,
-        private ?StepUpCheck $stepUp = null,
-        ?Duration $window = null,
     ) {
-        $this->window = $window ?? Duration::minutes(5);
     }
 
     public function name(): string
@@ -83,53 +71,14 @@ final readonly class RolePermit implements PermitElement, ChecksCatalogue, Prelo
 
     public function evaluate(Request $request): Truth
     {
-        $truth = $this->roles->decide($request);
-        $sensitive = $this->sensitive($request);
-
-        if (TruthValue::Holds !== $truth->value || null === $sensitive) {
-            return $truth;
-        }
-
-        if (null === $this->stepUp) {
-            return Truth::fails(\sprintf('%s takes a recent proof of who they are, and nothing checks one here.', $sensitive));
-        }
-
-        $proof = $this->stepUp->check($request->actor, new StepUpRemedy($this->window, operation: $request->name()));
-
-        return TruthValue::Holds === $proof->value ? Truth::holds(\sprintf('%s %s', $truth->detail, $proof->detail), ...$truth->grounds, ...$proof->grounds) : $proof;
+        return $this->roles->decide($request);
     }
 
     /**
-     * What makes the change sensitive, if it is: a super role given, or a strict ability given.
+     * Roles let changes through that no-escalation and the step-up weigh (C1).
      */
-    private function sensitive(Request $request): ?string
+    public function requiredForbids(): array
     {
-        $command = $request->command;
-
-        if (($command instanceof AssignRole || $command instanceof AssignGroupRole) && true === $this->roles->role($request->realm, $command->role)?->super) {
-            return \sprintf('Giving the super role "%s"', $command->role);
-        }
-
-        if ($command instanceof AddGroupMember) {
-            foreach ($this->roles->rolesOfGroup($request->realm, $command->group) as $role) {
-                if (true === $this->roles->role($request->realm, $role)?->super) {
-                    return \sprintf('Giving the super role "%s" through the group "%s"', $role, $command->group);
-                }
-            }
-        }
-
-        $given = match (true) {
-            $command instanceof GrantAbilities, $command instanceof SetAbilities => $command->abilities,
-            $command instanceof CreateRole && null !== $command->from => $this->roles->abilitiesOf($request->realm, $command->from),
-            default => [],
-        };
-
-        foreach ($given as $ability) {
-            if (true === $this->roles->ability($ability)?->strict) {
-                return \sprintf('Giving the strict ability "%s"', $ability);
-            }
-        }
-
-        return null;
+        return self::SAFETY;
     }
 }

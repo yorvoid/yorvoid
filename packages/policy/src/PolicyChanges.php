@@ -6,6 +6,7 @@ namespace YorvoID\Policy;
 
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
+use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
@@ -33,7 +34,7 @@ use YorvoID\Policy\Change\UnassignRole;
  *
  * @api
  */
-final readonly class PolicyChanges implements OperationHandler
+final readonly class PolicyChanges implements OperationHandler, RequiresForbids
 {
     private Roles $roles;
 
@@ -346,5 +347,13 @@ final readonly class PolicyChanges implements OperationHandler
     private function record(Realm $realm, string $action, Permit $permit, Origin $origin, ?string $subjectType = null, ?string $subjectId = null, array $details = []): void
     {
         $this->log->record($realm, $action, Outcome::Success, $origin, $permit->actor->principalId, $subjectType, $subjectId, $details);
+    }
+
+    /**
+     * What it changes is safe only weighed by no-escalation and the step-up, whatever permits it (M2-13).
+     */
+    public function requiredForbids(): array
+    {
+        return RolePermit::SAFETY;
     }
 }

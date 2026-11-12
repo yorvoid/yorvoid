@@ -25,6 +25,7 @@ use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\RoleSource;
 use YorvoID\Policy\Rule\Rule;
 use YorvoID\Policy\Rule\RuleAnswer;
+use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\Subject;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
@@ -126,7 +127,8 @@ final class GroundsTest extends TestCase
         $admin = $world->principal('admin');
         $operation = $world->catalogue->forCommand(AssignRole::class);
         $request = Request::forOperation($operation, new AssignRole($world->realm, self::id($ada), 'admin'), $admin, new Origin(OriginKind::Web), $world->clock->now());
-        self::assertEquals([Ground::role('admin', RoleGrant::Super), Ground::evidence('step_up')], new RolePermit($world->roles, $stepUp)->evaluate($request)->grounds);
+        self::assertEquals([Ground::role('admin', RoleGrant::Super)], new RolePermit($world->roles)->evaluate($request)->grounds);
+        self::assertEquals([Ground::evidence('step_up')], new StepUpForSensitiveChanges($world->roles, $stepUp)->evaluate($request)->grounds);
     }
 
     private static function id(ActingPrincipal $principal): PrincipalId

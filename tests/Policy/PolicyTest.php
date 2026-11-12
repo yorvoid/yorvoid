@@ -26,11 +26,13 @@ use YorvoID\Core\Principal\Storage\InMemoryPrincipalStore;
 use YorvoID\Core\Principal\SuspendPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Policy\ForgetRolesOfDeletedPrincipals;
+use YorvoID\Policy\NoEscalation;
 use YorvoID\Policy\Policy;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\RoleAssignment;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Roles;
+use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -53,7 +55,8 @@ final class PolicyTest extends TestCase
         $ada = new Principal(new PrincipalId(new UuidV7()), $realm, PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now);
         $principals->add($ada);
         $store->assign(new RoleAssignment($realm, $ada->id, 'editor', $now));
-        $policy = new Policy(Evaluator::builtIn(new PrincipalAuthority($principals), elements: [new RolePermit(new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $store))]));
+        $roles = new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $store);
+        $policy = new Policy(Evaluator::builtIn(new PrincipalAuthority($principals), elements: [new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles)]));
         $page = new ResourceRef('page', '1');
         $origin = new Origin(OriginKind::Web);
 

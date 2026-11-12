@@ -77,4 +77,9 @@ final class RelationPermitTest extends TestCase
         self::assertSame(TruthValue::Holds, $batched->evaluate($request('3'))->value, 'A request not preloaded reads for itself.');
         self::assertGreaterThan($reads, $counting->reads);
     }
+
+    public function testItRequiresNoEscalationAndTheStepUp(): void
+    {
+        self::assertSame(['yorvoid.policy.no_escalation', 'yorvoid.policy.step_up'], array_keys(new RelationPermit(new Relations(RelationSchema::of([]), new InMemoryRelationStore(), 2))->requiredForbids()));
+    }
 }

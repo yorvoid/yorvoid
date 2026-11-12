@@ -24,12 +24,14 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Policy\AbilityChanges;
 use YorvoID\Policy\GroupRelations;
+use YorvoID\Policy\NoEscalation;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\Role;
 use YorvoID\Policy\RoleAssignment;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Roles;
 use YorvoID\Policy\RoleSource;
+use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\Policy\UnknownAbility;
 use YorvoID\Relations\Relations;
@@ -336,7 +338,8 @@ final class RolesTest extends TestCase
 
     private function decide(Actor $actor, string $ability, ?ResourceRef $resource = null, ?Realm $realm = null): Decision
     {
-        $evaluator = new Evaluator([new RolePermit($this->roles())], new StubAuthority(Truth::holds('valid')), $this->clock);
+        $roles = $this->roles();
+        $evaluator = new Evaluator([new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles)], new StubAuthority(Truth::holds('valid')), $this->clock);
 
         return $evaluator->decideAbility($actor, $ability, $realm ?? $this->realm, $resource, new Origin(OriginKind::Web));
     }

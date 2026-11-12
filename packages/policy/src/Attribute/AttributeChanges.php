@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy\Attribute;
 
+use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
@@ -12,6 +13,8 @@ use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Policy\NoEscalation;
+use YorvoID\Policy\RolePermit;
 
 /**
  * Sets principals' security attributes through Operations::run(), in a transaction with its security
@@ -19,7 +22,7 @@ use YorvoID\Core\Storage\Transactions;
  *
  * @api
  */
-final readonly class AttributeChanges implements OperationHandler
+final readonly class AttributeChanges implements OperationHandler, RequiresForbids
 {
     public function __construct(
         private Attributes $attributes,
@@ -58,5 +61,13 @@ final readonly class AttributeChanges implements OperationHandler
                 : $this->store->set($command->realm, $command->principalId, $command->name, $command->value);
             $this->log->record($command->realm, 'yorvoid.attribute.set', Outcome::Success, $origin, $permit->actor->principalId, 'principal', $command->principalId->uuid->toRfc4122(), ['attribute' => $command->name, 'removed' => null === $command->value]);
         });
+    }
+
+    /**
+     * Nobody sets their own security attributes, whatever permits it (M2-13): no-escalation says so.
+     */
+    public function requiredForbids(): array
+    {
+        return [NoEscalation::NAME => RolePermit::SAFETY[NoEscalation::NAME]];
     }
 }
