@@ -12,6 +12,7 @@ use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Operation\Operator;
+use YorvoID\Policy\Attribute\SetAttribute;
 use YorvoID\Policy\Change\AddGroupMember;
 use YorvoID\Policy\Change\AssignGroupRole;
 use YorvoID\Policy\Change\AssignRole;
@@ -24,8 +25,9 @@ use YorvoID\Relations\Change\AddRelation;
 /**
  * Giving anyone a super role or a strict ability, directly or through what follows from it (Effects),
  * takes a recent proof of who one is (AUZ-052), whatever permits the change: a role, a relation, a rule
- * or an ability policy. Without a StepUpCheck, only the host's operator gives them. Taking them away
- * never waits for a proof.
+ * or an ability policy. So does setting or removing a security attribute: what it gives depends on the
+ * rules that read it, which can't be weighed. Without a StepUpCheck, only the host's operator makes these
+ * changes. Taking roles and abilities away never waits for a proof.
  *
  * @api
  */
@@ -60,7 +62,7 @@ final readonly class StepUpForSensitiveChanges implements ForbidElement
 
         return !$request->actor instanceof Operator
             && ($command instanceof AssignRole || $command instanceof AssignGroupRole || $command instanceof AddGroupMember || ($command instanceof CreateRole && null !== $command->from)
-                || $command instanceof GrantAbilities || $command instanceof SetAbilities || $command instanceof ResetAbilities || $command instanceof AddRelation);
+                || $command instanceof GrantAbilities || $command instanceof SetAbilities || $command instanceof ResetAbilities || $command instanceof AddRelation || $command instanceof SetAttribute);
     }
 
     public function evaluate(Request $request): Truth
@@ -85,11 +87,17 @@ final readonly class StepUpForSensitiveChanges implements ForbidElement
     }
 
     /**
-     * What makes the change sensitive, if it is: a super role given, or a strict ability given, by a role or
-     * directly.
+     * What makes the change sensitive, if it is: a security attribute set or removed, a super role given,
+     * or a strict ability given, by a role or directly.
      */
     private function sensitive(Request $request): ?string
     {
+        $command = $request->command;
+
+        if ($command instanceof SetAttribute) {
+            return \sprintf('%s the security attribute "%s"', null === $command->value ? 'Removing' : 'Setting', $command->name);
+        }
+
         foreach (Effects::of($this->roles)->on($request)->gives as $part) {
             $abilities = $part->abilities;
 

@@ -13,7 +13,6 @@ use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Principal\UnknownPrincipal;
 use YorvoID\Core\Storage\Transactions;
-use YorvoID\Policy\NoEscalation;
 use YorvoID\Policy\RolePermit;
 
 /**
@@ -64,10 +63,11 @@ final readonly class AttributeChanges implements OperationHandler, RequiresForbi
     }
 
     /**
-     * Nobody sets their own security attributes, whatever permits it (M2-13): no-escalation says so.
+     * Nobody sets their own security attributes, and nobody sets anyone's without a recent proof, whatever
+     * permits it (M2-13): no-escalation and the step-up say so.
      */
     public function requiredForbids(): array
     {
-        return [NoEscalation::NAME => RolePermit::SAFETY[NoEscalation::NAME]];
+        return RolePermit::SAFETY;
     }
 }
