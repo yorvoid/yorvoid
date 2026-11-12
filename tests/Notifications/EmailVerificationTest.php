@@ -51,7 +51,7 @@ final class EmailVerificationTest extends DatabaseTestCase
         $verification = $this->verification($implementation);
         $ana = $this->principal('ana@example.com');
 
-        self::assertTrue($verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme')), new Origin(OriginKind::Web)));
+        self::assertTrue($verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme'), $ana->id), new Origin(OriginKind::Web)));
         self::assertCount(1, $this->mailer->sent);
         $email = $this->mailer->sent[0];
         self::assertSame(['ana@example.com', 'Confirm your email address for Acme', 'en'], [$email->to, $email->subject, $email->locale]);
@@ -71,8 +71,8 @@ final class EmailVerificationTest extends DatabaseTestCase
         self::assertNull($verification->peek(new Realm('acme'), $token));
 
         // Verified now: nothing more to send.
-        self::assertFalse($verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme')), new Origin(OriginKind::Web)));
-        self::assertFalse($verification->send(new Realm('acme'), $this->principal(null)->id, Permits::because(new Realm('acme')), new Origin(OriginKind::Web)));
+        self::assertFalse($verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme'), $ana->id), new Origin(OriginKind::Web)));
+        self::assertFalse($verification->send(new Realm('acme'), $none = $this->principal(null)->id, Permits::because(new Realm('acme'), $none), new Origin(OriginKind::Web)));
         self::assertSame(['ana@example.com'], array_map(static fn ($sent): string => $sent->to, $this->mailer->sent), 'Only the first.');
     }
 
@@ -81,7 +81,7 @@ final class EmailVerificationTest extends DatabaseTestCase
     {
         $verification = $this->verification($implementation);
         $ana = $this->principal('ana@example.com');
-        $verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme')), new Origin(OriginKind::Web));
+        $verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme'), $ana->id), new Origin(OriginKind::Web));
         $token = self::token($this->mailer->sent[0]->body[1]);
 
         $this->clock->sleep(86_399);
@@ -95,9 +95,9 @@ final class EmailVerificationTest extends DatabaseTestCase
     {
         $verification = $this->verification($implementation);
         $ana = $this->principal('ana@example.com');
-        $verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme')), new Origin(OriginKind::Web));
+        $verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme'), $ana->id), new Origin(OriginKind::Web));
         $older = self::token($this->mailer->sent[0]->body[1]);
-        $verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme')), new Origin(OriginKind::Web));
+        $verification->send(new Realm('acme'), $ana->id, Permits::because(new Realm('acme'), $ana->id), new Origin(OriginKind::Web));
         $newer = self::token($this->mailer->sent[1]->body[1]);
 
         self::assertNull(Permits::call($verification->confirm(...), new VerifyEmail(new Realm('acme'), $older), new Origin(OriginKind::Web)), 'A replaced link worked.');
@@ -116,7 +116,7 @@ final class EmailVerificationTest extends DatabaseTestCase
         $origin = new Origin(OriginKind::Web);
 
         $after = Permits::call($this->principals->setIdentifier(...), new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email, 'ana@example.org'), $origin);
-        $verification->identifierChanged(new IdentifierChanged($ana->id, $before, $after, $origin, $ana->id, Permits::because(new Realm('acme'))));
+        $verification->identifierChanged(new IdentifierChanged($ana->id, $before, $after, $origin, $ana->id, Permits::because(new Realm('acme'), $ana->id)));
         self::assertSame(['ana@example.org'], array_map(static fn ($email): string => $email->to, $this->mailer->sent));
 
         // A verified address, a username, or no address at all: no link.
@@ -124,7 +124,7 @@ final class EmailVerificationTest extends DatabaseTestCase
         $username = Permits::call($this->principals->setIdentifier(...), new SetIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Username, 'ana'), $origin);
 
         foreach ([$verified, $username, null] as $identifier) {
-            $verification->identifierChanged(new IdentifierChanged($ana->id, $after, $identifier, $origin, $ana->id, Permits::because(new Realm('acme'))));
+            $verification->identifierChanged(new IdentifierChanged($ana->id, $after, $identifier, $origin, $ana->id, Permits::because(new Realm('acme'), $ana->id)));
         }
 
         self::assertCount(1, $this->mailer->sent);
@@ -138,7 +138,7 @@ final class EmailVerificationTest extends DatabaseTestCase
 
         foreach ([['ana@example.com', PrincipalStatus::Active], ['bo@example.com', PrincipalStatus::Invited], [null, PrincipalStatus::Active]] as [$email, $status]) {
             $created = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human, $status, $email), $origin);
-            $verification->principalCreated(new PrincipalCreated($created, [], $origin, null, Permits::because(new Realm('acme'))));
+            $verification->principalCreated(new PrincipalCreated($created, [], $origin, null, Permits::because(new Realm('acme'), $created->id)));
         }
 
         self::assertSame(['ana@example.com'], array_map(static fn ($email): string => $email->to, $this->mailer->sent), 'An invitation verifies the address itself.');
@@ -168,7 +168,7 @@ final class EmailVerificationTest extends DatabaseTestCase
         }, logger: $logger);
         $ana = $this->principal('ana@example.com');
 
-        $verification->principalCreated(new PrincipalCreated($ana, [], new Origin(OriginKind::Web), null, Permits::because(new Realm('acme'))));
+        $verification->principalCreated(new PrincipalCreated($ana, [], new Origin(OriginKind::Web), null, Permits::because(new Realm('acme'), $ana->id)));
 
         self::assertSame(['YorvoID couldn\'t send the link to verify an email address: {message}'], $logger->logged);
         self::assertSame(['realm' => 'acme', 'principal' => (string) $ana->id, 'message' => 'The mail server is down.'], array_diff_key($logger->context, ['exception' => true]));
@@ -179,7 +179,7 @@ final class EmailVerificationTest extends DatabaseTestCase
     public function testTheLinkIsInThePrincipalsLanguage(string $implementation): void
     {
         $verification = $this->verification($implementation, 'de');
-        $verification->send(new Realm('acme'), $this->principal('ana@example.com')->id, Permits::because(new Realm('acme')), new Origin(OriginKind::Web));
+        $verification->send(new Realm('acme'), $ana = $this->principal('ana@example.com')->id, Permits::because(new Realm('acme'), $ana), new Origin(OriginKind::Web));
 
         self::assertSame(['Bestätigen Sie Ihre E-Mail-Adresse für Acme', 'de'], [$this->mailer->sent[0]->subject, $this->mailer->sent[0]->locale]);
         $action = $this->mailer->sent[0]->body[1];

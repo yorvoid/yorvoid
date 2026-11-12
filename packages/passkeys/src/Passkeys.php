@@ -231,6 +231,7 @@ final readonly class Passkeys implements OperationHandler
 
         return $this->transactions->run(function () use ($passkey, $credential, $userVerified, $counter, $permit, $origin, $device, $address, $deviceCookie): StartedSession {
             $this->recordUse($passkey, $credential, $counter, $origin);
+            $permit->about($passkey->principalId);
 
             try {
                 return $permit->cause($this->sessions->start(...), new StartSession($passkey->realm, $passkey->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true)), $device, $address, $deviceCookie), $origin, new ActingPrincipal($passkey->realm, $passkey->principalId));

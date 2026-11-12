@@ -16,11 +16,14 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\InvalidIdentifier;
 use YorvoID\Core\Principal\Principal;
+use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\UnknownPrincipal;
@@ -71,6 +74,7 @@ final readonly class OneTimeTokens implements OperationHandler
     /**
      * @throws UnknownPrincipal  When there's no such principal
      * @throws InactivePrincipal When it's suspended or deleted
+     * @throws NotPermitted      When the purpose is YorvoID's own, and the permit isn't its owner's
      */
     public function issue(IssueToken $command, Permit $permit, Origin $origin): IssuedToken
     {
@@ -80,6 +84,8 @@ final readonly class OneTimeTokens implements OperationHandler
         if (1 !== preg_match(self::PURPOSE, $command->purpose) || \strlen($command->purpose) > 64) {
             throw new IntegratorError(\sprintf('The token purpose "%s" is invalid.', $command->purpose), 'Use up to 64 lowercase letters, digits, dots and underscores, starting with a letter, e.g. "acme.password_reset".', 'concepts/one-time-tokens.md#issuing-a-token');
         }
+
+        $this->refuseIfNotTheOwners($command->realm, 'issue', $command->purpose, $command->principalId, $permit, $origin);
 
         return $this->transactions->run(function () use ($command, $origin, $actor): IssuedToken {
             $principal = $this->principals->get($command->realm, $command->principalId) ?? throw new UnknownPrincipal($command->realm, $command->principalId);
@@ -159,11 +165,14 @@ final readonly class OneTimeTokens implements OperationHandler
 
     /**
      * @return int How many tokens stopped working
+     *
+     * @throws NotPermitted When the purpose is YorvoID's own, and the permit isn't its owner's
      */
     public function revoke(RevokeTokens $command, Permit $permit, Origin $origin): int
     {
         $permit->use($command);
         $actor = $permit->actor->principalId;
+        $this->refuseIfNotTheOwners($command->realm, 'revoke', $command->purpose, $command->principalId, $permit, $origin);
 
         return $this->transactions->run(function () use ($command, $origin, $actor): int {
             $revoked = $this->store->deleteFor($command->realm, $command->principalId, $command->purpose);
@@ -184,6 +193,32 @@ final readonly class OneTimeTokens implements OperationHandler
     public function purge(): int
     {
         return $this->store->purge($this->clock->now());
+    }
+
+    /**
+     * YorvoID's own purposes are its operations': a token for one is issued or revoked only as a
+     * consequence of the operation it belongs to (M2-13, H-3).
+     *
+     * @param 'issue'|'revoke' $what
+     *
+     * @throws NotPermitted
+     */
+    private function refuseIfNotTheOwners(Realm $realm, string $what, string $purpose, PrincipalId $principalId, Permit $permit, Origin $origin): void
+    {
+        $refusal = TokenPurposes::refusal($purpose, $what, $permit);
+
+        if (null === $refusal) {
+            return;
+        }
+
+        $operation = 'yorvoid.token.'.$what;
+        $this->log->record($realm, $operation, Outcome::Denied, $origin, $permit->actor->principalId, 'principal', (string) $principalId, array_filter([
+            'purpose' => $purpose,
+            'consequence_of' => $permit->parent?->operation,
+            'reason' => $refusal,
+        ], static fn (?string $value): bool => null !== $value));
+
+        throw new NotPermitted($operation, Decision::deny($refusal));
     }
 
     private function working(Realm $realm, string $purpose, #[\SensitiveParameter] Secret $token): ?WorkingToken

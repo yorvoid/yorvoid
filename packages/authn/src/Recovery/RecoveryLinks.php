@@ -116,6 +116,7 @@ final readonly class RecoveryLinks implements OperationHandler
                 return null;
             }
 
+            $permit->about($used->principalId);
             $recovered = new ActingPrincipal($realm, $used->principalId);
             $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Recovered), $origin, $recovered);
             $this->stepUp->startCoolDown($realm, $used->principalId, $origin);

@@ -258,6 +258,7 @@ final readonly class RecoveryCodes implements OperationHandler
             $remaining = $this->store->count($realm, $principalId);
             $this->credentials->markUsed($credential);
             $this->log->record($realm, self::USE, Outcome::Success, $origin, $principalId, 'credential', (string) $credential->id, ['principal' => (string) $principalId, 'remaining' => $remaining]);
+            $permit->about($principalId);
             $recovered = new ActingPrincipal($realm, $principalId);
             $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $recovered);
             $this->stepUp->startCoolDown($realm, $principalId, $origin);

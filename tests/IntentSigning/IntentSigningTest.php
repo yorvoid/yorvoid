@@ -6,12 +6,14 @@ namespace YorvoID\Tests\IntentSigning;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Clock\MockClock;
+use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
@@ -44,6 +46,7 @@ use YorvoID\IntentVerifier\VerifierConfig;
 use YorvoID\Mail\Block\Facts;
 use YorvoID\Mail\InMemoryMailer;
 use YorvoID\Notifications\NotificationSettings;
+use YorvoID\Notifications\NotMe;
 use YorvoID\Notifications\SecurityNotifications;
 use YorvoID\Notifications\Translations as NotificationsTranslations;
 use YorvoID\Tests\Support\DatabaseTestCase;
@@ -223,7 +226,10 @@ final class IntentSigningTest extends DatabaseTestCase
         $translator = new Translator([NotificationsTranslations::DIRECTORY, Translations::DIRECTORY, __DIR__.'/catalogues']);
         $this->summaries = new IntentSummaries($translator, 'acme');
         $this->mailer = new InMemoryMailer();
-        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, $this->stack->principals, null, new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock)), $this->mailer, $translator, new NotificationSettings('Acme', 'https://example.com/not-me?token={token}'), $this->clock);
+        $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock);
+        $credentials = new Credentials($this->stack->credentials, $this->sessions, new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock), $log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        $notMe = new NotMe($tokens, $this->sessions, $credentials, $log, $this->stack->transactions, $this->events);
+        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, $this->stack->principals, null, $tokens, $notMe), $this->mailer, $translator, new NotificationSettings('Acme', 'https://example.com/not-me?token={token}'), $this->clock);
         $this->events->listen(SignedOperationRan::class, new SignedOperationNotification($notifications, $this->summaries)(...));
 
         return new IntentSigning($log, $this->stack->transactions, $throttle, $limit, $this->events, $this->clock);

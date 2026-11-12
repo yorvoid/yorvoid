@@ -6,6 +6,7 @@ namespace YorvoID\Core\Principal;
 
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\AuthorizedBy;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Operation\SelfOperation;
 use YorvoID\Core\Realm;
@@ -18,7 +19,7 @@ use YorvoID\Core\Realm;
  * @api
  */
 #[Operation('yorvoid.identifier.set', 'Set an email address or username of a principal', [AuthorizedBy::Self, AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.identifier.remove', causes: ['yorvoid.token.issue'])]
-final readonly class SetIdentifier implements SelfOperation
+final readonly class SetIdentifier implements SelfOperation, ConcernsPrincipal
 {
     /**
      * @param bool $verified Whether its owner has shown it's theirs; only the code that saw them do so
@@ -37,5 +38,10 @@ final readonly class SetIdentifier implements SelfOperation
     {
         // Only the code that saw the owner show it's theirs marks it verified: never the owner's own say-so.
         return !$this->verified && null !== $actor->principalId && $actor->principalId->equals($this->principalId);
+    }
+
+    public function principal(): PrincipalId
+    {
+        return $this->principalId;
     }
 }

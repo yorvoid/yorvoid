@@ -51,6 +51,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.invitation.resend' => ['ability', 'operator'],
         'yorvoid.invitation.send' => ['ability', 'operator'],
         'yorvoid.invitation.withdraw' => ['ability', 'operator'],
+        'yorvoid.not_me.issue' => ['operator'],
         'yorvoid.notification.not_me' => ['authentication'],
         'yorvoid.passkey.register' => ['self'],
         'yorvoid.passkey.sign_in' => ['authentication'],
@@ -90,6 +91,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.invitation.resend' => ['yorvoid.token.issue'],
         'yorvoid.invitation.send' => ['yorvoid.principal.create', 'yorvoid.token.issue'],
         'yorvoid.invitation.withdraw' => ['yorvoid.token.revoke', 'yorvoid.principal.delete'],
+        'yorvoid.not_me.issue' => ['yorvoid.token.issue'],
         'yorvoid.notification.not_me' => ['yorvoid.session.end_all'],
         'yorvoid.passkey.register' => ['yorvoid.credential.add'],
         'yorvoid.passkey.sign_in' => ['yorvoid.session.start'],
@@ -157,7 +159,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
             }
         }
 
-        self::assertCount(50, $commands, 'The operations moved.');
+        self::assertCount(51, $commands, 'The operations moved.');
 
         return $commands;
     }

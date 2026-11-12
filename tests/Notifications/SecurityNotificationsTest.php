@@ -381,8 +381,8 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock);
         $this->mailer = new InMemoryMailer();
         $settings = new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}&credential={credential}', fn (Realm $realm, PrincipalId $principal): string => $this->locales[(string) $principal] ?? 'en');
-        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, $this->stack->principals, null, $tokens), $mailer ?? $this->mailer, new Translator([Translations::DIRECTORY]), $settings, $this->clock, $logger);
         $this->notMe = new NotMe($tokens, $this->sessions, $this->credentials, $log, $this->stack->transactions, $this->events);
+        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, $this->stack->principals, null, $tokens, $this->notMe), $mailer ?? $this->mailer, new Translator([Translations::DIRECTORY]), $settings, $this->clock, $logger);
 
         foreach (SecurityNotifications::events() as $event => $method) {
             $listener = [$notifications, $method];

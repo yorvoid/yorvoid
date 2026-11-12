@@ -36,7 +36,8 @@ final readonly class Operation
      * @param string|null                     $ability        The ability a principal needs to run it, for AuthorizedBy::Ability
      * @param string|null                     $inverse        The operation that undoes it, if any
      * @param list<string>                    $causes         The operations it may run as its consequences, e.g. ending sessions:
-     *                                                        a permit gives a consequence for these only
+     *                                                        a permit gives a consequence for these only, each once; name one
+     *                                                        twice to run it twice
      * @param bool                            $acceptsOffline Whether it runs on Permit-offline, which an OfflineDecider may give
      *                                                        while a store is unreachable (XP-03, P1′); no operation does by default
      */

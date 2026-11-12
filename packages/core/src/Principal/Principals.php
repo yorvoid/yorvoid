@@ -86,6 +86,8 @@ final readonly class Principals implements OperationHandler
         return $this->transactions->run(function () use ($command, $permit, $origin, $actor): Principal {
             $now = Time::stored($this->clock->now());
             $principal = new Principal(new PrincipalId($this->ids->next()), $command->realm, $command->kind, $command->status, $now, $now, $now);
+            // Before the events that carry the permit: what follows from it is about this principal only.
+            $permit->about($principal->id);
             $identifiers = [];
 
             if (null !== $command->email) {

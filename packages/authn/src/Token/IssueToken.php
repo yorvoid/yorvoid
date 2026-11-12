@@ -7,6 +7,7 @@ namespace YorvoID\Authn\Token;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -19,7 +20,7 @@ use YorvoID\Core\Realm;
  * @api
  */
 #[Operation('yorvoid.token.issue', 'Issue a one-time token', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.token.revoke')]
-final readonly class IssueToken implements Command
+final readonly class IssueToken implements Command, ConcernsPrincipal
 {
     /**
      * @param string      $purpose    What it's for: lowercase letters, digits, dots and underscores, e.g. "acme.password_reset"
@@ -35,5 +36,10 @@ final readonly class IssueToken implements Command
         public ?string $sentTo = null,
         public bool $newestOnly = true,
     ) {
+    }
+
+    public function principal(): PrincipalId
+    {
+        return $this->principalId;
     }
 }
