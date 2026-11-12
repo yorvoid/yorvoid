@@ -10,6 +10,7 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use Psr\Log\NullLogger;
 use Symfony\Component\Clock\MockClock;
+use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Credential\AddCredential;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Authn\Credential\CredentialKind;
@@ -52,6 +53,7 @@ use YorvoID\Mail\Email;
 use YorvoID\Mail\InMemoryMailer;
 use YorvoID\Mail\Mailer;
 use YorvoID\Notifications\Event\NotMeReported;
+use YorvoID\Notifications\IssueNotMeLink;
 use YorvoID\Notifications\NotificationSettings;
 use YorvoID\Notifications\NotMe;
 use YorvoID\Notifications\ReportNotMe;
@@ -277,6 +279,21 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         Permits::call($this->principals->removeIdentifier(...), new RemoveIdentifier(new Realm('acme'), $ana->id, IdentifierKind::Email), new Origin(OriginKind::Web), $ana->id);
         $removed = $this->only();
         self::assertSame(['ANA@example.com', 'The email address was removed from your Acme account'], [$removed->to, $removed->subject]);
+    }
+
+    /**
+     * The "this wasn't me" link's token comes only from its own operation, which NotMe handles beside the
+     * report (M2-13).
+     */
+    public function testNotMeIssuesItsLinksToken(): void
+    {
+        $this->notifications('memory');
+        $ana = $this->principal('ana@example.com');
+        $suspect = CredentialId::fromString((string) new UuidV7());
+
+        self::assertSame([ReportNotMe::class, IssueNotMeLink::class], array_keys($this->notMe->operations()));
+        $issued = Permits::call($this->notMe->issue(...), new IssueNotMeLink(new Realm('acme'), $ana->id, $suspect, Duration::days(1)), new Origin(OriginKind::System));
+        self::assertSame(SecurityNotifications::notMePurpose($suspect), $issued->token->purpose);
     }
 
     #[DataProvider('implementations')]

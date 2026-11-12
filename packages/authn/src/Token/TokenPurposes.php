@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\Token;
 
-use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Permit;
 
 /**
@@ -42,7 +41,8 @@ final class TokenPurposes
         }
 
         $owners = self::owners($purpose)[$what];
-        $parent = AuthorizedBy::Consequence === $permit->basis ? $permit->parent?->operation : null;
+        // Only a consequence has a parent.
+        $parent = $permit->parent?->operation;
 
         if (null !== $parent && \in_array($parent, $owners, true)) {
             return null;

@@ -127,7 +127,9 @@ final class Permit
             throw new IntegratorError(\sprintf('"%s" doesn\'t say it causes "%s".', $this->operation, $consequence), 'Name what an operation runs as its consequences in #[Operation(causes: [...])]; run anything else through Operations::run().', 'concepts/operations-and-events.md#permits');
         }
 
-        if (($this->caused[$consequence] ?? 0) >= $declared) {
+        $caused = $this->caused[$consequence] ?? 0;
+
+        if ($caused >= $declared) {
             throw new IntegratorError(\sprintf('This permit for "%s" ran its consequence "%s" already: as many times as it says it causes it.', $this->operation, $consequence), 'Each consequence runs as many times as #[Operation(causes: [...])] names it; whatever ran it first used the permit for it.', 'concepts/operations-and-events.md#permits');
         }
 
@@ -141,7 +143,7 @@ final class Permit
             }
         }
 
-        $this->caused[$consequence] = ($this->caused[$consequence] ?? 0) + 1;
+        $this->caused[$consequence] = $caused + 1;
 
         return new self($consequence, $actingAs ?? $this->actor, AuthorizedBy::Consequence, $this->decisionId, $command, $this, $this->offline);
     }

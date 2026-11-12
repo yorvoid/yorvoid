@@ -142,7 +142,7 @@ final class ReservedPurposesTest extends DatabaseTestCase
     {
         $this->world('memory');
 
-        foreach (['yorvoid.invitation', 'yorvoid.recovery_link', 'yorvoid.email_verification', 'yorvoid.not_me'] as $purpose) {
+        foreach (['yorvoid.invitation', 'yorvoid.recovery_link', 'yorvoid.email_verification', 'yorvoid.not_me', SecurityNotifications::notMePurpose(CredentialId::fromString((string) new UuidV7()))] as $purpose) {
             $command = new RevokeTokens($this->realm, $this->ana->id, $purpose);
             $this->assertRefused(fn () => Permits::call($this->tokens->revoke(...), $command, new Origin(OriginKind::Web), $this->ana->id), 'revoke', $purpose);
             $run = fn (): int => $this->tokens->revoke($command, $this->because(new WithdrawInvitation($this->realm, $this->ana->id))->consequence($command), new Origin(OriginKind::Web));
@@ -155,6 +155,7 @@ final class ReservedPurposesTest extends DatabaseTestCase
         }
 
         self::assertSame(0, Permits::call($this->tokens->revoke(...), new RevokeTokens($this->realm, $this->ana->id, 'acme.password_reset'), new Origin(OriginKind::Web), $this->ana->id), 'An application\'s own.');
+        self::assertSame('The purpose "yorvoid.not_me.cx" is YorvoID\'s own: nothing revokes tokens for it.', $this->refusal(fn () => Permits::call($this->tokens->revoke(...), new RevokeTokens($this->realm, $this->ana->id, 'yorvoid.not_me.cx'), new Origin(OriginKind::Web))));
     }
 
     /**
