@@ -153,8 +153,8 @@ final class OperationsTest extends TestCase
             self::fail('It was permitted.');
         } catch (NotPermitted $refused) {
             self::assertSame(Verdict::Indeterminate, $refused->decision->verdict);
-            self::assertSame('A permit couldn\'t be evaluated: No self-service policy says what "acme.badge.issue" needs.', $refused->decision->reason);
-            self::assertSame([IndeterminateReason::MissingData], $refused->decision->indeterminate);
+            self::assertSame('A forbid couldn\'t be ruled out: No self-service policy says what "acme.badge.issue" needs.', $refused->decision->reason);
+            self::assertSame([IndeterminateReason::UnknownForbid, IndeterminateReason::MissingData], $refused->decision->indeterminate);
         }
     }
 

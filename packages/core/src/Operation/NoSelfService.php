@@ -15,7 +15,7 @@ use YorvoID\Core\Authorization\Truth;
  */
 final readonly class NoSelfService implements SelfServicePolicy
 {
-    public function decide(OperationDescription $operation, SelfOperation $command, Actor $actor): Truth
+    public function decide(OperationDescription $operation, Command $command, Actor $actor): Truth
     {
         return Truth::unknown(IndeterminateReason::MissingData, \sprintf('No self-service policy says what "%s" needs.', $operation->name));
     }

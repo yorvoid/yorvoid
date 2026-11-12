@@ -45,6 +45,14 @@ YorvoID's ways to authorize, which each operation names in `#[Operation(authoriz
 
 A permit speaks only for the operations that name its way to authorize: an ability never permits an operation only the host's operator runs. When several permits hold, the decision's basis is the first the operation names.
 
+### One's own account
+
+Whatever permits a change to one's own account, the self-service policy asks the same of it: a role with `yorvoid.principals.manage` changes its own email address only as anyone does, with a recent proof, and not in the 24 hours after a recovery (`yorvoid.self_service.own_account`, a forbid every evaluator has). "One's own" means a `SelfOperation` that concerns the actor, or a command about the actor's own principal (`ConcernsPrincipal`). The operator is exempt.
+
+`StepUpSelfService` asks a recent proof, held after a recovery, for changing or removing one's email address or username, suspending or deleting oneself, and issuing oneself a recovery link or a token; nothing for signing out, revoking one's tokens or activating oneself. A self-service operation it doesn't know needs a recent proof; any other command about one's own principal needs nothing unless you give it a requirement (`new StepUpSelfService($stepUp, ['acme.api_key.create' => new AuthenticationRequirement(...)])`).
+
+Without a self-service policy (`NoSelfService`, the evaluator's default), nobody changes their own account, whatever their role: someone else, or the operator, does. The Symfony bundle uses `StepUpSelfService`.
+
 ## Authority
 
 `PrincipalAuthority` checks the actor's own authority: a principal that exists, is active and acts in the command's realm. A suspended or deleted principal is denied whatever the permits say; one that isn't on record is Indeterminate (`missing_data`). The host's operator and someone not signed in claim no authority, so there's nothing to invalidate.

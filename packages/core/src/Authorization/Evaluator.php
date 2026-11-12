@@ -11,6 +11,7 @@ use Symfony\Component\Clock\NativeClock;
 use YorvoID\Core\Authorization\BuiltIn\AbilityPermit;
 use YorvoID\Core\Authorization\BuiltIn\AuthenticationPermit;
 use YorvoID\Core\Authorization\BuiltIn\OperatorPermit;
+use YorvoID\Core\Authorization\BuiltIn\SelfServiceForOwnAccount;
 use YorvoID\Core\Authorization\BuiltIn\SelfServicePermit;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Event\Origin;
@@ -112,6 +113,7 @@ final readonly class Evaluator implements Authorization
             $list[$element->name()] = $element;
         }
 
+        $list = self::withOwnAccount($list);
         // By name: the decision's reasons, and the detail it leads with, never depend on the order given.
         ksort($list, \SORT_STRING);
         $this->elements = $list;
@@ -121,6 +123,31 @@ final readonly class Evaluator implements Authorization
                 $this->requireForbids(\sprintf('The policy element "%s"', $element->name()), $element);
             }
         }
+    }
+
+    /**
+     * Every evaluator holds one's own account to the self-service policy, whatever permits the change
+     * (M2-13, H-4): with the self-service permit's policy, or none, which refuses, without one.
+     *
+     * @param array<string, PolicyElement> $list
+     *
+     * @return array<string, PolicyElement>
+     *
+     * @throws IntegratorError When it's given with another policy than the permit's
+     */
+    private static function withOwnAccount(array $list): array
+    {
+        $permit = $list['yorvoid.self_service'] ?? null;
+        $policy = $permit instanceof SelfServicePermit ? $permit->policy : new NoSelfService();
+        $forbid = $list[SelfServiceForOwnAccount::NAME] ?? null;
+
+        if (null === $forbid) {
+            $list[SelfServiceForOwnAccount::NAME] = new SelfServiceForOwnAccount($policy);
+        } elseif (!$forbid instanceof SelfServiceForOwnAccount || ($permit instanceof SelfServicePermit && $forbid->policy !== $permit->policy)) {
+            throw new IntegratorError(\sprintf('The policy element "%s" isn\'t the self-service permit\'s own.', SelfServiceForOwnAccount::NAME), 'Leave it out: the evaluator adds it, with the self-service permit\'s policy.', 'concepts/authorization.md#ones-own-account');
+        }
+
+        return $list;
     }
 
     /**
