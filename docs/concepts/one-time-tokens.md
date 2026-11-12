@@ -19,7 +19,7 @@ $link = 'https://example.com/reset/'.$issued->secret->reveal(); // shown only no
 ```
 
 - A token is for one principal and one **purpose**: lowercase letters, digits, dots and underscores, e.g. `acme.password_reset`. A token for one purpose never works for another.
-- **Purposes starting with `yorvoid.` are YorvoID's own**: invitations, recovery links, email verification and "this wasn't me". A token for one is issued or revoked only by the operation it belongs to, e.g. a recovery link only by `IssueRecoveryLink`, with its ability and its cap on the lifetime. `IssueToken` and `RevokeTokens` with such a purpose throw `NotPermitted`, the operator's included, and the security log records the refusal. Use your own namespace for your tokens, e.g. `acme.`.
+- **Purposes starting with `yorvoid.` are YorvoID's own**: invitations, recovery links, email verification and "this wasn't me". A token for one is issued or revoked only by the operation it belongs to, e.g. a recovery link only by `IssueRecoveryLink`, with its ability and its cap on the lifetime. `IssueToken` and `RevokeTokens` with such a purpose throw `NotPermitted`, the operator's included. The security log records the refusal, and the logger given to `OneTimeTokens` warns of it, which stays when a refusal inside another operation rolls that operation back. In Symfony, that's the application's `logger`. Use your own namespace for your tokens, e.g. `acme.`.
 - It expires after its lifetime.
 - By default, issuing a token makes the principal's earlier tokens for the purpose stop working: only the newest link works. Pass `newestOnly: false` to keep them.
 - Suspended and deleted principals get no tokens, and their tokens stop working. Invited principals get them: that's how invitations work.

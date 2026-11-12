@@ -42,6 +42,7 @@ use YorvoID\Notifications\SecurityNotifications;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
+use YorvoID\Tests\Support\RecordingLogger;
 use YorvoID\Tests\Support\Stack;
 
 /**
@@ -74,6 +75,8 @@ final class ReservedPurposesTest extends DatabaseTestCase
     private Principal $admin;
 
     private CredentialId $credential;
+
+    private RecordingLogger $logger;
 
     /**
      * The architect's matrix: a token issued for one purpose works for it, and for no other.
@@ -238,6 +241,48 @@ final class ReservedPurposesTest extends DatabaseTestCase
         self::assertSame(['A consequence of "yorvoid.principal.create" is about another principal.', 'permitted'], $outcomes);
     }
 
+    /**
+     * N1: a refusal inside another operation's transaction leaves its warning, though the rollback takes the
+     * security log's record with it.
+     */
+    #[DataProvider('implementations')]
+    public function testARefusalInsideARolledBackOperationLeavesItsWarning(string $implementation): void
+    {
+        $this->world($implementation);
+        $parent = $this->because(new SetIdentifier($this->realm, $this->ana->id, IdentifierKind::Email, 'ana@example.com'));
+        $command = new IssueToken($this->realm, $this->ana->id, 'yorvoid.recovery_link', Duration::days(1));
+        $before = \count(iterator_to_array($this->stack->log->entries($this->realm, 1), false));
+
+        try {
+            $this->stack->transactions->run(fn (): IssuedToken => $this->tokens->issue($command, $parent->consequence($command), new Origin(OriginKind::Web)));
+            self::fail('Not refused.');
+        } catch (NotPermitted) {
+        }
+
+        self::assertSame([[
+            'warning',
+            'YorvoID refused to {what} a token for its own purpose {purpose}: {reason}',
+            [
+                'what' => 'issue',
+                'purpose' => 'yorvoid.recovery_link',
+                'consequence_of' => 'yorvoid.identifier.set',
+                'decision' => 'test',
+                'realm' => 'acme',
+                'principal' => (string) $this->ana->id,
+                'reason' => 'The purpose "yorvoid.recovery_link" is YorvoID\'s own: only "yorvoid.recovery_link.issue" issues tokens for it.',
+            ],
+        ]], $this->logger->logs, 'The operator\'s permit: no actor.');
+
+        if ('memory' !== $implementation) {
+            self::assertCount($before, iterator_to_array($this->stack->log->entries($this->realm, 1), false), 'The rollback took the record.');
+        }
+
+        // A principal's refusal at the top level names them.
+        $this->assertRefused(fn () => Permits::call($this->tokens->issue(...), $command, new Origin(OriginKind::Web), $this->admin->id), 'issue', 'yorvoid.recovery_link');
+        self::assertSame((string) $this->admin->id, $this->logger->logs[1][2]['actor'] ?? null);
+        self::assertArrayNotHasKey('consequence_of', $this->logger->logs[1][2]);
+    }
+
     private function world(string $implementation): void
     {
         $this->realm = new Realm('acme');
@@ -247,7 +292,8 @@ final class ReservedPurposesTest extends DatabaseTestCase
         $ids = new UuidV7Generator($clock);
         $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $clock);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, $this->events, ids: $ids, clock: $clock);
-        $this->tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $clock);
+        $this->logger = new RecordingLogger();
+        $this->tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $clock, logger: $this->logger);
         $this->ana = $this->principal('ana@example.com');
         $this->admin = $this->principal('admin@example.com');
         $this->credential = CredentialId::fromString((string) new UuidV7());
