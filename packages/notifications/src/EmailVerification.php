@@ -122,6 +122,8 @@ final readonly class EmailVerification implements OperationHandler
                 return null;
             }
 
+            $permit->about($used->principalId);
+
             return $permit->cause($this->principals->verifyIdentifier(...), new VerifyIdentifier($realm, $used->principalId, IdentifierKind::Email, $used->email), $origin, new ActingPrincipal($realm, $used->principalId));
         });
     }

@@ -11,6 +11,8 @@ use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Session\EndSessions;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
+use YorvoID\Authn\Token\IssuedToken;
+use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
@@ -45,7 +47,17 @@ final readonly class NotMe implements OperationHandler
 
     public function operations(): array
     {
-        return [ReportNotMe::class => $this->confirm(...)];
+        return [ReportNotMe::class => $this->confirm(...), IssueNotMeLink::class => $this->issue(...)];
+    }
+
+    /**
+     * The link's token, for the sign-in method or for the account; earlier links keep working.
+     */
+    public function issue(IssueNotMeLink $command, Permit $permit, Origin $origin): IssuedToken
+    {
+        $permit->use($command);
+
+        return $permit->cause($this->tokens->issue(...), new IssueToken($command->realm, $command->principalId, SecurityNotifications::notMePurpose($command->suspect), $command->lifetime, $command->sentTo, newestOnly: false), $origin);
     }
 
     /**
@@ -68,6 +80,7 @@ final readonly class NotMe implements OperationHandler
                 return null;
             }
 
+            $permit->about($used->principalId);
             $disabled = null === $suspect ? null : $this->credentials->get($realm, $suspect);
 
             if (null !== $disabled && $disabled->principalId->equals($used->principalId)) {

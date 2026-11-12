@@ -7,6 +7,7 @@ namespace YorvoID\Authn\Invitation;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -19,12 +20,17 @@ use YorvoID\Core\Realm;
  * @api
  */
 #[Operation('yorvoid.invitation.resend', 'Send an invited person a new link', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', causes: ['yorvoid.token.issue'])]
-final readonly class ResendInvitation implements Command
+final readonly class ResendInvitation implements Command, ConcernsPrincipal
 {
     public function __construct(
         public Realm $realm,
         public PrincipalId $principalId,
         public ?Duration $lifetime = null,
     ) {
+    }
+
+    public function principal(): PrincipalId
+    {
+        return $this->principalId;
     }
 }

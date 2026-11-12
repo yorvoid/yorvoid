@@ -6,6 +6,7 @@ namespace YorvoID\Authn\Session;
 
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -20,7 +21,7 @@ use YorvoID\Core\Secret;
  * @api
  */
 #[Operation('yorvoid.session.start', 'Start a session', AuthorizedBy::Consequence, inverse: 'yorvoid.session.end')]
-final readonly class StartSession implements Command
+final readonly class StartSession implements Command, ConcernsPrincipal
 {
     /**
      * @param string|null $device       What the person would recognise, e.g. "Firefox on Linux"; at most 255 characters are kept
@@ -36,5 +37,10 @@ final readonly class StartSession implements Command
         #[\SensitiveParameter]
         public ?Secret $deviceCookie = null,
     ) {
+    }
+
+    public function principal(): PrincipalId
+    {
+        return $this->principalId;
     }
 }

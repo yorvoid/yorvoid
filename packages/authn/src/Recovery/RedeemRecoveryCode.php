@@ -6,6 +6,7 @@ namespace YorvoID\Authn\Recovery;
 
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -20,7 +21,7 @@ use YorvoID\Core\Secret;
  * @api
  */
 #[Operation('yorvoid.recovery_code.redeem', 'Recover a known account with a recovery code', AuthorizedBy::Authentication, causes: ['yorvoid.session.end_all', 'yorvoid.session.start'])]
-final readonly class RedeemRecoveryCode implements Command
+final readonly class RedeemRecoveryCode implements Command, ConcernsPrincipal
 {
     /**
      * @param string|null $device       As for StartSession
@@ -37,5 +38,10 @@ final readonly class RedeemRecoveryCode implements Command
         #[\SensitiveParameter]
         public ?Secret $deviceCookie = null,
     ) {
+    }
+
+    public function principal(): PrincipalId
+    {
+        return $this->principalId;
     }
 }

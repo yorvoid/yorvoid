@@ -93,6 +93,7 @@ final readonly class Invitations implements OperationHandler
 
         return $this->transactions->run(function () use ($command, $permit, $origin): Invitation {
             $principal = $permit->cause($this->principals->create(...), new CreatePrincipal($command->realm, PrincipalKind::Human, PrincipalStatus::Invited, $command->email, $command->username), $origin);
+            $permit->about($principal->id);
 
             return new Invitation($principal, $this->send($principal, $command->email, $command->lifetime, $permit, $origin));
         });
@@ -166,6 +167,7 @@ final readonly class Invitations implements OperationHandler
                 return null;
             }
 
+            $permit->about($used->principalId);
             // Invitations are always sent to the invitee's address, and work only while it's theirs.
             $email = $used->email;
             \assert(null !== $email);

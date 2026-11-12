@@ -7,6 +7,7 @@ namespace YorvoID\Testing;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -20,12 +21,17 @@ use YorvoID\Core\Realm;
  * @internal
  */
 #[Operation('yorvoid.testing.sign_in', 'Sign a principal in, in a test', AuthorizedBy::Authentication, causes: ['yorvoid.session.start'])]
-final readonly class SignInForTest implements Command
+final readonly class SignInForTest implements Command, ConcernsPrincipal
 {
     public function __construct(
         public Realm $realm,
         public PrincipalId $principalId,
         public AuthenticationMethod $method,
     ) {
+    }
+
+    public function principal(): PrincipalId
+    {
+        return $this->principalId;
     }
 }

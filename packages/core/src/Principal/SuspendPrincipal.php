@@ -6,6 +6,7 @@ namespace YorvoID\Core\Principal;
 
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Realm;
 
@@ -15,11 +16,16 @@ use YorvoID\Core\Realm;
  * @api
  */
 #[Operation('yorvoid.principal.suspend', 'Suspend a principal until it is activated again', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.principal.activate', causes: ['yorvoid.session.end_all'])]
-final readonly class SuspendPrincipal implements Command
+final readonly class SuspendPrincipal implements Command, ConcernsPrincipal
 {
     public function __construct(
         public Realm $realm,
         public PrincipalId $principalId,
     ) {
+    }
+
+    public function principal(): PrincipalId
+    {
+        return $this->principalId;
     }
 }

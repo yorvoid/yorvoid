@@ -57,11 +57,11 @@ final class Permits
 
     /**
      * A permit that was used, for what takes the operation that caused it, e.g. EmailVerification::send(): an
-     * address change's, which causes the link's token.
+     * address change's, which causes the link's token, about the principal given.
      */
-    public static function because(Realm $realm): Permit
+    public static function because(Realm $realm, ?PrincipalId $about = null): Permit
     {
-        $command = new SetIdentifier($realm, new PrincipalId(new UuidV7()), IdentifierKind::Email, 'ana@example.com');
+        $command = new SetIdentifier($realm, $about ?? new PrincipalId(new UuidV7()), IdentifierKind::Email, 'ana@example.com');
         $permit = self::for($command);
         $permit->use($command);
 

@@ -149,6 +149,7 @@ final readonly class SetupCodes implements OperationHandler
             }
 
             $principal = $permit->cause($this->principals->create(...), $command->owner, $origin);
+            $permit->about($principal->id);
 
             if (!$this->store->claim($realm, $hash, $principal->id, Time::stored($this->clock->now()))) {
                 throw new InvalidSetupCode();

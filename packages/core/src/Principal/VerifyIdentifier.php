@@ -6,6 +6,7 @@ namespace YorvoID\Core\Principal;
 
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Realm;
 
@@ -18,7 +19,7 @@ use YorvoID\Core\Realm;
  * @api
  */
 #[Operation('yorvoid.identifier.verify', 'Mark an identifier as verified by its owner', AuthorizedBy::Consequence)]
-final readonly class VerifyIdentifier implements Command
+final readonly class VerifyIdentifier implements Command, ConcernsPrincipal
 {
     /**
      * @param string $value The value that was verified: if the identifier changed since, nothing is marked
@@ -29,5 +30,10 @@ final readonly class VerifyIdentifier implements Command
         public IdentifierKind $kind,
         public string $value,
     ) {
+    }
+
+    public function principal(): PrincipalId
+    {
+        return $this->principalId;
     }
 }

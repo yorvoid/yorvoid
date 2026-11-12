@@ -151,6 +151,7 @@ final readonly class Credentials implements OperationHandler
 
         $this->transactions->run(function () use ($command, $session, $permit, $origin): void {
             $credential = $this->own($command->realm, $command->credentialId, $session);
+            $permit->about($credential->principalId);
             $this->requireStepUp($session, 'yorvoid.credential.remove', heldAfterRecovery: true, phishingResistant: true);
 
             $this->events->dispatch(new CredentialRemoving($credential, $origin));
