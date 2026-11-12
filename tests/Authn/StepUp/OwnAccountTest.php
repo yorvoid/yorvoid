@@ -197,8 +197,9 @@ final class OwnAccountTest extends TestCase
         $session = $this->actor(true, 'fresh');
         $byRole = new Evaluator([$this->managers()], $this->authority, $this->clock);
         $own = $this->decide($byRole, new SetIdentifier($this->realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session);
-        self::assertNotSame(Verdict::Permit, $own->verdict, 'No self-service policy: nobody changes their own.');
-        self::assertSame('A forbid couldn\'t be ruled out: No self-service policy says what "yorvoid.identifier.set" needs.', $own->reason);
+        self::assertSame(Verdict::Deny, $own->verdict, 'No self-service policy: nobody changes their own.');
+        self::assertSame('A forbid applies: On one\'s own account: this application has no self-service: someone else changes one\'s own account.', $own->reason);
+        self::assertSame([], $own->remedies);
 
         $other = $this->actor(false, 'fresh')->principalId;
         self::assertSame(Verdict::Permit, $this->decide($byRole, new SetIdentifier($this->realm, $other, IdentifierKind::Email, 'bob@example.org'), $session)->verdict, 'Someone else changes it.');

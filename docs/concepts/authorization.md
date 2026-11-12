@@ -51,7 +51,7 @@ Whatever permits a change to one's own account, the self-service policy asks the
 
 `StepUpSelfService` asks a recent proof, held after a recovery, for changing or removing one's email address or username, suspending or deleting oneself, and issuing oneself a recovery link or a token; nothing for signing out, revoking one's tokens or activating oneself. A self-service operation it doesn't know needs a recent proof; any other command about one's own principal needs nothing unless you give it a requirement (`new StepUpSelfService($stepUp, ['acme.api_key.create' => new AuthenticationRequirement(...)])`).
 
-Without a self-service policy (`NoSelfService`, the evaluator's default), nobody changes their own account, whatever their role: someone else, or the operator, does. The Symfony bundle uses `StepUpSelfService`.
+Without a self-service policy (`NoSelfService`, the evaluator's default), nobody changes their own account, whatever their role: someone else, or the operator, does. It's a Deny, with no remedy: a choice, not something the evaluator couldn't decide. The Symfony bundle uses `StepUpSelfService`.
 
 ## Authority
 
