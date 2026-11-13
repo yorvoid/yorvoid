@@ -30,7 +30,7 @@ Every element that's about the request is evaluated, so neither the outcome nor 
 
 Row 2 gives Indeterminate even when nothing could permit the request: an unknown forbid is reported, and the reason says the request would be refused regardless.
 
-Each decision has an ID, its time, and the versions of what it read (`Decision::$versions`): the realm's policy version and its relations version, from the `VersionSource`s the evaluator is given. Every change to roles, abilities, assignments and groups increments the policy version (attributes aren't cached, so they need none); every change to relations, the relations version. Decisions are recorded in the [decision log](security-log.md#the-decision-log).
+Each decision has an ID, its time, and the versions of what it read (`Decision::$versions`): the realm's policy version and its relations version, from the `VersionSource`s the evaluator is given. Every change to roles, abilities, assignments and groups increments the policy version; every change to relations, the relations version. Attributes aren't versioned: they aren't cached, so no decision reads them stale, but a decision's versions don't show which attribute values it read, and neither does its record. Decisions are recorded in the [decision log](security-log.md#the-decision-log).
 
 ## The built-in permits
 

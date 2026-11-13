@@ -83,12 +83,12 @@ It exits 1: they differ, and only as follows.
 - `packages/core/src/Crypto`, `Key`, `Log`, `Log/Checkpoint` and `tools/fips-host`: unchanged.
 - `packages/passkeys/src`, seven files: the recovery pages' wording, the notice of a used recovery code and the cool-down they show, and `Permit::about()` before a sign-in starts its session. No call to OpenSSL, sodium, a hash or a random source, and no COSE algorithm.
 - `composer.json`: `symfony/expression-language` in `require-dev`.
-- `composer.lock`: every package in `packages`, the ones installed in production, is at the same version from the same source. Only `packages-dev` changed: `composer/semver` 3.6.0, `ergebnis/agent-detector` 2.0.0, `friendsofphp/php-cs-fixer` 3.95.28, `infection/infection` 0.35.9, `phpstan/phpstan` 2.3.5, `phpstan/phpstan-strict-rules` 2.1.1, `sanmai/di-container` 0.2.2, `sanmai/duoclock` 0.1.4, and the new `symfony/expression-language` 8.1.9.
+- `composer.lock`: every third-party package in `packages`, the ones installed in production, is at the same version from the same source. YorvoID's own packages there (`yorvoid/core`, `authn`, `passkeys`, `symfony`, `intent-verifier`) changed reference: they're this repository, covered by the paths above and the search below. Only `packages-dev` changed: `composer/semver` 3.6.0, `ergebnis/agent-detector` 2.0.0, `friendsofphp/php-cs-fixer` 3.95.28, `infection/infection` 0.35.9, `phpstan/phpstan` 2.3.5, `phpstan/phpstan-strict-rules` 2.1.1, `sanmai/di-container` 0.2.2, `sanmai/duoclock` 0.1.4, and the new `symfony/expression-language` 8.1.9.
 
-And across all of `packages/*/src`, not only those paths, the lines added since the run that name a cryptographic function:
+And across all of `packages/*/src`, not only those paths, the lines added or removed since the run that name a cryptographic function:
 
 ```sh
-git diff 9b31482 d42382c -- packages | grep '^+' | grep -E 'openssl_|sodium_|hash_hmac|hash_equals|hash\(|random_bytes|random_int|password_|CryptoPolicy|CryptoProvider'
+git diff 9b31482 d42382c -- packages | grep '^[+-]' | grep -v '^+++\|^---' | grep -E 'openssl_|sodium_|hash_hmac|hash_equals|hash\(|random_bytes|random_int|password_|CryptoPolicy|CryptoProvider'
 ```
 
-One line: `packages/core/src/Storage/VersionedCache.php:136`, `hash('sha256', $arguments)` in a cache key. It's SHA-256, which the run's tests already used, through PHP's own implementation, for a key that isn't secret.
+One pair of lines: `packages/core/src/Storage/VersionedCache.php:136`, the cache key, where `hash('sha256', …)` now takes the read's encoded arguments. The removed line had the same `hash('sha256', …)`. It's SHA-256, which the run's tests already used, through PHP's own implementation, for a key that isn't secret.
