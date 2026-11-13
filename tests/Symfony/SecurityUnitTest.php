@@ -24,6 +24,7 @@ use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
+use YorvoID\Symfony\Flow\SessionFlowStore;
 use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\SignInRefused;
 use YorvoID\Symfony\Security\CurrentSession;
@@ -149,7 +150,7 @@ final class SecurityUnitTest extends TestCase
 
         new CurrentSession($requests, $this->sessions(), $this->service(Operations::class), Realm::default())->signOutKeepingData(new Origin(OriginKind::Web));
 
-        self::assertSame(['cart' => 3], $session->all());
+        self::assertSame(['cart' => 3], $session->all(), 'The application\'s data stays; YorvoID\'s flows go, with what they hold (H-6).');
         self::assertNotSame($before, $session->getId());
         self::assertFileDoesNotExist(\sprintf('%s/%s.mocksess', $this->directory, $before), 'A copy of the old session cookie still works.');
 
@@ -215,6 +216,7 @@ final class SecurityUnitTest extends TestCase
         $session->set('_security_main', 'a serialized token');
         $session->set('_security_admin', 'another');
         $session->set('cart', 3);
+        $session->set(SessionFlowStore::KEY, ['a-flow' => ['recovery_codes.codes' => ['a code']]]);
         $session->save();
         $request = new Request();
         $request->setSession($session);

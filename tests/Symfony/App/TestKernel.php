@@ -54,6 +54,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
      * @param list<class-string>   $voters         Voters another bundle's compiler pass tags, before SecurityBundle gathers them
      * @param bool                 $expressions    Whether it decides Symfony's expressions, as with symfony/expression-language installed
      * @param int|null             $decorates      The priority of the application's decorator of Symfony's authenticated voter, if it has one
+     * @param bool                 $keepsData      Whether the firewall's logout keeps the PHP session (invalidate_session: false)
      */
     public function __construct(
         private readonly string $directory,
@@ -72,6 +73,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         private readonly array $voters = [],
         private readonly bool $expressions = false,
         private readonly ?int $decorates = null,
+        private readonly bool $keepsData = false,
     ) {
         parent::__construct($environment, $debugging);
     }
@@ -147,7 +149,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                     'lazy' => true,
                     'provider' => 'yorvoid',
                     'user_checker' => PrincipalUserChecker::class,
-                    'logout' => ['path' => 'sign_out'],
+                    'logout' => ['path' => 'sign_out'] + ($this->keepsData ? ['invalidate_session' => false] : []),
                 ] + ($this->authenticators ? ['custom_authenticators' => [PasskeyAuthenticator::class, RecoveryCodeAuthenticator::class, RecoveryLinkAuthenticator::class, SessionAuthenticator::class]] : [])],
                 'access_control' => [['path' => '^/me', 'roles' => 'IS_AUTHENTICATED']],
             ], $this->security));

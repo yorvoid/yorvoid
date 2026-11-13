@@ -19,6 +19,7 @@ use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
+use YorvoID\Symfony\Flow\SessionFlowStore;
 
 /**
  * The request's YorvoID session (SES-008): the application's PHP session holds only its token, and
@@ -159,8 +160,8 @@ final class CurrentSession implements ResetInterface
     private static function signOutOf(SessionInterface $session, string $key): void
     {
         foreach (array_keys($session->all()) as $name) {
-            // Every firewall keeps its token under "_security_" and its context's name.
-            if ($key === $name || str_starts_with($name, '_security_')) {
+            // Every firewall keeps its token under "_security_" and its context's name; YorvoID's flows go too (H-6).
+            if ($key === $name || SessionFlowStore::KEY === $name || str_starts_with($name, '_security_')) {
                 $session->remove($name);
             }
         }

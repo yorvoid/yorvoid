@@ -15,7 +15,9 @@ use YorvoID\Authn\Recovery\RecoveryLinks;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
+use YorvoID\Authn\Session\EndSession;
 use YorvoID\Authn\Session\Session;
+use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\Setup\CreateSetupCode;
@@ -324,7 +326,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         $refused = $this->submit($flow, 'step_up', ['response' => []], $context);
         self::assertSame([['yorvoid.passkey.not_working', 'invalid_response']], array_map(static fn (Problem $problem): array => [$problem->message, $problem->reason], $refused->problems));
 
-        $stepped = $this->submit($flow, 'step_up', ['response' => json_decode($authenticator->signIn($this->options($refused)), true)], $context);
+        $stepped = $this->submit($flow, 'step_up', ['response' => json_decode($authenticator->signIn($this->options($refused, $context)), true)], $context);
         self::assertNotNull($stepped->renewedToken);
         self::assertSame('passkey_registration', $stepped->step, 'Registration began in the session the step-up proved.');
         $renewed = $this->sessions->validate($this->realm, $stepped->renewedToken);
@@ -338,6 +340,25 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertSame('passkey_registration', $fresh->step, 'A recent proof is enough.');
     }
 
+    public function testAStepUpKeepsTheFlowInItsSessionUntilThatEnds(): void
+    {
+        [$ana, $authenticator] = $this->account();
+        $session = $this->session($ana);
+        $this->clock->sleep(600);
+        $context = $this->context->withSession($session);
+        $flow = $this->flows->start(PasskeyFlows::ADD_PASSKEY, $this->realm, $context);
+
+        $stepped = $this->submit($flow, 'step_up', ['response' => json_decode($authenticator->signIn($this->options($flow, $context)), true)], $context);
+        self::assertNotNull($stepped->renewedToken);
+        $renewed = $this->sessions->validate($this->realm, $stepped->renewedToken);
+        self::assertNotNull($renewed);
+        self::assertTrue($renewed->id->equals($session->id), 'A new token, the same session.');
+        self::assertSame('passkey_registration', $this->flows->resume($flow->state->id, $context->withSession($renewed))?->step, 'Its new token keeps the flow going (C2).');
+
+        Permits::call($this->sessions->end(...), new EndSession($this->realm, $session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        self::assertNull($this->flows->resume($flow->state->id, $this->context), 'Once it ends, so does the flow.');
+    }
+
     public function testStepsUpForAnOperation(): void
     {
         [$ana, $authenticator] = $this->account();
@@ -346,9 +367,9 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertSame(FlowStatus::Completed, $this->flows->start(PasskeyFlows::STEP_UP, $this->realm, $context, ['step_up.operation' => 'acme.site.remove'])->status, 'Signed in with a recovery code just now: recent enough.');
 
         $flow = $this->flows->start(PasskeyFlows::STEP_UP, $this->realm, $context, ['step_up.operation' => 'acme.site.remove', 'step_up.multi_factor' => true]);
-        self::assertEquals(new StepUpView($this->options($flow), 'acme.site.remove'), $flow->view);
-        self::assertSame('required', ((array) json_decode($this->options($flow), true))['userVerification']);
-        self::assertNotNull($this->submit($flow, 'step_up', ['response' => json_decode($authenticator->signIn($this->options($flow)), true)], $context)->renewedToken);
+        self::assertEquals(new StepUpView($this->options($flow, $context), 'acme.site.remove'), $flow->view);
+        self::assertSame('required', ((array) json_decode($this->options($flow, $context), true))['userVerification']);
+        self::assertNotNull($this->submit($flow, 'step_up', ['response' => json_decode($authenticator->signIn($this->options($flow, $context)), true)], $context)->renewedToken);
 
         $this->clock->sleep(120);
         self::assertSame(FlowStatus::Completed, $this->flows->start(PasskeyFlows::STEP_UP, $this->realm, $context, ['step_up.operation' => 'acme.site.remove', 'step_up.within' => 600])->status, 'No longer than the window.');
@@ -377,16 +398,16 @@ final class PasskeyFlowsTest extends DatabaseTestCase
 
         // Two minutes at the authenticator: the ceremony still works, the proof lapsed.
         $this->clock->sleep(120);
-        $lapsed = $this->submit($flow, 'passkey_registration', ['response' => json_decode(new VirtualAuthenticator()->register($this->options($flow)), true)], $context);
+        $lapsed = $this->submit($flow, 'passkey_registration', ['response' => json_decode(new VirtualAuthenticator()->register($this->options($flow, $context)), true)], $context);
 
         self::assertEquals([FlowStatus::InProgress, 'step_up', [new Problem('yorvoid.flow.confirm_again')]], [$lapsed->status, $lapsed->step, $lapsed->problems]);
         self::assertCount(1, $this->passkeys->of($this->realm, $ana->id), 'A passkey was added without a recent proof.');
-        $again = $this->submit($flow, 'step_up', ['response' => json_decode($authenticator->signIn($this->options($lapsed)), true)], $context);
+        $again = $this->submit($flow, 'step_up', ['response' => json_decode($authenticator->signIn($this->options($lapsed, $context)), true)], $context);
         self::assertNotNull($again->renewedToken);
         $renewed = $this->sessions->validate($this->realm, $again->renewedToken);
         self::assertNotNull($renewed);
         self::assertSame('passkey_registration', $again->step);
-        self::assertSame(FlowStatus::Completed, $this->submit($flow, 'passkey_registration', ['response' => json_decode(new VirtualAuthenticator()->register($this->options($again)), true)], $context->withSession($renewed))->status);
+        self::assertSame(FlowStatus::Completed, $this->submit($flow, 'passkey_registration', ['response' => json_decode(new VirtualAuthenticator()->register($this->options($again, $context)), true)], $context->withSession($renewed))->status);
         self::assertCount(2, $this->passkeys->of($this->realm, $ana->id));
     }
 
@@ -533,9 +554,9 @@ final class PasskeyFlowsTest extends DatabaseTestCase
     /**
      * The current ceremony's options.
      */
-    private function options(Progress $flow): string
+    private function options(Progress $flow, ?FlowContext $context = null): string
     {
-        $options = $this->flows->resume($flow->state->id, $this->context)?->state->string($flow->step.'.options') ?? $flow->state->string($flow->step.'.options');
+        $options = $this->flows->resume($flow->state->id, $context ?? $this->context)?->state->string($flow->step.'.options') ?? $flow->state->string($flow->step.'.options');
         self::assertNotNull($options);
 
         return $options;
