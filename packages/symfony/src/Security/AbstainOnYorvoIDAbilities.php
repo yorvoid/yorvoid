@@ -42,7 +42,9 @@ final readonly class AbstainOnYorvoIDAbilities implements CacheableVoterInterfac
         }
 
         foreach ($asked->reasons ?? [] as $reason) {
-            $vote?->addReason($reason);
+            // Asked with a vote only when given one.
+            \assert(null !== $vote);
+            $vote->addReason($reason);
         }
 
         return $result;
