@@ -22,7 +22,8 @@ Every dependency is code that runs with YorvoID's privileges, so YorvoID has few
 | `symfony/uid` | UUIDv7 identifiers |
 | `ext-intl` | Comparing email addresses: one Unicode form (NFC), and domains in their ASCII form (IDNA) |
 | `ext-mbstring` | Text in any script |
-| `ext-openssl` | Ed25519 signing keys and the security hashes, from a FIPS provider when one is configured ([cryptography](../concepts/cryptography.md)) |
+| `psr/cache`, `psr/log` | The shared pool for what decisions read; warnings for Indeterminate decisions and audit records that couldn't be written |
+| `ext-openssl` | Ed25519 and ES256 signing keys and the security hashes, from a FIPS provider when one is configured ([cryptography](../concepts/cryptography.md)) |
 
 ## Current runtime dependencies of `yorvoid/authn`
 
@@ -30,6 +31,7 @@ Every dependency is code that runs with YorvoID's privileges, so YorvoID has few
 |---|---|
 | `yorvoid/core`, `yorvoid/throttle` | Principals, the security log, storage; limits on attempts |
 | `doctrine/dbal`, `psr/clock`, `psr/event-dispatcher`, `symfony/clock`, `symfony/uid` | As for core |
+| `psr/log` | Warning of a refused token for one of YorvoID's purposes |
 | `ext-mbstring`, `ext-filter` | Device names within their column in any script; checking addresses |
 
 ## Current runtime dependencies of `yorvoid/notifications`
@@ -69,7 +71,7 @@ Every dependency is code that runs with YorvoID's privileges, so YorvoID has few
 | `web-auth/webauthn-lib` 5.3.9 or later | WebAuthn's checks: the established PHP implementation, MIT-licensed, maintained since 2018. Below 5.3.1, user verification could be downgraded (GHSA-h4fw-6r7f-w494) |
 | `web-auth/cose-lib`, `spomky-labs/cbor-php` | Which COSE algorithms are accepted, and the public keys' checks: declared, so YorvoID's constraint pins them, not only webauthn-lib's |
 | `symfony/serializer`, `symfony/uid` | WebAuthn's options as JSON; ceremony IDs |
-| `ext-openssl`, `ext-filter` | Checking public keys; integers in COSE keys |
+| `ext-openssl`, `ext-sodium`, `ext-filter` | Checking public keys; EdDSA passkeys (libsodium, through the WebAuthn library); integers in COSE keys |
 | `yorvoid/notifications` (suggested) | The link that confirms the owner's email address in the setup flow, and the `yorvoid.verify_email` flow |
 | webauthn-lib's own: `spomky-labs/pki-framework`, `paragonie/constant_time_encoding`, `brick/math` | Certificates and arithmetic for WebAuthn |
 
@@ -80,6 +82,7 @@ The verifier runs on its own server, so it doesn't use YorvoID's other packages.
 | Package | Why |
 |---|---|
 | `web-auth/webauthn-lib`, `web-auth/cose-lib`, `spomky-labs/cbor-php`, `symfony/serializer` | Checking signatures made with passkeys, as passkeys does |
+| `ext-openssl`, `ext-sodium` | Checking signatures; EdDSA, through the WebAuthn library |
 | `twig/twig` | The signing pages |
 | `psr/clock`, `symfony/uid` | Time; IDs |
 | `ext-dom`, `ext-libxml`, `ext-mbstring` | Checking that a page shows what is signed; text in any script |
@@ -90,8 +93,18 @@ The verifier runs on its own server, so it doesn't use YorvoID's other packages.
 | Package | Why |
 |---|---|
 | `yorvoid/core` | Errors, durations, storage |
-| `doctrine/dbal`, `psr/clock`, `symfony/clock` (throttle) | Its counters, and their time |
+| `doctrine/dbal`, `psr/clock`, `symfony/clock`, `ext-filter` (throttle) | Its counters, and their time; addresses as keys |
 | `twig/twig`, `ext-mbstring`, `ext-filter` (mail) | Rendering emails; checking addresses |
+| `symfony/translation-contracts`, `ext-intl` (translation) | The translator interface it implements; ICU messages |
+
+## Current runtime dependencies of `yorvoid/policy` and `yorvoid/relations`
+
+| Package | Why |
+|---|---|
+| `yorvoid/core` | The evaluator, operations, the security log, storage |
+| `yorvoid/relations` (policy) | Roles on resources and groups, as relations |
+| `doctrine/dbal` | Their tables |
+| `psr/clock`, `symfony/clock`, `ext-mbstring` (policy) | Role assignments' expiry; names within their columns |
 
 ## Current runtime dependencies of `yorvoid/symfony`
 

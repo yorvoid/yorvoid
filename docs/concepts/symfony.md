@@ -38,6 +38,21 @@ yorvoid:
     connection: default                 # the DoctrineBundle connection for YorvoID's tables
     keys:
         file: ~                         # the signing keys, e.g. /run/secrets/yorvoid-keys.json; yorvoid:keys:rotate creates it
+        per_realm: false                # each realm's own keys in keys.directory: acme.json for the realm acme
+        directory: ~                    # with per_realm; yorvoid:keys:rotate --realm creates them
+    log:
+        checkpoint_file: ~              # where yorvoid:log:checkpoint appends signed checkpoints
+        checkpoint_logger: false        # checkpoints to the application's logger too
+    decision_log:
+        permits: none                   # or sampled, all: which permits of abilities are recorded
+        sample_rate: 0.01               # with sampled
+        connection: ~                   # a DoctrineBundle connection of its own, outside the application's transaction
+    crypto:
+        mode: standard                  # or fips
+    audit:
+        on_failure: continue            # or refuse
+    cache:
+        pool: yorvoid.cache             # on cache.app; or the service ID of a PSR-6 pool
     realm: default                      # the realm people sign in to
     users: ~                            # the service ID of your PrincipalUsers; PrincipalUser otherwise
     cookies:
@@ -74,6 +89,10 @@ yorvoid:
         completed_path: /               # where people go when a flow completes
         completed_paths: {}             # by flow, e.g. {yorvoid.sign_in: /dashboard}
         script: /bundles/yorvoid/browser/forms.js   # the pages' passkey script: a path, or https:// on one of passkeys.origins
+    remedies:
+        pages: true                     # answer a refusal nothing caught with a page of what would satisfy it
+    ordered_conditions:
+        pessimistic: false              # experimental
 ```
 
 - **A mistake stops the application from starting**, naming the option: a realm, table prefix, duration, limit, origin, cookie name, script or notification address YorvoID would refuse later is refused when the container is compiled. A value from an environment variable is checked when it's used, and by `yorvoid:doctor`.
@@ -98,7 +117,7 @@ A preset is a documented starting point for a kind of application (PLT-090). It 
 
 - **consumer_site:** a public site; AAL2 sessions, and a day's [cool-down](step-up.md#the-cool-down-after-a-recovery) after an account recovery before credentials change.
 - **internal_tool:** staff signing in for a working day, many of them from one address; the same cool-down.
-- **regulated:** AAL3 session limits, fresher proofs for changing sign-in methods, tighter limits. Quorum intents and strict audit join it when YorvoID has them.
+- **regulated:** AAL3 session limits, fresher proofs for changing sign-in methods, tighter limits. Quorum intents join it when YorvoID has them; refusing without a record (`audit.on_failure: refuse`) is yours to set.
 - **agent_platform:** people delegating to agents: a taken-over account hands over its agents too, so a recovery waits a day before sensitive operations. Delegation limits join it when YorvoID has agents.
 
 ## Behind a proxy
@@ -137,7 +156,7 @@ use YorvoID\Core\Authorization\ResourceRef;
 $this->denyAccessUnlessGranted('acme.pages.publish', new ResourceRef('page', $id));
 ```
 
-- **The subject** says which resource it's about: a `ResourceRef`, an object that implements `ConcernsResource`, or `[ResourceRef, object]`. An ID or an entity that says neither is refused with an `IntegratorError` ([the subject](authorization.md#the-subject)).
+- **The subject** says which resource it's about: a `ResourceRef`, an object that implements `ConcernsResource`, or `[ResourceRef, object]`; or none: no subject, the `Request` that `access_control` passes (the whole realm), or an object your rules read that implements `ConcernsNoResource`. An ID, an array or an entity that says neither is refused with an `IntegratorError` ([the subject](authorization.md#the-subject)).
 - **Other voters can't grant a declared ability; their refusals count where the strategy weighs them.** The bundle wraps every other voter, yours and Symfony's, so that under any access decision strategy only YorvoID grants a declared ability; a voter of yours can still refuse one, e.g. under `unanimous`, and decides your other attributes as before. Grant YorvoID's abilities with its roles, relations and rules, whose decisions are recorded. A voter's decorators are inside its wrapper, whatever their priority. In debug, Symfony's profiler shows each wrapped voter as `AbstainOnYorvoIDAbilities`, and `yorvoid:doctor` lists them by their own class under "Symfony voters". An application that replaces Symfony's access decision manager or authorization checker, or decorates YorvoID's `PolicyVoter`, decides with its own, and owns what they grant.
 - **The vote's reason** is the verdict and the decision's ID, e.g. `YorvoID: Deny (decision 0193…).`, which Symfony puts in `AccessDeniedException`'s message: why it was refused stays in the [decision log](security-log.md#the-decision-log), under that ID.
 - **One correlation ID per request:** YorvoID's decisions and security-log entries of a request, its sub-requests included, share one (`RequestOrigins`), so the decision log samples a request whole. It's drawn by YorvoID, not read from a header: the sample is chosen by a hash of it, and a client that chose it would choose whether its request is recorded. To use your own, e.g. a proxy's request ID, decorate `RequestOrigins` and take it only from something the client can't set.
@@ -206,7 +225,7 @@ To show a refusal on a page of your own, `yorvoid_remedies(decision, return)` gi
 
 ## Signing in
 
-The bundle gives you a user provider, a user checker and three authenticators. Put them in your own firewall, and import YorvoID's routes for the browser client:
+The bundle gives you a user provider, a user checker and four authenticators. Put them in your own firewall, and import YorvoID's routes for the browser client:
 
 ```yaml
 # config/packages/security.yaml
@@ -290,7 +309,7 @@ YorvoID's [flows](flows.md) are at `/flows/{flow}` under YorvoID's routes: e.g. 
 
 - **Signing in happens in the flow.** The step that signs someone in keeps the YorvoID session's token in the PHP session; `SessionAuthenticator`, in your firewall, signs them in to it from the next request. Whoever was signed in before isn't any more.
 - **The flow's ID is in its address,** long and random, and the flow lives in the PHP session: a page elsewhere can neither guess it nor continue it, so the forms need no CSRF token.
-- **A request starts only the public flows,** with only their inputs: `yorvoid.invitation` and `yorvoid.recover_with_link` take `token`, `yorvoid.step_up` takes `operation`, `multi_factor` and `within` (seconds, from the refused requirement). A flow your own code starts, you send the person to with `yorvoid_flow_show` and the flow's ID.
+- **A request starts only the public flows,** with only their inputs: `yorvoid.invitation`, `yorvoid.recover_with_link` and `yorvoid.verify_email` take `token`, `yorvoid.step_up` takes `operation`, `multi_factor`, `within` (seconds, from the refused requirement) and `return` (a path on this site). A flow your own code starts, you send the person to with `yorvoid_flow_show` and the flow's ID.
 - **Signed operations aren't signed in the console's flows:** the person signs them on the verifier's own signing pages, at a signing origin of their own ([signed intents](signed-intents.md)).
 - **A browser keeps five flows going** at once; older ones are forgotten.
 - **To change a flow,** implement `FlowCustomizer`: every service implementing it is given each flow in turn, to insert, replace or remove steps. Give your own steps a template, `templates/bundles/YorvoIDBundle/flow/{step}.html.twig`.
@@ -381,14 +400,18 @@ It answers only in debug mode, wherever it's imported.
 | Command | |
 |---|---|
 | `yorvoid:doctor` | Checks YorvoID's setup and says how to fix each problem ([below](#checking-the-setup)). `--strict` fails on warnings too. |
-| `yorvoid:keys:rotate` | Takes the next step in [rotating the signing keys](keys.md#rotating-keys): creates the ring, adds a verify-only key, makes it active; `--remove <key>` removes an old one. Sessions and tokens in flight carry on. |
+| `yorvoid:keys:rotate` | Takes the next step in [rotating the signing keys](keys.md#rotating-keys): creates the ring, adds a verify-only key, makes it active; `--remove <key>` removes an old one, `--realm` takes a realm's own ring (`keys.per_realm`), `--algorithm` (ES256 or EdDSA) the new key's. Sessions and tokens in flight carry on. |
+| `yorvoid:log:checkpoint` | Signs where each realm's security log stands, and keeps it outside the database ([checkpoints](security-log.md#checkpoints)); from cron. |
+| `yorvoid:log:verify` | Checks the security log's chain, and against its checkpoints. |
+| `yorvoid:log:anchor` | Verifies the security log against all its checkpoints, then signs an anchor ([moving to ES256](keys.md#moving-to-es256)). |
+| `yorvoid:identifiers:normalize` | Compares stored identifiers by today's rules, after an upgrade that changed them. |
 | `yorvoid:migrate` | Creates or updates YorvoID's tables, separately from your migrations. `--dry-run` prints the SQL; `--allow-blocking` runs migrations that block tables, in a maintenance window. |
 | `yorvoid:setup-code [realm]` | Prints a setup code that claims a fresh installation (`--lifetime`, 24 hours by default). |
 | `yorvoid:recovery-link <email>` | Prints a recovery link for someone who lost access, for whoever has the server's shell (`--url` with `{token}`, `--lifetime`, 15 minutes by default). |
 | `yorvoid:templates:publish <templates or flow>` | Copies flow templates into your application, to change them ([above](#changing-the-templates)). |
 | `yorvoid:templates:diff [templates]` | After an upgrade, what YorvoID changed in the templates you published; `--accept` takes it. |
 | `yorvoid:templates:lint` | Checks the flow pages, with your templates, for what each step needs. |
-| `yorvoid:purge` | Removes ended sessions, expired tokens and ceremonies, throttling state that's clear, ended cool-downs and long-unused devices. Run it daily. |
+| `yorvoid:purge` | Removes ended sessions, expired tokens and ceremonies, throttling state that's clear, ended cool-downs, long-unused devices and old decisions (`--keep-decisions`, 90 days by default). Run it daily. |
 
 ## Checking the setup
 
@@ -397,7 +420,11 @@ It answers only in debug mode, wherever it's imported.
 | Check | What it looks at |
 |---|---|
 | Configuration | Builds what YorvoID builds only when it's first used: the passkey policy (the relying party ID and the origins), the session policy, the limits, the database. Passkeys for `localhost` outside development are a warning. |
-| Keys | With `keys.file` set: the file exists, only its owner can read it, and it holds a valid key ring. |
+| Keys | With `keys.file` set: the file exists, only its owner can read it, and it holds a valid key ring; with `keys.per_realm`, every realm has a file of its own. |
+| Security log checkpoints | Outside development, the security log's checkpoints are taken. |
+| Cryptography | The crypto mode, OpenSSL's version, whether only a FIPS provider is active and whether the kernel runs in FIPS mode ([cryptography](cryptography.md)). |
+| Audit failures | What a decision whose record can't be written does (`audit.on_failure`), and whether the configuration keeps that promise ([when a record can't be written](security-log.md#when-a-record-cant-be-written)). |
+| Key algorithms | The keys suit the crypto mode: no active Ed25519 key in FIPS mode without EdDSA, and an anchor after Ed25519 checkpoints once an ES256 key is active ([moving to ES256](keys.md#moving-to-es256)). |
 | Database and migrations | YorvoID reaches its database, every migration of this version ran, and the database has none from a later version. |
 | Security log privileges | On PostgreSQL, the application's database user can't update, delete or truncate the security log, or delete or truncate its head: otherwise it could rewrite the log unnoticed. See [what the chain proves](security-log.md#what-the-chain-proves-and-what-it-doesnt). |
 | Clock | The application's clock agrees with the database's within 5 seconds; a `MockClock` outside development is a problem. |
@@ -407,5 +434,8 @@ It answers only in debug mode, wherever it's imported.
 | Proxies | `framework.trusted_proxies` doesn't trust every address (`0.0.0.0/0`, `::/0`), which would let anyone choose their address. See [behind a proxy](#behind-a-proxy). |
 | Mailer | With notifications on: the sender is an email address, and outside development the default transport delivers (not `null://`, not Symfony's `smtp://null`). With them off, outside development: a warning, since nobody would hear about a recovery. It sends nothing. |
 | Flow pages | The pages have what each step needs (as `yorvoid:templates:lint`), and the templates you published kept up with YorvoID's (as `yorvoid:templates:diff`). |
+| Test helpers | `yorvoid/testing` and the virtual authenticator aren't installed outside development. |
+| Symfony voters | The voters wrapped so they can't grant a declared ability, by their own class. |
+| Environment | Production runs without debug, and with a secret of its own. |
 
 A **problem** breaks something: sign-in, emails, the pages. The command then fails, so a deployment can stop on it. A **warning** works, but less safely than it could, or than the configuration says; `--strict` fails on warnings too.

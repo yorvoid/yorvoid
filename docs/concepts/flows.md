@@ -26,7 +26,7 @@ $progress = $flows->submit($id, 'passkey', new Input($fields), $context); // the
 - **A flow takes at most 30 minutes** by default, and is forgotten when it completes, fails or expires.
 - **Signing in happens in the step that does it, but the person gets the session once every required step is done.** Until then the flow holds it, and its steps run in it; then the `Progress` carries it for the application to hold. So leaving setup before adding a passkey, or an inserted terms step that's required, leaves nobody signed in. Steps that aren't required don't hold it back. A step-up's new token comes the same way.
 - **When a flow completes**, `FlowCompleted` carries its state: keep what your own steps collected.
-- **A flow belongs to the browser that started it.** Whoever has a flow's ID resumes it and reads its state, freshly generated recovery codes included. The Symfony bridge keeps flows in the PHP session; a `FlowStore` of your own must bind each flow to the browser's session too.
+- **A flow belongs to the browser that started it.** A flow's state can hold freshly generated recovery codes; whoever may resume it reads them, which the next point limits to its session. The Symfony bridge keeps flows in the PHP session; a `FlowStore` of your own must bind each flow to the browser's session too.
 - **A flow lives within the session it runs in:** the one signed in when it started, or the one it signed in once it hands that over. It ends, and is deleted, when the request doesn't have that session any more: signed out, someone else signed in, or the session ended elsewhere (signing out everywhere, a suspension, expiry). A session the flow holds back must stay valid too, and when a flow has both, both must hold. A step-up's new token is the same session, so the flow goes on. An ended flow answers like one that never was: nothing tells the next person in the browser it existed. A flow started by someone not signed in, which hasn't signed anyone in yet, is its bearer's: what it holds is what the link, or what they typed, already gives.
 
 The context says who is signed in, and what steps that sign people in record: the origin, the device's description, the client's address, the device cookie, and the language to prepare things in. The Symfony bridge builds it for each request.
@@ -45,7 +45,7 @@ YorvoID's passkey-first journeys come from `PasskeyFlows` in `yorvoid/passkeys` 
 | `yorvoid.recover_with_code` | `recovery_code` (email and code), `passkey_registration` (or later), `recovery_codes` | |
 | `yorvoid.recover_with_link` | `recovery_link` (confirm), `passkey_registration` (or later), `recovery_codes` | `recovery_link.token`: the link's token |
 | `yorvoid.add_passkey` | `step_up`, `passkey_registration` | |
-| `yorvoid.step_up` | `step_up` | `step_up.operation`, `step_up.multi_factor` if it needs two factors, and `step_up.within` (seconds) if it needs a fresher proof than the window |
+| `yorvoid.step_up` | `step_up` | `step_up.operation`, `step_up.multi_factor` if it needs two factors, and `step_up.within` (seconds) if it needs a fresher proof than the window; in Symfony also `return`, a path on this site to come back to |
 | `yorvoid.verify_email` | `verify_email` (confirm; signs nobody in). Only with [`EmailVerification`](notifications.md#verifying-the-email-address) | `verify_email.token`: the link's token |
 
 - **`passkey_registration`** keeps the new credential's ID as `passkey_registration.credential`. After a recovery, the person may add one later, on a borrowed device for instance.

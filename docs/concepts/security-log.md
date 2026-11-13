@@ -59,7 +59,7 @@ Hashes name their algorithm (`sha256` today). Verification refuses any algorithm
 
 ## Checkpoints
 
-A **checkpoint** records where a realm's log stood: its last entry's number and hash, and when, signed with the [key ring](keys.md)'s active key. It's kept outside the database, where the application's database user can't change it. Verification against checkpoints finds what the chain alone can't:
+A **checkpoint** records where a realm's log stood: its last entry's number and hash, and when, signed with the active key of the realm's [key ring](keys.md#a-ring-for-each-realm). It's kept outside the database, where the application's database user can't change it. Verification against checkpoints finds what the chain alone can't:
 
 - entries cut off from the end, with the head moved back: the checkpointed entry is missing;
 - a history rewritten up to a checkpoint, with every hash recomputed: the checkpointed entry's hash differs.
@@ -88,7 +88,7 @@ $verification = $checkpoints->verify(Realm::default(), $file->read(Realm::defaul
 - A checkpoint that can't be signed or kept raises the [audit alert](#when-a-record-cant-be-written), and `yorvoid:log:checkpoint` fails: a missing checkpoint is a lost audit record.
 - An **anchor** is a checkpoint signed only once the log verifies against every checkpoint before it (`Checkpoints::anchor()`, `yorvoid:log:anchor`). Moving the keys from Ed25519 to ES256 anchors each realm, so that under a FIPS provider without EdDSA the anchor covers what the Ed25519 checkpoints did ([moving to ES256](keys.md#moving-to-es256)).
 
-In Symfony, set `yorvoid.log.checkpoint_file` (or `checkpoint_logger`) next to `yorvoid.keys.file`, and run `yorvoid:log:checkpoint` from cron; `yorvoid:log:verify` checks the chain and the checkpoints. `yorvoid:doctor` warns outside development while there are none, or the newest is more than a day old.
+In Symfony, set `yorvoid.log.checkpoint_file` (or `checkpoint_logger`) next to `yorvoid.keys.file` (or `keys.directory`), and run `yorvoid:log:checkpoint` from cron; `yorvoid:log:verify` checks the chain and the checkpoints. `yorvoid:doctor` warns outside development while there are none, or the newest is more than a day old.
 
 ## The decision log
 

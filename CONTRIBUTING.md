@@ -40,6 +40,11 @@ So each package directory carries what its repository needs on its own: a README
 | `packages/core/` | `yorvoid/core` |
 | `packages/authn/` | `yorvoid/authn` |
 | `packages/passkeys/` | `yorvoid/passkeys` |
+| `packages/policy/` | `yorvoid/policy` |
+| `packages/policy-testing/` | `yorvoid/policy-testing` |
+| `packages/relations/` | `yorvoid/relations` |
+| `packages/notifications/` | `yorvoid/notifications` |
+| `packages/intent-signing/` | `yorvoid/intent-signing` |
 | `packages/flows/` | `yorvoid/flows` |
 | `packages/intent-verifier/` | `yorvoid/intent-verifier` |
 | `packages/throttle/` | `yorvoid/throttle` |
@@ -130,7 +135,7 @@ So each package directory carries what its repository needs on its own: a README
 - A subject over its target needs a line in the release notes: "accepted, because …" or "fixed in …".
 - So does one whose median is more than 20 % slower than at the last release, or whose p99 grew as much. Each pull request was within 20 % on its lower quartile, but several can add up, and the tail isn't what a pull request's gate sees.
 
-A release whose measured time is above 15 minutes doesn't go out until the quickstart is shorter or clearer. Before YorvoID is on Packagist, run `QUICKSTART_PACKAGIST=1 php tools/quickstart/follow.php` once it is, to check the published packages install as the page says.
+A release whose measured time is above 15 minutes doesn't go out until the quickstart is shorter or clearer. Once the release is on Packagist, run `QUICKSTART_PACKAGIST=1 php tools/quickstart/follow.php`, to check the published packages install as the page says.
 
 **Releasing:** main always says which minor it's heading for: each package's branch alias (`0.4.x-dev`) and what the packages require of each other (`^0.4`), which `composer versions` checks. Move the [changelog](CHANGELOG.md)'s "Unreleased" under the new version, with the date, in a pull request. Then push a signed version tag (`git tag -s v0.2.0`) on a commit of main that passed CI: the release workflows refuse a tag that isn't signed by a key in [`.github/release-signers`](.github/release-signers). Tags are signed with SSH keys (`git config gpg.format ssh`, and `git config user.signingkey` with the public key's path); add a key to that file in a pull request of its own. The Release workflow publishes a GitHub release with each package's source, SBOM and build provenance, and the changelog's section for the version; the Split workflow copies the PHP packages to their repositories, which Packagist installs from; the npm workflow publishes the browser client as `@yorvoid/browser` with the tag's version, through npm's trusted publishing (no token), and a pre-release such as `v0.1.0-rc.1` under `next`. Each of them refuses a tag of another minor than the packages require (`php tools/release/version.php check v0.4.0`). Once Split has pushed the tag, it waits for Packagist and installs every package at the tag's version into an empty project. Right after tagging a minor, open a pull request that moves main on to the next one: `php tools/release/version.php set 0.5`, then `composer update 'yorvoid/*'`.
 

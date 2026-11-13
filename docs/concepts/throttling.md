@@ -53,7 +53,7 @@ Configure them with `new Attempts($throttle, new AttemptLimits(perAccount: new L
 - [Passkey sign-in](passkeys.md#signing-in) counts per address.
 - [Setup codes](setup-codes.md) count per address.
 
-Pass the client's address (`address:`) to these services: it's the last argument, and optional, but without it only the account's limit applies, or none, e.g. for passkey sign-in and setup codes. Behind a proxy, it's the client's address only if the application trusts that proxy: otherwise every client is the proxy, and shares one limit ([Symfony](symfony.md#behind-a-proxy); elsewhere, trust only your proxy's `X-Forwarded-For`).
+Pass the client's address (`address:`) in their commands, and to `Passkeys::beginSignIn()`: it's optional, but without it only the account's limit applies, or none, e.g. for passkey sign-in and setup codes. Behind a proxy, it's the client's address only if the application trusts that proxy: otherwise every client is the proxy, and shares one limit ([Symfony](symfony.md#behind-a-proxy); elsewhere, trust only your proxy's `X-Forwarded-For`).
 
 ## Storage
 

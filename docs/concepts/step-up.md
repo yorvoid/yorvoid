@@ -31,7 +31,7 @@ The [credential registry](credentials.md) asks for a proof within 5 minutes befo
 
 ## Stepping up
 
-When a requirement isn't met, `StepUpRequired` carries it as the **remedy**: hand it to the step-up, then retry the operation.
+When a requirement isn't met, `StepUpRequired` carries it as the **remedy**: hand it to the step-up, then retry the operation. An operation `StepUpSelfService` asks it of refuses with `NotPermitted` instead, carrying a `StepUpRemedy` ([remedies](authorization.md#remedies)).
 
 ```php
 use YorvoID\Authn\StepUp\StepUpRequired;
@@ -65,9 +65,9 @@ $stepUp = new StepUp($sessions, $coolDownStore, $log, coolDown: Duration::hours(
 
 - It's off unless configured in `StepUp`. The [Symfony bundle's presets](symfony.md#presets) all set one: 24 hours.
 - [Recovery codes](recovery-codes.md) and [recovery links](recovery-links.md) start it; the security log records it.
-- Removing a credential and replacing recovery codes wait it out. Adding one doesn't: someone who lost their passkeys recovers to add a new one.
+- Removing a credential and replacing recovery codes wait it out, as do changing or removing one's own email address or username, suspending or deleting oneself, and issuing oneself a recovery link or a token. Adding a credential doesn't: someone who lost their passkeys recovers to add a new one.
 - The owner can't remove a passkey an attacker added during the cool-down either. The "This wasn't me" link in the [notification](notifications.md) disables it at once, and ends the attacker's sessions.
-- A held operation throws `HeldAfterRecovery` with the moment it's possible again. Stepping up doesn't help; tell the person when.
+- A held operation throws `HeldAfterRecovery` with the moment it's possible again, or, for one `StepUpSelfService` holds, `NotPermitted` with a `WaitRemedy` ([remedies](authorization.md#remedies)). Stepping up doesn't help; tell the person when.
 - Tell them before, too: `StepUp::coolDown()` is the cool-down a recovery starts, or null. The recovery pages' views carry it (`RecoveryCodeView::$holds`, `RecoveryLinkView::$holds`), and the reference pages say it before the person continues.
 - The recovery flows' recovery-codes step is passed over while it lasts: the person generates new codes once it ends.
 - `coolDownEndsAt()` tells whether a principal is cooling down, e.g. to show it on their security page. Purge ended cool-downs daily with `$stepUp->purge()`.

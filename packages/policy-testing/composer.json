@@ -1,7 +1,7 @@
 {
     "name": "yorvoid/policy-testing",
     "type": "library",
-    "description": "Tests for an application's YorvoID policy: the decisions it must give, as cases in PHP, run in PHPUnit or from a command, on the policy as production builds it with its stores in memory.",
+    "description": "Tests for an application's YorvoID policy: the decisions it must give, as cases in PHP, run in PHPUnit or from a command, on the policy as production builds it with its stores in memory, and mutation testing.",
     "keywords": [
         "authorization",
         "policy",

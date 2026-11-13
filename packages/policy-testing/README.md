@@ -1,6 +1,6 @@
 # yorvoid/policy-testing
 
-Tests for an application's YorvoID policy (AUZ-043): the decisions it must give, written as cases in PHP, and run in PHPUnit or from a command, on the policy as production builds it with only its stores in memory. For development only. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
+Tests for an application's YorvoID policy (AUZ-043): the decisions it must give, written as cases in PHP, and run in PHPUnit or from a command, on the policy as production builds it with only its stores in memory, and mutation testing that reports what no case catches. For development only. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
 
 ```bash
 composer require --dev yorvoid/policy-testing

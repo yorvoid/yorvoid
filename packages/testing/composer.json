@@ -1,7 +1,7 @@
 {
     "name": "yorvoid/testing",
     "type": "library",
-    "description": "YorvoID's test helpers: scenario fixtures made through YorvoID's own services, a movable clock, and signing in to Symfony functional tests.",
+    "description": "YorvoID's test helpers: scenario fixtures made through YorvoID's own services, a movable clock, signing in to Symfony functional tests, and the contracts a store of your own must pass.",
     "keywords": [
         "testing",
         "fixtures",

@@ -44,7 +44,7 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 
 | Threat | Mitigation | Status |
 |---|---|---|
-| Database read leak exposes secrets | Secrets stored hashed or encrypted; secrets in memory are `Secret`s that don't appear in dumps, logs or traces | Partly: `Secret` and hashed session tokens in place; storage of credentials arrives with them (M1) |
+| Database read leak exposes secrets | Secrets stored hashed or encrypted; secrets in memory are `Secret`s that don't appear in dumps, logs or traces | Partly: `Secret`s in place, and session tokens, one-time tokens and recovery codes stored only hashed; password hashes and TOTP seeds arrive with them (M4) |
 | The log can't forget personal data that must be erased | The log holds IDs and kinds, never email addresses, IP addresses or devices; those stay in tables that are erased or purged | In place |
 | Database writer changes the log | Hash chain per realm; verification finds changed, removed, inserted, reordered or re-hashed entries | In place; `yorvoid:doctor` warns while the application's database user can update, delete or truncate the log (PostgreSQL) |
 | Database writer rewrites the whole chain, or cuts off its end | Signed checkpoints kept outside the database; verification against them | In place up to the last checkpoint, when they're configured and taken regularly; `yorvoid:doctor` warns outside development while there are none |
@@ -53,7 +53,7 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 | Signing key leaks | Key ring with rotation; keys outside the database; key files readable only by their owner | In place; hardware or cloud key stores planned (M7) |
 | Predictable secrets | Only the operating system's CSPRNG, at least 128 bits; predictable generators refused by static analysis | In place |
 | Timing of comparisons reveals secrets | Secrets compared only with `hash_equals()`, enforced by static analysis | In place |
-| Weak or downgraded hash algorithms | SHA-256 and Ed25519; every hash and key names its algorithm; unknown algorithms refused | In place |
+| Weak or downgraded hash algorithms | SHA-256; Ed25519 or ES256 (P-256) signing keys; every hash and key names its algorithm; unknown algorithms refused; in FIPS mode only what OpenSSL's FIPS provider allows, checked at boot | In place |
 
 ### Authentication and sessions (M1, M4)
 
@@ -83,6 +83,11 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 | Threat | Mitigation | Status |
 |---|---|---|
 | An unknown condition or missing data turns into a Permit | Three outcomes; Indeterminate is never Permit; an element that throws, or a store that can't be reached, counts as unknown; Permit-offline is a verdict of its own, off by default, that only operations accepting it run on | In place: the evaluator ([authorization](../concepts/authorization.md)) decides every request of the precedence model as the model does, and a PHPStan rule reads a verdict only through an exhaustive match |
+| Someone gives what they don't hold | `NoEscalation`: nobody gives or takes what they don't hold, weighed by what a change does; giving a strict ability or a super role, and setting or removing a security attribute, take a recent proof whatever permits the change; neither rule can be left out (`RequiresForbids`) | In place |
+| A check decides without the resource, or another voter overrides a Deny | In Symfony, `isGranted()` refuses a subject that doesn't say which resource it's about; other voters can't grant a declared ability | In place |
+| An unfinished flow serves the next person in the browser | A flow is bound to the session it runs in and ends with it; signing out removes YorvoID's flows | In place |
+| A refusal tells an attacker which rule refused | Refusals are a 403 or a 503 without the decision's reason, with its ID as a reference | In place |
+| An operation runs without its record | An audit record that can't be written raises a critical log entry and `AuditFailed`; with `audit.on_failure: refuse`, a Permit whose record can't be written is Indeterminate | In place |
 | A child agent gets more authority than its parent | Attenuation checked at issuance and at every use; the delegator's own rights re-checked at every use | Planned (M3) |
 | An agent forges evidence ("the review was approved") | Evidence only from registered sources; never from the agent itself | Planned (M3) |
 | Revocation races with the effect | The final check runs in the effect's own transaction | Planned (M3) |

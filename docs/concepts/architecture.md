@@ -25,7 +25,7 @@ YorvoID is a set of PHP libraries, not a service. It runs inside your applicatio
 
 - **People** sign in with passkeys in the browser, through YorvoID's pages or your own, with the [browser client](browser-client.md).
 - **Operators** run the console commands: [claiming the installation](setup-codes.md), [recovery links](recovery-links.md), [checks](../how-to/check-the-setup.md), [key rotation](keys.md), [checkpoints](security-log.md).
-- **Your application** calls YorvoID's services, directly or through the [Symfony bridge](symfony.md). It decides who may run what: YorvoID records the ability each operation needs, but doesn't enforce it yet ([operations](operations-and-events.md)).
+- **Your application** calls YorvoID's services, directly or through the [Symfony bridge](symfony.md). It decides who may run what through YorvoID's policy: every operation runs through `Operations::run()`, which asks the evaluator whether the actor may ([authorization](authorization.md), [operations](operations-and-events.md)).
 - **The database** holds YorvoID's tables next to yours, under a prefix ([storage](storage.md)). Every record belongs to a [realm](realms.md).
 - **Outside the database:** signed [checkpoints](security-log.md) of the security log, so that whoever can write the database can't rewrite its history unnoticed; and, for [signed intents](signed-intents.md), a verifier that trusts nothing your web application says.
 
@@ -41,6 +41,7 @@ What runs, and where each package belongs:
 │ autofill, step-up,   │        │ yorvoid/passkeys    yorvoid/notifications  │    │ its own signing pages,  │
 │ errors as codes      │        │ yorvoid/authn       yorvoid/mail           │    │ at its own origin       │
 └──────────────────────┘        │ yorvoid/throttle    yorvoid/translation    │    └─────────────────────────┘
+                                │ yorvoid/policy      yorvoid/relations      │
                                 │ yorvoid/core                               │
                                 └────────────────────────────────────────────┘
                                       │                         │
@@ -50,7 +51,9 @@ What runs, and where each package belongs:
 
 | Package | What it does |
 |---|---|
-| `yorvoid/core` | Realms, principals and identifiers, the hash-chained security log and its checkpoints, signing keys, storage and migrations, operations and events. |
+| `yorvoid/core` | Realms, principals and identifiers, the hash-chained security log and its checkpoints, signing keys and the crypto policy, storage and migrations, operations and events, the evaluator and the decision log. |
+| `yorvoid/policy` | Declared abilities and roles, role assignments, groups, security attributes, rules, why-not and view-as. |
+| `yorvoid/relations` | Relations between resources (ReBAC), and the abilities they give. |
 | `yorvoid/throttle` | At most so many attempts per period, shared by every server through the database. |
 | `yorvoid/authn` | Sessions, one-time tokens, setup and recovery codes, recovery links, invitations, step-up. |
 | `yorvoid/passkeys` | WebAuthn registration and sign-in, user verification, passkey management. |
@@ -61,7 +64,8 @@ What runs, and where each package belongs:
 | `yorvoid/intent-signing` | The application's side of signed intents: asking, limits, summaries, the log. |
 | `yorvoid/intent-verifier` | The privileged side of signed intents. Stands alone: no framework, no database layer, no other YorvoID package. `Verifier` is its API, over `IntentChecks` (what the browser answers) and `KeyRegistry` (the keys and their changes, replayed against its formal model). |
 | `yorvoid/symfony` | The bundle: configuration, firewall authenticators, user provider, console commands, mailer and translator glue. |
-| `yorvoid/testing`, `yorvoid/virtual-authenticator` | For your tests: fixtures, a movable clock, a software authenticator. |
+| `yorvoid/testing`, `yorvoid/virtual-authenticator` | For your tests: fixtures, a movable clock, a software authenticator, the stores' contracts. |
+| `yorvoid/policy-testing` | For development: policy tests and policy mutation testing. |
 | `@yorvoid/browser` | The browser client, on npm. No dependencies. |
 
 Install only what you use: each package requires what it needs, and nothing else ([compatibility](../compatibility.md#versions)).
@@ -78,13 +82,16 @@ Dependencies point one way, towards `yorvoid/core`, and never in a circle.
 | `yorvoid/throttle` | core |
 | `yorvoid/mail` | core |
 | `yorvoid/translation` | core |
+| `yorvoid/relations` | core |
+| `yorvoid/policy` | core, relations |
 | `yorvoid/authn` | core, throttle |
 | `yorvoid/flows` | core, authn, throttle |
 | `yorvoid/notifications` | core, authn, mail |
 | `yorvoid/passkeys` | core, authn, flows, notifications, throttle |
 | `yorvoid/intent-signing` | core, authn, intent-verifier, notifications, throttle |
 | `yorvoid/symfony` | every package above but `virtual-authenticator` |
-| `yorvoid/testing` | core, authn, passkeys, symfony, throttle, virtual-authenticator |
+| `yorvoid/testing` | core, authn, flows, passkeys, policy, relations, symfony, throttle, virtual-authenticator |
+| `yorvoid/policy-testing` | core, authn, passkeys, policy, relations, testing, throttle |
 
 The exact rules are in [`deptrac.yaml`](https://github.com/yorvoid/yorvoid/blob/main/deptrac.yaml), and CI enforces them, together with:
 

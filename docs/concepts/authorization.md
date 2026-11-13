@@ -30,7 +30,7 @@ Every element that's about the request is evaluated, so neither the outcome nor 
 
 Row 2 gives Indeterminate even when nothing could permit the request: an unknown forbid is reported, and the reason says the request would be refused regardless.
 
-Each decision has an ID, its time, and the versions of what it read (`Decision::$versions`): the realm's policy version and its relations version, from the `VersionSource`s the evaluator is given. Every change to roles, abilities, assignments, groups and attributes increments the policy version; every change to relations, the relations version. Decisions are recorded in the [decision log](security-log.md#the-decision-log).
+Each decision has an ID, its time, and the versions of what it read (`Decision::$versions`): the realm's policy version and its relations version, from the `VersionSource`s the evaluator is given. Every change to roles, abilities, assignments and groups increments the policy version; every change to relations, the relations version. Attributes aren't versioned: they aren't cached, so no decision reads them stale, but a decision's versions don't show which attribute values it read, and neither does its record. Decisions are recorded in the [decision log](security-log.md#the-decision-log).
 
 ## The built-in permits
 
@@ -47,11 +47,11 @@ A permit speaks only for the operations that name its way to authorize: an abili
 
 ### One's own account
 
-Whatever permits a change to one's own account, the self-service policy asks the same of it: a role with `yorvoid.principals.manage` changes its own email address only as anyone does, with a recent proof, and not in the 24 hours after a recovery (`yorvoid.self_service.own_account`, a forbid every evaluator has). "One's own" means a `SelfOperation` that concerns the actor, or a command about the actor's own principal (`ConcernsPrincipal`). The operator is exempt.
+Whatever permits a change to one's own account, the self-service policy asks the same of it: a role with `yorvoid.principals.manage` changes its own email address only as anyone does, with a recent proof, and not during the [cool-down](step-up.md#the-cool-down-after-a-recovery) after a recovery (`yorvoid.self_service.own_account`, a forbid every evaluator has). "One's own" means a `SelfOperation` that concerns the actor, or a command about the actor's own principal (`ConcernsPrincipal`). The operator is exempt.
 
 `StepUpSelfService` asks a recent proof, held after a recovery, for changing or removing one's email address or username, suspending or deleting oneself, and issuing oneself a recovery link or a token; nothing for signing out, revoking one's tokens or activating oneself. A self-service operation it doesn't know needs a recent proof; any other command about one's own principal needs nothing unless you give it a requirement (`new StepUpSelfService($stepUp, ['acme.api_key.create' => new AuthenticationRequirement(...)])`).
 
-Without a self-service policy (`NoSelfService`, the evaluator's default), nobody changes their own account, whatever their role: someone else, or the operator, does. It's a Deny, with no remedy: a choice, not something the evaluator couldn't decide. The Symfony bundle uses `StepUpSelfService`.
+Without a self-service policy (`NoSelfService`, the evaluator's default), nobody changes their own account, whatever their role: someone else, or the operator, does. Signing out, here or everywhere, isn't self-service: anyone ends their own sessions. Otherwise it's a Deny, with no remedy: a choice, not something the evaluator couldn't decide. The Symfony bundle uses `StepUpSelfService`.
 
 ## Authority
 
@@ -114,7 +114,7 @@ final readonly class AcmeDeclarations implements PolicyDeclarations
 }
 ```
 
-By convention a name starts with its owner's namespace (`acme.`). That's a convention, not a check: the owner is what the declaration says, and an application may name abilities after what they're about (`content.edit`) and declare them as its core's. Every ability an operation needs (`#[Operation(ability: ...)]`) must be declared; YorvoID declares its own (`YorvoIDDeclarations`): managing principals, issuing recovery links (strict: it hands an account over), signing others out, managing roles, changing which roles have which abilities, seeing why someone else may or may not do something (`yorvoid.policy.explain`), and seeing the application as someone else sees it (`yorvoid.policy.view_as`). A declaration that doesn't fit (a name twice, a default role that isn't declared, an operation's undeclared ability) fails when YorvoID is built. In Symfony, a service implementing `PolicyDeclarations` is collected by itself.
+By convention a name starts with its owner's namespace (`acme.`). That's a convention, not a check: the owner is what the declaration says, and an application may name abilities after what they're about (`content.edit`) and declare them as its core's. Every ability an operation needs (`#[Operation(ability: ...)]`) must be declared; YorvoID declares its own (`YorvoIDDeclarations`): managing principals, issuing recovery links (strict: it hands an account over), signing others out, managing roles, changing which roles have which abilities, setting security attributes (`yorvoid.attributes.manage`), relating people and resources (`yorvoid.relations.manage`), seeing why someone else may or may not do something (`yorvoid.policy.explain`), and seeing the application as someone else sees it (`yorvoid.policy.view_as`). A declaration that doesn't fit (a name twice, a default role that isn't declared, an operation's undeclared ability) fails when YorvoID is built. In Symfony, a service implementing `PolicyDeclarations` is collected by itself.
 
 Ask about one of your own abilities with `Policy::decide()` or `allows()`, or in Symfony with `isGranted()`, which YorvoID decides for every declared ability:
 
@@ -255,7 +255,7 @@ They need `yorvoid.roles.manage`. Adding someone to a group gives them its roles
 
 ## Attributes
 
-Security attributes are what decisions may read about a principal (IDN-055), e.g. a department or a clearance, kept apart from profile data, which decisions never read. Their owner declares them in a service implementing `AttributeDeclarations` (`SecurityAttribute`: a namespaced name, a label, a type: string, integer, boolean or a list of strings). `SetAttribute` (`yorvoid.attribute.set`, ability `yorvoid.attributes.manage`) sets one or, with null, removes it. What an attribute decides is the application's rules', so nobody but the operator sets their own, setting anyone's takes a recent proof, and the ability is apart from managing accounts: no role has it until you give it; the security log names the attribute, never its value. A deleted principal's attributes go.
+Security attributes are what decisions may read about a principal (IDN-055), e.g. a department or a clearance, kept apart from profile data, which decisions never read. Their owner declares them in a service implementing `AttributeDeclarations` (`SecurityAttribute`: a namespaced name, a label, a type: string, integer, boolean or a list of strings). `SetAttribute` (`yorvoid.attribute.set`, ability `yorvoid.attributes.manage`) sets one or, with null, removes it. What an attribute decides is the application's rules', so nobody but the operator sets their own, setting anyone's takes a recent proof, and the ability is apart from managing accounts: no role has it until you give it, but a super role, since it isn't strict; the security log names the attribute, never its value. A deleted principal's attributes go.
 
 A rule reads them through `Attributes`: the acting principal's (`principal()`), and the request's resource or environment (`resolve()`), which an `AttributeResolver` answers, e.g. whether a page is classified, or whether the request comes from the office. What isn't known throws `MissingAttribute`, and the decision is Indeterminate (`missing_data`), never a Permit. Any exception of yours implementing `MissingData` is read the same way.
 
@@ -372,8 +372,9 @@ Every element's truth says what it rests on (`Truth::$grounds`, a list of `Groun
 ```php
 use YorvoID\Core\Authorization\Explanation;
 use YorvoID\Core\Authorization\GroundKind;
+use YorvoID\Core\Authorization\ResourceRef;
 
-$explanation = Explanation::of($policy->decide($session, 'acme.pages.publish', $realm, $page, $origin));
+$explanation = Explanation::of($policy->decide($session, 'acme.pages.publish', $realm, new ResourceRef('page', $page->id), $origin));
 
 foreach ($explanation->grounds as $ground) {
     if (GroundKind::Role === $ground->kind) {
@@ -420,6 +421,7 @@ A view is read-only: the forbid `yorvoid.view_as.read_only` refuses every operat
 Begin one with the operation `yorvoid.view_as.begin` (`BeginViewAs`), which takes the ability `yorvoid.policy.view_as`. It refuses a target that isn't active or is the viewer, is recorded in the security log with the viewer as the actor and the target as the subject, and returns the actor and what's beyond the viewer: the abilities the target's roles give and the viewer's don't, in the whole realm and on each resource the target has a role on. Decide whether to show such a view at all (refuse it, as Quire does) or to warn that it's partial:
 
 ```php
+use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Policy\ViewAs\BeginViewAs;
 
 $view = $operations->run(new BeginViewAs($realm, $member), $session, $origin);
@@ -428,14 +430,14 @@ if (!$view->complete()) {
     // $view->beyond: each Beyond's ability, and the resource it's on (null for the whole realm)
 }
 
-$policy->allows($view->actor, 'acme.pages.edit', $realm, $page, $origin);
+$policy->allows($view->actor, 'acme.pages.edit', $realm, new ResourceRef('page', $page->id), $origin);
 ```
 
 Only roles are compared for what's beyond: a relation or a rule that permits the target isn't listed, though the view refuses it too. Nothing is stored: a view lasts as long as you hold the actor, and every decision reads the policy as it is then, so a viewer who loses a role during the view loses it in the view too. All of it is experimental.
 
 ## Why it couldn't decide
 
-Every Indeterminate names what couldn't be established (`IndeterminateReason`): `store_unreachable`, `unknown_forbid`, `unverifiable_signature`, `missing_data`, `conflicting_records` or `evaluation_error`. New reasons can come in a minor release, so a `match` of yours on them needs a default arm.
+Every Indeterminate names what couldn't be established (`IndeterminateReason`): `store_unreachable`, `unknown_forbid`, `unverifiable_signature`, `missing_data`, `conflicting_records`, `evaluation_error` or `audit_unavailable` ([when a record can't be written](security-log.md#when-a-record-cant-be-written)). New reasons can come in a minor release, so a `match` of yours on them needs a default arm.
 
 ## What a request reads
 
