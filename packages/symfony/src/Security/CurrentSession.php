@@ -15,7 +15,6 @@ use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\ValidSession;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Realm;
@@ -37,6 +36,8 @@ final class CurrentSession implements ResetInterface
     /** @var \WeakMap<Request, ValidSession|null> */
     private \WeakMap $checked;
 
+    private readonly RequestOrigins $origins;
+
     public function __construct(
         private readonly RequestStack $requests,
         private readonly Sessions $sessions,
@@ -44,8 +45,10 @@ final class CurrentSession implements ResetInterface
         private readonly Realm $realm,
         private readonly string $key = self::KEY,
         private readonly ?TokenStorageInterface $tokens = null,
+        ?RequestOrigins $origins = null,
     ) {
         $this->checked = new \WeakMap();
+        $this->origins = $origins ?? new RequestOrigins($requests);
     }
 
     /**
@@ -78,9 +81,12 @@ final class CurrentSession implements ResetInterface
     /**
      * Keeps a session's token in the PHP session, under a new PHP session ID (SES-002). A session the PHP
      * session held before ends, unless it's the same one with a new token, after a step-up (V7.2.4).
+     *
+     * @param Origin|null $origin The request's, unless given
      */
-    public function hold(#[\SensitiveParameter] Secret $token, Origin $origin = new Origin(OriginKind::Web)): void
+    public function hold(#[\SensitiveParameter] Secret $token, ?Origin $origin = null): void
     {
+        $origin ??= $this->origins->of();
         $request = $this->requests->getMainRequest() ?? throw new \LogicException('There is no request to hold a session in.');
         $previous = $this->get();
         $held = null === $previous ? null : $this->sessions->validate($this->realm, $token);
@@ -101,10 +107,12 @@ final class CurrentSession implements ResetInterface
      * Signs the person out, when you do it yourself rather than through the firewall's logout: ends the
      * YorvoID session, empties the PHP session under a new ID, and clears the firewall's token, so no
      * firewall stays signed in, and a copy of the old session cookie is no use.
+     *
+     * @param Origin|null $origin The request's, unless given
      */
-    public function signOut(Origin $origin = new Origin(OriginKind::Web)): void
+    public function signOut(?Origin $origin = null): void
     {
-        $this->end($origin);
+        $this->end($origin ?? $this->origins->of());
         $request = $this->requests->getMainRequest();
 
         if (null !== $request && $request->hasSession()) {

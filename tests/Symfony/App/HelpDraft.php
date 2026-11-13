@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Symfony\App;
 
+use YorvoID\Core\Operation\ConcernsNoResource;
+
 /**
- * An application's own object as isGranted()'s subject, which doesn't say which resource it is: the
- * application's rules read it.
+ * An application's own object as isGranted()'s subject, about no resource: the application's rules
+ * read it.
  */
-final readonly class HelpDraft
+final readonly class HelpDraft implements ConcernsNoResource
 {
 }

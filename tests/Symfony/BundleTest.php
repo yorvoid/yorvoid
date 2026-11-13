@@ -13,6 +13,10 @@ use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpFoundation\Session\Session as HttpSession;
+use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 use Symfony\Component\Mailer\EventListener\MessageLoggerListener;
 use Symfony\Component\Mime\Email;
 use YorvoID\Authn\Attempt\AttemptLimits;
@@ -40,6 +44,7 @@ use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Migration\LockProfile;
 use YorvoID\Core\Storage\Migration\Migration;
@@ -55,6 +60,8 @@ use YorvoID\Passkeys\PasskeyPolicy;
 use YorvoID\Passkeys\UserVerification;
 use YorvoID\Policy\Ordered\OrderedConditions;
 use YorvoID\Symfony\Command\MigrateCommand;
+use YorvoID\Symfony\Security\CurrentSession;
+use YorvoID\Symfony\Security\RequestOrigins;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Symfony\App\TestKernel;
 use YorvoID\Throttle\Limit;
@@ -212,6 +219,34 @@ final class BundleTest extends TestCase
         \assert($tokens instanceof OneTimeTokens);
 
         self::assertSame($container->get('logger'), (new \ReflectionProperty(OneTimeTokens::class, 'logger'))->getValue($tokens), 'Not a logger of its own, which nobody reads.');
+    }
+
+    public function testSigningOutHereIsLoggedWithTheRequestsCorrelationId(): void
+    {
+        $container = $this->boot();
+        $this->migrate();
+        $principals = $container->get(Principals::class);
+        $sessions = $container->get(Sessions::class);
+        $current = $container->get(CurrentSession::class);
+        $origins = $container->get(RequestOrigins::class);
+        $requests = $container->get('request_stack');
+        \assert($principals instanceof Principals && $sessions instanceof Sessions && $current instanceof CurrentSession && $origins instanceof RequestOrigins && $requests instanceof RequestStack);
+        $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
+        $start = static fn (): Secret => Permits::call($sessions->start(...), new StartSession(Realm::default(), $ana->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web))->token;
+        $session = new HttpSession(new MockArraySessionStorage());
+        $session->start();
+        $request = new Request(cookies: [$session->getName() => $session->getId()]);
+        $request->setSession($session);
+        $requests->push($request);
+
+        $request->getSession()->set(CurrentSession::KEY, $start()->reveal());
+        $current->signOut();
+        $current->hold($start());
+        $current->hold($start(), new Origin(OriginKind::Web, null, 'given-to-hold'));
+        $current->signOut(new Origin(OriginKind::Web, null, 'given-to-sign-out'));
+
+        $ended = $this->database($container)->connection->fetchFirstColumn(\sprintf("SELECT correlation_id FROM %s WHERE action LIKE '%%session%%end%%' ORDER BY sequence", $this->database($container)->table(DbalSecurityLogStore::TABLE)));
+        self::assertSame([$origins->of()->correlationId, 'given-to-hold', 'given-to-sign-out'], $ended, 'The request\'s own, the one the bundle\'s other services use; or the one given.');
     }
 
     public function testAddsTheMiddlewareToYorvoIDsConnectionOnly(): void

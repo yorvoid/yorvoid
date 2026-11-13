@@ -99,7 +99,7 @@ It isn't a chain, and recording takes no lock: every request asks for decisions,
 What's recorded, and when:
 
 - **An operation's decision**, whatever it is, at once and before the operation runs, in a statement of its own. The operation's transaction starts afterwards, so a change rolled back still has its decision; if you call `Operations::run()` inside a transaction of your own, the decision is part of yours. If it can't be written, the operation doesn't run.
-- **An ability's refusal or Indeterminate**, always, and its permit as configured: none by default, all, or a sampled share of requests, chosen per correlation ID so a request is recorded whole or not at all. An ability declared with `recordsPermits: true` records its permits whatever the configuration, e.g. one for explaining someone else's access.
+- **An ability's refusal or Indeterminate**, always, and its permit as configured: none by default, all, or a sampled share of requests, chosen per correlation ID so a request is recorded whole or not at all (in Symfony, a request and its sub-requests share one: [`RequestOrigins`](symfony.md#who-may-run-an-operation)). An ability declared with `recordsPermits: true` records its permits whatever the configuration, e.g. one for explaining someone else's access.
 - Abilities' records wait for the end of what asked for them and are written together: call `DecisionLog::flush()` when a request, command or job ends (in Symfony, `kernel.terminate`, `console.terminate` and Messenger's handled and failed messages do), and whenever 100 are waiting. That's best effort: a process that dies before then loses them, and a write that fails raises the [audit alert](#when-a-record-cant-be-written), not an error.
 
 ```php

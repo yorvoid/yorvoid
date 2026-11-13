@@ -14,10 +14,13 @@ use Symfony\Bundle\TwigBundle\TwigBundle;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Config\Loader\LoaderInterface;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
+use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Kernel;
+use Symfony\Component\Security\Core\Authorization\ExpressionLanguage;
+use Symfony\Component\Security\Core\Authorization\Voter\ExpressionVoter;
 use YorvoID\PolicyTesting\Symfony\YorvoIDPolicyTestingBundle;
 use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\RecoveryCodeAuthenticator;
@@ -46,6 +49,11 @@ final class TestKernel extends Kernel implements CompilerPassInterface
      * @param bool                 $session        Whether it has a PHP session
      * @param bool                 $mailer         Whether it has Symfony Mailer
      * @param string|null          $database       The application's database, if not its own SQLite file
+     * @param array<string, mixed> $security       SecurityBundle's configuration, over the defaults below
+     * @param list<class-string>   $services       The application's own services, autoconfigured
+     * @param list<class-string>   $voters         Voters another bundle's compiler pass tags, before SecurityBundle gathers them
+     * @param bool                 $expressions    Whether it decides Symfony's expressions, as with symfony/expression-language installed
+     * @param int|null             $decorates      The priority of the application's decorator of Symfony's authenticated voter, if it has one
      */
     public function __construct(
         private readonly string $directory,
@@ -59,6 +67,11 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         private readonly bool $mailer = true,
         string $environment = 'test',
         private readonly ?string $database = null,
+        private readonly array $security = [],
+        private readonly array $services = [],
+        private readonly array $voters = [],
+        private readonly bool $expressions = false,
+        private readonly ?int $decorates = null,
     ) {
         parent::__construct($environment, $debugging);
     }
@@ -128,7 +141,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                 // A connection of its own to the same database, for the decision log (AUD-006).
                 'audit' => ['url' => $this->database ?? 'sqlite:///'.$this->directory.'/yorvoid.sqlite'],
             ]]]);
-            $container->loadFromExtension('security', [
+            $container->loadFromExtension('security', array_replace([
                 'providers' => ['yorvoid' => ['id' => PrincipalUserProvider::class]],
                 'firewalls' => ['main' => [
                     'lazy' => true,
@@ -137,7 +150,43 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                     'logout' => ['path' => 'sign_out'],
                 ] + ($this->authenticators ? ['custom_authenticators' => [PasskeyAuthenticator::class, RecoveryCodeAuthenticator::class, RecoveryLinkAuthenticator::class, SessionAuthenticator::class]] : [])],
                 'access_control' => [['path' => '^/me', 'roles' => 'IS_AUTHENTICATED']],
-            ]);
+            ], $this->security));
+
+            foreach ($this->services as $service) {
+                $container->register($service)->setAutoconfigured(true)->setAutowired(true);
+            }
+
+            foreach ($this->voters as $voter) {
+                $container->register($voter)->setAutowired(true);
+            }
+
+            // SecurityBundle's own only when symfony/expression-language is installed for production: it's a dev dependency here.
+            if ($this->expressions) {
+                $container->register('test.expression_voter', ExpressionVoter::class)
+                    ->setArguments([new Definition(ExpressionLanguage::class), new Reference('security.authentication.trust_resolver'), new Reference('security.authorization_checker'), null, new Reference('security.access.decision_manager'), new Reference('security.token_storage')])
+                    ->addTag('security.voter', ['priority' => 245]);
+            }
+
+            if (null !== $this->decorates) {
+                $container->register(DecoratesAuthenticatedVoter::class)
+                    ->setDecoratedService('security.access.authenticated_voter', null, $this->decorates)
+                    ->setArguments([new Reference(DecoratesAuthenticatedVoter::class.'.inner')]);
+            }
+
+            $voters = $this->voters;
+            $container->addCompilerPass(new class($voters) implements CompilerPassInterface {
+                /** @param list<class-string> $voters */
+                public function __construct(private readonly array $voters)
+                {
+                }
+
+                public function process(ContainerBuilder $container): void
+                {
+                    foreach ($this->voters as $voter) {
+                        $container->getDefinition($voter)->addTag('security.voter', ['priority' => 100]);
+                    }
+                }
+            }, PassConfig::TYPE_BEFORE_OPTIMIZATION, 10);
 
             if ($this->customize) {
                 $container->register(TermsCustomizer::class)->setAutoconfigured(true);

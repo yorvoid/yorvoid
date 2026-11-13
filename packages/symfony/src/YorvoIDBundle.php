@@ -6,6 +6,7 @@ namespace YorvoID\Symfony;
 
 use Symfony\Component\Config\Definition\Builder\NodeBuilder;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
+use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Definition;
@@ -301,6 +302,8 @@ final class YorvoIDBundle extends AbstractBundle
     public function build(ContainerBuilder $container): void
     {
         $container->addCompilerPass(new DependencyInjection\YorvoIDPass());
+        // After SecurityBundle has gathered the voters (AddSecurityVotersPass, priority 0).
+        $container->addCompilerPass(new DependencyInjection\VotersPass(), PassConfig::TYPE_BEFORE_OPTIMIZATION, -16);
     }
 
     /**

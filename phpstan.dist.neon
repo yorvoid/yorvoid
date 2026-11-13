@@ -75,6 +75,12 @@ parameters:
             # can't resolve when fewer are passed; a limitation of its annotations, not of our tests.
             identifier: argument.templateType
             path: tests/Properties/*
+        -
+            # Symfony 7.4 declares a voter's Vote only in a comment, `array $attributes/* , ?Vote $vote = null */`,
+            # and 8 in the signature; both pass it on. CI's LTS job analyses against 7.4, where this is reported.
+            message: '#^Method Symfony\\Component\\Security\\Core\\Authorization\\Voter\\VoterInterface::vote\(\) invoked with 4 parameters, 3 required\.$#'
+            identifier: arguments.count
+            reportUnmatched: false
 
 rules:
     - YorvoID\Tools\PHPStan\SecretComparisonRule

@@ -133,7 +133,7 @@ final readonly class Policy
         return match (true) {
             $one instanceof ResourceRef => [$one, null],
             $one instanceof ConcernsResource => [$one->resource(), $one],
-            \is_array($one) && ($one[0] ?? null) instanceof ResourceRef && \is_object($one[1] ?? null) => [$one[0], $one[1]],
+            \is_array($one) && array_is_list($one) && 2 === \count($one) && $one[0] instanceof ResourceRef && \is_object($one[1]) => [$one[0], $one[1]],
             default => throw new IntegratorError(\sprintf('decideMany() was given %s for "%s".', get_debug_type($one), $ability), 'Give each a ResourceRef, a subject that implements ConcernsResource, or [ResourceRef, subject].', 'concepts/authorization.md#many-at-once'),
         };
     }

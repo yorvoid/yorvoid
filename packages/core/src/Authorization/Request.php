@@ -9,6 +9,7 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsNoResource;
 use YorvoID\Core\Operation\ConcernsResource;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Realm;
@@ -64,6 +65,10 @@ final readonly class Request
     {
         if ($subject instanceof ResourceRef) {
             throw new IntegratorError(\sprintf('The subject of "%s" is the resource %s.', $ability, $subject), 'Give a ResourceRef as the resource; the subject is the application\'s own object.', 'concepts/authorization.md#the-subject');
+        }
+
+        if ($subject instanceof ConcernsNoResource && ($subject instanceof ConcernsResource || null !== $resource)) {
+            throw new IntegratorError(\sprintf('The subject of "%s" concerns no resource, and is given %s.', $ability, $subject instanceof ConcernsResource ? 'one of its own' : 'one'), 'Give a subject that concerns no resource without one, or have it say which it concerns with ConcernsResource alone.', 'concepts/authorization.md#the-subject');
         }
 
         if ($subject instanceof ConcernsResource) {

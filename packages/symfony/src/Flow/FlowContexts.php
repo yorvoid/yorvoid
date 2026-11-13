@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace YorvoID\Symfony\Flow;
 
 use Symfony\Component\HttpFoundation\Request;
-use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Event\OriginKind;
+use Symfony\Component\HttpFoundation\RequestStack;
 use YorvoID\Core\Secret;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\Json;
+use YorvoID\Symfony\Security\RequestOrigins;
 
 /**
  * The context a flow continues in, from the request: the YorvoID session, the browser's description,
@@ -23,6 +23,7 @@ final readonly class FlowContexts
     public function __construct(
         private CurrentSession $current,
         private string $deviceCookie,
+        private RequestOrigins $origins = new RequestOrigins(new RequestStack()),
     ) {
     }
 
@@ -32,7 +33,7 @@ final readonly class FlowContexts
         $route = $request->attributes->get('_route');
 
         return new FlowContext(
-            new Origin(OriginKind::Web, \is_string($route) ? $route : null),
+            $this->origins->of(\is_string($route) ? $route : null),
             $this->current->get(),
             Json::device($request),
             $request->getClientIp(),
