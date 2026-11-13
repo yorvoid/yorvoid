@@ -22,6 +22,9 @@ final class RecordingVoter implements VoterInterface
     /** @var list<bool> */
     public array $withVote = [];
 
+    /**
+     * @param array<mixed> $attributes
+     */
     public function vote(TokenInterface $token, mixed $subject, array $attributes, ?Vote $vote = null): int
     {
         $this->asked[] = $attributes;

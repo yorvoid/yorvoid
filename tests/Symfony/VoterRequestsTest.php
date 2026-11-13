@@ -15,6 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\TerminateEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\Security\Core\Authorization\AccessDecision;
+use Symfony\Component\Security\Core\Authorization\AuthorizationChecker;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Vote;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
@@ -154,6 +155,8 @@ final class VoterRequestsTest extends TestCase
     public function testTheVoteSaysTheVerdictAndTheRecordNotTheReason(): void
     {
         $checker = $this->checker(['audit' => ['on_failure' => 'refuse'], 'decision_log' => ['permits' => 'sampled', 'sample_rate' => 0.0]]);
+        // Symfony 7.4's interface declares the AccessDecision only in a comment; its checker takes it, as 8's does.
+        \assert($checker instanceof AuthorizationChecker);
 
         $denied = new AccessDecision();
         self::assertFalse($checker->isGranted('acme.pages.view', new ResourceRef('page', 'locked'), $denied));
@@ -174,6 +177,7 @@ final class VoterRequestsTest extends TestCase
         $this->kernel?->shutdown();
         $this->directory .= '-all';
         $checker = $this->checker(['audit' => ['on_failure' => 'refuse'], 'decision_log' => ['permits' => 'all']]);
+        \assert($checker instanceof AuthorizationChecker);
         FailingInserts::$tables = [DbalDecisionLogStore::TABLE];
         $unavailable = new AccessDecision();
         self::assertFalse($checker->isGranted('acme.pages.view', null, $unavailable));

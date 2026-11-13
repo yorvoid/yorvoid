@@ -71,6 +71,9 @@ final class AbstainOnYorvoIDAbilitiesTest extends TestCase
     public function testItSupportsWhatTheVoterSupports(): void
     {
         $cacheable = new class implements CacheableVoterInterface {
+            /**
+             * @param array<mixed> $attributes
+             */
             public function vote(TokenInterface $token, mixed $subject, array $attributes, ?Vote $vote = null): int
             {
                 return self::ACCESS_ABSTAIN;

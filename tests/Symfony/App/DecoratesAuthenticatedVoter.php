@@ -19,6 +19,9 @@ final readonly class DecoratesAuthenticatedVoter implements VoterInterface
     ) {
     }
 
+    /**
+     * @param array<mixed> $attributes
+     */
     public function vote(TokenInterface $token, mixed $subject, array $attributes, ?Vote $vote = null): int
     {
         foreach ($attributes as $attribute) {

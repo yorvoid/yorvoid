@@ -26,6 +26,9 @@ final readonly class AbstainOnYorvoIDAbilities implements CacheableVoterInterfac
     ) {
     }
 
+    /**
+     * @param array<mixed> $attributes
+     */
     public function vote(TokenInterface $token, mixed $subject, array $attributes, ?Vote $vote = null): int
     {
         $asked = null === $vote ? null : new Vote();
