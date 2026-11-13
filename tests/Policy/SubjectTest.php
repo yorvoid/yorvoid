@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Policy;
 
+use PHPUnit\Framework\Attributes\DataProviderExternal;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
@@ -23,6 +24,7 @@ use YorvoID\Tests\Policy\Fixtures\ContentItem;
 use YorvoID\Tests\Policy\Fixtures\Page;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\SubjectShapes;
 
 /**
  * The request's subject (G1) with the policy: rules and resolvers read it, roles count for the
@@ -80,18 +82,45 @@ final class SubjectTest extends DatabaseTestCase
         self::assertSame('A forbid applies: Secret pages aren\'t published.', $decisions->for(new ResourceRef('page', '5'))->reason);
         self::assertFalse($decisions->allows(new ResourceRef('page', '4')));
 
-        foreach (['acme', [new ResourceRef('page', '1')], [new ResourceRef('page', '1'), 'acme'], ['page:1', new \stdClass()], new \stdClass()] as $wrong) {
-            try {
-                $world->policy->decideMany($ada, 'acme.pages.publish', $world->realm, [$wrong], new Origin(OriginKind::Web)); // @phpstan-ignore argument.type
-                self::fail('A batch was given '.get_debug_type($wrong).'.');
-            } catch (IntegratorError $error) {
-                self::assertStringStartsWith(\sprintf('decideMany() was given %s for "acme.pages.publish".', get_debug_type($wrong)), $error->getMessage());
-            }
-        }
-
         $this->expectException(IntegratorError::class);
         $this->expectExceptionMessage('The subject of "acme.pages.publish" concerns page:1, not page:9.');
         $world->policy->decideMany($ada, 'acme.pages.publish', $world->realm, [[new ResourceRef('page', '9'), new Page('1', self::id($ada))]], new Origin(OriginKind::Web));
+    }
+
+    #[DataProviderExternal(SubjectShapes::class, 'refused')]
+    public function testABatchRefusesWhatIsntAResourceWithItsSubject(mixed $wrong): void
+    {
+        $world = self::world();
+
+        $this->expectException(IntegratorError::class);
+        $this->expectExceptionMessage(\sprintf('decideMany() was given %s for "acme.pages.publish".', get_debug_type($wrong)));
+        $world->policy->decideMany($world->principal('member'), 'acme.pages.publish', $world->realm, [$wrong], new Origin(OriginKind::Web)); // @phpstan-ignore argument.type
+    }
+
+    public function testASubjectAboutNoResourceTakesNone(): void
+    {
+        $world = self::world();
+        $ada = $world->principal('editor');
+
+        self::assertTrue($this->allows($world, $ada, null, SubjectShapes::none()), 'Roles on the whole realm count.');
+
+        foreach ([[null, SubjectShapes::both(), 'one of its own'], [new ResourceRef('page', '1'), SubjectShapes::none(), 'one']] as [$resource, $subject, $given]) {
+            try {
+                $this->decide($world, $ada, $resource, $subject);
+                self::fail('Decided on a subject about no resource, with '.$given.'.');
+            } catch (IntegratorError $error) {
+                self::assertStringStartsWith(\sprintf('The subject of "acme.pages.publish" concerns no resource, and is given %s.', $given), $error->getMessage());
+            }
+        }
+
+        foreach ([SubjectShapes::both(), [new ResourceRef('page', '1'), SubjectShapes::none()]] as $wrong) {
+            try {
+                $world->policy->decideMany($ada, 'acme.pages.publish', $world->realm, [$wrong], new Origin(OriginKind::Web)); // @phpstan-ignore argument.type
+                self::fail('A batch was given a subject about no resource, with one.');
+            } catch (IntegratorError $error) {
+                self::assertStringStartsWith('The subject of "acme.pages.publish" concerns no resource', $error->getMessage());
+            }
+        }
     }
 
     public function testNothingKeepsOrCachesTheSubject(): void

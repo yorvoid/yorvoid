@@ -315,9 +315,21 @@ public function decide(Request $request): RuleAnswer
 ```
 
 - **Its resource** is the one given, or else the one the subject concerns when it implements `ConcernsResource`. Any subject may come with a resource; one that implements `ConcernsResource` and concerns another is a mistake (`IntegratorError`).
-- **A subject with no resource** is about none, so only roles on the whole realm count for it: a role on a page doesn't. Give the resource if roles on it should count.
+- **A subject with no resource** is about none, so only roles on the whole realm count for it: a role on a page doesn't. Give the resource if roles on it should count. One that implements `ConcernsNoResource` says so: it's then a mistake (`IntegratorError`) to give it a resource, or to have it implement `ConcernsResource` too.
 - **It stays the application's:** it's never recorded in the decision log, written to the log or the security log, or part of a cache key, and nothing keeps it beyond the request. The decision records its resource.
-- **In Symfony**, `isGranted()`'s subject is the resource when it's a `ResourceRef`, and the request's subject when it's any other object: `isGranted('acme.pages.edit', $page)`, with `Page` implementing `ConcernsResource` so roles on it count.
+- **In Symfony**, `isGranted()` for a declared ability takes only a subject that says which resource it's about, or that it's about none. Anything else is an `IntegratorError`, not a decision without the resource, where a forbid on the resource (a locked page, a legal hold) wouldn't apply:
+
+  | `isGranted()`'s subject | The resource | The subject, for rules |
+  |---|---|---|
+  | none | none: the whole realm | none |
+  | a `ResourceRef` | it | none |
+  | an object that implements `ConcernsResource` | the one it concerns | it |
+  | `[ResourceRef, object]` | the ref | the object |
+  | an object that implements `ConcernsNoResource` | none | it |
+  | the `Request`, as `access_control` asks, or given explicitly | none: the whole realm | none |
+  | anything else: an ID, an array, an entity that implements neither | refused | |
+
+  So `isGranted('acme.pages.edit', $page)` needs `Page` to implement `ConcernsResource`. With `#[IsGranted]`, give the resource: `#[IsGranted('acme.pages.edit', subject: new Expression('args["page"]'))]` with such a `Page`, rather than its ID.
 
 An element's detail texts are the decision's reason, which is recorded: don't put the subject's data in them.
 

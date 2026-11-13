@@ -16,6 +16,7 @@ use YorvoID\Passkeys\SignInWithPasskey;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\Json;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
+use YorvoID\Symfony\Security\RequestOrigins;
 
 /**
  * Signs in with a passkey: POST the ceremony's ID and the browser's answer, as JSON, to the route
@@ -32,8 +33,9 @@ final class PasskeyAuthenticator extends YorvoIDAuthenticator
         Realm $realm,
         string $deviceCookie,
         private readonly Operations $operations,
+        RequestOrigins $origins,
     ) {
-        parent::__construct($current, $users, $realm, $deviceCookie);
+        parent::__construct($current, $users, $realm, $deviceCookie, $origins);
     }
 
     protected function route(): string

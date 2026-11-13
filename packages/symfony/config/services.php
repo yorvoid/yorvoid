@@ -148,6 +148,7 @@ use YorvoID\Symfony\Doctor\PresetCheck;
 use YorvoID\Symfony\Doctor\ProxiesCheck;
 use YorvoID\Symfony\Doctor\TemplatesCheck;
 use YorvoID\Symfony\Doctor\TestHelpersCheck;
+use YorvoID\Symfony\Doctor\VotersCheck;
 use YorvoID\Symfony\Factories;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Flow\SessionFlowStore;
@@ -167,6 +168,7 @@ use YorvoID\Symfony\Security\PolicyVoter;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
+use YorvoID\Symfony\Security\RequestOrigins;
 use YorvoID\Symfony\Security\SignInEntryPoint;
 use YorvoID\Symfony\Security\ValidateSessionListener;
 use YorvoID\Symfony\Templates\FlowPages;
@@ -354,6 +356,7 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(PrincipalUsers::class, DefaultPrincipalUsers::class);
     $services->set(PrincipalUserProvider::class)->public();
     $services->set(PrincipalUserChecker::class)->public();
+    $services->set(RequestOrigins::class)->public();
     $services->set(CurrentSession::class)->public()->tag('kernel.reset', ['method' => 'reset']);
     // Before the firewall (8), which would sign in from the PHP session.
     $services->set(ValidateSessionListener::class)->tag('kernel.event_listener', ['event' => 'kernel.request', 'priority' => 9]);
@@ -416,6 +419,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(MailerCheck::class)->args([param('yorvoid.notifications.enabled'), param('yorvoid.notifications.from'), null, param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Mailer']);
     $services->set(TemplatesCheck::class)->tag('yorvoid.doctor_check', ['name' => 'Flow pages']);
     $services->set(TestHelpersCheck::class)->args([param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Test helpers']);
+    $services->set(VotersCheck::class)->args([param('yorvoid.voters.wrapped')])->tag('yorvoid.doctor_check', ['name' => 'Symfony voters']);
     $services->set(EnvironmentCheck::class)->args([param('kernel.environment'), param('kernel.debug'), param('kernel.secret')])->tag('yorvoid.doctor_check', ['name' => 'Environment']);
     $services->set(KeysRotateCommand::class)->tag('console.command');
     $services->set(ConfiguredCheckpoints::class)->arg('$file', param('yorvoid.log.checkpoint_file'))->arg('$toLogger', param('yorvoid.log.checkpoint_logger'))->arg('$events', service('event_dispatcher'))->arg('$logger', service('logger')->nullOnInvalid());

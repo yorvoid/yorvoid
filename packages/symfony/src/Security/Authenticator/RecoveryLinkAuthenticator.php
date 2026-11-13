@@ -13,6 +13,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
+use YorvoID\Symfony\Security\RequestOrigins;
 
 /**
  * Recovers an account with a recovery link: POST the link's token, as JSON, to the route
@@ -29,8 +30,9 @@ final class RecoveryLinkAuthenticator extends YorvoIDAuthenticator
         Realm $realm,
         string $deviceCookie,
         private readonly Operations $operations,
+        RequestOrigins $origins,
     ) {
-        parent::__construct($current, $users, $realm, $deviceCookie);
+        parent::__construct($current, $users, $realm, $deviceCookie, $origins);
     }
 
     protected function route(): string

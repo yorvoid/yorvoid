@@ -83,8 +83,7 @@ final class PolicyVoterTest extends TestCase
         self::assertFalse($checker->isGranted('acme.pages.view', new LockedPage()), 'A subject that says which resource it concerns.');
         self::assertTrue($checker->isGranted('acme.pages.view_drafts', new ResourceRef('page', 'help')));
         self::assertFalse($checker->isGranted('acme.pages.view_drafts', new ResourceRef('page', 'other')));
-        self::assertTrue($checker->isGranted('acme.pages.view_drafts', new HelpDraft()), 'Any other object is the subject, for the rules.');
-        self::assertFalse($checker->isGranted('acme.pages.view_drafts', 'help'), 'A scalar is neither.');
+        self::assertTrue($checker->isGranted('acme.pages.view_drafts', new HelpDraft()), 'An object about no resource is the subject, for the rules.');
 
         // Refusals are recorded when the request ends; permits of abilities aren't, by default.
         $table = $database->table(DbalDecisionLogStore::TABLE);
@@ -93,7 +92,7 @@ final class PolicyVoterTest extends TestCase
         \assert($dispatcher instanceof EventDispatcherInterface);
         $dispatcher->dispatch(new TerminateEvent($this->kernel ?? throw new \LogicException('Not booted.'), new Request(), new Response()), KernelEvents::TERMINATE);
         $recorded = array_map(static fn (array $row): array => [Row::string($row, 'name'), Row::string($row, 'verdict'), DecisionRecord::fromJson(Row::string($row, 'content'))], $database->connection->fetchAllAssociative(\sprintf('SELECT name, verdict, content FROM %s ORDER BY name', $table)));
-        self::assertSame(['acme.pages.publish', 'acme.pages.publish', 'acme.pages.view', 'acme.pages.view', 'acme.pages.view_drafts', 'acme.pages.view_drafts', 'acme.sites.update', 'yorvoid.principals.manage'], array_column($recorded, 0));
+        self::assertSame(['acme.pages.publish', 'acme.pages.publish', 'acme.pages.view', 'acme.pages.view', 'acme.pages.view_drafts', 'acme.sites.update', 'yorvoid.principals.manage'], array_column($recorded, 0));
         self::assertSame(['deny'], array_values(array_unique(array_column($recorded, 1))));
         self::assertSame(['policy', 'relations'], array_keys($recorded[0][2]->versions), 'Each records the versions it read.');
 

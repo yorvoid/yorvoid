@@ -17,12 +17,12 @@ use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPasspor
 use YorvoID\Authn\Session\InactivePrincipal;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\Json;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
+use YorvoID\Symfony\Security\RequestOrigins;
 use YorvoID\Throttle\Throttled;
 
 /**
@@ -39,6 +39,7 @@ abstract class YorvoIDAuthenticator extends AbstractAuthenticator
         private readonly PrincipalUserProvider $users,
         protected readonly Realm $realm,
         private readonly string $deviceCookie,
+        private readonly RequestOrigins $origins,
     ) {
     }
 
@@ -53,7 +54,7 @@ abstract class YorvoIDAuthenticator extends AbstractAuthenticator
         $cookie = $request->cookies->get($this->deviceCookie);
 
         try {
-            $started = $this->signIn($body, new Origin(OriginKind::Web, $this->route()), Json::device($request), $request->getClientIp(), \is_string($cookie) && '' !== $cookie ? Secret::fromString($cookie) : null);
+            $started = $this->signIn($body, $this->origins->of($this->route()), Json::device($request), $request->getClientIp(), \is_string($cookie) && '' !== $cookie ? Secret::fromString($cookie) : null);
         } catch (Throttled $exception) {
             throw new SignInRefused($exception->getMessage(), 429, $exception->seconds, $exception);
         } catch (InactivePrincipal $exception) {
