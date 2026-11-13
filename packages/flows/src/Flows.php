@@ -8,6 +8,7 @@ use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Clock\NativeClock;
 use YorvoID\Authn\Attempt\Attempts;
+use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\StepUp\HeldAfterRecovery;
@@ -38,6 +39,9 @@ final class Flows
     private const string DEVICE_COOKIE = 'flows.signed_in.device_cookie';
 
     private const string NEW_DEVICE = 'flows.signed_in.new_device';
+
+    /** The session the flow runs in, once it has one: where it started, or the one it signed in and handed over */
+    private const string SESSION = 'flows.session';
 
     /** The notice a step left for the flow's end (StepResult::done(notice: …)) */
     private const string NOTICE = 'flows.notice';
@@ -88,7 +92,7 @@ final class Flows
         $this->attempts?->count('flow_start', $realm, null, $context->address);
         $state = new FlowState(rtrim(strtr(base64_encode(Secret::random(32)->reveal()), '+/', '-_'), '='), $flow, $realm, $this->flow($flow)->lifetime->after($this->clock->now()));
 
-        return $this->advance($state->with($data), $context);
+        return $this->advance(self::bound($state->with($data), $context->session), $context);
     }
 
     /**
@@ -104,8 +108,13 @@ final class Flows
             return null;
         }
 
-        $step = null === $state->current ? null : $this->flow($state->flow)->step($state->current);
         $context = $this->signedIn($state, $context);
+
+        if (null === $context) {
+            return null;
+        }
+
+        $step = null === $state->current ? null : $this->flow($state->flow)->step($state->current);
 
         // A step an upgrade removed is passed over.
         return null === $step ? $this->advance($state, $context) : new Progress(FlowStatus::InProgress, $state, $step->name(), $step->view($state));
@@ -126,6 +135,12 @@ final class Flows
             return null;
         }
 
+        $running = $this->signedIn($state, $context);
+
+        if (null === $running) {
+            return null;
+        }
+
         $current = null === $state->current ? null : $this->flow($state->flow)->step($state->current);
 
         if (null === $current || $step !== $current->name()) {
@@ -135,7 +150,7 @@ final class Flows
             return new Progress($progress->status, $progress->state, $progress->step, $progress->view, [new Problem('yorvoid.flow.out_of_date')]);
         }
 
-        $context = $this->signedIn($state, $context);
+        $context = $running;
 
         try {
             $result = $current->submit($state, $context, $input);
@@ -203,11 +218,42 @@ final class Flows
     /**
      * The request's context, in the session a step of the flow started, if one did.
      */
-    private function signedIn(FlowState $state, FlowContext $context): FlowContext
+    /**
+     * The context the flow's steps run in, or null when the flow has ended, which deletes it: a session
+     * it holds back must still be valid, and the request must have the session the flow runs in, if it
+     * runs in one (H-6, BRIDGE-07). Both, when it has both. A flow that has neither is its bearer's.
+     */
+    private function signedIn(FlowState $state, FlowContext $context): ?FlowContext
     {
+        $bound = $state->get(self::SESSION);
         $token = $state->string(self::TOKEN);
+        $held = null === $token ? null : $this->sessions->validate($state->realm, Secret::fromString($token));
+        $ended = (null !== $token && null === $held) || (null !== $bound && !self::runsIn($bound, $context->session));
 
-        return null === $token ? $context : $context->withSession($this->sessions->validate($state->realm, Secret::fromString($token)));
+        if ($ended) {
+            $this->store->delete($state->id);
+
+            return null;
+        }
+
+        return null === $held ? $context : $context->withSession($held);
+    }
+
+    /**
+     * The state, bound to the session, if there is one.
+     */
+    private static function bound(FlowState $state, ?Session $session): FlowState
+    {
+        return null === $session ? $state : $state->with([self::SESSION => ['realm' => $session->realm->name, 'id' => (string) $session->id]]);
+    }
+
+    /**
+     * Whether the request's session is the one the flow runs in: by realm and ID, which a step-up's new
+     * token keeps.
+     */
+    private static function runsIn(mixed $bound, ?Session $session): bool
+    {
+        return null !== $session && $bound === ['realm' => $session->realm->name, 'id' => (string) $session->id];
     }
 
     /**
@@ -262,8 +308,10 @@ final class Flows
         $token = $state->string(self::TOKEN);
         $deviceCookie = $state->string(self::DEVICE_COOKIE);
         $signedIn = null === $token || null === $context->session ? null : new StartedSession($context->session, Secret::fromString($token), null === $deviceCookie ? null : Secret::fromString($deviceCookie), true === $state->get(self::NEW_DEVICE));
+        $state = $state->without([self::TOKEN, self::DEVICE_COOKIE, self::NEW_DEVICE]);
 
-        return [$state->without([self::TOKEN, self::DEVICE_COOKIE, self::NEW_DEVICE]), $signedIn];
+        // Handed over, the session the flow signed in is the one it runs in from now on.
+        return [null === $signedIn ? $state : self::bound($state, $signedIn->session), $signedIn];
     }
 
     /**

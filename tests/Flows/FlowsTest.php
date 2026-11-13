@@ -361,16 +361,17 @@ final class FlowsTest extends DatabaseTestCase
         self::assertSame([FlowStatus::InProgress, 'after', null], [$accepted?->status, $accepted?->step, $accepted?->renewedToken]);
         self::assertSame($renewed->token->reveal(), $accepted?->signedIn?->token->reveal(), 'The newest token, once the required steps are done.');
         self::assertSame((string) $renewed->session->id, (string) $accepted->signedIn->session->id);
-        self::assertSame([], array_filter(array_keys($accepted->state->toArray()['data']), static fn (string $key): bool => str_starts_with($key, 'flows.')), 'The token isn\'t kept.');
+        self::assertSame(['flows.session'], array_values(array_filter(array_keys($accepted->state->toArray()['data']), static fn (string $key): bool => str_starts_with($key, 'flows.'))), 'The token isn\'t kept.');
+        self::assertSame(['realm' => 'acme', 'id' => (string) $renewed->session->id], $accepted->state->get('flows.session'), 'Handed over, the session runs the rest of the flow.');
 
-        // From then on, the request's own session.
-        $flows->submit($flow->state->id, 'after', new Input(), $this->context->withSession($started->session));
-        self::assertSame($started->session, $after->submitted[0]->session);
-        $last = $flows->submit($flow->state->id, 'later', new Input(), $this->context);
+        // From then on, the request's own session: the one handed over.
+        $flows->submit($flow->state->id, 'after', new Input(), $this->context->withSession($renewed->session));
+        self::assertSame($renewed->session, $after->submitted[0]->session);
+        $last = $flows->submit($flow->state->id, 'later', new Input(), $this->context->withSession($renewed->session));
         self::assertSame([FlowStatus::Completed, null, null], [$last?->status, $last?->signedIn, $last?->renewedToken]);
     }
 
-    public function testASessionThatEndedMeanwhileIsntHandedOver(): void
+    public function testAFlowWhoseHeldBackSessionEndedEnds(): void
     {
         $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
         $started = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
@@ -380,10 +381,76 @@ final class FlowsTest extends DatabaseTestCase
         $flows->submit($flow->state->id, 'sign_in', new Input(), $this->context);
 
         Permits::call($this->sessions->end(...), new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
-        $done = $flows->submit($flow->state->id, 'terms', new Input(), $this->context);
 
-        self::assertSame([FlowStatus::Completed, null], [$done?->status, $done?->signedIn]);
-        self::assertNull($terms->submitted[0]->session, 'The step ran without it.');
+        self::assertNull($flows->submit($flow->state->id, 'terms', new Input(), $this->context), 'The session it holds back ended: so did the flow.');
+        self::assertSame([], $terms->submitted, 'No step ran without it.');
+        self::assertNull($flows->resume($flow->state->id, $this->context), 'It\'s gone.');
+    }
+
+    public function testAFlowStartedInASessionGoesOnOnlyInIt(): void
+    {
+        [$ana, $bob] = [$this->started(), $this->started()];
+        $second = new TestStep('second');
+        $flows = $this->flows(new Flow('acme.add', [new TestStep('first'), $second]));
+        $inAnas = $this->context->withSession($ana->session);
+
+        $flow = $flows->start('acme.add', new Realm('acme'), $inAnas);
+        self::assertSame('first', $flows->resume($flow->state->id, $inAnas)?->step, 'In her session.');
+        self::assertSame('second', $flows->submit($flow->state->id, 'first', new Input(), $inAnas)?->step);
+
+        self::assertNull($flows->resume($flow->state->id, $this->context->withSession($bob->session)), 'Not in another\'s (BRIDGE-07).');
+        self::assertNull($flows->resume($flow->state->id, $inAnas), 'Ended: deleted, not refused.');
+        self::assertNull($this->store->get($flow->state->id));
+
+        $again = $flows->start('acme.add', new Realm('acme'), $inAnas);
+        self::assertNull($flows->submit($again->state->id, 'first', new Input(), $this->context), 'Nor without one, e.g. after signing out (H-6); submitting is checked too.');
+        self::assertSame([], $second->submitted);
+        self::assertNull($this->store->get($again->state->id));
+    }
+
+    public function testEveryBindingAFlowHasMustHold(): void
+    {
+        [$ana, $bob] = [$this->started(), $this->started()];
+        $flows = $this->flows(new Flow('acme.sign_in', [new TestStep('sign_in', static fn (): StepResult => StepResult::done(signedIn: $ana)), new TestStep('terms')], ['sign_in', 'terms']));
+        $inBobs = $this->context->withSession($bob->session);
+
+        // Started in Bob's session, signing Ana in: both, until Ana's is handed over.
+        $flow = $flows->start('acme.sign_in', new Realm('acme'), $inBobs);
+        self::assertSame('terms', $flows->submit($flow->state->id, 'sign_in', new Input(), $inBobs)?->step);
+        self::assertSame($ana->token->reveal(), $flows->resume($flow->state->id, $inBobs)?->state->string('flows.signed_in.token'), 'Ana\'s held back.');
+
+        Permits::call($this->sessions->end(...), new EndSession(new Realm('acme'), $bob->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        self::assertNull($flows->resume($flow->state->id, $this->context), 'Bob\'s ended, so the flow did, though Ana\'s still holds (C1).');
+        self::assertNotNull($this->sessions->validate(new Realm('acme'), $ana->token));
+
+        // The other way round: Carol's held back, and it ends while Dan's goes on.
+        [$carol, $dan] = [$this->started(), $this->started()];
+        $flows = $this->flows(new Flow('acme.sign_in', [new TestStep('sign_in', static fn (): StepResult => StepResult::done(signedIn: $carol)), new TestStep('terms')], ['sign_in', 'terms']));
+        $inDans = $this->context->withSession($dan->session);
+        $flow = $flows->start('acme.sign_in', new Realm('acme'), $inDans);
+        $flows->submit($flow->state->id, 'sign_in', new Input(), $inDans);
+        Permits::call($this->sessions->end(...), new EndSession(new Realm('acme'), $carol->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
+        self::assertNull($flows->resume($flow->state->id, $inDans), 'The session it holds back ended.');
+    }
+
+    public function testAnAnonymousFlowIsItsBearers(): void
+    {
+        $flows = $this->flows(new Flow('acme.join', [new TestStep('first'), new TestStep('second')]));
+        $flow = $flows->start('acme.join', new Realm('acme'), $this->context);
+
+        self::assertSame('first', $flows->resume($flow->state->id, $this->context->withSession($this->started()->session))?->step, 'Signing in elsewhere in the browser doesn\'t end it.');
+        self::assertSame('second', $flows->submit($flow->state->id, 'first', new Input(), $this->context)?->step);
+        self::assertNull($flows->resume($flow->state->id, $this->context)?->state->get('flows.session'));
+    }
+
+    public function testAStepCantBindTheFlow(): void
+    {
+        $flows = $this->flows(new Flow('acme.join', [new TestStep('first', static fn (): StepResult => StepResult::done(['flows.session' => ['realm' => 'acme', 'id' => 'x']]))]));
+        $flow = $flows->start('acme.join', new Realm('acme'), $this->context);
+
+        $this->expectException(IntegratorError::class);
+        $this->expectExceptionMessage('"flows." and "yorvoid." are reserved.');
+        $flows->submit($flow->state->id, 'first', new Input(), $this->context);
     }
 
     public function testAStepThatsGoneAfterAnUpgradeIsPassedOver(): void
@@ -428,6 +495,13 @@ final class FlowsTest extends DatabaseTestCase
 
         self::assertEqualsWithDelta(time() + 1800, $started->state->expiresAt->getTimestamp(), 5);
         self::assertSame(FlowStatus::Completed, $flows->submit($started->state->id, 'a', new Input(), $this->context)?->status);
+    }
+
+    private function started(): StartedSession
+    {
+        $principal = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+
+        return Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now()))), new Origin(OriginKind::Web));
     }
 
     private function flows(Flow ...$flows): Flows
