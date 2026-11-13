@@ -53,6 +53,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
      * @param list<class-string>   $services       The application's own services, autoconfigured
      * @param list<class-string>   $voters         Voters another bundle's compiler pass tags, before SecurityBundle gathers them
      * @param bool                 $expressions    Whether it decides Symfony's expressions, as with symfony/expression-language installed
+     * @param int|null             $decorates      The priority of the application's decorator of Symfony's authenticated voter, if it has one
      */
     public function __construct(
         private readonly string $directory,
@@ -70,6 +71,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         private readonly array $services = [],
         private readonly array $voters = [],
         private readonly bool $expressions = false,
+        private readonly ?int $decorates = null,
     ) {
         parent::__construct($environment, $debugging);
     }
@@ -163,6 +165,12 @@ final class TestKernel extends Kernel implements CompilerPassInterface
                 $container->register('test.expression_voter', ExpressionVoter::class)
                     ->setArguments([new Definition(ExpressionLanguage::class), new Reference('security.authentication.trust_resolver'), new Reference('security.authorization_checker'), null, new Reference('security.access.decision_manager'), new Reference('security.token_storage')])
                     ->addTag('security.voter', ['priority' => 245]);
+            }
+
+            if (null !== $this->decorates) {
+                $container->register(DecoratesAuthenticatedVoter::class)
+                    ->setDecoratedService('security.access.authenticated_voter', null, $this->decorates)
+                    ->setArguments([new Reference(DecoratesAuthenticatedVoter::class.'.inner')]);
             }
 
             $voters = $this->voters;

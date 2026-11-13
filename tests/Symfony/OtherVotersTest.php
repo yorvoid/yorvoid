@@ -94,6 +94,19 @@ final class OtherVotersTest extends TestCase
         self::assertTrue($manager->decide(new NullToken(), ['acme.pages.view'], $request, null, true), 'The Request is no resource: YorvoID decides realm-wide.');
     }
 
+    public function testAnApplicationsDecoratorOfAVoterIsWrappedToo(): void
+    {
+        foreach ([[-100, true], [\PHP_INT_MIN, true], [-100, false], [\PHP_INT_MIN, false]] as [$priority, $debug]) {
+            $checker = $this->checker(decorates: $priority, debug: $debug);
+            $how = \sprintf('priority %d, %s', $priority, $debug ? 'debug' : 'production');
+
+            self::assertFalse($checker->isGranted('acme.pages.view', new ResourceRef('page', 'locked')), $how.': its grant is inside the wrapper, whatever the priority.');
+            self::assertTrue($checker->isGranted('acme_custom'), $how.': it still grants the application\'s own.');
+            $this->kernel?->shutdown();
+            $this->directory .= '-next';
+        }
+    }
+
     public function testExpressionsAndClosuresGoThroughAndAskYorvoIDInTurn(): void
     {
         $checker = $this->checker(services: [GrantsAcme::class], expressions: true);
@@ -147,9 +160,9 @@ final class OtherVotersTest extends TestCase
      * @param list<class-string>   $services
      * @param list<class-string>   $voters
      */
-    private function checker(array $security = [], array $services = [], array $voters = [], bool $expressions = false): AuthorizationCheckerInterface
+    private function checker(array $security = [], array $services = [], array $voters = [], bool $expressions = false, ?int $decorates = null, bool $debug = true): AuthorizationCheckerInterface
     {
-        $kernel = new TestKernel($this->directory, security: $security, services: $services, voters: $voters, expressions: $expressions);
+        $kernel = new TestKernel($this->directory, debugging: $debug, security: $security, services: $services, voters: $voters, expressions: $expressions, decorates: $decorates);
         $kernel->boot();
         $this->kernel = $kernel;
         $container = $this->container();
