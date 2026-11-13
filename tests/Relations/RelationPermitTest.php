@@ -6,6 +6,7 @@ namespace YorvoID\Tests\Relations;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\UuidV7;
+use YorvoID\Core\Authorization\ForbidElement;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
@@ -14,6 +15,9 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Policy\NoEscalation;
+use YorvoID\Policy\RolePermit;
+use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Relations\RelationDeclarations;
 use YorvoID\Relations\RelationDefinition;
 use YorvoID\Relations\RelationPermit;
@@ -24,6 +28,7 @@ use YorvoID\Relations\ResourceType;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Relations\Fixtures\CountingRelationStore;
 
 /**
@@ -80,6 +85,17 @@ final class RelationPermitTest extends TestCase
 
     public function testItRequiresNoEscalationAndTheStepUp(): void
     {
-        self::assertSame(['yorvoid.policy.no_escalation', 'yorvoid.policy.step_up'], array_keys(new RelationPermit(new Relations(RelationSchema::of([]), new InMemoryRelationStore(), 2))->requiredForbids()));
+        self::assertSame(RelationPermit::SAFETY, new RelationPermit(new Relations(RelationSchema::of([]), new InMemoryRelationStore(), 2))->requiredForbids());
+
+        // yorvoid/relations doesn't depend on yorvoid/policy, so it names policy's forbids by their names: these
+        // must stay the names those forbids give themselves, or the evaluator would ask for forbids nobody has.
+        $roles = new PolicyWorld()->roles;
+        $forbids = [new NoEscalation($roles), new StepUpForSensitiveChanges($roles)];
+        self::assertSame(array_map(static fn (ForbidElement $forbid): string => $forbid->name(), $forbids), array_keys(RelationPermit::SAFETY), 'As the forbids name themselves to the evaluator.');
+        self::assertSame(array_keys(new RolePermit($roles)->requiredForbids()), array_keys(RelationPermit::SAFETY), 'The same forbids as for roles.');
+
+        foreach ($forbids as $forbid) {
+            self::assertStringContainsString($forbid::class, RelationPermit::SAFETY[$forbid->name()], 'How to fix it names the class to add.');
+        }
     }
 }
