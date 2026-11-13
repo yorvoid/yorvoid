@@ -2,9 +2,9 @@
 
 All of YorvoID's packages are released together, with the same version ([compatibility](docs/compatibility.md)). Each release lists what changed, and what to do where a change breaks covered code.
 
-## Unreleased
+## 0.4.0 (2026-11-13)
 
-Every operation runs through one decision point: `Operations::run()` asks the evaluator, and gives its handler a permit.
+Every operation runs through one decision point: `Operations::run()` asks the evaluator, and gives its handler a permit. Abilities, roles, relations, groups and attributes in `yorvoid/policy` and `yorvoid/relations`, with policy tests and mutation testing in `yorvoid/policy-testing`; the decision log; a FIPS mode and ES256 keys; refusals people can act on; and the fixes from the authorization audit (M2-13).
 
 ### Breaking
 
@@ -70,6 +70,15 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - A recorded run on a FIPS-enabled operating system before each release, and `tools/fips-host/run.sh`, which does it on a throwaway AlmaLinux 9 host: 0.4.0's ran on AlmaLinux 9.8 with its build of Red Hat's FIPS provider, the tests with Ed25519 keys among them ([FIPS runs](assurance/fips-runs.md)).
 - `yorvoid:doctor` checks the audit mode, the crypto mode and the keys' algorithms, and says what a check found after its name.
 - Refusals for people (M2-10): in Symfony, a `NotPermitted` nothing catches is answered with a page, or JSON, of what would satisfy it: "Confirm it's you" with a button to the step-up, which comes back to the page, or how long to wait. A Deny is a 403 and what couldn't be decided a 503, never with the decision's reason; the decision's ID is shown as a reference (`refused.html.twig`, `yorvoid_remedies()`, `remedies.pages`). The step-up flow takes `return`, a path on this site. The browser client has the error code `not_permitted` and `notPermitted()` ([refusals for people](docs/concepts/symfony.md#refusals-for-people)).
+- `WaitRemedy` says why it waits (`WaitReason`, in its parameters as `reason`): YorvoID's waits after an account recovery say so, and the refusal page tells the person why ([remedies](docs/concepts/authorization.md#remedies)).
+- The refusal page says the operation wasn't done, and links back to the page the person came from, or to `flows.completed_path` ([symfony](docs/concepts/symfony.md)).
+- A completed step-up leaves one flash, `yorvoid.notice` ("You've confirmed it's you. Now try again."), for the page it returns to, and the flow's JSON answer has it in `notice` ([symfony](docs/concepts/symfony.md)).
+- `StepUp::coolDown()`, the cool-down a recovery starts, and `holds` on `RecoveryCodeView` and `RecoveryLinkView`: the recovery pages say, before the person continues, that some changes will wait that long ([step-up](docs/concepts/step-up.md#the-cool-down-after-a-recovery)).
+- After a cancelled passkey prompt, the sign-in and step-up buttons say "Try again with your passkey" (`data-yorvoid-retry`, [browser client](docs/concepts/browser-client.md)).
+- After a recovery, the page that offers a passkey asks "Is this your own device?", and "Not now" comes first, so it's what Enter sends ([symfony](docs/concepts/symfony.md)).
+- The recovery codes' page has Download, Copy and Print buttons, shown by the browser client; printed, it names the site and the date; and it says a screenshot isn't a safe place for the codes ([browser client](docs/concepts/browser-client.md)).
+- A step can leave a notice for its flow's end (`Notice`, `StepResult::done(notice:)`, `Progress::$notice`), which the Symfony bridge says on the page the flow ends on, in the `yorvoid.notice` flash and the JSON's `notice` ([flows](docs/concepts/flows.md#writing-a-step)).
+- After recovering with a code, the flow says it's used and how many are left, and with fewer than 3, when a new set can be made. `StartedSession::$recoveryCodesLeft` is that count, the one the security log and `RecoveryCodeUsed` have ([recovery codes](docs/concepts/recovery-codes.md#using-a-code)).
 
 ### Changed
 
@@ -150,15 +159,6 @@ Stricter passkey and intent checks, signed checkpoints of the security log, Symf
 - Symfony 7.4 LTS is supported next to 8.1, and PHP 8.4 next to 8.5, so YorvoID installs in Laravel 12 and Drupal 11 applications.
 - `Sessions::check()` gives a valid session with its principal; the Symfony bridge loads the principal once a request instead of twice.
 - `FlowSource` in the Symfony bridge adds an application's own flows, and the ones a request may start.
-- `WaitRemedy` says why it waits (`WaitReason`, in its parameters as `reason`): YorvoID's waits after an account recovery say so, and the refusal page tells the person why ([remedies](docs/concepts/authorization.md#remedies)).
-- The refusal page says the operation wasn't done, and links back to the page the person came from, or to `flows.completed_path` ([symfony](docs/concepts/symfony.md)).
-- A completed step-up leaves one flash, `yorvoid.notice` ("You've confirmed it's you. Now try again."), for the page it returns to, and the flow's JSON answer has it in `notice` ([symfony](docs/concepts/symfony.md)).
-- `StepUp::coolDown()`, the cool-down a recovery starts, and `holds` on `RecoveryCodeView` and `RecoveryLinkView`: the recovery pages say, before the person continues, that some changes will wait that long ([step-up](docs/concepts/step-up.md#the-cool-down-after-a-recovery)).
-- After a cancelled passkey prompt, the sign-in and step-up buttons say "Try again with your passkey" (`data-yorvoid-retry`, [browser client](docs/concepts/browser-client.md)).
-- After a recovery, the page that offers a passkey asks "Is this your own device?", and "Not now" comes first, so it's what Enter sends ([symfony](docs/concepts/symfony.md)).
-- The recovery codes' page has Download, Copy and Print buttons, shown by the browser client; printed, it names the site and the date; and it says a screenshot isn't a safe place for the codes ([browser client](docs/concepts/browser-client.md)).
-- A step can leave a notice for its flow's end (`Notice`, `StepResult::done(notice:)`, `Progress::$notice`), which the Symfony bridge says on the page the flow ends on, in the `yorvoid.notice` flash and the JSON's `notice` ([flows](docs/concepts/flows.md#writing-a-step)).
-- After recovering with a code, the flow says it's used and how many are left, and with fewer than 3, when a new set can be made. `StartedSession::$recoveryCodesLeft` is that count, the one the security log and `RecoveryCodeUsed` have ([recovery codes](docs/concepts/recovery-codes.md#using-a-code)).
 
 ### Fixed
 
