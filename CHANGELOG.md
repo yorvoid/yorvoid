@@ -73,7 +73,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 
 ### Changed
 
-- A flow is bound to the session it runs in, the one it started in or the one it signed in and handed over, and ends, deleted, when the request doesn't have that session or a session it holds back stops being valid; an ended flow answers like an unknown one. A flow started by someone not signed in is still its bearer's. Signing out keeping the PHP session (`signOutKeepingData()`, `invalidate_session: false`) also removes YorvoID's flows from it.
+- A flow is bound to the session it runs in, the one it started in or the one it signed in and handed over, and ends, deleted, when the request doesn't have that session or a session it holds back stops being valid; an ended flow answers like an unknown one. So a flow whose held-back session ended now ends, where it went on without that session, and once a flow hands its session over, its remaining steps run only in that session. A flow started by someone not signed in is still its bearer's. Signing out keeping the PHP session (`signOutKeepingData()`, `invalidate_session: false`) also removes YorvoID's flows from it.
 - `CurrentSession::hold()` and `signOut()` take `?Origin $origin = null`, the request's origin from `RequestOrigins` unless given, where they made a new one.
 - In Symfony, the reason a vote for a declared ability gives is its verdict and its decision's ID (`YorvoID: Deny (decision …).`), which `AccessDeniedException`'s message shows; the decision log keeps why.
 
