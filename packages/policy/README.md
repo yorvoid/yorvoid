@@ -1,6 +1,6 @@
 # yorvoid/policy
 
-YorvoID's policy: declared abilities, roles (super roles, strict abilities, the "everyone" pseudo-role), a realm's changes to the defaults kept as differences, roles given in a realm or on one resource, and rules in PHP that permit, forbid or can't tell. They're elements of YorvoID's evaluator, which decides YorvoID's operations and an application's own abilities alike. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
+YorvoID's policy: declared abilities, roles (super roles, strict abilities, the "everyone" pseudo-role), a realm's changes to the defaults kept as differences, roles given in a realm or on one resource, and rules in PHP that permit, forbid or can't tell. Groups, nested, with roles given to them; security attributes and ordered conditions; changes to the policy through operations, never giving what one doesn't hold; and, experimental, why-not and view-as. They're elements of YorvoID's evaluator, which decides YorvoID's operations and an application's own abilities alike. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
 
 ```bash
 composer require yorvoid/policy

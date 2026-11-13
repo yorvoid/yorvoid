@@ -9,14 +9,15 @@ A command class is marked with `#[Operation]` and implements `Command`:
 ```php
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 
 /** @implements Command<Principal> */
-#[Operation('yorvoid.principal.suspend', 'Suspend a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.principal.activate')]
-final readonly class SuspendPrincipal implements Command
+#[Operation('yorvoid.principal.suspend', 'Suspend a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', inverse: 'yorvoid.principal.activate', causes: ['yorvoid.session.end_all'])]
+final readonly class SuspendPrincipal implements Command, ConcernsPrincipal
 {
     public function __construct(public Realm $realm, public PrincipalId $principalId) {}
 }
@@ -44,7 +45,7 @@ use YorvoID\Core\Principal\SuspendPrincipal;
 $principal = $operations->run(new SuspendPrincipal($realm, $principalId), $session, $origin);
 ```
 
-- **The actor** is a signed-in `Session`, or the host's `Operator`. The operator acts from a console command or a job only when PHP runs from the command line, so a web request that says it's the console is refused; YorvoID itself (`OriginKind::System`) acts from anywhere. Your code says who the actor is: never take it from the request.
+- **The actor** is a signed-in `Session`; `Anonymous` for what someone not signed in does, e.g. signing in or accepting an invitation; or the host's `Operator`. The operator acts from a console command or a job only when PHP runs from the command line, so a web request that says it's the console is refused; YorvoID itself (`OriginKind::System`) acts from anywhere. Your code says who the actor is: never take it from the request.
 - **The decision** is the evaluator's ([authorization](authorization.md)): Permit, Deny or Indeterminate. Only Permit runs anything; otherwise `run()` throws `NotPermitted`, with the decision: its reasons, and on a Deny what could change it, e.g. a step-up. Indeterminate means something the decision needs couldn't be established, and never permits.
 - **Abilities** are decided by roles ([roles](authorization.md#roles)): give the evaluator the role permit (`RolePermit`); the Symfony bundle does. An `AbilityPolicy` of your own can decide them too. Without either, no ability permits anything.
 

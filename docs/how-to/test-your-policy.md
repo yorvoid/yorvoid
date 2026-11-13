@@ -112,14 +112,15 @@ Build the policy under test with the function production builds it with, given i
 ```php
 use Acme\Security;
 use Acme\Tests\AcmeCases;
+use YorvoID\PolicyTesting\Mutation\Mutants;
 use YorvoID\PolicyTesting\PolicyServices;
 use YorvoID\PolicyTesting\PolicySuite;
 use YorvoID\PolicyTesting\PolicyUnderTest;
 use YorvoID\Testing\InMemoryStorage;
 
 // tests/policy.php
-$policy = PolicyUnderTest::of(static function (InMemoryStorage $stores): PolicyServices {
-    [$operations, $policy] = Security::build($stores->policy, $stores->relations, $stores->attributes, $stores->principals, $stores->log, $stores->transactions);
+$policy = PolicyUnderTest::of(static function (InMemoryStorage $stores, Mutants $mutants): PolicyServices {
+    [$operations, $policy] = Security::build($stores->policy, $stores->relations, $stores->attributes, $stores->principals, $stores->log, $stores->transactions, $mutants);
 
     return new PolicyServices($operations, $policy, Security::realm());
 });

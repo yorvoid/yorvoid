@@ -18,6 +18,7 @@ $policy = new PasskeyPolicy(
 | `userVerification` | `Required` | The device checks it's its owner (PIN, fingerprint, face). See below. |
 | `clonePolicy` | `RefuseSignIn` | What a suspected copy does. See below. |
 | `timeout` | 5 minutes | How long a registration or sign-in may take: 30 seconds to 10 minutes. |
+| `crypto` | `CryptoPolicy::standard()` | Which algorithms passkeys may use ([cryptography](cryptography.md)). |
 
 The relying party ID is a domain, not an IP address. Origins are `https://` and a host at or under the relying party ID, with an optional port; `http://localhost` only for development.
 
@@ -36,7 +37,7 @@ $ceremony = $passkeys->beginRegistration($session);
 $credential = $operations->run(new RegisterPasskey($realm, $ceremonyId, $responseFromTheBrowser, 'MacBook'), $session, $origin);
 ```
 
-The passkey is added to the [credential registry](credentials.md) with its label. The options are discoverable credentials ("resident keys"), so sign-in needs no username; ES256, EdDSA and RS256 keys; no attestation; and the principal's existing passkeys excluded, so a device isn't asked to make a second one for the same account.
+The passkey is added to the [credential registry](credentials.md) with its label. The options are discoverable credentials ("resident keys"), so sign-in needs no username; ES256, EdDSA and RS256 keys (without EdDSA under a FIPS provider that lacks it); no attestation; and the principal's existing passkeys excluded, so a device isn't asked to make a second one for the same account.
 
 Each principal has one WebAuthn user handle: 32 random bytes, stored on their authenticators, so it says nothing about them.
 
@@ -60,7 +61,7 @@ A refused attempt throws `PasskeyRefused`. Show its message: it's the same for e
 
 ## Stepping up
 
-When an operation needs a recent proof of identity, `StepUpRequired` carries the requirement (see [step-up](step-up.md)). The person confirms it's them with one of their passkeys:
+When an operation needs a recent proof of identity, `NotPermitted` carries a `StepUpRemedy` ([remedies](authorization.md#remedies)), or `StepUpRequired` its requirement where a service asks itself, e.g. adding a passkey (see [step-up](step-up.md)). The person confirms it's them with one of their passkeys:
 
 ```php
 $ceremony = $passkeys->beginStepUp($session, $refusal->requirement);

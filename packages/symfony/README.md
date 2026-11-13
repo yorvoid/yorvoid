@@ -1,6 +1,6 @@
 # yorvoid/symfony
 
-YorvoID for Symfony: configuration, services, authenticators for any firewall, the user provider and checker, console commands, and the mailer, translator and event glue. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
+YorvoID for Symfony: configuration, services, authenticators for any firewall, the user provider and checker, `isGranted()` for declared abilities, pages for refusals, console commands, and the mailer, translator and event glue. Part of [YorvoID](https://github.com/yorvoid/yorvoid), identity and access management for PHP.
 
 ```bash
 composer require yorvoid/symfony

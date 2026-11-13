@@ -2,7 +2,7 @@
 
 NIST SP 800-63B-4 (2025) defines authenticator assurance levels: AAL1, AAL2 and AAL3. This page says which YorvoID configurations reach which level. It's based on the published text of 800-63B-4, not on summaries of it.
 
-> YorvoID's authentication arrives in milestone M1 (passkeys, recovery codes, sessions, step-up) and M4 (passwords, TOTP, email sign-in links). Until then, this page states the targets that those milestones are tested against.
+> Passkeys, recovery codes, sessions and step-up are in place (M1). Passwords, TOTP and email sign-in links arrive in M4; until then, the rows about them state the targets that milestone is tested against.
 
 ## The rules that matter most
 

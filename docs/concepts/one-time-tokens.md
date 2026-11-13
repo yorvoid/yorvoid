@@ -10,8 +10,9 @@ A token looks like `3f2a9c…e1.Zk9x…Qw`: a 128-bit **selector** that finds it
 use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Core\Duration;
 
-$issued = $tokens->issue(
+$issued = $operations->run(
     new IssueToken($realm, $principal->id, 'acme.password_reset', Duration::hours(1), sentTo: 'ana@example.com'),
+    $session, // one with yorvoid.principals.manage, or new Operator()
     $origin,
 );
 
@@ -46,7 +47,7 @@ if (null === $token) {
 
 To show a page before the token is used (e.g. "choose a new password"), use `peek()`, which checks it without using it.
 
-`revoke()` makes a principal's tokens for a purpose stop working. `purge()` deletes expired tokens; run it daily.
+`RevokeTokens`, run through `Operations`, makes a principal's tokens for a purpose stop working. `purge()` deletes expired tokens; run it daily.
 
 ## What's guaranteed, and how it's checked
 

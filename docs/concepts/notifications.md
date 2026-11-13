@@ -8,6 +8,7 @@ People should hear about every change to how they sign in, and about sign-ins fr
 | `CredentialAdded` | A sign-in method was added, e.g. a passkey |
 | `CredentialRemoved` | A sign-in method was removed |
 | `RecoveryCodeUsed` | A recovery code was used, with how many are left |
+| `RecoveryLinkUsed` | A recovery link was used |
 | `RecoveryCodesGenerated` | New recovery codes replaced the old ones |
 | `IdentifierChanged` | The email address was changed or removed: to the **old** address |
 
@@ -23,7 +24,7 @@ use YorvoID\Notifications\SecurityNotifications;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 
-$notifications = new SecurityNotifications($principals, $oneTimeTokens, $mailer, $translator, new NotificationSettings(
+$notifications = new SecurityNotifications($principals, $operations, $mailer, $translator, new NotificationSettings(
     applicationName: 'Acme',
     notMeUrl: 'https://example.com/security/not-me?token={token}&credential={credential}',
     localeOf: fn (Realm $realm, PrincipalId $id): string => $yourProfiles->languageOf($id),
@@ -36,7 +37,7 @@ foreach (SecurityNotifications::events() as $event => $method) {
 
 - `$mailer` delivers the emails ([mail](mail.md)); `$translator` is any Symfony `TranslatorInterface` with YorvoID's [catalogues](translations.md).
 - `notMeUrl` is your page for "This wasn't me", with `{token}` and `{credential}` where they go: an `https://` address (`http://` only for `localhost`), with the token in its path or query, never in the host, and no user name or password before the host.
-- The events come after the commit; the listeners issue a one-time token each, so run your work through `$transactions->run()` ([storage](storage.md#transactions)).
+- The events come after the commit; the listeners issue each email's token through `Operations` (`IssueNotMeLink`, the operator only), so run your work through `$transactions->run()` ([storage](storage.md#transactions)).
 
 ## "This wasn't me"
 
@@ -63,14 +64,16 @@ Notifications go only to a verified address, so an address nobody confirmed hear
 ```php
 use YorvoID\Notifications\EmailVerification;
 use YorvoID\Core\Principal\Event\IdentifierChanged;
+use YorvoID\Core\Principal\Event\PrincipalCreated;
 
 $verification = new EmailVerification($principals, $oneTimeTokens, $mailer, $translator, $settings, $transactions,
     fn (string $token): string => 'https://example.com/verify-email?token='.rawurlencode($token));
 
 $yourDispatcher->addListener(IdentifierChanged::class, [$verification, 'identifierChanged']);
+$yourDispatcher->addListener(PrincipalCreated::class, [$verification, 'principalCreated']);
 ```
 
-- The listener sends a link to every new address that isn't verified. `send($realm, $principalId, $origin)` sends one yourself, e.g. if the person asks again.
+- The listeners send a link to every new address that isn't verified, and to a principal created active. `send($realm, $principalId, $permit, $origin)` sends one as part of an operation, with that operation's permit.
 - The link works once, for a day, only while the address is still the principal's, and a newer link replaces an older one.
-- Your page shows what `peek()` gives and asks the person to confirm; on POST, `confirm()` verifies the address. As with "This wasn't me", opening the link must change nothing.
+- Your page shows what `peek()` gives and asks the person to confirm; on POST, `$operations->run(new VerifyEmail($realm, Secret::fromString($token)), new Anonymous(), $origin)` verifies the address; `EmailVerification` is the handler `Operations` is given. As with "This wasn't me", opening the link must change nothing.
 - The Symfony bridge does all of this when notifications are on: the link leads to the `yorvoid.verify_email` [flow](flows.md), and claiming a fresh installation sends the owner one.

@@ -111,7 +111,7 @@ use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\SetIdentifier;
 
 $operations->run(new SetIdentifier($realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session, $origin);
-// StepUpRequired: send them through a step-up, then try again.
+// NotPermitted with a StepUpRemedy (a WaitRemedy during a recovery's cool-down): send them through a step-up, then try again.
 ```
 
 A new email address isn't verified, so it gets no security notifications until its owner confirms it: [`EmailVerification`](notifications.md#verifying-the-email-address) sends them a link.

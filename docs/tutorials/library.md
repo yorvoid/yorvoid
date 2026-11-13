@@ -104,7 +104,7 @@ try {
     // YorvoID's step-up page asks for the passkey, for this operation only, as recent as the requirement.
     $remedy = $required->requirement;
 
-    return new RedirectResponse($this->urls->generate('yorvoid_flow_start', ['flow' => 'yorvoid.step_up', 'operation' => $remedy->operation, 'multi_factor' => $remedy->multiFactor ? '1' : '0', 'within' => $remedy->within->seconds]));
+    return new RedirectResponse($this->urls->generate('yorvoid_flow_start', ['flow' => 'yorvoid.step_up', 'operation' => $remedy->operation, 'multi_factor' => $remedy->multiFactor ? '1' : '0', 'within' => $remedy->within->seconds, 'return' => $request->getPathInfo()]));
 }
 ```
 
@@ -112,7 +112,7 @@ try {
 - **Pass `within` on**: a requirement fresher than the bridge's `step_up.window` (5 minutes) is then what the step-up asks for. Without it, the step-up sees a proof recent enough by its own window, completes at once, and sends the person back to a page that refuses them again.
 - **Give the operation words** in your translations, as `yorvoid.operation.acme_wiki.wiki.delete` (domain `yorvoid`), e.g. "deleting the wiki": the step-up page says what the person confirms.
 - **Every route checks for itself.** No firewall rule or voter asks for a step-up: call `StepUp::require()` in each controller that runs a sensitive operation.
-- When the step-up completes, the person goes where the application's `flows.completed_paths` sends `yorvoid.step_up`; document that your bundle needs it to come back to your page.
+- **Pass `return`**, the path of your page, so the person comes back to it when the step-up completes; it must be a path on this site.
 
 ## Add a step to a flow
 
@@ -157,4 +157,4 @@ $client->request('GET', '/wiki/home/edit');
 - [ ] No YorvoID configuration in your bundle's recipe or `prependExtension()`: the application's.
 - [ ] No user table: principals, keyed by ID.
 - [ ] Your operations and steps named after your bundle.
-- [ ] Your docs say: install and configure YorvoID first ([quickstart](symfony-quickstart.md)), and set `completed_paths` for your step-ups.
+- [ ] Your docs say: install and configure YorvoID first ([quickstart](symfony-quickstart.md)).

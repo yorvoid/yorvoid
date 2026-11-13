@@ -6,17 +6,19 @@ Sessions are in the `yorvoid/authn` package.
 
 ## Starting a session
 
-The code that checked the proof starts the session, never a request on its own say-so:
+The operation that checked the proof starts the session as its consequence, never a request on its own say-so: YorvoID's sign-ins (`SignInWithPasskey`, `RecoverWithCode`, `UseRecoveryLink`, `ClaimSetup`, `AcceptInvitation`) do. A way of signing in of your own is an operation (`#[Operation(..., AuthorizedBy::Authentication, causes: ['yorvoid.session.start'])]`) whose handler, once it checked the proof, says whom it's about and causes the start:
 
 ```php
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\StartSession;
-use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Operation\ActingPrincipal;
 
-$started = $sessions->start(
+// In your handler, given the operation's $permit and $origin:
+$permit->about($principal->id);
+$started = $permit->cause(
+    $sessions->start(...),
     new StartSession(
         $realm,
         $principal->id,
@@ -24,7 +26,8 @@ $started = $sessions->start(
         device: 'Firefox on Linux',      // what the person would recognise in a list of their devices
         address: $request->getClientIp(),
     ),
-    new Origin(OriginKind::Web, 'yorvoid_sign_in'),
+    $origin,
+    new ActingPrincipal($realm, $principal->id),
 );
 
 $request->getSession()->migrate(true);   // a new ID for your session first: see below

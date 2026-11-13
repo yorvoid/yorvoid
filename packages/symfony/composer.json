@@ -1,7 +1,7 @@
 {
     "name": "yorvoid/symfony",
     "type": "symfony-bundle",
-    "description": "YorvoID for Symfony: configuration, services, authenticators for any firewall, the user provider and checker, console commands, and the mailer, translator and event glue.",
+    "description": "YorvoID for Symfony: configuration, services, authenticators for any firewall, the user provider and checker, isGranted() for declared abilities, pages for refusals, console commands, and the mailer, translator and event glue.",
     "keywords": [
         "symfony",
         "bundle",

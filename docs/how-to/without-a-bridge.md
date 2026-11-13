@@ -21,7 +21,7 @@ A token in a cookie of its own, as in the tutorial, needs no such step: every si
 
 - **Cookies:** `Secure`, `HttpOnly`, `SameSite=Lax` (or `Strict`), and the `__Host-` prefix where you can, so a subdomain can't set or overwrite them. The same goes for the device cookie (`StartedSession::$deviceCookie`), which the bridge keeps 400 days as `__Host-yorvoid_device`.
 - **On every request,** `Sessions::validate()` the token, and treat `null` as signed out: the session ended, expired, or its principal changed.
-- **Signing out** ends the YorvoID session (`Sessions::end()`), then empties your session under a new ID and clears the cookie, so a copy of the old cookie is no use.
+- **Signing out** ends the YorvoID session (`$operations->run(new EndSession($realm, $session->id, SessionEndReason::SignedOut), $session, $origin)`), then empties your session under a new ID and clears the cookie, so a copy of the old cookie is no use.
 
 ## Requests from the browser
 
@@ -37,7 +37,7 @@ A token in a cookie of its own, as in the tutorial, needs no such step: every si
 
 ## Flows
 
-- **A flow belongs to the browser that started it.** The bridge keeps flows in the PHP session (`SessionFlowStore`), so a flow's ID is useless in another browser, and its forms need no CSRF token. A store shared between browsers (a database table, a cache) makes the flow ID a bearer token: bind it to the browser's session if you write one. `InMemoryFlowStore` is for tests.
+- **A flow belongs to the session it runs in.** `Flows` binds a flow to the session it started in, or the one it signed in and handed over, and ends it when a request comes without that session: give each request's `FlowContext` its session. A flow started by someone not signed in is its bearer's. The bridge keeps flows in the PHP session (`SessionFlowStore`), so their IDs are useless in another browser and their forms need no CSRF token; a store shared between browsers (a database table, a cache) makes such a flow's ID a bearer token. When signing out keeps your session's data, take YorvoID's flows out of it too, as the bridge does. `InMemoryFlowStore` is for tests.
 - **Start only the flows a request may start,** with only the inputs it may give. The bridge starts these from a request, nothing else: `yorvoid.sign_in`, `yorvoid.setup`, `yorvoid.recover_with_code`, `yorvoid.add_passkey`, `yorvoid.invitation` (with the link's `token`), `yorvoid.recover_with_link` (with the link's `token`), `yorvoid.step_up` (with an operation's name). Never pass the request's data into a flow's state wholesale.
 - **Hold the session a flow hands over** (`Progress::$signedIn`), with a new session ID as above, and a step-up's renewed token (`Progress::$renewedToken`) the same way.
 
@@ -49,6 +49,9 @@ Register these with your PSR-14 dispatcher and pass it to the services: without 
 |---|---|---|
 | `EndSessionsOfInactivePrincipals` | `PrincipalStatusChanging` | Suspending or deleting someone ends their sessions in the same transaction |
 | `ForgetCredentialsOfDeletedPrincipals` | `PrincipalStatusChanging` | A deleted principal's credentials, passkeys and recovery codes go with them |
+| `ForgetRolesOfDeletedPrincipals` | `PrincipalStatusChanging` | A deleted principal's roles go with them (`yorvoid/policy`) |
+| `ForgetRelationsOfDeletedPrincipals` | `PrincipalStatusChanging` | A deleted principal's relations go with them (`yorvoid/relations`) |
+| `ForgetAttributesOfDeletedPrincipals` | `PrincipalStatusChanging` | A deleted principal's security attributes go with them (`yorvoid/policy`) |
 | `RemovePasskeyWithCredential` | `CredentialRemoving` | Removing a sign-in method removes the passkey's key too |
 | `SecurityNotifications` | each event in `SecurityNotifications::events()` | People hear about new devices, new and removed sign-in methods, recoveries ([notifications](../concepts/notifications.md)) |
 | `SignedOperationNotification` | `SignedOperationRan` | The owner hears about every signed operation |
@@ -68,6 +71,7 @@ $oneTimeTokens->purge();
 $passkeys->purge();
 $throttle->purge();
 $stepUp->purge();
+$decisions->purge(Duration::days(90)); // the decision log (DecisionLog)
 ```
 
 ## Checking the setup

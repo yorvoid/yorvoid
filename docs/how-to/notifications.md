@@ -23,7 +23,7 @@ Security notifications email people when something changes on their account: a n
            not_me_url: 'https://example.com/security/not-me?token={token}&credential={credential}'
    ```
 
-3. Write the "This wasn't me" page at `not_me_url`: it hands the token to `NotMe` ([notifications](../concepts/notifications.md#this-wasnt-me)).
+3. Write the "This wasn't me" page at `not_me_url`: it runs `ReportNotMe` with the token through `Operations` ([notifications](../concepts/notifications.md#this-wasnt-me)).
 
 4. Check: `php bin/console yorvoid:doctor` says whether the sender is an address and, outside development, whether the transport delivers.
 

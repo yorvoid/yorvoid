@@ -49,7 +49,7 @@ BrowserSignIn::as($client, $ana);                     // the client from above
 $client->request('GET', '/account');                  // signed in as Ana
 ```
 
-It starts a real YorvoID session and keeps it in the browser's PHP session, as signing in does; the next request signs in through YorvoID's authenticator. Symfony's `loginUser()` would bypass YorvoID, and YorvoID's session check would then sign the user out. Ending the session (`Sessions::end()`) signs the browser out too.
+It starts a real YorvoID session and keeps it in the browser's PHP session, as signing in does; the next request signs in through YorvoID's authenticator. Symfony's `loginUser()` would bypass YorvoID, and YorvoID's session check would then sign the user out. Ending the session (`EndSession` through `Operations`) signs the browser out too.
 
 ## The virtual authenticator
 
@@ -71,4 +71,4 @@ A store you wrote yourself runs YorvoID's tests for its kind, from `YorvoID\Test
 
 ## Decisions
 
-A refused operation throws `NotPermitted`, whose `decision` has the verdict, the reasons, what couldn't be established and the remedies ([authorization](authorization.md)): assert on those. Helpers that explain a decision come with explanations, later in M2.
+A refused operation throws `NotPermitted`, whose `decision` has the verdict, the reasons, what couldn't be established and the remedies ([authorization](authorization.md)): assert on those. To explain one, `Explanation::of()` puts together what each element's truth rests on (experimental, [explanations](authorization.md#explanations)). To test your policy itself, as cases, see [test your policy](../how-to/test-your-policy.md) (`yorvoid/policy-testing`).
