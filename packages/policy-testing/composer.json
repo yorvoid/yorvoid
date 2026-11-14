@@ -38,6 +38,7 @@
         "yorvoid/throttle": "^0.5"
     },
     "suggest": {
+        "symfony/config": "For the Symfony bundle",
         "symfony/dependency-injection": "For the Symfony bundle: the policy under test from the application's own container",
         "symfony/http-kernel": "For the Symfony bundle",
         "symfony/service-contracts": "For the Symfony bundle"

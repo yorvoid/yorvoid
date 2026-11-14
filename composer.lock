@@ -7520,7 +7520,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/policy-testing",
-                "reference": "d86d22f5bf69c0fdcea3401f806946b61a0e2a76"
+                "reference": "fa68ead0844cf1f8fc5a2495299e9f0fa429a14c"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7536,6 +7536,7 @@
                 "yorvoid/throttle": "^0.5"
             },
             "suggest": {
+                "symfony/config": "For the Symfony bundle",
                 "symfony/dependency-injection": "For the Symfony bundle: the policy under test from the application's own container",
                 "symfony/http-kernel": "For the Symfony bundle",
                 "symfony/service-contracts": "For the Symfony bundle"
