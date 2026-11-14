@@ -2,6 +2,12 @@
 
 All of YorvoID's packages are released together, with the same version ([compatibility](docs/compatibility.md)). Each release lists what changed, and what to do where a change breaks covered code.
 
+## Unreleased
+
+### Fixed
+
+- `yorvoid/policy-testing` suggests `symfony/config` with the other packages its Symfony bundle needs: Symfony's `Bundle` doesn't load without it.
+
 ## 0.4.0 (2026-11-13)
 
 Every operation runs through one decision point: `Operations::run()` asks the evaluator, and gives its handler a permit. Abilities, roles, relations, groups and attributes in `yorvoid/policy` and `yorvoid/relations`, with policy tests and mutation testing in `yorvoid/policy-testing`; the decision log; a FIPS mode and ES256 keys; refusals people can act on; and the fixes from the authorization audit (M2-13).

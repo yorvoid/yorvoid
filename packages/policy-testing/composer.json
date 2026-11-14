@@ -29,15 +29,16 @@
         "doctrine/dbal": "^4.3",
         "phpunit/phpunit": "^12.0 || ^13.0",
         "symfony/console": "^7.4 || ^8.1",
-        "yorvoid/authn": "^0.4",
-        "yorvoid/core": "^0.4",
-        "yorvoid/passkeys": "^0.4",
-        "yorvoid/policy": "^0.4",
-        "yorvoid/relations": "^0.4",
-        "yorvoid/testing": "^0.4",
-        "yorvoid/throttle": "^0.4"
+        "yorvoid/authn": "^0.5",
+        "yorvoid/core": "^0.5",
+        "yorvoid/passkeys": "^0.5",
+        "yorvoid/policy": "^0.5",
+        "yorvoid/relations": "^0.5",
+        "yorvoid/testing": "^0.5",
+        "yorvoid/throttle": "^0.5"
     },
     "suggest": {
+        "symfony/config": "For the Symfony bundle",
         "symfony/dependency-injection": "For the Symfony bundle: the policy under test from the application's own container",
         "symfony/http-kernel": "For the Symfony bundle",
         "symfony/service-contracts": "For the Symfony bundle"
@@ -52,7 +53,7 @@
     ],
     "extra": {
         "branch-alias": {
-            "dev-main": "0.4.x-dev"
+            "dev-main": "0.5.x-dev"
         }
     }
 }

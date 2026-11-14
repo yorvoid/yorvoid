@@ -57,16 +57,17 @@ foreach (orNone(glob("$work/to/packages/*/composer.json")) as $manifest) {
     mkdir($repository, 0o777, true);
     run(['git', '-C', $repository, 'init', '-q']);
     $commits = [];
+    $suggested = array_values(array_unique([...suggested("$work/from/packages/$package/composer.json"), ...suggested($manifest)]));
 
     foreach (['from', 'to'] as $side) {
         run(['sh', '-c', sprintf('cd %s && git rm -rqf --ignore-unmatch . && cp -R %s/. .', escapeshellarg($repository), escapeshellarg("$work/$side/packages/$package"))]);
-        installable("$repository/composer.json", "$work/$side/packages");
+        installable("$repository/composer.json", "$work/$side/packages", $suggested);
         run(['git', '-C', $repository, 'add', '-A']);
         run(['git', '-C', $repository, '-c', 'user.name=bc', '-c', 'user.email=bc@localhost', 'commit', '-qm', $side, '--allow-empty']);
         $commits[$side] = trim(run(['git', '-C', $repository, 'rev-parse', 'HEAD']));
     }
 
-    $output = run([\PHP_BINARY, $roave, '--from='.$commits['from'], '--to='.$commits['to'], '--format=markdown'], $repository, allowFailure: true);
+    $output = run([\PHP_BINARY, $roave, '--from='.$commits['from'], '--to='.$commits['to'], '--format=markdown', '--install-development-dependencies'], $repository, allowFailure: true);
     preg_match_all('/^\s*- \[BC\] (.+)$/m', $output, $breaks);
     echo "\nyorvoid/$package: ".count($breaks[1])." change(s) that break compatibility.\n";
 
@@ -196,32 +197,61 @@ function breakingSince(string $changelog, string $version): string
 
 /**
  * Points the package's composer.json at the other packages of the same tree, each with a version its
- * constraints accept (0.2.99 for ^0.2), as tools/compat/frameworks.sh does.
+ * constraints accept (0.2.99 for ^0.2), as tools/compat/frameworks.sh does. The packages it suggests, at
+ * the tag or now, are installed too, as development dependencies, on both sides: a class may extend one
+ * (policy-testing's bundle extends Symfony's Bundle), and the tool can't read a class whose parent it
+ * can't find.
+ *
+ * @param list<string> $suggested
  */
-function installable(string $manifest, string $packages): void
+function installable(string $manifest, string $packages, array $suggested): void
 {
     $json = json_decode((string) file_get_contents($manifest), true, 512, \JSON_THROW_ON_ERROR);
     assert(is_array($json));
+    $require = is_array($json['require'] ?? null) ? $json['require'] : [];
+    $requireDev = is_array($json['require-dev'] ?? null) ? $json['require-dev'] : [];
     $version = null;
 
-    foreach ((array) ($json['require'] ?? []) as $name => $constraint) {
+    foreach ($suggested as $name) {
+        if (!isset($require[$name])) {
+            $requireDev[$name] = '*';
+        }
+    }
+
+    foreach ($require as $name => $constraint) {
         if (is_string($name) && is_string($constraint) && str_starts_with($name, 'yorvoid/') && 1 === preg_match('/^\^(\d+\.\d+)/', $constraint, $match)) {
             $version = $match[1].'.99';
         }
     }
 
-    if (null === $version) {
-        return;
+    if ([] !== $requireDev) {
+        $json['require-dev'] = $requireDev;
     }
 
-    $versions = [];
+    if (null !== $version) {
+        $versions = [];
 
-    foreach (orNone(glob("$packages/*/composer.json")) as $other) {
-        $versions['yorvoid/'.basename(dirname($other))] = $version;
+        foreach (orNone(glob("$packages/*/composer.json")) as $other) {
+            $versions['yorvoid/'.basename(dirname($other))] = $version;
+        }
+
+        $json['repositories'] = [['type' => 'path', 'url' => "$packages/*", 'options' => ['symlink' => false, 'versions' => $versions]]];
     }
 
-    $json['repositories'] = [['type' => 'path', 'url' => "$packages/*", 'options' => ['symlink' => false, 'versions' => $versions]]];
     file_put_contents($manifest, json_encode($json, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES | \JSON_THROW_ON_ERROR));
+}
+
+/**
+ * The packages a composer.json suggests: those with a vendor, not PHP extensions.
+ *
+ * @return list<string>
+ */
+function suggested(string $manifest): array
+{
+    $json = json_decode((string) file_get_contents($manifest), true, 512, \JSON_THROW_ON_ERROR);
+    $suggest = is_array($json) && is_array($json['suggest'] ?? null) ? $json['suggest'] : [];
+
+    return array_values(array_filter(array_map(strval(...), array_keys($suggest)), static fn (string $name): bool => str_contains($name, '/')));
 }
 
 /**
