@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Authn\Token\Storage;
 
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Authn\Token\OneTimeToken;
 use YorvoID\Authn\Token\OneTimeTokenStore;
@@ -78,7 +77,7 @@ final readonly class DbalOneTimeTokenStore implements OneTimeTokenStore
 
     private function time(mixed $value): \DateTimeImmutable
     {
-        $time = Type::getType(Types::DATETIMETZ_IMMUTABLE)->convertToPHPValue($value, $this->database->connection->getDatabasePlatform());
+        $time = $this->database->connection->convertToPHPValue($value, Types::DATETIMETZ_IMMUTABLE);
         \assert($time instanceof \DateTimeImmutable);
 
         return $time;

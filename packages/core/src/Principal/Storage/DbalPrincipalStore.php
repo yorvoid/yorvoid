@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Core\Principal\Storage;
 
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
@@ -92,7 +91,7 @@ final readonly class DbalPrincipalStore implements PrincipalStore
 
     private function time(mixed $value): \DateTimeImmutable
     {
-        $time = Type::getType(Types::DATETIMETZ_IMMUTABLE)->convertToPHPValue($value, $this->database->connection->getDatabasePlatform());
+        $time = $this->database->connection->convertToPHPValue($value, Types::DATETIMETZ_IMMUTABLE);
         \assert($time instanceof \DateTimeImmutable);
 
         return $time;

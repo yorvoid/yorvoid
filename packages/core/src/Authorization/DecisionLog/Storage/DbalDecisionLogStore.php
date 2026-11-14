@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Core\Authorization\DecisionLog\Storage;
 
 use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
@@ -50,14 +49,12 @@ final readonly class DbalDecisionLogStore implements DecisionLogStore
     public function add(array $records): void
     {
         $connection = $this->writes ?? $this->database->connection;
-        $time = Type::getType(Types::DATETIMETZ_IMMUTABLE);
-        $platform = $connection->getDatabasePlatform();
 
         foreach (array_chunk($records, self::BATCH) as $batch) {
             $parameters = [];
 
             foreach ($batch as $record) {
-                array_push($parameters, $record->id, $record->realm->name, $time->convertToDatabaseValue($record->at, $platform), $record->name, $record->actor, $record->verdict, $record->json(), $record->hash());
+                array_push($parameters, $record->id, $record->realm->name, $connection->convertToDatabaseValue($record->at, Types::DATETIMETZ_IMMUTABLE), $record->name, $record->actor, $record->verdict, $record->json(), $record->hash());
             }
 
             $row = '('.implode(', ', array_map(static fn (): string => '?', self::COLUMNS)).')';

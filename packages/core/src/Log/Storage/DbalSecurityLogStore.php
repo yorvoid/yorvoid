@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Log\Storage;
 
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Symfony\Component\Uid\Uuid;
 use YorvoID\Core\Event\Origin;
@@ -127,9 +126,9 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
      */
     private function entry(Realm $realm, array $row): LogEntry
     {
-        $platform = $this->database->connection->getDatabasePlatform();
-        $recordedAt = Type::getType(Types::DATETIMETZ_IMMUTABLE)->convertToPHPValue($row['recorded_at'], $platform);
-        $details = Type::getType(Types::JSON)->convertToPHPValue($row['details'], $platform);
+        $connection = $this->database->connection;
+        $recordedAt = $connection->convertToPHPValue($row['recorded_at'], Types::DATETIMETZ_IMMUTABLE);
+        $details = $connection->convertToPHPValue($row['details'], Types::JSON);
         \assert($recordedAt instanceof \DateTimeImmutable && \is_array($details));
         $actor = Row::nullableString($row, 'actor');
 

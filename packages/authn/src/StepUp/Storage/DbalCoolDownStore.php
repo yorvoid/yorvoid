@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\StepUp\Storage;
 
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Authn\StepUp\CoolDownStore;
 use YorvoID\Core\Principal\PrincipalId;
@@ -47,7 +46,7 @@ final readonly class DbalCoolDownStore implements CoolDownStore
             return null;
         }
 
-        $until = Type::getType(Types::DATETIMETZ_IMMUTABLE)->convertToPHPValue($value, $this->database->connection->getDatabasePlatform());
+        $until = $this->database->connection->convertToPHPValue($value, Types::DATETIMETZ_IMMUTABLE);
         \assert($until instanceof \DateTimeImmutable);
 
         return $until;

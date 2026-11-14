@@ -7,7 +7,6 @@ namespace YorvoID\Core\Storage\Migration;
 use Doctrine\DBAL\Schema\Column;
 use Doctrine\DBAL\Schema\PrimaryKeyConstraint;
 use Doctrine\DBAL\Schema\TableEditor;
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
@@ -197,12 +196,10 @@ final class Migrator
         }
 
         $connection = $this->database->connection;
-        $platform = $connection->getDatabasePlatform();
-        $time = Type::getType(Types::DATETIMETZ_IMMUTABLE);
         $executed = [];
 
         foreach ($connection->fetchAllAssociative(\sprintf('SELECT version, description, executed_at FROM %s', $this->database->table(self::HISTORY_TABLE))) as $row) {
-            $at = $time->convertToPHPValue($row['executed_at'], $platform);
+            $at = $connection->convertToPHPValue($row['executed_at'], Types::DATETIMETZ_IMMUTABLE);
             \assert($at instanceof \DateTimeImmutable);
             \assert(\is_string($row['version']) && (null === $row['description'] || \is_string($row['description'])));
             $executed[$row['version']] = ['description' => $row['description'], 'at' => $at];

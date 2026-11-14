@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Authn\Credential\Storage;
 
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Authn\Credential\Credential;
 use YorvoID\Authn\Credential\CredentialId;
@@ -107,7 +106,7 @@ final readonly class DbalCredentialStore implements CredentialStore
 
     private function time(mixed $value): \DateTimeImmutable
     {
-        $time = Type::getType(Types::DATETIMETZ_IMMUTABLE)->convertToPHPValue($value, $this->database->connection->getDatabasePlatform());
+        $time = $this->database->connection->convertToPHPValue($value, Types::DATETIMETZ_IMMUTABLE);
         \assert($time instanceof \DateTimeImmutable);
 
         return $time;
