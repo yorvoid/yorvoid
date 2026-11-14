@@ -9,7 +9,8 @@ declare(strict_types=1);
  * installs only when they require each other at the version they're released with (ADR-0005).
  *
  *   php tools/release/version.php check          every place agrees with packages/core's branch alias
- *   php tools/release/version.php check v0.4.0   …and the tag is of that minor
+ *   php tools/release/version.php check v0.4.0   …and the tag is of that minor, and Packagist has every
+ *                                                package Split pushes (.github/split.json): run it before tagging
  *   php tools/release/version.php set 0.5        main heads for 0.5 now: right after tagging 0.4.0
  *
  * Plain PHP 8.1, no dependencies: the release workflows run it on the runner's own PHP.
@@ -61,6 +62,37 @@ if ('check' === $action && null !== $argument) {
         $problems[] = sprintf('"%s" isn\'t a version tag like v0.4.0.', $argument);
     } elseif ($tag[1] !== $minor) {
         $problems[] = sprintf('The tag %s is of %s, but the packages require each other at %s: run "php tools/release/version.php set %s" in a pull request first.', $argument, $tag[1], $constraint, $tag[1]);
+    }
+
+    // A package Packagist doesn't know installs from nowhere, and nor does any package that requires it.
+    $split = json_decode((string) file_get_contents($root.'/.github/split.json'), false, flags: \JSON_THROW_ON_ERROR);
+
+    foreach (is_array($split) ? $split : [] as $index => $entry) {
+        [$path, $repository] = [$members($entry)['path'] ?? null, $members($entry)['repository'] ?? null];
+
+        if (!is_string($path) || !is_string($repository) || !is_file($root.'/'.$path.'/composer.json')) {
+            $problems[] = sprintf('.github/split.json\'s entry %d has no path to a package or no repository.', $index + 1);
+
+            continue;
+        }
+
+        // Packagist knows a package by the name in its composer.json, and installs it from the repository.
+        $name = $members(json_decode((string) file_get_contents($root.'/'.$path.'/composer.json'), false, flags: \JSON_THROW_ON_ERROR))['name'] ?? null;
+
+        if (!is_string($name)) {
+            $problems[] = sprintf('%s/composer.json has no name.', $path);
+
+            continue;
+        }
+
+        $metadata = @file_get_contents('https://packagist.org/packages/'.$name.'.json');
+        $source = false === $metadata ? null : $members($members(json_decode($metadata, false))['package'] ?? null)['repository'] ?? null;
+
+        if (false === $metadata) {
+            $problems[] = sprintf('Packagist has no %s: submit https://github.com/%s at https://packagist.org/packages/submit before tagging (or Packagist didn\'t answer: try again).', $name, $repository);
+        } elseif ($source !== 'https://github.com/'.$repository) {
+            $problems[] = sprintf('Packagist has %s from "%s", not from https://github.com/%s, where Split pushes it.', $name, $text($source), $repository);
+        }
     }
 }
 
@@ -140,4 +172,4 @@ if ([] !== $problems) {
     exit(1);
 }
 
-echo sprintf("Every package requires the others at %s, and main is %s.\n", $constraint, $dev);
+echo sprintf("Every package requires the others at %s, and main is %s.%s\n", $constraint, $dev, null !== $argument ? ' Packagist has every package.' : '');
