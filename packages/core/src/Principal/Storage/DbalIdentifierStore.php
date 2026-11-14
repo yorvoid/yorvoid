@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Core\Principal\Storage;
 
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Principal\Identifier;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -91,10 +90,9 @@ final readonly class DbalIdentifierStore implements IdentifierStore
      */
     private function identifier(Realm $realm, array $row): Identifier
     {
-        $platform = $this->database->connection->getDatabasePlatform();
-        $time = Type::getType(Types::DATETIMETZ_IMMUTABLE);
-        $createdAt = $time->convertToPHPValue($row['created_at'], $platform);
-        $verifiedAt = $time->convertToPHPValue($row['verified_at'], $platform);
+        $connection = $this->database->connection;
+        $createdAt = $connection->convertToPHPValue($row['created_at'], Types::DATETIMETZ_IMMUTABLE);
+        $verifiedAt = $connection->convertToPHPValue($row['verified_at'], Types::DATETIMETZ_IMMUTABLE);
         \assert($createdAt instanceof \DateTimeImmutable && (null === $verifiedAt || $verifiedAt instanceof \DateTimeImmutable));
 
         return new Identifier($realm, PrincipalId::fromString(Row::string($row, 'principal_id')), IdentifierKind::from(Row::string($row, 'kind')), Row::string($row, 'value'), $createdAt, $verifiedAt);

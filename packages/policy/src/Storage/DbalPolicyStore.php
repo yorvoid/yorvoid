@@ -7,7 +7,6 @@ namespace YorvoID\Policy\Storage;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\ParameterType;
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
@@ -263,7 +262,7 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     private function time(mixed $value): \DateTimeImmutable
     {
-        $time = Type::getType(Types::DATETIMETZ_IMMUTABLE)->convertToPHPValue($value, $this->database->connection->getDatabasePlatform());
+        $time = $this->database->connection->convertToPHPValue($value, Types::DATETIMETZ_IMMUTABLE);
         \assert($time instanceof \DateTimeImmutable);
 
         return $time;

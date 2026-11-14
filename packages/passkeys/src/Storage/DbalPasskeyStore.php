@@ -6,7 +6,6 @@ namespace YorvoID\Passkeys\Storage;
 
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\ParameterType;
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Symfony\Component\Uid\Uuid;
 use YorvoID\Authn\Credential\CredentialId;
@@ -105,7 +104,7 @@ final readonly class DbalPasskeyStore implements PasskeyStore
      */
     private function passkey(array $row): Passkey
     {
-        $stored = Type::getType(Types::JSON)->convertToPHPValue($row['transports'], $this->database->connection->getDatabasePlatform());
+        $stored = $this->database->connection->convertToPHPValue($row['transports'], Types::JSON);
         // Entries that aren't transports are left out (Passkey), as 0.1.0 could store them; a list it always wrote.
         $transports = \is_array($stored) && array_is_list($stored) ? $stored : throw new StorageException('A passkey\'s transports aren\'t what YorvoID wrote: the row was changed.');
 

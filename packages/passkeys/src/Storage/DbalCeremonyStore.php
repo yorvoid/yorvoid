@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Storage;
 
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Symfony\Component\Uid\Uuid;
 use YorvoID\Authn\Session\SessionId;
@@ -56,7 +55,7 @@ final readonly class DbalCeremonyStore implements CeremonyStore
         }
 
         $sessionId = Row::nullableString($row, 'session_id');
-        $expiresAt = Type::getType(Types::DATETIMETZ_IMMUTABLE)->convertToPHPValue($row['expires_at'], $this->database->connection->getDatabasePlatform());
+        $expiresAt = $this->database->connection->convertToPHPValue($row['expires_at'], Types::DATETIMETZ_IMMUTABLE);
         \assert($expiresAt instanceof \DateTimeImmutable);
 
         return new Ceremony($id, $realm, CeremonyKind::from(Row::string($row, 'kind')), Row::string($row, 'options'), $expiresAt, null === $sessionId ? null : SessionId::fromString($sessionId), Row::nullableString($row, 'operation'));

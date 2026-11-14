@@ -6,6 +6,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Fixed
 
+- The stores convert values through the connection (`Connection::convertToPHPValue()`), not `Type::getType()`, which Doctrine DBAL 4.6 deprecates: no deprecations with DBAL 4.6.
 - `yorvoid/policy-testing` suggests `symfony/config` with the other packages its Symfony bundle needs: Symfony's `Bundle` doesn't load without it.
 
 ## 0.4.0 (2026-11-13)

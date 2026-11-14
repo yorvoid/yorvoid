@@ -232,7 +232,9 @@ final class SchemaTest extends DatabaseTestCase
             $actual = [];
 
             foreach ($table->getColumns() as $column) {
-                $type = $column->getTypeName();
+                // The database stores a time the same whether PHP gets it immutable or not: DBAL 4.6 reads
+                // back the immutable type the migrations declare, older versions the mutable one.
+                $type = (string) preg_replace('/_immutable$/D', '', $column->getTypeName());
                 $actual[$column->getObjectName()->getIdentifier()->getValue()] = [$type, 'string' === $type ? $column->getLength() : null, !$column->getNotnull()];
             }
 

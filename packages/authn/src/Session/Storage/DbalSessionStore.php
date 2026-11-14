@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Authn\Session\Storage;
 
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
-use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
@@ -208,7 +207,7 @@ final readonly class DbalSessionStore implements SessionStore
 
     private function authentication(mixed $value): AuthenticationContext
     {
-        $factors = Type::getType(Types::JSON)->convertToPHPValue($value, $this->database->connection->getDatabasePlatform());
+        $factors = $this->database->connection->convertToPHPValue($value, Types::JSON);
         $valid = [];
 
         foreach (\is_array($factors) ? $factors : [null] as $factor) {
@@ -224,7 +223,7 @@ final readonly class DbalSessionStore implements SessionStore
 
     private function time(mixed $value): \DateTimeImmutable
     {
-        $time = Type::getType(Types::DATETIMETZ_IMMUTABLE)->convertToPHPValue($value, $this->database->connection->getDatabasePlatform());
+        $time = $this->database->connection->convertToPHPValue($value, Types::DATETIMETZ_IMMUTABLE);
         \assert($time instanceof \DateTimeImmutable);
 
         return $time;
