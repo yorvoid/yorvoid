@@ -1,6 +1,7 @@
 #!/bin/sh
 # Whether a version tag may be released: signed by a key in .github/release-signers (verify-tag.sh),
-# on a commit of main that passed CI, whose packages require each other at the tag's version. The
+# on a commit of main that passed CI, whose packages require each other at the tag's version and are all
+# on Packagist. The
 # Split, npm and Release workflows all ask it.
 # Usage: REPOSITORY=owner/name GH_TOKEN=… .github/release-check.sh v0.2.0
 set -eu
@@ -8,9 +9,10 @@ set -eu
 tag=$1
 .github/verify-tag.sh "$tag"
 
-# A set installs only when its packages require each other at the version they're released with.
+# A set installs only when its packages require each other at the version they're released with, and
+# Packagist has every one of them.
 if ! php tools/release/version.php check "$tag"; then
-	echo "::error::The packages don't require each other at $tag's version."
+	echo "::error::The packages don't install together at $tag's version: see above."
 	exit 1
 fi
 
