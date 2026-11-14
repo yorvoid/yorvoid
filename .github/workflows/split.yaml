@@ -16,6 +16,13 @@ on:
   push:
     tags:
       - 'v*'
+  # Only the install check, again, for a release that's already split: with this branch's script.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The version tag whose packages must install from Packagist, such as v0.4.0
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -105,12 +112,16 @@ jobs:
           REF: ${{ steps.passed.outputs.ref }}
           GIT_TOKEN: ${{ steps.token.outputs.token }}
 
-  # After a version tag is split: whether its packages install together from Packagist, as an
-  # application gets them (ADR-0005). It waits for Packagist to list the version.
+  # After a version tag is split, or when run by hand for a tag: whether its packages install together
+  # from Packagist, as an application gets them (ADR-0005). It waits for Packagist to list the version.
   installs:
     name: Install the release from Packagist
     needs: split
-    if: github.event_name == 'push'
+    # Run by hand, split is skipped; "always()" lets this job run without it.
+    if: >-
+      always()
+      && ((github.event_name == 'push' && needs.split.result == 'success')
+      || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -131,4 +142,6 @@ jobs:
           set: |
             php.cache-from=type=gha,scope=dev-refs/heads/main
       - name: Install every package at the tag's version
-        run: docker run --rm -v "$PWD:/app" -w /app "${IMAGES_PREFIX:-}yorvoid-php-dev" php tools/release/installs.php "$GITHUB_REF_NAME"
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: docker run --rm -v "$PWD:/app" -w /app "${IMAGES_PREFIX:-}yorvoid-php-dev" php tools/release/installs.php "$TAG"
