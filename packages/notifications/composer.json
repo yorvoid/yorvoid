@@ -33,9 +33,9 @@
         "symfony/clock": "^7.4 || ^8.1",
         "symfony/translation-contracts": "^3.6",
         "symfony/uid": "^7.4 || ^8.1",
-        "yorvoid/authn": "^0.4",
-        "yorvoid/core": "^0.4",
-        "yorvoid/mail": "^0.4"
+        "yorvoid/authn": "^0.5",
+        "yorvoid/core": "^0.5",
+        "yorvoid/mail": "^0.5"
     },
     "autoload": {
         "psr-4": {
@@ -44,7 +44,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.4.x-dev"
+            "dev-main": "0.5.x-dev"
         }
     }
 }

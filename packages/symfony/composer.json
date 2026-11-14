@@ -50,17 +50,17 @@
         "symfony/service-contracts": "^3.6",
         "symfony/translation-contracts": "^3.6",
         "symfony/uid": "^7.4 || ^8.1",
-        "yorvoid/authn": "^0.4",
-        "yorvoid/core": "^0.4",
-        "yorvoid/flows": "^0.4",
-        "yorvoid/intent-signing": "^0.4",
-        "yorvoid/mail": "^0.4",
-        "yorvoid/notifications": "^0.4",
-        "yorvoid/passkeys": "^0.4",
-        "yorvoid/policy": "^0.4",
-        "yorvoid/relations": "^0.4",
-        "yorvoid/throttle": "^0.4",
-        "yorvoid/translation": "^0.4"
+        "yorvoid/authn": "^0.5",
+        "yorvoid/core": "^0.5",
+        "yorvoid/flows": "^0.5",
+        "yorvoid/intent-signing": "^0.5",
+        "yorvoid/mail": "^0.5",
+        "yorvoid/notifications": "^0.5",
+        "yorvoid/passkeys": "^0.5",
+        "yorvoid/policy": "^0.5",
+        "yorvoid/relations": "^0.5",
+        "yorvoid/throttle": "^0.5",
+        "yorvoid/translation": "^0.5"
     },
     "suggest": {
         "symfony/mailer": "Sends YorvoID's emails through Symfony Mailer",
@@ -75,7 +75,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.4.x-dev"
+            "dev-main": "0.5.x-dev"
         }
     }
 }

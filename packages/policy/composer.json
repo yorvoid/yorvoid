@@ -31,8 +31,8 @@
         "doctrine/dbal": "^4.3",
         "psr/clock": "^1.0",
         "symfony/clock": "^7.4 || ^8.1",
-        "yorvoid/core": "^0.4",
-        "yorvoid/relations": "^0.4"
+        "yorvoid/core": "^0.5",
+        "yorvoid/relations": "^0.5"
     },
     "autoload": {
         "psr-4": {
@@ -41,7 +41,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.4.x-dev"
+            "dev-main": "0.5.x-dev"
         }
     }
 }
