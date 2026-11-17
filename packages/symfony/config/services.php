@@ -280,6 +280,7 @@ return static function (ContainerConfigurator $container): void {
             service(ClockInterface::class),
             inline_service(AuditFailure::class)->factory([AuditFailure::class, 'from'])->args([param('yorvoid.audit.on_failure')]),
             service('event_dispatcher'),
+            service(Transactions::class),
         ])
         ->tag('kernel.reset', ['method' => 'reset'])
         ->tag('kernel.event_listener', ['event' => 'kernel.terminate', 'method' => 'flush'])

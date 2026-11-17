@@ -24,6 +24,9 @@ final class InMemoryTransactions implements Transactions
     /** @var list<\Closure(): void> */
     private array $afterCommit = [];
 
+    /** @var list<\Closure(): void> */
+    private array $afterEnd = [];
+
     /**
      * @template T
      *
@@ -59,6 +62,12 @@ final class InMemoryTransactions implements Transactions
             throw $exception;
         } finally {
             --$this->depth;
+
+            // Committed or rolled back: what waits for the end runs either way.
+            while ($outermost && [] !== $this->afterEnd) {
+                $callback = array_shift($this->afterEnd);
+                $callback();
+            }
         }
 
         while ($outermost && [] !== $this->afterCommit) {
@@ -78,5 +87,16 @@ final class InMemoryTransactions implements Transactions
         }
 
         $this->afterCommit[] = $callback;
+    }
+
+    public function afterEnd(\Closure $callback): void
+    {
+        if (0 === $this->depth) {
+            $callback();
+
+            return;
+        }
+
+        $this->afterEnd[] = $callback;
     }
 }

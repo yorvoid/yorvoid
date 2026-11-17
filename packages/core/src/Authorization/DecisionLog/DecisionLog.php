@@ -18,6 +18,7 @@ use YorvoID\Core\Log\AuditAlarm;
 use YorvoID\Core\Log\Event\AuditFailed;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\Verdict;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * Records decisions apart from the security log (AUZ-040, ADR-09):
@@ -62,6 +63,7 @@ final class DecisionLog
         private readonly ClockInterface $clock = new NativeClock(),
         private readonly AuditFailure $onFailure = AuditFailure::Continue,
         EventDispatcherInterface $events = new NoEventListeners(),
+        private readonly ?Transactions $transactions = null,
     ) {
         if ($sampleRate < 0.0 || $sampleRate > 1.0) {
             throw new IntegratorError(\sprintf('The decision log\'s sample rate is %s.', $sampleRate), 'Give a share between 0 and 1, e.g. 0.01 for one request in a hundred.', 'concepts/security-log.md#the-decision-log');
@@ -102,6 +104,7 @@ final class DecisionLog
         /** @var array<int, DecisionRecord> $records The records of those to be recorded, by their place */
         $records = [];
         $now = [];
+        $refused = [];
 
         foreach ($decided as $i => [$request, $decision]) {
             $operation = null !== $request->operation;
@@ -112,7 +115,11 @@ final class DecisionLog
 
             $records[$i] = DecisionRecord::of($request, $decision);
 
-            if ($operation || AuditFailure::Refuse === $this->onFailure) {
+            if (!self::permits($decision) && ($operation || AuditFailure::Refuse === $this->onFailure)) {
+                // A refusal changes nothing: it's written outside the caller's transaction, and its
+                // failure raises the alert rather than replace the refusal (D-42).
+                $refused[$i] = $records[$i];
+            } elseif ($operation || AuditFailure::Refuse === $this->onFailure) {
                 $now[] = $records[$i];
             } else {
                 $this->buffer[] = $records[$i];
@@ -136,15 +143,19 @@ final class DecisionLog
             }
         }
 
+        // Written at once and failed: like any record that couldn't be written, it has no hash.
+        $unwritten = [] !== $refused && false === $this->independently(array_values($refused)) ? $refused : [];
+
         if (\count($this->buffer) >= self::BUFFER) {
             $this->flush();
         }
 
-        return array_map(static function (int $i, array $one) use ($records, $lost): Decision {
+        return array_map(static function (int $i, array $one) use ($records, $lost, $unwritten): Decision {
             $record = $records[$i] ?? null;
 
             return match (true) {
                 null === $record => $one[1],
+                isset($unwritten[$i]) => $one[1],
                 $lost => self::unrecorded($one[1]),
                 default => $one[1]->recorded($record->hash()),
             };
@@ -162,12 +173,7 @@ final class DecisionLog
 
         $records = $this->buffer;
         $this->buffer = [];
-
-        try {
-            $this->store->add($records);
-        } catch (\Throwable $e) {
-            $this->alarm->raise(new AuditFailed(AuditFailed::DECISION_LOG, $records[0]->realm, \count($records), false, $e));
-        }
+        $this->independently($records);
     }
 
     /**
@@ -187,6 +193,50 @@ final class DecisionLog
     public function reset(): void
     {
         $this->flush();
+    }
+
+    /**
+     * Writes records outside the caller's transaction (D-42): at once on a store with a connection of
+     * its own, or with no transaction open; otherwise once the caller's transaction has ended, committed
+     * or rolled back. A write that fails raises the audit alert, and nothing else.
+     *
+     * @param non-empty-list<DecisionRecord> $records
+     *
+     * @return bool|null Whether they were written, when that was at once; null when they wait for the end
+     */
+    private function independently(array $records): ?bool
+    {
+        $write = function () use ($records): bool {
+            try {
+                $this->store->add($records);
+
+                return true;
+            } catch (\Throwable $e) {
+                $this->alarm->raise(new AuditFailed(AuditFailed::DECISION_LOG, $records[0]->realm, \count($records), false, $e));
+
+                return false;
+            }
+        };
+
+        if (null === $this->transactions || ($this->store instanceof WritesIndependently && $this->store->writesIndependently())) {
+            return $write();
+        }
+
+        // With no transaction open, afterEnd() runs it at once, and it's known whether it was written.
+        $written = null;
+        $this->transactions->afterEnd(static function () use ($write, &$written): void {
+            $written = $write();
+        });
+
+        return $written;
+    }
+
+    private static function permits(Decision $decision): bool
+    {
+        return match ($decision->verdict) {
+            Verdict::Permit, Verdict::PermitOffline => true,
+            Verdict::Deny, Verdict::Indeterminate => false,
+        };
     }
 
     /**

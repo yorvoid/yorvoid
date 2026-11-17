@@ -148,8 +148,9 @@ final class AuditFailureTest extends TestCase
         }
 
         self::assertSame([], $badges->permits, 'The handler didn\'t run.');
-        $entry = iterator_to_array($entries->entries($this->realm, 1), false)[0] ?? null;
-        self::assertSame([Outcome::Denied, ['audit_unavailable']], [$entry?->outcome, $entry?->details['indeterminate'] ?? null], 'The security log has the refusal.');
+        // A refusal changes nothing, so the chain doesn't have it (D-42): with the decision log down, the
+        // audit alert is its trace.
+        self::assertSame([], iterator_to_array($entries->entries($this->realm, 1), false));
         self::assertCount(1, $this->events->of(AuditFailed::class));
     }
 

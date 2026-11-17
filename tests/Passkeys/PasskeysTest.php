@@ -618,12 +618,7 @@ final class PasskeysTest extends DatabaseTestCase
 
         $this->refused(Refusal::SuspectedCopy, static fn () => $transactions->run(static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web))));
 
-        $status = $this->credentials->get(new Realm('acme'), $credential->id)?->status;
-
-        // Known, until G-4 writes the disable outside the caller's transaction: remove this then.
-        if (CredentialStatus::Disabled !== $status) {
-            self::markTestIncomplete('ARC-0058 / G-4: the disable must be written outside the caller\'s transaction; the application\'s rollback made the copied passkey work again');
-        }
+        self::assertSame(CredentialStatus::Disabled, $this->credentials->get(new Realm('acme'), $credential->id)?->status, 'The application\'s rollback made the copied passkey work again (ARC-0058).');
     }
 
     #[DataProvider('implementations')]

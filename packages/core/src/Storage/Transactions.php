@@ -33,4 +33,17 @@ interface Transactions
      * @param \Closure(): void $callback
      */
     public function afterCommit(\Closure $callback): void;
+
+    /**
+     * Runs the callback once the outermost transaction has ended, committed or rolled back, or now if
+     * none is open: for what must happen whatever the caller's transaction does, e.g. disabling a
+     * passkey a refused sign-in showed was copied (D-42). The callback runs in no transaction; it opens
+     * one of its own. A process that ends before then loses it.
+     *
+     * Where the end of a transaction can't be seen (a connection without YorvoID's middleware), it runs
+     * now, inside the transaction, and is undone with it.
+     *
+     * @param \Closure(): void $callback
+     */
+    public function afterEnd(\Closure $callback): void;
 }

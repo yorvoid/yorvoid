@@ -43,6 +43,11 @@ final readonly class DbalTransactions implements Transactions
             // The outermost rollback drops every callback; a failed nested one only its own.
             $hooks->truncate($waiting);
 
+            if ($outermost) {
+                $hooks->defer(false);
+                $hooks->runWaitingEnded();
+            }
+
             throw $exception;
         } finally {
             if ($outermost) {
@@ -73,5 +78,19 @@ final readonly class DbalTransactions implements Transactions
         }
 
         $hooks->add($callback);
+    }
+
+    public function afterEnd(\Closure $callback): void
+    {
+        $hooks = $this->middleware?->hooks();
+
+        // No transaction, or none whose end YorvoID can see: now (D-42).
+        if (!$this->connection->isTransactionActive() || null === $hooks || !$hooks->isWatching()) {
+            $callback();
+
+            return;
+        }
+
+        $hooks->addEnded($callback);
     }
 }

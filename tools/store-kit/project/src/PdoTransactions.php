@@ -17,6 +17,9 @@ final class PdoTransactions implements Transactions
     /** @var list<\Closure(): void> */
     private array $callbacks = [];
 
+    /** @var list<\Closure(): void> For the end, committed or rolled back */
+    private array $ended = [];
+
     public function __construct(
         private readonly \PDO $pdo,
     ) {
@@ -33,6 +36,7 @@ final class PdoTransactions implements Transactions
             $this->rollBack();
             // The outermost rollback drops every callback; a failed nested unit only its own.
             $this->callbacks = \array_slice($this->callbacks, 0, $waiting);
+            $this->ended();
 
             throw $exception;
         }
@@ -49,7 +53,31 @@ final class PdoTransactions implements Transactions
             }
         }
 
+        $this->ended();
+
         return $result;
+    }
+
+    public function afterEnd(\Closure $callback): void
+    {
+        if (0 === $this->depth) {
+            $callback();
+
+            return;
+        }
+
+        $this->ended[] = $callback;
+    }
+
+    /**
+     * Once the outermost unit has ended, whichever way: what waits for the end.
+     */
+    private function ended(): void
+    {
+        while (0 === $this->depth && [] !== $this->ended) {
+            $callback = array_shift($this->ended);
+            $callback();
+        }
     }
 
     public function afterCommit(\Closure $callback): void
