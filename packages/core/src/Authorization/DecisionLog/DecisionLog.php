@@ -13,11 +13,18 @@ use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\NoEventListeners;
+use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Id\IdGenerator;
+use YorvoID\Core\Id\UuidV7Generator;
+use YorvoID\Core\Log\AttemptLog;
 use YorvoID\Core\Log\AuditAlarm;
 use YorvoID\Core\Log\Event\AuditFailed;
+use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\Verdict;
+use YorvoID\Core\Principal\PrincipalId;
+use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
 
 /**
@@ -35,7 +42,7 @@ use YorvoID\Core\Storage\Transactions;
  *
  * @api
  */
-final class DecisionLog
+final class DecisionLog implements AttemptLog
 {
     public const int BUFFER = 100;
 
@@ -64,6 +71,7 @@ final class DecisionLog
         private readonly AuditFailure $onFailure = AuditFailure::Continue,
         EventDispatcherInterface $events = new NoEventListeners(),
         private readonly ?Transactions $transactions = null,
+        private readonly IdGenerator $ids = new UuidV7Generator(),
     ) {
         if ($sampleRate < 0.0 || $sampleRate > 1.0) {
             throw new IntegratorError(\sprintf('The decision log\'s sample rate is %s.', $sampleRate), 'Give a share between 0 and 1, e.g. 0.01 for one request in a hundred.', 'concepts/security-log.md#the-decision-log');
@@ -163,6 +171,15 @@ final class DecisionLog
     }
 
     /**
+     * Keeps a failed attempt or a refusal outside the chain, outside the caller's transaction (D-42):
+     * SecurityLog::attempt() checked it.
+     */
+    public function attempt(Realm $realm, string $action, Outcome $outcome, Origin $origin, ?PrincipalId $actor, ?string $subjectType, ?string $subjectId, array $details): void
+    {
+        $this->independently([DecisionRecord::attempt((string) $this->ids->next(), $realm, $this->clock->now(), $action, $outcome->value, null === $actor ? null : (string) $actor, $subjectType, $subjectId, $origin, $details)]);
+    }
+
+    /**
      * Writes what's waiting: at the end of every request, command and job.
      */
     public function flush(): void
@@ -218,7 +235,7 @@ final class DecisionLog
             }
         };
 
-        if (null === $this->transactions || ($this->store instanceof WritesIndependently && $this->store->writesIndependently())) {
+        if (null === $this->transactions || ($this->store instanceof WritesApart && $this->store->writesApart())) {
             return $write();
         }
 

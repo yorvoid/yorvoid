@@ -110,7 +110,7 @@ final readonly class Attempts
         }
 
         $this->throttle->hit($marker, $once);
-        $this->log?->record($realm, 'yorvoid.attempt.throttled', Outcome::Denied, new Origin(OriginKind::System, 'throttle'), details: ['form' => $form, 'key' => Digest::sha256($key)]);
+        $this->log?->attempt($realm, 'yorvoid.attempt.throttled', Outcome::Denied, new Origin(OriginKind::System, 'throttle'), details: ['form' => $form, 'key' => Digest::sha256($key)]);
     }
 
     private static function account(string $form, Realm $realm, PrincipalId|string $account): string

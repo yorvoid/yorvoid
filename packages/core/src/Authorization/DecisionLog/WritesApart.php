@@ -11,7 +11,10 @@ namespace YorvoID\Core\Authorization\DecisionLog;
  *
  * @api
  */
-interface WritesIndependently
+interface WritesApart
 {
-    public function writesIndependently(): bool;
+    /**
+     * Whether what it writes commits on its own, out of the application's transactions.
+     */
+    public function writesApart(): bool;
 }

@@ -8,7 +8,7 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
-use YorvoID\Core\Authorization\DecisionLog\WritesIndependently;
+use YorvoID\Core\Authorization\DecisionLog\WritesApart;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Row;
@@ -20,7 +20,7 @@ use YorvoID\Core\Storage\Row;
  *
  * @api
  */
-final readonly class DbalDecisionLogStore implements DecisionLogStore, WritesIndependently
+final readonly class DbalDecisionLogStore implements DecisionLogStore, WritesApart
 {
     public const string TABLE = 'authorization_decision';
 
@@ -39,15 +39,7 @@ final readonly class DbalDecisionLogStore implements DecisionLogStore, WritesInd
     ) {
     }
 
-    /**
-     * Whether what it writes commits on its own, out of the application's transactions.
-     */
     public function writesApart(): bool
-    {
-        return null !== $this->writes;
-    }
-
-    public function writesIndependently(): bool
     {
         return null !== $this->writes;
     }

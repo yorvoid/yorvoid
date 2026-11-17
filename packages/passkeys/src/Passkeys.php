@@ -609,7 +609,7 @@ final readonly class Passkeys implements OperationHandler
         try {
             return $read();
         } catch (PasskeyRefused $refused) {
-            $this->log->record($realm, $action, Outcome::Failed, $origin, details: ['reason' => $refused->refusal->value]);
+            $this->log->attempt($realm, $action, Outcome::Failed, $origin, details: ['reason' => $refused->refusal->value]);
 
             throw $refused;
         }
@@ -617,7 +617,7 @@ final readonly class Passkeys implements OperationHandler
 
     private function refuse(Passkey $passkey, string $action, Refusal $refusal, Origin $origin, ?\Throwable $previous = null): never
     {
-        $this->log->record($passkey->realm, $action, Outcome::Failed, $origin, null, 'credential', (string) $passkey->credentialId, [
+        $this->log->attempt($passkey->realm, $action, Outcome::Failed, $origin, null, 'credential', (string) $passkey->credentialId, [
             'principal' => (string) $passkey->principalId,
             'reason' => $refusal->value,
         ]);

@@ -241,7 +241,7 @@ final readonly class RecoveryCodes implements OperationHandler
         try {
             return $this->transactions->run(fn (): ?StartedSession => $this->useCode($realm, $principalId, $hash, $permit, $origin, $device, $address, $deviceCookie));
         } catch (CredentialDisabledMeanwhile $disabled) {
-            $this->log->record($realm, self::USE, Outcome::Failed, $origin, null, 'credential', (string) $disabled->credential->id, ['principal' => (string) $principalId]);
+            $this->log->attempt($realm, self::USE, Outcome::Failed, $origin, null, 'credential', (string) $disabled->credential->id, ['principal' => (string) $principalId]);
 
             return null;
         }
@@ -260,13 +260,13 @@ final readonly class RecoveryCodes implements OperationHandler
         if (!$usable) {
             // No codes to use, or a disabled set, which keeps its codes: a read instead of the use.
             $this->store->count($realm, $principalId);
-            $this->log->record($realm, self::USE, Outcome::Failed, $origin);
+            $this->log->attempt($realm, self::USE, Outcome::Failed, $origin);
 
             return null;
         }
 
         if (!$this->store->use($realm, $principalId, $hash)) {
-            $this->log->record($realm, self::USE, Outcome::Failed, $origin, null, 'credential', (string) $credential->id, ['principal' => (string) $principalId]);
+            $this->log->attempt($realm, self::USE, Outcome::Failed, $origin, null, 'credential', (string) $credential->id, ['principal' => (string) $principalId]);
 
             return null;
         }

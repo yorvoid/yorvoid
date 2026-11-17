@@ -268,7 +268,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(KeyFiles::class)->args([param('yorvoid.keys.file'), param('yorvoid.keys.per_realm'), param('yorvoid.keys.directory')]);
 
     // The services.
-    $services->set(SecurityLog::class)->tag('kernel.reset', ['method' => 'reset']);
+    // Failed attempts and refusals go to the decision log, outside the chain (D-42).
+    $services->set(SecurityLog::class)->arg('$attempts', service(DecisionLog::class))->tag('kernel.reset', ['method' => 'reset']);
     // Ability decisions wait for the end of what asked for them: a request, a command, a message.
     $services->set(DecisionLog::class)
         ->args([
