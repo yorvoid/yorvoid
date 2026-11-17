@@ -99,7 +99,8 @@ final class YorvoIDBundle extends AbstractBundle
         $children->arrayNode('decision_log')->addDefaultsIfNotSet()->children()
             ->enumNode('permits')->values(['none', 'sampled', 'all'])->defaultValue('none')->info('Which permits of abilities are recorded: refusals, Indeterminate and every operation\'s decision always are')->end()
             ->floatNode('sample_rate')->min(0.0)->max(1.0)->defaultValue(0.01)->info('With permits: sampled, the share of requests whose permits are recorded')->end()
-            ->scalarNode('connection')->defaultNull()->info('A DoctrineBundle connection of its own to the same database, which writes decisions outside the application\'s transactions: give one with audit.on_failure: refuse')->end();
+            ->scalarNode('connection')->defaultNull()->info('A DoctrineBundle connection of its own to the same database, which writes decisions outside the application\'s transactions: give one with audit.on_failure: refuse')->end()
+            ->scalarNode('digest_grace')->defaultValue('1m')->info('How long a decision record may take to be written after it\'s decided, e.g. a request\'s buffered records: yorvoid:log:checkpoint digests records older than that')->end();
         $children->arrayNode('crypto')->addDefaultsIfNotSet()->children()
             ->enumNode('mode')->values(['standard', 'fips'])->defaultValue('standard')->info('Which algorithms YorvoID uses: standard, or fips, only with OpenSSL\'s FIPS provider alone active, which it checks at boot (CRY-01)')->end();
         $children->arrayNode('audit')->addDefaultsIfNotSet()->children()

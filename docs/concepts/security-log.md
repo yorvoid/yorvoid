@@ -28,7 +28,7 @@ Each entry has:
 | details | Facts that help reconstruct what happened |
 | algorithm, previous hash, hash | The chain |
 
-Failed attempts are recorded too, with outcome `failed` and nothing typed in the details: a setup code that didn't work (`yorvoid.setup.claim`), a token or link that didn't (`yorvoid.token.consume`, with its purpose), a recovery code (`yorvoid.recovery_code.use`). A limit that refuses attempts is recorded once per window, not once per attempt (`yorvoid.attempt.throttled`, `denied`, with the form and a hash of what was counted).
+The chain holds what changed. A refused operation and a failed attempt change nothing, so they're [decision records](#the-decision-log) instead, kept outside the caller's transaction and without the realm's lock: a setup code that didn't work (`yorvoid.setup.claim`), a token or link that didn't (`yorvoid.token.consume`, with its purpose), a recovery code (`yorvoid.recovery_code.use`), a passkey refused, and a limit that refuses attempts, once per window (`yorvoid.attempt.throttled`, with the form and a hash of what was counted). Nothing typed is kept. Without a decision log (`SecurityLog` given no `attempts:`), they're entries of the chain, with outcome `failed` or `denied`, as before 0.5.
 
 Details hold facts, never secrets, tokens, passwords or copies of personal data: point to records instead of copying them. They're strings, integers, booleans, null, and lists or maps of those, up to 16 KB. Numbers with decimals are written as strings, because their text form isn't stable enough to hash.
 
@@ -52,6 +52,8 @@ A `SecurityLogStore` of your own implements `lock()` as an append locks: on a da
 Verification detects any change to entries that left the rest of the chain in place, and entries removed from the end while the realm's head, which records the last one, still names them.
 
 Someone who can write to the database can, however, change the head too: cut entries off the end, or rewrite the whole chain from the point they changed, and the chain alone still verifies. [Checkpoints](#checkpoints) kept outside the database close that gap, up to the last checkpoint. Take the privileges to rewrite the log from the application's database user too, if you can.
+
+Decision records, refusals and failed attempts among them, have no entry of their own. Each `yorvoid:log:checkpoint` first appends a **digest** of those written since the last one (`yorvoid.decision.digest`: how many, and a hash over each one's ID and hash), and the checkpoint then covers it. `yorvoid:log:verify --decisions` recomputes each digest from the records, and names those changed or missing since; a window since pruned is kept by its digest only. What's younger than the last digest isn't covered yet: someone who can write the database can delete a refusal of the last minutes, up to the checkpoint interval plus `yorvoid.decision_log.digest_grace` (a minute), and nothing notices. Records written inside a transaction of yours, an operation's permit among them, aren't digested: the entries of the changes they allowed cite them, hash included.
 
 Recording needs only `INSERT` and `SELECT` on `yorvoid_security_log`, and `INSERT`, `SELECT` and `UPDATE` on `yorvoid_security_log_head`. On PostgreSQL, run migrations as a user that owns YorvoID's tables, and grant the application's user only those; `yorvoid:doctor` warns while it can update, delete or truncate the log, or delete or truncate its head. SQLite has no privileges: whoever can write its file can change anything.
 
@@ -98,21 +100,32 @@ It isn't a chain, and recording takes no lock: every request asks for decisions,
 
 What's recorded, and when:
 
-- **An operation's decision**, whatever it is, at once and before the operation runs, in a statement of its own. The operation's transaction starts afterwards, so a change rolled back still has its decision; if you call `Operations::run()` inside a transaction of your own, the decision is part of yours. If it can't be written, the operation doesn't run.
+- **An operation's Permit**, at once and before the operation runs, in a statement of its own. The operation's transaction starts afterwards, so a change rolled back still has its decision; if you call `Operations::run()` inside a transaction of your own, the record is part of yours, and lives and dies with what it allowed. If it can't be written, the operation doesn't run.
+- **An operation's refusal, and a failed attempt**, outside your transaction, so your rollback doesn't take them, and without the realm's lock: at once on a connection of their own (`yorvoid.decision_log.connection`), or with no transaction open; otherwise once your outermost transaction has ended, committed or rolled back (`Transactions::afterEnd()`). A process that dies before then loses them. If one can't be written, the audit alert is raised, and the refusal stands. On a connection without YorvoID's `TransactionMiddleware`, the end can't be seen: they're written at once, in your transaction.
 - **An ability's refusal or Indeterminate**, always, and its permit as configured: none by default, all, or a sampled share of requests, chosen per correlation ID so a request is recorded whole or not at all (in Symfony, a request and its sub-requests share one: [`RequestOrigins`](symfony.md#who-may-run-an-operation)). An ability declared with `recordsPermits: true` records its permits whatever the configuration, e.g. one for explaining someone else's access.
 - Abilities' records wait for the end of what asked for them and are written together: call `DecisionLog::flush()` when a request, command or job ends (in Symfony, `kernel.terminate`, `console.terminate` and Messenger's handled and failed messages do), and whenever 100 are waiting. That's best effort: a process that dies before then loses them, and a write that fails raises the [audit alert](#when-a-record-cant-be-written), not an error.
 
 ```php
+use YorvoID\Core\Authorization\DecisionLog\DecisionDigests;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Realm;
 
-$decisions = new DecisionLog(new DbalDecisionLogStore($database), PermitRecording::Sampled, sampleRate: 0.01);
+$decisions = new DecisionLog(new DbalDecisionLogStore($database), PermitRecording::Sampled, sampleRate: 0.01, transactions: $transactions);
 $evaluator = Evaluator::builtIn($authority, versions: [$policyVersion, $relationsVersion], decisions: $decisions);
+$log = new SecurityLog($logStore, $transactions, attempts: $decisions);  // failed attempts and refusals go to it
+
+// From cron, before each checkpoint: the records written since the last digest.
+$digests = new DecisionDigests(new DbalDecisionLogStore($database), $log, $logStore, $transactions);
+$digests->take(Realm::default());
 ```
 
-Every security-log entry recorded while an operation runs, and the entry of an operation refused, cites the decision in its details: `decision: {id, hash}`. Its consequences cite the same one. The chain then proves which decision allowed each change, and a decision record changed afterwards no longer matches the hash the chain holds.
+Every security-log entry recorded while an operation runs cites the decision in its details: `decision: {id, hash}`. Its consequences cite the same one. The chain then proves which decision allowed each change, and a decision record changed afterwards no longer matches the hash the chain holds.
+
+Each record written is dispatched as a `DecisionRecorded` event, for your own audit log or a SIEM: refusals and failed attempts are no entries, so `SecurityLogEntryRecorded` doesn't carry them. One written once your transaction ended is dispatched then, maybe after the response was sent.
 
 Old decisions are pruned by `yorvoid:purge` (`--keep-decisions`, 90 days by default), or `DecisionLog::purge()`. The security log keeps the hashes of those it cites.
 
@@ -146,7 +159,8 @@ $dispatcher->addListener(AuditFailed::class, static function (AuditFailed $failu
 With `AuditFailure::Refuse` (in Symfony, `yorvoid.audit.on_failure: refuse`), nothing is permitted without its record:
 
 - Every decision that's recorded is written **before it's returned**. Nothing waits for the end of the request, and a batch from `decideAbilities()` is one write.
-- If the write fails, a Permit or Permit-offline becomes **Indeterminate** with the reason `audit_unavailable`. It keeps its ID, and a refused operation's security-log entry cites that ID.
+- If the write fails, a Permit or Permit-offline becomes **Indeterminate** with the reason `audit_unavailable`. It keeps its ID, and the audit alert is its trace.
+- It needs a connection of its own (`yorvoid.decision_log.connection`; the Symfony bridge refuses to start without one): a record written in your transaction is undone with it.
 - A Deny stays a Deny.
 - A voter then denies access, and `Operations::run()` throws `NotPermitted`; the handler doesn't run.
 

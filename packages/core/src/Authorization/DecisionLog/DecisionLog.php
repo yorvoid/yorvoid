@@ -9,6 +9,7 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Clock\NativeClock;
+use YorvoID\Core\Authorization\DecisionLog\Event\DecisionRecorded;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Duration;
@@ -69,7 +70,7 @@ final class DecisionLog implements AttemptLog
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly ClockInterface $clock = new NativeClock(),
         private readonly AuditFailure $onFailure = AuditFailure::Continue,
-        EventDispatcherInterface $events = new NoEventListeners(),
+        private readonly EventDispatcherInterface $events = new NoEventListeners(),
         private readonly ?Transactions $transactions = null,
         private readonly IdGenerator $ids = new UuidV7Generator(),
     ) {
@@ -113,6 +114,7 @@ final class DecisionLog implements AttemptLog
         $records = [];
         $now = [];
         $refused = [];
+        $refusedAt = [];
 
         foreach ($decided as $i => [$request, $decision]) {
             $operation = null !== $request->operation;
@@ -126,7 +128,8 @@ final class DecisionLog implements AttemptLog
             if (!self::permits($decision) && ($operation || AuditFailure::Refuse === $this->onFailure)) {
                 // A refusal changes nothing: it's written outside the caller's transaction, and its
                 // failure raises the alert rather than replace the refusal (D-42).
-                $refused[$i] = $records[$i];
+                $refused[] = $records[$i];
+                $refusedAt[$i] = $i;
             } elseif ($operation || AuditFailure::Refuse === $this->onFailure) {
                 $now[] = $records[$i];
             } else {
@@ -149,10 +152,14 @@ final class DecisionLog implements AttemptLog
                 // Refusing, all of them were to be written now.
                 $lost = true;
             }
+
+            if (!$lost) {
+                $this->announce($now);
+            }
         }
 
         // Written at once and failed: like any record that couldn't be written, it has no hash.
-        $unwritten = [] !== $refused && false === $this->independently(array_values($refused)) ? $refused : [];
+        $unwritten = [] !== $refused && false === $this->independently($refused) ? $refusedAt : [];
 
         if (\count($this->buffer) >= self::BUFFER) {
             $this->flush();
@@ -226,13 +233,16 @@ final class DecisionLog implements AttemptLog
         $write = function () use ($records): bool {
             try {
                 $this->store->add($records);
-
-                return true;
             } catch (\Throwable $e) {
                 $this->alarm->raise(new AuditFailed(AuditFailed::DECISION_LOG, $records[0]->realm, \count($records), false, $e));
 
                 return false;
             }
+
+            // Written: a listener's own failure isn't the record's.
+            $this->announce($records);
+
+            return true;
         };
 
         if (null === $this->transactions || ($this->store instanceof WritesApart && $this->store->writesApart())) {
@@ -246,6 +256,16 @@ final class DecisionLog implements AttemptLog
         });
 
         return $written;
+    }
+
+    /**
+     * @param list<DecisionRecord> $records Written
+     */
+    private function announce(array $records): void
+    {
+        foreach ($records as $record) {
+            $this->events->dispatch(new DecisionRecorded($record));
+        }
     }
 
     private static function permits(Decision $decision): bool

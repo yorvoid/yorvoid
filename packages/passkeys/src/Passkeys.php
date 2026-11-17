@@ -479,6 +479,7 @@ final readonly class Passkeys implements OperationHandler
                 $disable = new DisableCredential($passkey->realm, $credential->id, $passkey->principalId, 'signature counter didn\'t go up: the passkey may have been copied');
                 $permit->cause($this->credentials->disable(...), $disable, $origin);
                 $this->transactions->afterEnd(function () use ($permit, $disable, $origin): void {
+                    // Kept by a commit, or removed meanwhile: nothing to do again.
                     if (true !== $this->credentials->get($disable->realm, $disable->credentialId)?->isActive()) {
                         return;
                     }

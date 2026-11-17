@@ -43,11 +43,6 @@ final readonly class DbalTransactions implements Transactions
             // The outermost rollback drops every callback; a failed nested one only its own.
             $hooks->truncate($waiting);
 
-            if ($outermost) {
-                $hooks->defer(false);
-                $hooks->runWaitingEnded();
-            }
-
             throw $exception;
         } finally {
             if ($outermost) {

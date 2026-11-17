@@ -654,6 +654,33 @@ final class PasskeysTest extends DatabaseTestCase
 
         self::assertLessThan(2.5, microtime(true) - $started, 'The disable waited on the application\'s locks.');
         self::assertSame(CredentialStatus::Disabled, $this->credentials->get(new Realm('acme'), $credential->id)?->status);
+        self::assertCount(1, array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.credential.disable' === $entry->action), 'Kept by the commit: disabled once.');
+    }
+
+    /**
+     * The application removes the credential in the transaction the refusal left, and commits: once it
+     * has ended, there's nothing to disable again.
+     */
+    #[DataProvider('implementations')]
+    public function testACopiedPasskeyRemovedMeanwhileIsntDisabledAgain(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation, clonePolicy: ClonePolicy::DisablePasskey);
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $ceremony = $passkeys->beginRegistration($session);
+        $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key'), new Origin(OriginKind::Web), $session);
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 5)), new Origin(OriginKind::Web));
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $copy = $authenticator->signIn($signIn->options, counter: 5);
+        $stack = $this->stack;
+
+        $stack->transactions->run(function () use ($passkeys, $signIn, $copy, $stack, $credential): void {
+            $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web)));
+            $stack->credentials->remove($credential->realm, $credential->id);
+        });
+
+        self::assertNull($this->credentials->get(new Realm('acme'), $credential->id));
     }
 
     #[DataProvider('implementations')]

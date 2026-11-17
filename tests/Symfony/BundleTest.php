@@ -29,6 +29,7 @@ use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
+use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Crypto\CryptoMode;
 use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Duration;
@@ -38,6 +39,8 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Key\KeyAlgorithm;
 use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Key\SigningKey;
+use YorvoID\Core\Log\Outcome;
+use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -380,6 +383,37 @@ final class BundleTest extends TestCase
         $database->connection->executeStatement(\sprintf('DELETE FROM %s', $database->table(DbalSecurityLogStore::HEAD_TABLE)));
         self::assertSame(1, $verify->execute([]));
         self::assertStringContainsString('isn\'t in the log: entries at the end were removed.', (string) preg_replace('/\s+/', ' ', $verify->getDisplay()));
+    }
+
+    /**
+     * A refusal has no entry of its own: the checkpoint digests the decision records first, and
+     * verifying with --decisions finds one changed since (D-42).
+     */
+    #[Group('ed25519-keys')]
+    public function testCheckpointsDigestTheDecisionRecords(): void
+    {
+        $keys = $this->directory.'/keys.json';
+        new Filesystem()->mkdir($this->directory, 0o700);
+        new KeyRing([SigningKey::generate('2026-11-17')])->toFile($keys);
+        $container = $this->boot(['keys' => ['file' => $keys], 'log' => ['checkpoint_file' => $this->directory.'/checkpoints.jsonl'], 'decision_log' => ['digest_grace' => '1s']]);
+        $this->migrate();
+        $application = new Application($this->kernel ?? throw new \LogicException());
+        $checkpoint = new CommandTester($application->find('yorvoid:log:checkpoint'));
+        $verify = new CommandTester($application->find('yorvoid:log:verify'));
+        $log = $container->get(SecurityLog::class);
+        \assert($log instanceof SecurityLog);
+
+        $log->attempt(Realm::default(), 'yorvoid.setup.claim', Outcome::Failed, new Origin(OriginKind::Web));
+        usleep(1_100_000);
+        self::assertSame(0, $checkpoint->execute([]));
+        self::assertStringContainsString('Digested 1 decision record(s) of the realm "default" in entry 1.', $checkpoint->getDisplay());
+        self::assertSame(0, $verify->execute(['--decisions' => true]));
+        self::assertStringContainsString('The decision records of 1 digest(s) match them.', (string) preg_replace('/\s+/', ' ', $verify->getDisplay()));
+
+        $database = $this->database($container);
+        $database->connection->executeStatement(\sprintf("UPDATE %s SET content = REPLACE(content, 'yorvoid.setup.claim', 'yorvoid.setup.other')", $database->table(DbalDecisionLogStore::TABLE)));
+        self::assertSame(1, $verify->execute(['--decisions' => true]));
+        self::assertStringContainsString('Decision records changed or went missing since they were digested', (string) preg_replace('/\s+/', ' ', $verify->getDisplay()));
     }
 
     public function testWithoutCheckpointsVerificationSaysWhatItCantSee(): void

@@ -251,7 +251,11 @@ final readonly class DecisionRecord
         $keyed = [];
 
         foreach ($details as $key => $value) {
-            $keyed[(string) $key] = $value;
+            if (!\is_string($key)) {
+                throw new \UnexpectedValueException('A stored decision\'s details are malformed.');
+            }
+
+            $keyed[$key] = $value;
         }
 
         return $keyed;

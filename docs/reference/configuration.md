@@ -43,6 +43,9 @@ yorvoid:
 
         # A DoctrineBundle connection of its own to the same database, which writes decisions outside the application's transactions: give one with audit.on_failure: refuse
         connection:           null
+
+        # How long a decision record may take to be written after it's decided, e.g. a request's buffered records: yorvoid:log:checkpoint digests records older than that
+        digest_grace:         1m
     crypto:
 
         # Which algorithms YorvoID uses: standard, or fips, only with OpenSSL's FIPS provider alone active, which it checks at boot (CRY-01)

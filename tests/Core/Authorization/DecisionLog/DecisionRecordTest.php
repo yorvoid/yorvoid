@@ -120,6 +120,7 @@ final class DecisionRecordTest extends TestCase
         yield 'another format' => [$with(['format' => 3]), 'A stored decision has an unknown format.'];
         yield 'an attempt in format 1' => [$with(['kind' => 'attempt']), 'A stored decision is malformed.'];
         yield 'details that are a list' => [$with(['format' => 2, 'details' => ['a']]), 'A stored decision\'s details are malformed.'];
+        yield 'details with a number for a name' => [$with(['format' => 2, 'details' => ['a' => 1, 7 => 'b']]), 'A stored decision\'s details are malformed.'];
         yield 'no ID' => [$with(['id' => 1]), 'A stored decision\'s "id" isn\'t text.'];
         yield 'a bad time' => [$with(['decided_at' => 'yesterday']), 'A stored decision is malformed.'];
         yield 'another kind' => [$with(['kind' => 'guess']), 'A stored decision is malformed.'];

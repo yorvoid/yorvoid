@@ -51,6 +51,8 @@ final class WritesWithoutPermit
         'YorvoID\\Authn\\Token\\OneTimeTokens::consume' => ['logs', 'needs the secret, which is the proof; records the use', 'YorvoID\\Tests\\Authn\\Token\\OneTimeTokensTest::testIssuesATokenThatWorksOnce'],
         'YorvoID\\Authn\\Token\\OneTimeTokens::peek' => ['read', 'reads'],
         'YorvoID\\Authn\\Token\\OneTimeTokens::purge' => ['bookkeeping', 'removes used or expired tokens'],
+        'YorvoID\\Core\\Authorization\\DecisionLog\\DecisionDigests::take' => ['logs', 'appends the realm\'s digest of its decision records to the chain', 'YorvoID\\Tests\\Conformance\\DecisionDigestsTest::testDigestsCoverWhatWasWrittenAndFindWhatChanged'],
+        'YorvoID\\Core\\Authorization\\DecisionLog\\DecisionDigests::verify' => ['read', 'recomputes the digests from the records'],
         'YorvoID\\Core\\Authorization\\DecisionLog\\DecisionLog::attempt' => ['logs', 'a failed attempt or a refusal, kept in the decision log outside the chain (D-42)', 'YorvoID\\Tests\\Conformance\\RefusalsOutsideTheChainTest::testAFailedAttemptIsARecordNotAnEntry'],
         'YorvoID\\Core\\Authorization\\DecisionLog\\DecisionLog::flush' => ['logs', 'writes the decision records it holds: the decision log', 'YorvoID\\Tests\\Core\\Authorization\\DecisionLog\\DecisionLogTest::testAnAbilitysRefusalWaitsForTheEndOfTheRequest'],
         'YorvoID\\Core\\Authorization\\DecisionLog\\DecisionLog::onFailure' => ['read', 'what happens when the decision log can\'t be written'],

@@ -18,8 +18,6 @@ final class CommitHooks
     /** @var list<\Closure(): void> Callbacks for the end, committed or rolled back */
     private array $ended = [];
 
-    private bool $endedWaiting = false;
-
     private bool $watching = false;
 
     /** Whether a commit should wait for runCommitted() rather than run the callbacks at once */
@@ -84,7 +82,6 @@ final class CommitHooks
     {
         if ($this->deferring) {
             $this->committed = true;
-            $this->endedWaiting = true;
 
             return;
         }
@@ -101,34 +98,15 @@ final class CommitHooks
         if ($this->committed) {
             $this->committed = false;
             $this->run();
+            $this->runEnded();
         }
-
-        $this->runWaitingEnded();
     }
 
     public function rolledBack(): void
     {
         $this->callbacks = [];
-
-        // DBAL counts no transaction once it rolls back, but YorvoID's run() is still unwinding: it runs them.
-        if ($this->deferring) {
-            $this->endedWaiting = true;
-
-            return;
-        }
-
+        // DBAL counts no transaction once it rolls back, before the driver does: they can open one.
         $this->runEnded();
-    }
-
-    /**
-     * Runs the callbacks for the end, after a deferred commit or rollback.
-     */
-    public function runWaitingEnded(): void
-    {
-        if ($this->endedWaiting) {
-            $this->endedWaiting = false;
-            $this->runEnded();
-        }
     }
 
     private function runEnded(): void

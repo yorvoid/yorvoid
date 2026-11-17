@@ -102,7 +102,7 @@ Hardware keys count their signatures. If a sign-in reports a count that didn't g
 
 Passkeys that sync between devices always report 0 and are never suspected. Whether a passkey syncs (its backup flags) is recorded, and isn't a reason to refuse it.
 
-Run sign-ins and step-ups outside your own database transaction. Inside one, a rollback also undoes the disabling of a copied passkey (until 0.5's G-4), e.g. under Messenger's `doctrine_transaction` middleware. The Symfony bridge doesn't open one.
+A copied passkey stays disabled when your own transaction rolls back with the refusal, e.g. under Messenger's `doctrine_transaction` middleware: YorvoID disables it again once that transaction has ended. That needs YorvoID's `TransactionMiddleware` on the connection, as the Symfony bridge sets up: without it, the end can't be seen, and the rollback undoes the disabling ([storage](storage.md)). A process that dies in between loses it; the next answer of the copy is suspected again.
 
 ## Removing a passkey
 

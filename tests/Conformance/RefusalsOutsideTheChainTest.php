@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Conformance;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
+use YorvoID\Core\Authorization\DecisionLog\Event\DecisionRecorded;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Event\Origin;
@@ -28,6 +29,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\ScanBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 
 /**
@@ -89,7 +91,8 @@ final class RefusalsOutsideTheChainTest extends DatabaseTestCase
     public function testAFailedAttemptIsARecordNotAnEntry(string $implementation): void
     {
         $stack = $this->stack($implementation);
-        $decisions = new DecisionLog($stack->decisions, transactions: $stack->transactions);
+        $events = new RecordingDispatcher();
+        $decisions = new DecisionLog($stack->decisions, events: $events, transactions: $stack->transactions);
         $log = new SecurityLog($stack->log, $stack->transactions, attempts: $decisions);
         $realm = new Realm('acme');
 
@@ -101,6 +104,9 @@ final class RefusalsOutsideTheChainTest extends DatabaseTestCase
         $records = $this->attempts($stack, $realm);
         self::assertCount(1, $records);
         self::assertSame(['attempt', 'yorvoid.recovery_code.use', 'failed', ['principal' => 'p-1']], [$records[0]->kind, $records[0]->name, $records[0]->verdict, $records[0]->details]);
+        $recorded = $events->of(DecisionRecorded::class);
+        self::assertCount(1, $recorded, 'A SIEM sees no attempts.');
+        self::assertSame($records[0]->id, $recorded[0]->record->id);
     }
 
     /**
