@@ -1,5 +1,6 @@
 var/
 vendor/
+!/tests/PhpstanRules/data/vendor/
 .php-cs-fixer.cache
 /compose.override.yaml
 .deptrac.cache
