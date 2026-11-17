@@ -181,7 +181,8 @@ final readonly class Sessions implements OperationHandler
 
     /**
      * Gives a current session a new token (SES-002): after signing in to an existing session, after
-     * stepping up, after any change of privilege. The old token stops working.
+     * stepping up, after any change of privilege. The old token stops working, and the security log
+     * records the refresh (yorvoid.session.refresh).
      *
      * @return Secret|null The new token; null if the session isn't current
      */
@@ -200,6 +201,11 @@ final readonly class Sessions implements OperationHandler
                 return null;
             }
 
+            // A new bearer token is a new credential: recorded like a sign-in or a step-up.
+            $this->log->record($realm, 'yorvoid.session.refresh', Outcome::Success, $origin, $session->principalId, 'session', (string) $session->id, [
+                'principal' => (string) $session->principalId,
+            ]);
+
             $this->transactions->afterCommit(function () use ($session, $origin): void {
                 $this->events->dispatch(new SessionRefreshed($session, $origin));
             });
@@ -210,9 +216,10 @@ final readonly class Sessions implements OperationHandler
 
     /**
      * Adds a proof to a current session, after its principal proved who they are again (ATN-070), and
-     * gives it a new token (SES-002): the old token stops working. For the packages that check the proof,
-     * e.g. Passkeys::finishStepUp(). Store the new token as on sign-in: under a new ID of the application's
-     * session.
+     * gives it a new token (SES-002): the old token stops working. Store the new token as on sign-in:
+     * under a new ID of the application's session.
+     *
+     * @internal For the packages that check the proof, e.g. Passkeys::finishStepUp()
      *
      * @return Secret|null The new token; null if the session isn't current, or its principal not active
      */

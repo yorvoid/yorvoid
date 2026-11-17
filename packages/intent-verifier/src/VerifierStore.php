@@ -12,6 +12,8 @@ namespace YorvoID\IntentVerifier;
  * checks FileVerifierStore makes: a regular file, not a link, the verifier's user's alone.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface VerifierStore
 {

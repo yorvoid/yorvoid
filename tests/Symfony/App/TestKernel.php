@@ -42,19 +42,20 @@ final class TestKernel extends Kernel implements CompilerPassInterface
     use MicroKernelTrait;
 
     /**
-     * @param array<string, mixed> $yorvoid        YorvoID's configuration, over the defaults below
-     * @param bool                 $translations   Whether the application has Symfony's translator
-     * @param bool                 $authenticators Whether the firewall has YorvoID's authenticators
-     * @param bool                 $debugging      Whether it runs in debug mode, as in development
-     * @param bool                 $session        Whether it has a PHP session
-     * @param bool                 $mailer         Whether it has Symfony Mailer
-     * @param string|null          $database       The application's database, if not its own SQLite file
-     * @param array<string, mixed> $security       SecurityBundle's configuration, over the defaults below
-     * @param list<class-string>   $services       The application's own services, autoconfigured
-     * @param list<class-string>   $voters         Voters another bundle's compiler pass tags, before SecurityBundle gathers them
-     * @param bool                 $expressions    Whether it decides Symfony's expressions, as with symfony/expression-language installed
-     * @param int|null             $decorates      The priority of the application's decorator of Symfony's authenticated voter, if it has one
-     * @param bool                 $keepsData      Whether the firewall's logout keeps the PHP session (invalidate_session: false)
+     * @param array<string, mixed>  $yorvoid        YorvoID's configuration, over the defaults below
+     * @param bool                  $translations   Whether the application has Symfony's translator
+     * @param bool                  $authenticators Whether the firewall has YorvoID's authenticators
+     * @param bool                  $debugging      Whether it runs in debug mode, as in development
+     * @param bool                  $session        Whether it has a PHP session
+     * @param bool                  $mailer         Whether it has Symfony Mailer
+     * @param string|null           $database       The application's database, if not its own SQLite file
+     * @param array<string, mixed>  $security       SecurityBundle's configuration, over the defaults below
+     * @param list<class-string>    $services       The application's own services, autoconfigured
+     * @param list<class-string>    $voters         Voters another bundle's compiler pass tags, before SecurityBundle gathers them
+     * @param bool                  $expressions    Whether it decides Symfony's expressions, as with symfony/expression-language installed
+     * @param int|null              $decorates      The priority of the application's decorator of Symfony's authenticated voter, if it has one
+     * @param bool                  $keepsData      Whether the firewall's logout keeps the PHP session (invalidate_session: false)
+     * @param array<string, string> $aliases        The application's aliases: ID => the service it points to
      */
     public function __construct(
         private readonly string $directory,
@@ -74,6 +75,7 @@ final class TestKernel extends Kernel implements CompilerPassInterface
         private readonly bool $expressions = false,
         private readonly ?int $decorates = null,
         private readonly bool $keepsData = false,
+        private readonly array $aliases = [],
     ) {
         parent::__construct($environment, $debugging);
     }
@@ -160,6 +162,10 @@ final class TestKernel extends Kernel implements CompilerPassInterface
 
             foreach ($this->voters as $voter) {
                 $container->register($voter)->setAutowired(true);
+            }
+
+            foreach ($this->aliases as $id => $service) {
+                $container->setAlias($id, $service)->setPublic(true);
             }
 
             // SecurityBundle's own only when symfony/expression-language is installed for production: it's a dev dependency here.

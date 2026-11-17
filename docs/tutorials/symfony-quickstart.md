@@ -185,4 +185,5 @@ Follow "Sign out", then "Sign in". The sign-in page offers your passkey in the e
 - **Your kind of application:** pick a [preset](../concepts/symfony.md#presets).
 - **Your users:** [sign in your own user objects](../concepts/symfony.md#your-own-users).
 - **Tests:** [sign in to functional tests](../concepts/testing.md) through YorvoID.
+- **Static analysis:** `composer require --dev yorvoid/phpstan-rules`, and [PHPStan flags](../how-to/phpstan-rules.md) a call to YorvoID's stores or its internals.
 - **Production:** `APP_ENV=prod` (the skeleton's `.env` says `dev`, whose error pages show your code to anyone), a long random `APP_SECRET`, `composer dump-env prod`; HTTPS, your domain as the relying party ID, PostgreSQL, `cookie_secure: true`, your proxy in `trusted_proxies` if one terminates HTTPS ([behind a proxy](../concepts/symfony.md#behind-a-proxy)), and `yorvoid:doctor --strict` in your deployment: it checks these.

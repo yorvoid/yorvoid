@@ -311,7 +311,7 @@ final class SecurityTest extends TestCase
 
         self::assertSame([], $credentials->of(Realm::default(), $ana->id));
         self::assertSame([], $passkeys->of(Realm::default(), $ana->id), 'A deleted principal\'s public key stayed.');
-        $store = $this->container->get(\YorvoID\Authn\Recovery\RecoveryCodeStore::class);
+        $store = $this->container->get('yorvoid.store.recovery_code');
         \assert($store instanceof \YorvoID\Authn\Recovery\RecoveryCodeStore);
         self::assertSame(0, $store->count(Realm::default(), $ana->id), 'A deleted principal\'s recovery codes stayed.');
     }

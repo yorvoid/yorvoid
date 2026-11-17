@@ -20,6 +20,7 @@
                     "yorvoid/mail": "0.5.x-dev",
                     "yorvoid/notifications": "0.5.x-dev",
                     "yorvoid/passkeys": "0.5.x-dev",
+                    "yorvoid/phpstan-rules": "0.5.x-dev",
                     "yorvoid/policy": "0.5.x-dev",
                     "yorvoid/policy-testing": "0.5.x-dev",
                     "yorvoid/relations": "0.5.x-dev",
@@ -43,6 +44,7 @@
         "yorvoid/mail": "^0.5",
         "yorvoid/notifications": "^0.5",
         "yorvoid/passkeys": "^0.5",
+        "yorvoid/phpstan-rules": "^0.5",
         "yorvoid/policy": "^0.5",
         "yorvoid/policy-testing": "^0.5",
         "yorvoid/relations": "^0.5",
@@ -83,7 +85,10 @@
             "YorvoID\\E2e\\": "e2e/app/src/",
             "YorvoID\\Tests\\": "tests/",
             "YorvoID\\Tools\\PHPStan\\": "tools/phpstan/src/"
-        }
+        },
+        "classmap": [
+            "tests/PhpstanRules/data/"
+        ]
     },
     "config": {
         "process-timeout": 0,
@@ -146,5 +151,12 @@
         "docs-reference": "Writes the reference pages from the code: the configuration and the console commands",
         "qa": "Everything CI checks, in order",
         "fuzz": "Fuzzes the parsers; any crash fails"
+    },
+    "extra": {
+        "phpstan/extension-installer": {
+            "ignore": [
+                "yorvoid/phpstan-rules"
+            ]
+        }
     }
 }

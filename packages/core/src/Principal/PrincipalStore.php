@@ -10,6 +10,8 @@ use YorvoID\Core\Realm;
  * Where principals are kept. Every read names its realm, so nothing crosses realms (D-14).
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface PrincipalStore
 {

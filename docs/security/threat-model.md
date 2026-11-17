@@ -119,6 +119,7 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 
 - Compromised code inside the application can call YorvoID with any input; YorvoID records what it's asked to do.
 - Someone who can write the database can change state; YorvoID detects changes to its log, it doesn't prevent them.
+- Calling one of YorvoID's stores is writing the database: it changes YorvoID's records without asking YorvoID, so it's the line above, not the one before it. Stores are for implementing, not calling (`@spi`, [compatibility](../compatibility.md#interfaces-you-implement)): the Symfony bridge doesn't give them to application code, and [YorvoID's PHPStan rules](../how-to/phpstan-rules.md) flag a call to one.
 - Prompt injection itself. YorvoID limits what a manipulated agent can do, not what it wants to do.
 - Effects outside the application's database can't be made atomic with revocation.
 - Vulnerabilities in PHP, the operating system, the database or the kernel.

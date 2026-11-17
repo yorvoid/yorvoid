@@ -11,6 +11,8 @@ use YorvoID\Core\Realm;
  * Where recovery codes are kept, as their SHA-256 hashes: a leaked database holds none that work.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface RecoveryCodeStore
 {

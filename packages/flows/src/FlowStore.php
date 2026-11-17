@@ -9,6 +9,8 @@ namespace YorvoID\Flows;
  * a flow can only be continued where it began.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface FlowStore
 {

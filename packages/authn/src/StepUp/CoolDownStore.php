@@ -11,6 +11,8 @@ use YorvoID\Core\Realm;
  * Where the cool-downs after account recoveries are kept: one per principal, until a moment.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface CoolDownStore
 {

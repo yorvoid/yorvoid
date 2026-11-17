@@ -237,40 +237,58 @@ final readonly class RecoveryCodes implements OperationHandler
      */
     private function check(Realm $realm, PrincipalId $principalId, string $hash, Permit $permit, Origin $origin, ?string $device, ?string $address, ?Secret $deviceCookie): ?StartedSession
     {
-        return $this->transactions->run(function () use ($realm, $principalId, $hash, $permit, $origin, $device, $address, $deviceCookie): ?StartedSession {
-            $credential = $this->credential($realm, $principalId);
-            $usable = null !== $credential && $credential->isActive();
+        try {
+            return $this->transactions->run(fn (): ?StartedSession => $this->useCode($realm, $principalId, $hash, $permit, $origin, $device, $address, $deviceCookie));
+        } catch (CredentialDisabledMeanwhile $disabled) {
+            $this->log->record($realm, self::USE, Outcome::Failed, $origin, null, 'credential', (string) $disabled->credential->id, ['principal' => (string) $principalId]);
 
-            if (!$usable) {
-                // No codes to use, or a disabled set, which keeps its codes: a read instead of the use.
-                $this->store->count($realm, $principalId);
-                $this->log->record($realm, self::USE, Outcome::Failed, $origin);
+            return null;
+        }
+    }
 
-                return null;
-            }
+    /**
+     * The check's transaction.
+     *
+     * @throws CredentialDisabledMeanwhile
+     */
+    private function useCode(Realm $realm, PrincipalId $principalId, string $hash, Permit $permit, Origin $origin, ?string $device, ?string $address, ?Secret $deviceCookie): ?StartedSession
+    {
+        $credential = $this->credential($realm, $principalId);
+        $usable = null !== $credential && $credential->isActive();
 
-            if (!$this->store->use($realm, $principalId, $hash)) {
-                $this->log->record($realm, self::USE, Outcome::Failed, $origin, null, 'credential', (string) $credential->id, ['principal' => (string) $principalId]);
+        if (!$usable) {
+            // No codes to use, or a disabled set, which keeps its codes: a read instead of the use.
+            $this->store->count($realm, $principalId);
+            $this->log->record($realm, self::USE, Outcome::Failed, $origin);
 
-                return null;
-            }
+            return null;
+        }
 
-            $remaining = $this->store->count($realm, $principalId);
-            $this->credentials->markUsed($credential);
-            $this->log->record($realm, self::USE, Outcome::Success, $origin, $principalId, 'credential', (string) $credential->id, ['principal' => (string) $principalId, 'remaining' => $remaining]);
-            $permit->about($principalId);
-            $recovered = new ActingPrincipal($realm, $principalId);
-            $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $recovered);
-            $this->stepUp->startCoolDown($realm, $principalId, $origin);
-            $started = $permit->cause($this->sessions->start(...), new StartSession($realm, $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now())), $device, $address, $deviceCookie), $origin, $recovered);
+        if (!$this->store->use($realm, $principalId, $hash)) {
+            $this->log->record($realm, self::USE, Outcome::Failed, $origin, null, 'credential', (string) $credential->id, ['principal' => (string) $principalId]);
 
-            $this->transactions->afterCommit(function () use ($realm, $principalId, $remaining, $origin): void {
-                $this->events->dispatch(new RecoveryCodeUsed($realm, $principalId, $remaining, $origin));
-            });
+            return null;
+        }
 
-            // The count from this use, for the person too: one source, whatever's used after it.
-            return new StartedSession($started->session, $started->token, $started->deviceCookie, $started->newDevice, $remaining);
+        $remaining = $this->store->count($realm, $principalId);
+
+        if (!$this->credentials->markUsed($realm, $credential->id)) {
+            throw new CredentialDisabledMeanwhile($credential);
+        }
+
+        $this->log->record($realm, self::USE, Outcome::Success, $origin, $principalId, 'credential', (string) $credential->id, ['principal' => (string) $principalId, 'remaining' => $remaining]);
+        $permit->about($principalId);
+        $recovered = new ActingPrincipal($realm, $principalId);
+        $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $recovered);
+        $this->stepUp->startCoolDown($realm, $principalId, $origin);
+        $started = $permit->cause($this->sessions->start(...), new StartSession($realm, $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now())), $device, $address, $deviceCookie), $origin, $recovered);
+
+        $this->transactions->afterCommit(function () use ($realm, $principalId, $remaining, $origin): void {
+            $this->events->dispatch(new RecoveryCodeUsed($realm, $principalId, $remaining, $origin));
         });
+
+        // The count from this use, for the person too: one source, whatever's used after it.
+        return new StartedSession($started->session, $started->token, $started->deviceCookie, $started->newDevice, $remaining);
     }
 
     private function credential(Realm $realm, PrincipalId $principalId): ?Credential

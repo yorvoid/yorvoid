@@ -131,6 +131,7 @@ use YorvoID\Symfony\Command\TemplatesPublishCommand;
 use YorvoID\Symfony\Controller\CeremonyController;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Controller\TemplateGalleryController;
+use YorvoID\Symfony\DependencyInjection\Stores;
 use YorvoID\Symfony\Doctor\AssuranceCheck;
 use YorvoID\Symfony\Doctor\AuditCheck;
 use YorvoID\Symfony\Doctor\ClockCheck;
@@ -194,6 +195,15 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\tagged_lo
  */
 return static function (ContainerConfigurator $container): void {
     $services = $container->services()->defaults()->autowire()->private();
+
+    // The stores, by ID only (Stores): YorvoID's services get them by binding, which applies to the
+    // services this file defines and to no one else's, so application code can't autowire a store.
+    // Those wired by ID below (e.g. the known devices: device recognition can be off) aren't bound:
+    // Symfony refuses a binding nothing uses.
+    foreach (array_diff_key(Stores::IDS, array_flip([KnownDeviceStore::class, DecisionLogStore::class])) as $interface => $id) {
+        $services->bind($interface, service($id));
+    }
+
     // Every service that runs operations is one of Operations' handlers.
     $services->instanceof(OperationHandler::class)->tag('yorvoid.operation_handler');
 
@@ -206,6 +216,7 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(Transactions::class, DbalTransactions::class)->public();
     $services->set(IdentifierRenormalization::class);
 
+    // Each on DBAL, as "<id>.dbal"; the policy and relations are read through the cache below.
     foreach ([
         PrincipalStore::class => DbalPrincipalStore::class,
         IdentifierStore::class => DbalIdentifierStore::class,
@@ -225,20 +236,20 @@ return static function (ContainerConfigurator $container): void {
         AttributeStore::class => DbalAttributeStore::class,
         DecisionLogStore::class => DbalDecisionLogStore::class,
     ] as $interface => $implementation) {
-        $services->set($implementation);
-        $services->alias($interface, $implementation);
+        $services->set(Stores::IDS[$interface].'.dbal', $implementation);
+        $services->alias(Stores::IDS[$interface], Stores::IDS[$interface].'.dbal');
     }
 
     // What decisions read, kept against the realm's versions: once a request, and in the shared pool
     // the configuration names (cache.pool, set by the bundle).
     // On the application's connection unless yorvoid.decision_log.connection names one of its own (YorvoIDBundle).
-    $services->get(DbalDecisionLogStore::class)->arg('$writes', null);
+    $services->get(Stores::IDS[DecisionLogStore::class].'.dbal')->arg('$writes', null);
     $services->set(Installation::class)->factory([Installation::class, 'stored'])->args([service(Database::class)]);
     $services->set(VersionedCache::class)->args([null, service(Installation::class), service('logger')->nullOnInvalid()])->tag('kernel.reset', ['method' => 'reset']);
-    $services->set(CachedPolicyStore::class)->args([service(DbalPolicyStore::class), service(VersionedCache::class)])->tag('kernel.reset', ['method' => 'reset']);
-    $services->alias(PolicyStore::class, CachedPolicyStore::class);
-    $services->set(CachedRelationStore::class)->args([service(DbalRelationStore::class), service(VersionedCache::class)])->tag('kernel.reset', ['method' => 'reset']);
-    $services->alias(RelationStore::class, CachedRelationStore::class);
+    foreach ([PolicyStore::class => CachedPolicyStore::class, RelationStore::class => CachedRelationStore::class] as $interface => $cached) {
+        $services->set(Stores::IDS[$interface].'.cached', $cached)->args([service(Stores::IDS[$interface].'.dbal'), service(VersionedCache::class)])->tag('kernel.reset', ['method' => 'reset']);
+        $services->alias(Stores::IDS[$interface], Stores::IDS[$interface].'.cached');
+    }
 
     $services->set(UuidV7Generator::class)->args([service(ClockInterface::class)]);
     $services->alias(IdGenerator::class, UuidV7Generator::class);
@@ -261,7 +272,7 @@ return static function (ContainerConfigurator $container): void {
     // Ability decisions wait for the end of what asked for them: a request, a command, a message.
     $services->set(DecisionLog::class)
         ->args([
-            service(DecisionLogStore::class),
+            service(Stores::IDS[DecisionLogStore::class]),
             inline_service(PermitRecording::class)->factory([PermitRecording::class, 'from'])->args([param('yorvoid.decision_log.permits')]),
             param('yorvoid.decision_log.sample_rate'),
             inline_service('array')->factory([Factories::class, 'recordingPermits'])->args([service(PolicyCatalogue::class)]),
@@ -277,7 +288,7 @@ return static function (ContainerConfigurator $container): void {
         ->tag('kernel.event_listener', ['event' => 'Symfony\\Component\\Messenger\\Event\\WorkerMessageFailedEvent', 'method' => 'flush'])
         ->public();
     $services->set(Principals::class)->arg('$guardRules', tagged_iterator('yorvoid.guard_rule'));
-    $services->set(Sessions::class)->arg('$devices', service(KnownDeviceStore::class)->nullOnInvalid());
+    $services->set(Sessions::class)->arg('$devices', service(Stores::IDS[KnownDeviceStore::class])->nullOnInvalid());
     $services->set(StepUp::class)->arg('$coolDown', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.cool_down')]));
     $services->set(Credentials::class)->arg('$reauthenticationWindow', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]));
     $services->set(OneTimeTokens::class);
@@ -308,7 +319,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(RelationPermit::class)->tag('yorvoid.policy_element');
     $services->set(RelationChanges::class);
     $services->set(GroupChanges::class);
-    $services->set(Attributes::class)->args([tagged_iterator('yorvoid.attribute_declarations'), service(AttributeStore::class), tagged_iterator('yorvoid.attribute_resolver')])->public();
+    $services->set(Attributes::class)->args([tagged_iterator('yorvoid.attribute_declarations'), service(Stores::IDS[AttributeStore::class]), tagged_iterator('yorvoid.attribute_resolver')])->public();
     $services->set(AttributeChanges::class);
     $services->set(OrderedConditions::class)->args([param('yorvoid.ordered_conditions.pessimistic')])->public();
     $services->set(Roles::class)->arg('$sources', tagged_iterator('yorvoid.role_source'))->arg('$relations', service(Relations::class))->public();
@@ -371,8 +382,8 @@ return static function (ContainerConfigurator $container): void {
 
     // Flows: YorvoID's journeys as the application changed them, kept in the PHP session.
     $window = inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]);
-    $services->set(SessionFlowStore::class);
-    $services->alias(FlowStore::class, SessionFlowStore::class);
+    $services->set(Stores::IDS[FlowStore::class].'.session', SessionFlowStore::class);
+    $services->alias(Stores::IDS[FlowStore::class], Stores::IDS[FlowStore::class].'.session');
     $services->set(PasskeyFlows::class)->arg('$window', $window)->arg('$emailVerification', service(EmailVerification::class)->nullOnInvalid());
     $services->set(Flows::class)->arg('$flows', inline_service()->factory([Factories::class, 'flows'])->args([service(PasskeyFlows::class), tagged_iterator('yorvoid.flow_customizer'), tagged_iterator('yorvoid.flow_source')]))->public();
     $services->set(FlowContexts::class)->arg('$deviceCookie', param('yorvoid.cookies.device'))->public();
@@ -408,7 +419,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
     $services->set(LogCheckpointsCheck::class)->args([service(KeyFiles::class), param('yorvoid.log.checkpoint_file'), param('yorvoid.log.checkpoint_logger'), service(Realm::class), service(ClockInterface::class), param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Security log checkpoints']);
     $services->set(CryptoCheck::class)->args([inline_service(CryptoMode::class)->factory([CryptoMode::class, 'from'])->args([param('yorvoid.crypto.mode')]), service_closure(CryptoPolicy::class)])->tag('yorvoid.doctor_check', ['name' => 'Cryptography']);
-    $services->set(AuditCheck::class)->args([inline_service(AuditFailure::class)->factory([AuditFailure::class, 'from'])->args([param('yorvoid.audit.on_failure')]), service(DecisionLogStore::class), param('yorvoid.decision_log.permits')])->tag('yorvoid.doctor_check', ['name' => 'Audit failures']);
+    $services->set(AuditCheck::class)->args([inline_service(AuditFailure::class)->factory([AuditFailure::class, 'from'])->args([param('yorvoid.audit.on_failure')]), service(Stores::IDS[DecisionLogStore::class]), param('yorvoid.decision_log.permits')])->tag('yorvoid.doctor_check', ['name' => 'Audit failures']);
     $services->set(KeyAlgorithmsCheck::class)->args([service(ConfiguredCheckpoints::class), param('yorvoid.keys.directory')])->public()->tag('yorvoid.doctor_check', ['name' => 'Key algorithms']);
     $services->set(LogGrantsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Security log privileges']);
     $services->set(ClockCheck::class)->arg('$database', service_closure(Database::class))->arg('$debug', param('kernel.debug'))->tag('yorvoid.doctor_check', ['name' => 'Clock']);

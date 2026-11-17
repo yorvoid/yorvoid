@@ -75,7 +75,9 @@ final readonly class StepUp
     }
 
     /**
-     * Starts the cool-down after an account recovery, if one is configured. For the ways to recover.
+     * Starts the cool-down after an account recovery, if one is configured.
+     *
+     * @internal For the ways to recover, inside the recovery's operation
      */
     public function startCoolDown(Realm $realm, PrincipalId $principalId, Origin $origin): void
     {

@@ -11,6 +11,8 @@ use YorvoID\Core\Realm;
  * The devices each principal has signed in from, by the SHA-256 hash of their device cookie (SES-012).
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface KnownDeviceStore
 {

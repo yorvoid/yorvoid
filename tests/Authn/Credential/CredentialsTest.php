@@ -12,6 +12,7 @@ use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Authn\Credential\CredentialKind;
 use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\CredentialStatus;
+use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Event\CredentialAdded;
 use YorvoID\Authn\Credential\Event\CredentialRemoved;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
@@ -49,6 +50,7 @@ use YorvoID\Core\Principal\SuspendPrincipal;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
+use YorvoID\Tests\Support\ReadThenRun;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 
@@ -318,6 +320,7 @@ final class CredentialsTest extends DatabaseTestCase
         $other = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Other'), new Origin(OriginKind::Web), $session);
 
         $disabled = $credentials->disable($copied, 'signature counter went backwards', new Origin(OriginKind::Web));
+        self::assertNotNull($disabled);
 
         self::assertSame(CredentialStatus::Disabled, $disabled->status);
         self::assertFalse($disabled->isActive());
@@ -329,6 +332,40 @@ final class CredentialsTest extends DatabaseTestCase
         $this->expectException(LastCredential::class);
 
         Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $other->id), new Origin(OriginKind::Web), $session);
+    }
+
+    /**
+     * The credential is removed after the caller read it, e.g. by its owner in another request: a rename
+     * finds it unknown, and disabling it does nothing and records nothing.
+     */
+    #[DataProvider('implementations')]
+    public function testACredentialRemovedMeanwhileIsntRenamedOrDisabled(string $implementation): void
+    {
+        $reading = null;
+        $credentials = $this->credentials($implementation, store: static function (CredentialStore $store) use (&$reading): CredentialStore {
+            return $reading = new ReadThenRun($store, 'get');
+        });
+        \assert($reading instanceof ReadThenRun);
+        $session = $this->session();
+        $credential = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
+        Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Key'), new Origin(OriginKind::Web), $session);
+        $stack = $this->stack;
+        $reading->arm(static function () use ($stack, $credential): void {
+            $stack->credentials->remove($credential->realm, $credential->id);
+        });
+
+        try {
+            Permits::call($credentials->rename(...), new RenameCredential(new Realm('acme'), $credential->id, 'Renamed'), new Origin(OriginKind::Web), $session);
+            self::fail('A credential removed meanwhile was renamed.');
+        } catch (UnknownCredential) {
+        }
+
+        self::assertTrue($reading->ran);
+        // The rename's rollback undid the removal it raced: removed again, for good this time.
+        self::assertTrue($this->stack->credentials->remove($credential->realm, $credential->id));
+        $entries = \count(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false));
+        self::assertNull($credentials->disable($credential, 'reported lost', new Origin(OriginKind::Web)), 'A removed credential was disabled.');
+        self::assertCount($entries, iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), 'Nothing changed, but something was recorded.');
     }
 
     #[DataProvider('implementations')]
@@ -391,11 +428,12 @@ final class CredentialsTest extends DatabaseTestCase
 
         $renamed = Permits::call($credentials->rename(...), new RenameCredential(new Realm('acme'), $credential->id, str_repeat('ü', 70)."\xC3"), new Origin(OriginKind::Web), $session);
         self::assertSame($renamed->label, $credentials->get(new Realm('acme'), $credential->id)?->label, 'The new label wasn\'t kept.');
-        $used = $credentials->markUsed($renamed);
+        self::assertTrue($credentials->markUsed(new Realm('acme'), $credential->id));
+        $used = $credentials->get(new Realm('acme'), $credential->id);
 
         self::assertSame(str_repeat('ü', 64), $renamed->label, 'Labels are kept to 64 valid characters.');
         self::assertEquals(new \DateTimeImmutable('2026-10-27 19:45:30 UTC'), $used->lastUsedAt);
-        self::assertEquals($used, $credentials->get(new Realm('acme'), $credential->id));
+        self::assertSame($renamed->label, $used->label, 'Marking its use changed the label.');
         self::assertSame('yorvoid.credential.rename', \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), -1)[0]->action);
     }
 
@@ -433,7 +471,10 @@ final class CredentialsTest extends DatabaseTestCase
         self::assertNull($catalogue->get('yorvoid.credential.remove')->ability, 'Only the owner changes their own sign-in methods.');
     }
 
-    private function credentials(string $implementation, ?Duration $coolDown = null): Credentials
+    /**
+     * @param (\Closure(CredentialStore): CredentialStore)|null $store What YorvoID's store is read through
+     */
+    private function credentials(string $implementation, ?Duration $coolDown = null, ?\Closure $store = null): Credentials
     {
         $this->stack = $this->stack($implementation);
         $this->clock = new MockClock('2026-10-27 18:45:30 UTC');
@@ -445,7 +486,7 @@ final class CredentialsTest extends DatabaseTestCase
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock, $coolDown);
 
         // The default window: 5 minutes.
-        return new Credentials($this->stack->credentials, $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        return new Credentials(null === $store ? $this->stack->credentials : $store($this->stack->credentials), $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
     }
 
     private function session(): Session

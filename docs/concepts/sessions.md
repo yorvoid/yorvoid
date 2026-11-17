@@ -62,7 +62,7 @@ It also records that the session was used, at most once a minute, which extends 
 
 To check a session you have by its ID, e.g. in a background job, use `active()`: it decides as `validate()` does, without recording a use. `get()` returns the session whatever its state, ended and expired included: never authorize with it.
 
-Signing in starts a new session with a new token, and a [step-up](step-up.md) gives the session a new token itself: the old one stops working (protection against session fixation). End the session the browser held before a new sign-in, with `SessionEndReason::Replaced`: the Symfony bridge does. To renew a token after any other change of privilege, use `refresh()`.
+Signing in starts a new session with a new token, and a [step-up](step-up.md) gives the session a new token itself: the old one stops working (protection against session fixation). End the session the browser held before a new sign-in, with `SessionEndReason::Replaced`: the Symfony bridge does. To renew a token after any other change of privilege, use `refresh()`: the security log records it (`yorvoid.session.refresh`), as it does a sign-in.
 
 ## How long sessions last
 

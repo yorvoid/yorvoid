@@ -105,9 +105,9 @@ The exact rules are in [`deptrac.yaml`](https://github.com/yorvoid/yorvoid/blob/
 The decisions that shape every package:
 
 - **Realms isolate.** Every record, every query and every log entry belongs to one [realm](realms.md); nothing crosses realms.
-- **Every change is an operation, and every operation is recorded.** Commands are classes marked `#[Operation]`, in one [catalogue](operations-and-events.md). Each change records an entry in the [security log](security-log.md) in the same transaction, and dispatches events before (cancellable) and after.
+- **Every change is an operation, and every operation is recorded.** What a sign-in or a step-up writes on the way is logged as part of it; bookkeeping, such as when a credential was last used, isn't ([operations](operations-and-events.md)). Commands are classes marked `#[Operation]`, in one [catalogue](operations-and-events.md). Each change records an entry in the [security log](security-log.md) in the same transaction, and dispatches events before (cancellable) and after.
 - **The security log is a hash chain per realm,** with signed checkpoints kept outside the database. Appending takes the realm's head row, so changes that must count what's there (the last way to sign in, a new set of recovery codes) take turns.
-- **Stores are interfaces.** Each has a DBAL implementation and one in memory, and both pass the same conformance tests ([storage](storage.md)). A failed change undoes what it did in every store.
+- **Stores are interfaces you implement, not call** (`@spi`). Each has a DBAL implementation and one in memory, and both pass the same conformance tests ([storage](storage.md)). A failed change undoes what it did in every store. Only YorvoID's services call them: a call from elsewhere is a write to the database.
 - **Secrets never leave as plain values.** They're held in `Secret`, compared in constant time, and redacted in dumps and logs ([secrets](secrets.md)); a PHPStan rule refuses variable-time comparisons.
 - **The server decides.** Flows are server-side steps; the browser client runs ceremonies and shows results, but every check happens on the server ([flows](flows.md)).
 - **The privileged side trusts nothing the web side says.** Signed intents are signed on pages the verifier serves from its own origin, with passkeys of its own ([signed intents](signed-intents.md)).

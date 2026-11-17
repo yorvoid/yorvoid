@@ -82,9 +82,19 @@ $slow = new readonly class(new DbalCredentialStore($database)) implements Creden
         return $this->store->of($realm, $principalId);
     }
 
-    public function update(Credential $credential): void
+    public function rename(Realm $realm, CredentialId $id, string $label): bool
     {
-        $this->store->update($credential);
+        return $this->store->rename($realm, $id, $label);
+    }
+
+    public function markUsed(Realm $realm, CredentialId $id, DateTimeImmutable $at): bool
+    {
+        return $this->store->markUsed($realm, $id, $at);
+    }
+
+    public function disable(Realm $realm, CredentialId $id): bool
+    {
+        return $this->store->disable($realm, $id);
     }
 
     public function remove(Realm $realm, CredentialId $id): bool

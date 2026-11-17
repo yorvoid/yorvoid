@@ -11,6 +11,8 @@ use YorvoID\Core\Realm;
  * Where each realm's setup state is kept: its current code's SHA-256 hash, or who claimed it.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface SetupStore
 {

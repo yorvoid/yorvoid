@@ -16,12 +16,10 @@ use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Exception\IntegratorError;
-use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Principal\Storage\InMemoryPrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Transactions;
-use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
 use YorvoID\PolicyTesting\Console\PolicyTestCommand;
 use YorvoID\PolicyTesting\Mutation\Mutants;
@@ -79,13 +77,13 @@ final class PolicyTestingBundleTest extends TestCase
 
         self::assertSame($elements($production), $elements($underTest));
         self::assertContains('YorvoID\Tests\Symfony\App\LockedPages', $elements($underTest), 'The application\'s own.');
-        $policyStore = self::service($underTest, PolicyStore::class);
+        $policyStore = self::service($underTest, 'yorvoid.store.policy');
         self::assertInstanceOf(MutatedPolicyStore::class, $policyStore, 'Through the mutants…');
         self::assertInstanceOf(InMemoryPolicyStore::class, $policyStore->inner, '…in memory.');
-        self::assertInstanceOf(InMemoryPrincipalStore::class, self::service($underTest, PrincipalStore::class));
-        self::assertNotInstanceOf(InMemoryPolicyStore::class, self::service($production, PolicyStore::class), 'Only in its environment.');
+        self::assertInstanceOf(InMemoryPrincipalStore::class, self::service($underTest, 'yorvoid.store.principal'));
+        self::assertNotInstanceOf(InMemoryPolicyStore::class, self::service($production, 'yorvoid.store.policy'), 'Only in its environment.');
         self::assertTrue($underTest->getContainer()->has(Transactions::class), 'As public as the bridge made it…');
-        self::assertFalse($underTest->getContainer()->has(PolicyStore::class), '…and as private.');
+        self::assertFalse($underTest->getContainer()->has('yorvoid.store.policy'), '…and as private.');
     }
 
     /**

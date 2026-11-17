@@ -88,7 +88,7 @@ final class RefusalPagesTest extends TestCase
         $id = $refused->decision->id;
         self::assertNotNull($id);
         self::assertStringContainsString('Reference: '.$id, $html);
-        $log = $container->get(DecisionLogStore::class);
+        $log = $container->get('yorvoid.store.decision_log');
         \assert($log instanceof DecisionLogStore);
         $record = $log->find(Realm::default(), $id);
         self::assertSame([$id, 'deny', 'yorvoid.identifier.set'], [$record?->id, $record?->verdict, $record?->name]);

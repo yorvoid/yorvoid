@@ -11,6 +11,8 @@ use YorvoID\Core\Realm;
  * makes a realm's decisions wait for each other or for its security log (ADR-09).
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface DecisionLogStore
 {

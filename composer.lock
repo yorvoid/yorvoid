@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "418787fdf270c2aaa7e69bc84a14b608",
+    "content-hash": "590659b26eec6cff5e338f64b37646d4",
     "packages": [
         {
             "name": "brick/math",
@@ -1110,6 +1110,70 @@
                 "source": "https://github.com/phpstan/phpdoc-parser/tree/2.3.8"
             },
             "time": "2026-10-26T20:24:50+00:00"
+        },
+        {
+            "name": "phpstan/phpstan",
+            "version": "2.3.5",
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/645a1bd6bead15fc1b8474137467961d0fa30a79",
+                "reference": "645a1bd6bead15fc1b8474137467961d0fa30a79",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^7.4|^8.0"
+            },
+            "conflict": {
+                "phpstan/phpstan-shim": "*"
+            },
+            "bin": [
+                "phpstan",
+                "phpstan.phar"
+            ],
+            "type": "library",
+            "autoload": {
+                "files": [
+                    "bootstrap.php"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Ondřej Mirtes"
+                },
+                {
+                    "name": "Markus Staab"
+                },
+                {
+                    "name": "Vincent Langlet"
+                }
+            ],
+            "description": "PHPStan - PHP Static Analysis Tool",
+            "keywords": [
+                "dev",
+                "static analysis"
+            ],
+            "support": {
+                "docs": "https://phpstan.org/user-guide/getting-started",
+                "forum": "https://github.com/phpstan/phpstan/discussions",
+                "issues": "https://github.com/phpstan/phpstan/issues",
+                "security": "https://github.com/phpstan/phpstan/security/policy",
+                "source": "https://github.com/phpstan/phpstan-src"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/ondrejmirtes",
+                    "type": "github"
+                },
+                {
+                    "url": "https://github.com/phpstan",
+                    "type": "github"
+                }
+            ],
+            "time": "2026-11-03T12:14:22+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -6969,7 +7033,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "ada8ff19fc121bc28d0a0fa4cf8eb2c48c4b2991"
+                "reference": "3918ed1d95f8b054d9da986b307616ca8a2e43fc"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7029,7 +7093,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "11f29101076ba6c3e95940c9ee2404282476bd9e"
+                "reference": "1ae0f42a626cc49a50681f2e5801a9c1a7435303"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7091,7 +7155,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/flows",
-                "reference": "5998baeea98dad08c34556333b1ce1f8b3b4bc1b"
+                "reference": "8c2bee7f810c0ea9d7f40ef00dfdd5c09af51ac1"
             },
             "require": {
                 "php": ">=8.4",
@@ -7147,7 +7211,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-signing",
-                "reference": "cdc3b8ee811b4422ee425f214f7eefebf1c4bf6c"
+                "reference": "5071684443bc900c242b968bbd9a9b2a9a5882d6"
             },
             "require": {
                 "ext-intl": "*",
@@ -7212,7 +7276,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "afdccaddfd0de0d1315672eaed2c4421b18c8dd9"
+                "reference": "7251a3dfd0690e42dd84b70266ed5784aa8b5e18"
             },
             "require": {
                 "ext-dom": "*",
@@ -7278,7 +7342,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/mail",
-                "reference": "194edc00cf9a6dd955192d8a85a97d822cf42f51"
+                "reference": "debf2a8139802983bc2fe1e36595b6053ab45568"
             },
             "require": {
                 "ext-filter": "*",
@@ -7332,7 +7396,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/notifications",
-                "reference": "cdddf3902729bc7e6dd76220fb4a9db357cf3e29"
+                "reference": "95bbbc6fc648d386518f2d577c693399461d3c3b"
             },
             "require": {
                 "ext-intl": "*",
@@ -7393,7 +7457,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/passkeys",
-                "reference": "46e937e4a9364cf2c26f26a022e57a93578b9175"
+                "reference": "8a9ddbdc0b8fece62c807f8f25a628892075c412"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7457,12 +7521,68 @@
             }
         },
         {
+            "name": "yorvoid/phpstan-rules",
+            "version": "0.5.x-dev",
+            "dist": {
+                "type": "path",
+                "url": "packages/phpstan-rules",
+                "reference": "eeffdb3f5b392fdb5370cbc931186ffefed6529a"
+            },
+            "require": {
+                "php": ">=8.4",
+                "phpstan/phpstan": "^2.1"
+            },
+            "type": "phpstan-extension",
+            "extra": {
+                "branch-alias": {
+                    "dev-main": "0.5.x-dev"
+                },
+                "phpstan": {
+                    "includes": [
+                        "rules.neon"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "YorvoID\\PhpstanRules\\": "src/"
+                }
+            },
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Darko Poposki",
+                    "email": "contact@yorvolabs.com"
+                }
+            ],
+            "description": "PHPStan rules for an application that uses YorvoID: they flag a call to one of YorvoID's stores, which are for implementing, not calling, and to what YorvoID marks @internal.",
+            "homepage": "https://github.com/yorvoid/yorvoid",
+            "keywords": [
+                "authorization",
+                "phpstan",
+                "security",
+                "static-analysis"
+            ],
+            "support": {
+                "email": "contact@yorvolabs.com",
+                "issues": "https://github.com/yorvoid/yorvoid/issues",
+                "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/phpstan-rules",
+                "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+                "security": "https://github.com/yorvoid/yorvoid/security/policy"
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
             "name": "yorvoid/policy",
             "version": "0.5.x-dev",
             "dist": {
                 "type": "path",
                 "url": "packages/policy",
-                "reference": "128c4960932aa731e8b57d3d808a06b2afd8da70"
+                "reference": "ce60991b0f66c5f68a3f0cc80170584c1edb03f4"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7520,7 +7640,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/policy-testing",
-                "reference": "fa68ead0844cf1f8fc5a2495299e9f0fa429a14c"
+                "reference": "c9eb8030eae42df077d59b3d0978891709d5ea02"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7590,7 +7710,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/relations",
-                "reference": "317f7e0bbd917e07658b50a420002da8457d1525"
+                "reference": "64185cb93a07d18c7053c69b7a2dec710a885fe9"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7644,7 +7764,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "05f44cf9574c55da1f782c7f0dadd366943d6226"
+                "reference": "6816582ba8ee9ff8d51e377a409f2efea21fbf28"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7736,7 +7856,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/testing",
-                "reference": "08a35dc24a50f3abef48380f8d7432972e791ef0"
+                "reference": "bed83d617a85290a80fadf89d8c551ac20e3eb60"
             },
             "require": {
                 "ext-mbstring": "*",
@@ -7805,7 +7925,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/throttle",
-                "reference": "cb3737039a62605381a052561c49b103570325fb"
+                "reference": "c1ac9a31dabae309c00eee5b2f726a21d38d1914"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7861,7 +7981,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/translation",
-                "reference": "c000f884589c7c225f116b31826553e383d28044"
+                "reference": "9b93b4e910adce2139e7ad1268f509b713ac678a"
             },
             "require": {
                 "ext-intl": "*",
@@ -7914,7 +8034,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/virtual-authenticator",
-                "reference": "bf67e0953e435112dc59e873f2f4d54615b4d04e"
+                "reference": "d296d739b8618254aa2d9f06e34ec8a3b9fe6942"
             },
             "require": {
                 "ext-openssl": "*",
@@ -9723,70 +9843,6 @@
                 "source": "https://github.com/phpstan/extension-installer/tree/1.4.3"
             },
             "time": "2024-09-04T20:21:43+00:00"
-        },
-        {
-            "name": "phpstan/phpstan",
-            "version": "2.3.5",
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/645a1bd6bead15fc1b8474137467961d0fa30a79",
-                "reference": "645a1bd6bead15fc1b8474137467961d0fa30a79",
-                "shasum": ""
-            },
-            "require": {
-                "php": "^7.4|^8.0"
-            },
-            "conflict": {
-                "phpstan/phpstan-shim": "*"
-            },
-            "bin": [
-                "phpstan",
-                "phpstan.phar"
-            ],
-            "type": "library",
-            "autoload": {
-                "files": [
-                    "bootstrap.php"
-                ]
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Ondřej Mirtes"
-                },
-                {
-                    "name": "Markus Staab"
-                },
-                {
-                    "name": "Vincent Langlet"
-                }
-            ],
-            "description": "PHPStan - PHP Static Analysis Tool",
-            "keywords": [
-                "dev",
-                "static analysis"
-            ],
-            "support": {
-                "docs": "https://phpstan.org/user-guide/getting-started",
-                "forum": "https://github.com/phpstan/phpstan/discussions",
-                "issues": "https://github.com/phpstan/phpstan/issues",
-                "security": "https://github.com/phpstan/phpstan/security/policy",
-                "source": "https://github.com/phpstan/phpstan-src"
-            },
-            "funding": [
-                {
-                    "url": "https://github.com/ondrejmirtes",
-                    "type": "github"
-                },
-                {
-                    "url": "https://github.com/phpstan",
-                    "type": "github"
-                }
-            ],
-            "time": "2026-11-03T12:14:22+00:00"
         },
         {
             "name": "phpstan/phpstan-phpunit",

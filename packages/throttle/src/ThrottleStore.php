@@ -9,6 +9,8 @@ namespace YorvoID\Throttle;
  * key will be clear of every attempt counted so far. Keys arrive hashed.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface ThrottleStore
 {

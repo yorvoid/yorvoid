@@ -48,26 +48,26 @@ use YorvoID\Throttle\ThrottleStore;
  */
 final readonly class InMemoryStoresPass implements CompilerPassInterface
 {
-    /** Each store YorvoID's bridge defines, and InMemoryStorage's store for it */
+    /** Each store YorvoID's bridge defines: its service ID there, and InMemoryStorage's store for it */
     public const array STORES = [
-        Transactions::class => 'transactions',
-        PrincipalStore::class => 'principals',
-        IdentifierStore::class => 'identifiers',
-        SecurityLogStore::class => 'log',
-        SessionStore::class => 'sessions',
-        KnownDeviceStore::class => 'devices',
-        OneTimeTokenStore::class => 'tokens',
-        SetupStore::class => 'setup',
-        CredentialStore::class => 'credentials',
-        RecoveryCodeStore::class => 'recoveryCodes',
-        CoolDownStore::class => 'coolDowns',
-        PasskeyStore::class => 'passkeys',
-        CeremonyStore::class => 'ceremonies',
-        PolicyStore::class => 'policy',
-        RelationStore::class => 'relations',
-        AttributeStore::class => 'attributes',
-        ThrottleStore::class => 'throttle',
-        DecisionLogStore::class => 'decisions',
+        Transactions::class => [Transactions::class, 'transactions'],
+        PrincipalStore::class => ['yorvoid.store.principal', 'principals'],
+        IdentifierStore::class => ['yorvoid.store.identifier', 'identifiers'],
+        SecurityLogStore::class => ['yorvoid.store.security_log', 'log'],
+        SessionStore::class => ['yorvoid.store.session', 'sessions'],
+        KnownDeviceStore::class => ['yorvoid.store.known_device', 'devices'],
+        OneTimeTokenStore::class => ['yorvoid.store.one_time_token', 'tokens'],
+        SetupStore::class => ['yorvoid.store.setup', 'setup'],
+        CredentialStore::class => ['yorvoid.store.credential', 'credentials'],
+        RecoveryCodeStore::class => ['yorvoid.store.recovery_code', 'recoveryCodes'],
+        CoolDownStore::class => ['yorvoid.store.cool_down', 'coolDowns'],
+        PasskeyStore::class => ['yorvoid.store.passkey', 'passkeys'],
+        CeremonyStore::class => ['yorvoid.store.ceremony', 'ceremonies'],
+        PolicyStore::class => ['yorvoid.store.policy', 'policy'],
+        RelationStore::class => ['yorvoid.store.relation', 'relations'],
+        AttributeStore::class => ['yorvoid.store.attribute', 'attributes'],
+        ThrottleStore::class => ['yorvoid.store.throttle', 'throttle'],
+        DecisionLogStore::class => ['yorvoid.store.decision_log', 'decisions'],
     ];
 
     /** The stores mutants change what's read from */
@@ -113,9 +113,9 @@ final readonly class InMemoryStoresPass implements CompilerPassInterface
         $mutants = new Reference(Mutants::class);
         $container->setDefinition(Mutants::class, new Definition(Mutants::class)->setSynthetic(true)->setPublic(true));
 
-        foreach (self::STORES as $interface => $store) {
+        foreach (self::STORES as $interface => [$id, $store]) {
             // In place of the bridge's alias, as public as it was.
-            $public = $container->hasAlias($interface) && $container->getAlias($interface)->isPublic();
+            $public = $container->hasAlias($id) && $container->getAlias($id)->isPublic();
             $definition = new Definition($interface)->setFactory([Stores::class, 'store'])->setArguments([new Reference(InMemoryStorage::class), $store]);
             $seam = self::SEAMS[$interface] ?? null;
 
@@ -123,7 +123,7 @@ final readonly class InMemoryStoresPass implements CompilerPassInterface
                 $definition = new Definition($interface)->setFactory([$mutants, $seam])->setArguments([$definition]);
             }
 
-            $container->setDefinition($interface, $definition->setPublic($public));
+            $container->setDefinition($id, $definition->setPublic($public));
         }
 
         // The evaluator's authority check and elements, through the mutants: the definition is the bridge's.

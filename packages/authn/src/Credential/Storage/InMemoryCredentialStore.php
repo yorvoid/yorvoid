@@ -6,6 +6,7 @@ namespace YorvoID\Authn\Credential\Storage;
 
 use YorvoID\Authn\Credential\Credential;
 use YorvoID\Authn\Credential\CredentialId;
+use YorvoID\Authn\Credential\CredentialStatus;
 use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -46,11 +47,23 @@ final class InMemoryCredentialStore implements CredentialStore, InMemoryStore
         return $credentials;
     }
 
-    public function update(Credential $credential): void
+    public function rename(Realm $realm, CredentialId $id, string $label): bool
     {
-        if (null !== $this->get($credential->realm, $credential->id)) {
-            $this->credentials[(string) $credential->id] = $credential;
+        return $this->change($realm, $id, static fn (Credential $c): Credential => new Credential($c->id, $c->realm, $c->principalId, $c->kind, $label, $c->createdAt, $c->lastUsedAt, $c->status));
+    }
+
+    public function markUsed(Realm $realm, CredentialId $id, \DateTimeImmutable $at): bool
+    {
+        if (true !== $this->get($realm, $id)?->isActive()) {
+            return false;
         }
+
+        return $this->change($realm, $id, static fn (Credential $c): Credential => new Credential($c->id, $c->realm, $c->principalId, $c->kind, $c->label, $c->createdAt, $at, $c->status));
+    }
+
+    public function disable(Realm $realm, CredentialId $id): bool
+    {
+        return $this->change($realm, $id, static fn (Credential $c): Credential => new Credential($c->id, $c->realm, $c->principalId, $c->kind, $c->label, $c->createdAt, $c->lastUsedAt, CredentialStatus::Disabled));
     }
 
     public function remove(Realm $realm, CredentialId $id): bool
@@ -72,5 +85,21 @@ final class InMemoryCredentialStore implements CredentialStore, InMemoryStore
     public function restore(mixed $snapshot): void
     {
         $this->credentials = $snapshot;
+    }
+
+    /**
+     * @param \Closure(Credential): Credential $change
+     */
+    private function change(Realm $realm, CredentialId $id, \Closure $change): bool
+    {
+        $credential = $this->get($realm, $id);
+
+        if (null === $credential) {
+            return false;
+        }
+
+        $this->credentials[(string) $id] = $change($credential);
+
+        return true;
     }
 }
