@@ -1,0 +1,6 @@
+{
+    "GHSA-fc5q-39xc-vjpf": {
+        "until": "2026-12-17",
+        "why": "No picomatch release fixes it yet; vite matches only the site's own globs at build time, and nothing of the site's tooling is shipped."
+    }
+}
