@@ -58,6 +58,8 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function saveRole(Realm $realm, string $name, string $label): void
     {
+        // Every change increments the version first (PolicyStore): caches are fresh by construction (SS-05).
+        $this->bump($realm);
         if (0 === $this->database->connection->update($this->table(self::ROLE_TABLE), ['label' => $label], ['realm' => $realm->name, 'name' => $name])) {
             $this->database->connection->insert($this->table(self::ROLE_TABLE), ['realm' => $realm->name, 'name' => $name, 'label' => $label]);
         }
@@ -65,6 +67,7 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function deleteRole(Realm $realm, string $name): void
     {
+        $this->bump($realm);
         $this->database->connection->delete($this->table(self::ROLE_TABLE), ['realm' => $realm->name, 'name' => $name]);
     }
 
@@ -81,6 +84,7 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function saveChanges(Realm $realm, AbilityChanges $changes): void
     {
+        $this->bump($realm);
         $this->database->connection->delete($this->table(self::CHANGE_TABLE), ['realm' => $realm->name]);
 
         foreach (['grant' => $changes->grant, 'revoke' => $changes->revoke] as $kind => $lists) {
@@ -123,6 +127,7 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function assign(RoleAssignment $assignment): void
     {
+        // unassign() increments the version first.
         $this->unassign($assignment->realm, $assignment->principalId, $assignment->role, $assignment->scope);
         $this->database->connection->insert($this->table(self::ASSIGNMENT_TABLE), [
             'realm' => $assignment->realm->name,
@@ -136,11 +141,14 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function unassign(Realm $realm, PrincipalId $principalId, string $role, ?ResourceRef $scope): bool
     {
+        $this->bump($realm);
+
         return 0 < $this->database->connection->delete($this->table(self::ASSIGNMENT_TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122(), 'role' => $role, 'scope' => (string) $scope]);
     }
 
     public function unassignRole(Realm $realm, string $role): void
     {
+        $this->bump($realm);
         $this->database->connection->delete($this->table(self::ASSIGNMENT_TABLE), ['realm' => $realm->name, 'role' => $role]);
         $this->database->connection->delete($this->table(self::GROUP_ASSIGNMENT_TABLE), ['realm' => $realm->name, 'role' => $role]);
     }
@@ -158,6 +166,7 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function saveGroup(Realm $realm, string $name, string $label): void
     {
+        $this->bump($realm);
         if (0 === $this->database->connection->update($this->table(self::GROUP_TABLE), ['label' => $label], ['realm' => $realm->name, 'name' => $name])) {
             $this->database->connection->insert($this->table(self::GROUP_TABLE), ['realm' => $realm->name, 'name' => $name, 'label' => $label]);
         }
@@ -165,6 +174,7 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function deleteGroup(Realm $realm, string $name): void
     {
+        $this->bump($realm);
         $this->database->connection->delete($this->table(self::GROUP_ASSIGNMENT_TABLE), ['realm' => $realm->name, 'group_name' => $name]);
         $this->database->connection->delete($this->table(self::GROUP_TABLE), ['realm' => $realm->name, 'name' => $name]);
     }
@@ -210,6 +220,7 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function assignGroup(GroupRoleAssignment $assignment): void
     {
+        // unassignGroup() increments the version first.
         $this->unassignGroup($assignment->realm, $assignment->group, $assignment->role, $assignment->scope);
         $this->database->connection->insert($this->table(self::GROUP_ASSIGNMENT_TABLE), [
             'realm' => $assignment->realm->name,
@@ -223,11 +234,14 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function unassignGroup(Realm $realm, string $group, string $role, ?ResourceRef $scope): bool
     {
+        $this->bump($realm);
+
         return 0 < $this->database->connection->delete($this->table(self::GROUP_ASSIGNMENT_TABLE), ['realm' => $realm->name, 'group_name' => $group, 'role' => $role, 'scope' => (string) $scope]);
     }
 
     public function forgetPrincipal(Realm $realm, PrincipalId $principalId): void
     {
+        $this->bump($realm);
         $this->database->connection->delete($this->table(self::ASSIGNMENT_TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122()]);
     }
 

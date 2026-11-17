@@ -14,6 +14,9 @@ use YorvoID\Core\Event\Origin;
  */
 final readonly class CredentialAdded
 {
+    /**
+     * @internal YorvoID dispatches it: its listeners act on it, so an application doesn't make one
+     */
     public function __construct(
         public Credential $credential,
         public Origin $origin,

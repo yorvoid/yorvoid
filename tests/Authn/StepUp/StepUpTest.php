@@ -15,8 +15,10 @@ use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\HeldAfterRecovery;
+use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Core\Duration;
@@ -61,7 +63,7 @@ final class StepUpTest extends DatabaseTestCase
             self::assertSame($requirement, $exception->requirement);
         }
 
-        $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), operation: 'acme.site.remove'), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->stepUp(...), new StepUpSession($session->realm, $session->id, $session->principalId, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), operation: 'acme.site.remove')), new Origin(OriginKind::Web));
 
         // The session as the request found it, before the step-up: what counts is the session now.
         $stepUp->require($session, $requirement);
@@ -121,7 +123,7 @@ final class StepUpTest extends DatabaseTestCase
         $session = $this->session();
         $entries = iterator_count($this->stack->log->entries(new Realm('acme'), 1));
 
-        $stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
+        Permits::call($stepUp->startCoolDown(...), new StartCoolDown(new Realm('acme'), $session->principalId), new Origin(OriginKind::Web));
 
         self::assertNull($stepUp->coolDownEndsAt(new Realm('acme'), $session->principalId));
         self::assertNull($stepUp->coolDown(), 'Nothing for the recovery pages to say.');
@@ -137,7 +139,7 @@ final class StepUpTest extends DatabaseTestCase
         $held = new AuthenticationRequirement(Duration::minutes(5), heldAfterRecovery: true);
         $notHeld = new AuthenticationRequirement(Duration::minutes(5));
 
-        $stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
+        Permits::call($stepUp->startCoolDown(...), new StartCoolDown(new Realm('acme'), $session->principalId), new Origin(OriginKind::Web));
         $until = new \DateTimeImmutable('2026-10-29 18:45:30 UTC');
         self::assertEquals($until, $stepUp->coolDownEndsAt(new Realm('acme'), $session->principalId));
         self::assertEquals(Duration::hours(24), $stepUp->coolDown(), 'What the recovery pages say is what was applied.');
@@ -178,7 +180,7 @@ final class StepUpTest extends DatabaseTestCase
     {
         $stepUp = $this->stepUp($implementation, Duration::hours(1));
         $session = $this->session();
-        $stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
+        Permits::call($stepUp->startCoolDown(...), new StartCoolDown(new Realm('acme'), $session->principalId), new Origin(OriginKind::Web));
         $this->clock->sleep(600);
 
         // Stepping up doesn't help, so the refusal says to wait, not to confirm it's you.
@@ -192,7 +194,7 @@ final class StepUpTest extends DatabaseTestCase
     {
         $stepUp = $this->stepUp($implementation, Duration::hours(1));
         $session = $this->session();
-        $stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
+        Permits::call($stepUp->startCoolDown(...), new StartCoolDown(new Realm('acme'), $session->principalId), new Origin(OriginKind::Web));
         self::assertSame(0, $stepUp->purge());
 
         $this->clock->sleep(3601);

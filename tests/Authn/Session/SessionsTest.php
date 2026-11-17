@@ -26,6 +26,7 @@ use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\Session\Storage\DbalSessionStore;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
@@ -313,6 +314,29 @@ final class SessionsTest extends DatabaseTestCase
         self::assertCount(1, array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.session.refresh' === $entry->action), 'A refresh that issued nothing was recorded.');
     }
 
+    /**
+     * The proof is its principal's: a step-up caused by someone's proof, its command naming them, can't
+     * step up another principal's session (C1 of G-1's Part B).
+     */
+    #[DataProvider('implementations')]
+    public function testAProofStepsUpOnlyItsPrincipalsSession(string $implementation): void
+    {
+        $sessions = $this->sessions($implementation);
+        $ana = $this->start($sessions, $this->principal());
+        $bob = $this->start($sessions, $this->principal());
+        $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove');
+
+        try {
+            Permits::call($sessions->stepUp(...), new StepUpSession(new Realm('acme'), $bob->session->id, $ana->session->principalId, $factor), new Origin(OriginKind::Web));
+            self::fail('Ana\'s proof stepped up Bob\'s session.');
+        } catch (IntegratorError $error) {
+            self::assertStringContainsString('about another principal', $error->getMessage());
+        }
+
+        self::assertEquals($bob->session->authentication, $sessions->validate(new Realm('acme'), $bob->token)?->authentication, 'Bob\'s session changed.');
+        self::assertSame([], array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.session.step_up' === $entry->action));
+    }
+
     #[DataProvider('implementations')]
     public function testSteppingUpAddsTheProofAndReplacesTheToken(string $implementation): void
     {
@@ -323,7 +347,7 @@ final class SessionsTest extends DatabaseTestCase
         $this->events->dispatched = [];
         $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove');
 
-        $token = $sessions->stepUp(new Realm('acme'), $started->session->id, $factor, new Origin(OriginKind::Web));
+        $token = Permits::call($sessions->stepUp(...), new StepUpSession(new Realm('acme'), $started->session->id, $started->session->principalId, $factor), new Origin(OriginKind::Web));
 
         self::assertNotNull($token);
         self::assertFalse($token->equals($started->token));
@@ -357,21 +381,21 @@ final class SessionsTest extends DatabaseTestCase
         Permits::call($sessions->end(...), new EndSession(new Realm('acme'), $ended->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         $current = $this->start($sessions, $principal)->session;
 
-        self::assertNull($sessions->stepUp(new Realm('acme'), $ended->id, $factor, new Origin(OriginKind::Web)));
-        self::assertNull($sessions->stepUp(new Realm('globex'), $current->id, $factor, new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($sessions->stepUp(...), new StepUpSession(new Realm('acme'), $ended->id, $ended->principalId, $factor), new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($sessions->stepUp(...), new StepUpSession(new Realm('globex'), $current->id, $current->principalId, $factor), new Origin(OriginKind::Web)));
 
         $orphan = new Session(new SessionId(new UuidV7Generator()->next()), $current->realm, new PrincipalId(new UuidV7Generator()->next()), 1, $current->authentication, $current->startedAt, $current->lastSeenAt, $current->expiresAt, $current->idleExpiresAt);
         $this->stack->sessions->add($orphan, hash('sha256', 'orphan'));
-        self::assertNull($sessions->stepUp(new Realm('acme'), $orphan->id, $factor, new Origin(OriginKind::Web)), 'A session whose principal is gone stepped up.');
+        self::assertNull(Permits::call($sessions->stepUp(...), new StepUpSession(new Realm('acme'), $orphan->id, $orphan->principalId, $factor), new Origin(OriginKind::Web)), 'A session whose principal is gone stepped up.');
 
         Permits::call($this->principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
-        self::assertNull($sessions->stepUp(new Realm('acme'), $current->id, $factor, new Origin(OriginKind::Web)), 'A suspended principal stepped up.');
+        self::assertNull(Permits::call($sessions->stepUp(...), new StepUpSession(new Realm('acme'), $current->id, $current->principalId, $factor), new Origin(OriginKind::Web)), 'A suspended principal stepped up.');
         Permits::call($this->principals->activate(...), new ActivatePrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Console));
-        self::assertNull($sessions->stepUp(new Realm('acme'), $current->id, $factor, new Origin(OriginKind::Web)), 'A session came back with its principal.');
+        self::assertNull(Permits::call($sessions->stepUp(...), new StepUpSession(new Realm('acme'), $current->id, $current->principalId, $factor), new Origin(OriginKind::Web)), 'A session came back with its principal.');
 
         $idle = $this->start($sessions, $principal)->session;
         $this->clock->sleep(3600);
-        self::assertNull($sessions->stepUp(new Realm('acme'), $idle->id, $factor, new Origin(OriginKind::Web)), 'An idle session stepped up.');
+        self::assertNull(Permits::call($sessions->stepUp(...), new StepUpSession(new Realm('acme'), $idle->id, $idle->principalId, $factor), new Origin(OriginKind::Web)), 'An idle session stepped up.');
         self::assertSame([], array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn ($entry): bool => 'yorvoid.session.step_up' === $entry->action));
     }
 

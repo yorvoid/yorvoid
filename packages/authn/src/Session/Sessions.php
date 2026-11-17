@@ -82,6 +82,7 @@ final readonly class Sessions implements OperationHandler
             StartSession::class => $this->start(...),
             EndSession::class => $this->end(...),
             EndSessions::class => $this->endAll(...),
+            StepUpSession::class => $this->stepUp(...),
         ];
     }
 
@@ -216,36 +217,40 @@ final readonly class Sessions implements OperationHandler
 
     /**
      * Adds a proof to a current session, after its principal proved who they are again (ATN-070), and
-     * gives it a new token (SES-002): the old token stops working. Store the new token as on sign-in:
-     * under a new ID of the application's session.
-     *
-     * @internal For the packages that check the proof, e.g. Passkeys::finishStepUp()
+     * gives it a new token (SES-002): the old token stops working. A consequence of the operation that
+     * checked the proof (StepUpSession), and only for its principal's session. Store the new token as on
+     * sign-in: under a new ID of the application's session.
      *
      * @return Secret|null The new token; null if the session isn't current, or its principal not active
      */
-    public function stepUp(Realm $realm, SessionId $id, AuthenticationFactor $factor, Origin $origin): ?Secret
+    public function stepUp(StepUpSession $command, Permit $permit, Origin $origin): ?Secret
     {
-        return $this->transactions->run(function () use ($realm, $id, $factor, $origin): ?Secret {
-            $session = $this->active($realm, $id);
+        $permit->use($command);
+
+        return $this->transactions->run(function () use ($command, $permit, $origin): ?Secret {
+            $session = $this->active($command->realm, $command->sessionId);
 
             if (null === $session) {
                 return null;
             }
 
+            // The proof is its principal's: a permit about someone else refuses (IntegratorError).
+            $permit->about($session->principalId);
             $token = self::newToken();
-            $authentication = $this->store->stepUp($realm, $id, $factor, self::hash($token));
+            $authentication = $this->store->stepUp($command->realm, $command->sessionId, $command->factor, self::hash($token));
 
             if (null === $authentication) {
                 return null;
             }
 
-            $this->log->record($realm, 'yorvoid.session.step_up', Outcome::Success, $origin, $session->principalId, 'session', (string) $session->id, [
-                'method' => $factor->method->value,
-                'operation' => $factor->operation,
+            $this->log->record($command->realm, 'yorvoid.session.step_up', Outcome::Success, $origin, $session->principalId, 'session', (string) $session->id, [
+                'method' => $command->factor->method->value,
+                'operation' => $command->factor->operation,
                 'principal' => (string) $session->principalId,
             ]);
 
             $steppedUp = new Session($session->id, $session->realm, $session->principalId, $session->principalStatusVersion, $authentication, $session->startedAt, $session->lastSeenAt, $session->expiresAt, $session->idleExpiresAt, $session->device, $session->address);
+            $factor = $command->factor;
             $this->transactions->afterCommit(function () use ($steppedUp, $factor, $origin): void {
                 $this->events->dispatch(new SessionSteppedUp($steppedUp, $factor, $origin));
             });

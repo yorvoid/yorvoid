@@ -18,6 +18,8 @@ final readonly class RecoveryCodeUsed
 {
     /**
      * @param int $remaining How many codes the principal has left
+     *
+     * @internal YorvoID dispatches it: its listeners act on it, so an application doesn't make one
      */
     public function __construct(
         public Realm $realm,

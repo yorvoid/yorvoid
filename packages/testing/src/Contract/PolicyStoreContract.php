@@ -279,6 +279,43 @@ trait PolicyStoreContract
     }
 
     /**
+     * Each change increments the version itself, before it writes, also when the caller didn't bump()
+     * first: what another server caches against the version is never older than what's stored (SS-05).
+     */
+    #[DataProvider('implementations')]
+    public function testEveryChangeIncrementsTheVersion(string $implementation): void
+    {
+        $store = $this->policyStore($implementation);
+        $acme = new Realm('acme');
+        $principal = new PrincipalId(new UuidV7());
+        $at = new \DateTimeImmutable('2026-11-17 18:00:00 UTC');
+        $changes = [
+            'saveRole' => static fn () => $store->saveRole($acme, 'editor', 'Editor'),
+            'saveChanges' => static fn () => $store->saveChanges($acme, new AbilityChanges(['acme.pages.delete' => ['editor']])),
+            'assign' => static fn () => $store->assign(new RoleAssignment($acme, $principal, 'editor', $at)),
+            'unassign' => static fn () => $store->unassign($acme, $principal, 'editor', null),
+            'saveGroup' => static fn () => $store->saveGroup($acme, 'staff', 'Staff'),
+            'assignGroup' => static fn () => $store->assignGroup(new GroupRoleAssignment($acme, 'staff', 'editor', $at)),
+            'unassignGroup' => static fn () => $store->unassignGroup($acme, 'staff', 'editor', null),
+            'deleteGroup' => static fn () => $store->deleteGroup($acme, 'staff'),
+            'unassignRole' => static fn () => $store->unassignRole($acme, 'editor'),
+            'forgetPrincipal' => static fn () => $store->forgetPrincipal($acme, $principal),
+            'deleteRole' => static fn () => $store->deleteRole($acme, 'editor'),
+        ];
+        $version = $store->version($acme);
+
+        foreach ($changes as $change => $make) {
+            $make();
+            // Read by a process that comes after the change, as another request would.
+            $now = $this->samePolicyStore($implementation, $store)->version($acme);
+            self::assertGreaterThan($version, $now, $change.' didn\'t increment the version another process reads.');
+            $version = $now;
+        }
+
+        self::assertSame(0, $this->samePolicyStore($implementation, $store)->version(new Realm('globex')), 'Another realm\'s version changed.');
+    }
+
+    /**
      * @param list<PrincipalId> $ids
      *
      * @return list<PrincipalId>

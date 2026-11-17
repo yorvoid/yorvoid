@@ -18,6 +18,7 @@ use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
+use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpSelfService;
 use YorvoID\Authn\Token\IssueToken;
@@ -327,7 +328,7 @@ final class OwnAccountTest extends TestCase
         $session = Permits::call($this->sessions->start(...), new StartSession($this->realm, $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true))), new Origin(OriginKind::Web))->session;
 
         match ($state) {
-            'hold' => $this->stepUp->startCoolDown($this->realm, $principal->id, new Origin(OriginKind::Web)),
+            'hold' => Permits::call($this->stepUp->startCoolDown(...), new StartCoolDown($this->realm, $principal->id), new Origin(OriginKind::Web)),
             'stale' => $this->clock->sleep(301),
             default => null,
         };

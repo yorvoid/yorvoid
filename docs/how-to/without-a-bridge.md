@@ -48,10 +48,12 @@ Register these with your PSR-14 dispatcher and pass it to the services: without 
 | Listener | Of | So that |
 |---|---|---|
 | `EndSessionsOfInactivePrincipals` | `PrincipalStatusChanging` | Suspending or deleting someone ends their sessions in the same transaction |
-| `ForgetCredentialsOfDeletedPrincipals` | `PrincipalStatusChanging` | A deleted principal's credentials, passkeys and recovery codes go with them |
+| `ForgetCredentialsOfDeletedPrincipals` | `PrincipalStatusChanging` | A deleted principal's credentials, passkeys and recovery codes go with them (give `Credentials` the `RecoveryCodeStore` as `recoveryCodes:`) |
 | `ForgetRolesOfDeletedPrincipals` | `PrincipalStatusChanging` | A deleted principal's roles go with them (`yorvoid/policy`) |
 | `ForgetRelationsOfDeletedPrincipals` | `PrincipalStatusChanging` | A deleted principal's relations go with them (`yorvoid/relations`) |
 | `ForgetAttributesOfDeletedPrincipals` | `PrincipalStatusChanging` | A deleted principal's security attributes go with them (`yorvoid/policy`) |
+
+Each runs on the deletion's permit, as one of its consequences: register the three `Forget*` listeners of `yorvoid/policy` and `yorvoid/relations` with your `Operations`' handlers too, so the catalogue lists what they run.
 | `RemovePasskeyWithCredential` | `CredentialRemoving` | Removing a sign-in method removes the passkey's key too |
 | `SecurityNotifications` | each event in `SecurityNotifications::events()` | People hear about new devices, new and removed sign-in methods, recoveries ([notifications](../concepts/notifications.md)) |
 | `SignedOperationNotification` | `SignedOperationRan` | The owner hears about every signed operation |

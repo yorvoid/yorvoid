@@ -9,6 +9,7 @@ use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Core\Duration;
+use YorvoID\Core\Operation\Operations;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
 use YorvoID\Flows\Input;
@@ -20,6 +21,7 @@ use YorvoID\Flows\StepView;
 use YorvoID\Passkeys\Flow\View\StepUpView;
 use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
+use YorvoID\Passkeys\StepUpWithPasskey;
 
 /**
  * Confirms it's the person, with a passkey, for an operation (ATN-028): input "response". Only when the
@@ -39,6 +41,7 @@ final readonly class StepUpStep implements Step
      */
     public function __construct(
         private Passkeys $passkeys,
+        private Operations $operations,
         private StepUp $stepUp,
         private Duration $window,
         private ?string $operation = null,
@@ -87,7 +90,7 @@ final readonly class StepUpStep implements Step
         }
 
         try {
-            return StepResult::done(renewedToken: $this->passkeys->finishStepUp($context->session, Ceremonies::id($state, self::NAME), $input->json('response') ?? '', $context->origin));
+            return StepResult::done(renewedToken: $this->operations->run(new StepUpWithPasskey($context->session->realm, Ceremonies::id($state, self::NAME), $input->json('response') ?? ''), $context->session, $context->origin));
         } catch (PasskeyRefused $refused) {
             return StepResult::refused(Ceremonies::problem($refused));
         }

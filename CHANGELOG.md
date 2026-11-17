@@ -6,18 +6,29 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Added
 
+- `ForgetRoles`, `ForgetRelations` and `ForgetAttributes` (`yorvoid.role.forget_all`, `yorvoid.relation.forget_all`, `yorvoid.attribute.forget_all`): a deletion's consequences, run by `ForgetRolesOfDeletedPrincipals`, `ForgetRelationsOfDeletedPrincipals` and `ForgetAttributesOfDeletedPrincipals`, which are their handlers.
+- Consequence-only operations for what only another operation may cause: `StepUpSession` (`yorvoid.session.step_up`), `StartCoolDown` (`yorvoid.recovery.cool_down`), `DisableCredential` (`yorvoid.credential.disable`) and `ForgetCredentials` (`yorvoid.credential.forget_all`). A way of stepping up of your own is an operation that causes `yorvoid.session.step_up` ([sessions](docs/concepts/sessions.md#starting-a-session)).
+- `StepUpWithPasskey` (`yorvoid.passkey.step_up`): a passkey step-up is an operation, decided and recorded like a sign-in.
 - `yorvoid/phpstan-rules`, PHPStan rules for an application: `yorvoid.storeCall` flags a call to one of YorvoID's stores, `yorvoid.internalUse` a use of what YorvoID marks `@internal` ([how-to](docs/how-to/phpstan-rules.md)).
 - `@spi` marks the interfaces you implement and don't call: YorvoID's stores ([interfaces you implement](docs/compatibility.md#interfaces-you-implement)).
 
 ### Breaking
 
+- The constructors of the events YorvoID's listeners act on are `@internal`: `PrincipalCreated`, `PrincipalStatusChanging`, `IdentifierChanged`, `CredentialAdded`, `CredentialRemoving`, `CredentialRemoved`, `NewDeviceSignedIn`, `RecoveryCodeUsed`, `RecoveryCodesGenerated`, `RecoveryLinkUsed` and `SignedOperationRan`. Listen to them as before; YorvoID makes them.
+- `ForgetCredentialsOfDeletedPrincipals` takes only `Credentials`: give `Credentials` the `RecoveryCodeStore` (`recoveryCodes:`), and forgetting a deleted principal's credentials removes its recovery codes too.
+- `SecurityNotifications::signedOperation()` and `Database::deleteInBatches()` are `@internal`.
+- A passkey step-up runs through `Operations`: `$operations->run(new StepUpWithPasskey($realm, $ceremonyId, $response), $session, $origin)` instead of `Passkeys::finishStepUp($session, ...)`, which is now its handler. `StepUpStep` takes `Operations` as its second argument.
+- `Sessions::stepUp()`, `StepUp::startCoolDown()`, `Credentials::disable()` and `Credentials::forgetAll()` (was `forgetAllOf()`) are handlers of those consequences and take a `Permit`, so only the operation that causes them runs them.
+- A `PolicyStore` of your own increments the realm's version in every change, before it writes (`PolicyStoreContract::testEveryChangeIncrementsTheVersion`), so caches never read an older policy than what's stored; `bump()` stays, as the lock a change takes before it reads what it changes.
 - `CredentialStore::update()` is gone. A store writes only what each change is about: `rename()` the label, `markUsed()` the last use, of an active credential only, and `disable()` the status. Each says whether it changed anything. A store of your own implements the three; `CredentialStoreContract` checks them, with a second instance over the same data (`sameCredentialStore()`), which you override for a store processes share.
 - `Credentials::markUsed()` takes the realm and the credential's ID, returns whether the credential was still active, and is `@internal`: it's for the packages that check credentials.
 - In Symfony, YorvoID's stores are services under IDs of their own, `yorvoid.store.<name>` (e.g. `yorvoid.store.session`), and no longer under their interfaces or classes: your services don't get a store by autowiring. A store of your own replaces YorvoID's by aliasing its ID, not its interface ([stores of your own](docs/concepts/storage.md#stores-of-your-own)).
-- `Sessions::stepUp()`, `Credentials::disable()`, `Credentials::forgetAllOf()` and `StepUp::startCoolDown()` are `@internal`: YorvoID's packages call them inside the operations that cause them (a passkey's step-up, a "This wasn't me" report, a deleted principal, a recovery). An application steps a session up with `Passkeys::beginStepUp()` and `finishStepUp()`, and removes a credential with `RemoveCredential` (AR-01).
 
 ### Security
 
+- A deletion's listeners run on its permit and only for the principal it deletes, and the events YorvoID's listeners act on can't be made by an application: a made-up event no longer removes someone's roles, relations, attributes or passkey, or sends them a security notification.
+- What only an operation may cause takes its permit (D-41, AR-01): a session's step-up, a recovery's cool-down, disabling and forgetting credentials. A step-up is about the principal who proved who they are, and can't step up anyone else's session.
+- Cache freshness after a policy change no longer depends on callers: every `PolicyStore` change increments the version itself (SS-05).
 - YorvoID's stores are marked `@spi`: implement them, don't call them. A call changes YorvoID's records without a decision or a log entry, as writing the database does ([interfaces you implement](docs/compatibility.md#interfaces-you-implement)). The Symfony bridge doesn't give them to application code (AR-01).
 - `Sessions::refresh()` records each new token in the security log (`yorvoid.session.refresh`), as a sign-in and a step-up do: it issues a credential (AR-01).
 - A passkey or a set of recovery codes disabled during a sign-in that uses it, e.g. by a "This wasn't me" report, stays disabled. Before, the sign-in wrote back its own copy of the credential, active, and went on. Now the sign-in is refused and recorded, and a recovery code it would have used is kept (ARC-0057).

@@ -157,6 +157,8 @@ final readonly class SecurityNotifications
      * yorvoid/passkeys' SignedOperationRan.
      *
      * @param \Closure(string): string $summary The operation as people read it, in the locale given
+     *
+     * @internal For yorvoid/intent-signing's SignedOperationNotification: a mail to anyone, so not an application's
      */
     public function signedOperation(Realm $realm, PrincipalId $principalId, \Closure $summary, \DateTimeImmutable $at): void
     {

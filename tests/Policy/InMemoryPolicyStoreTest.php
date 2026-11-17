@@ -26,6 +26,7 @@ final class InMemoryPolicyStoreTest extends TestCase
         $store->bump($realm);
         $store->saveGroup($realm, 'writers', 'Writers');
         $store->assignGroup(new GroupRoleAssignment($realm, 'writers', 'reviewer', new \DateTimeImmutable()));
+        $version = $store->version($realm);
         $snapshot = $store->snapshot();
 
         $store->deleteRole($realm, 'reviewer');
@@ -38,7 +39,7 @@ final class InMemoryPolicyStoreTest extends TestCase
         self::assertSame(['reviewer' => 'Reviewer'], $store->roles($realm));
         self::assertSame(['a.x' => ['reviewer']], $store->changes($realm)->grant);
         self::assertCount(1, $store->assignments($realm, $ada));
-        self::assertSame(1, $store->version($realm));
+        self::assertSame($version, $store->version($realm));
         self::assertSame(['writers' => 'Writers'], $store->groups($realm));
         self::assertCount(1, $store->groupAssignments($realm, ['writers']));
     }

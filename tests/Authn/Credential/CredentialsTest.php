@@ -13,9 +13,11 @@ use YorvoID\Authn\Credential\CredentialKind;
 use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\CredentialStatus;
 use YorvoID\Authn\Credential\CredentialStore;
+use YorvoID\Authn\Credential\DisableCredential;
 use YorvoID\Authn\Credential\Event\CredentialAdded;
 use YorvoID\Authn\Credential\Event\CredentialRemoved;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
+use YorvoID\Authn\Credential\ForgetCredentials;
 use YorvoID\Authn\Credential\ForgetCredentialsOfDeletedPrincipals;
 use YorvoID\Authn\Credential\LastCredential;
 use YorvoID\Authn\Credential\RemoveCredential;
@@ -29,8 +31,10 @@ use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\HeldAfterRecovery;
+use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Core\Duration;
@@ -170,7 +174,7 @@ final class CredentialsTest extends DatabaseTestCase
         $codes = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::RecoveryCodes, ''), new Origin(OriginKind::Web), $session);
         Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $other);
         $this->stack->recoveryCodes->replace(new Realm('acme'), $session->principalId, [hash('sha256', 'a')], $this->clock->now());
-        $this->events->listen(PrincipalStatusChanging::class, new ForgetCredentialsOfDeletedPrincipals($credentials, $this->stack->recoveryCodes, $this->clock)(...));
+        $this->events->listen(PrincipalStatusChanging::class, new ForgetCredentialsOfDeletedPrincipals($credentials)(...));
         $principals = new Principals($this->stack->principals, $this->stack->identifiers, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, events: $this->events, clock: $this->clock);
 
         Permits::call($principals->suspend(...), new SuspendPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console));
@@ -186,8 +190,23 @@ final class CredentialsTest extends DatabaseTestCase
         $entries = iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false);
         $forgot = array_values(array_filter($entries, static fn ($entry): bool => 'yorvoid.credential.forget_all' === $entry->action));
         self::assertSame([['principal', (string) $session->principalId, ['count' => 2]]], array_map(static fn ($entry): array => [$entry->subjectType, $entry->subjectId, $entry->details], $forgot));
-        self::assertSame(0, $credentials->forgetAllOf(new Realm('acme'), $session->principalId, new Origin(OriginKind::Console)));
+        self::assertSame(0, Permits::call($credentials->forgetAll(...), new ForgetCredentials(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console)));
         self::assertCount(1, array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn ($entry): bool => 'yorvoid.credential.forget_all' === $entry->action), 'Nothing forgotten was recorded.');
+    }
+
+    /**
+     * Without the recovery codes' store (no recovery codes in this application), forgetting still
+     * removes the credentials.
+     */
+    public function testForgettingWithoutRecoveryCodesRemovesTheCredentials(): void
+    {
+        $this->credentials('memory');
+        $credentials = new Credentials($this->stack->credentials, $this->sessions, $this->stepUp, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, clock: $this->clock);
+        $session = $this->session();
+        Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
+
+        self::assertSame(1, Permits::call($credentials->forgetAll(...), new ForgetCredentials(new Realm('acme'), $session->principalId), new Origin(OriginKind::Console)));
+        self::assertSame([], $credentials->of(new Realm('acme'), $session->principalId));
     }
 
     public function testTheWindowIsConfigurable(): void
@@ -225,7 +244,7 @@ final class CredentialsTest extends DatabaseTestCase
         $phone = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
         Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
         $this->clock->sleep(1800);
-        $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove'), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->stepUp(...), new StepUpSession($session->realm, $session->id, $session->principalId, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove')), new Origin(OriginKind::Web));
 
         try {
             Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Attacker\'s'), new Origin(OriginKind::Web), $session);
@@ -243,7 +262,7 @@ final class CredentialsTest extends DatabaseTestCase
         $credentials = $this->credentials($implementation, Duration::hours(24));
         $session = $this->session();
         $phone = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
-        $this->stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
+        Permits::call($this->stepUp->startCoolDown(...), new StartCoolDown(new Realm('acme'), $session->principalId), new Origin(OriginKind::Web));
 
         // Adding isn't held: someone who lost their passkeys recovers to add a new one.
         $laptop = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
@@ -319,7 +338,7 @@ final class CredentialsTest extends DatabaseTestCase
         $copied = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Copied'), new Origin(OriginKind::Web), $session);
         $other = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Other'), new Origin(OriginKind::Web), $session);
 
-        $disabled = $credentials->disable($copied, 'signature counter went backwards', new Origin(OriginKind::Web));
+        $disabled = Permits::call($credentials->disable(...), new DisableCredential($copied->realm, $copied->id, $copied->principalId, 'signature counter went backwards'), new Origin(OriginKind::Web));
         self::assertNotNull($disabled);
 
         self::assertSame(CredentialStatus::Disabled, $disabled->status);
@@ -364,7 +383,7 @@ final class CredentialsTest extends DatabaseTestCase
         // The rename's rollback undid the removal it raced: removed again, for good this time.
         self::assertTrue($this->stack->credentials->remove($credential->realm, $credential->id));
         $entries = \count(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false));
-        self::assertNull($credentials->disable($credential, 'reported lost', new Origin(OriginKind::Web)), 'A removed credential was disabled.');
+        self::assertNull(Permits::call($credentials->disable(...), new DisableCredential($credential->realm, $credential->id, $credential->principalId, 'reported lost'), new Origin(OriginKind::Web)), 'A removed credential was disabled.');
         self::assertCount($entries, iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), 'Nothing changed, but something was recorded.');
     }
 
@@ -486,7 +505,7 @@ final class CredentialsTest extends DatabaseTestCase
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock, $coolDown);
 
         // The default window: 5 minutes.
-        return new Credentials(null === $store ? $this->stack->credentials : $store($this->stack->credentials), $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        return new Credentials(null === $store ? $this->stack->credentials : $store($this->stack->credentials), $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock, recoveryCodes: $this->stack->recoveryCodes);
     }
 
     private function session(): Session

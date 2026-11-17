@@ -35,6 +35,7 @@ use YorvoID\Authn\Credential\AddCredential;
 use YorvoID\Authn\Credential\Credential;
 use YorvoID\Authn\Credential\CredentialKind;
 use YorvoID\Authn\Credential\Credentials;
+use YorvoID\Authn\Credential\DisableCredential;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -44,6 +45,7 @@ use YorvoID\Authn\Session\SessionId;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Core\Event\Origin;
@@ -109,6 +111,7 @@ final readonly class Passkeys implements OperationHandler
         return [
             RegisterPasskey::class => $this->finishRegistration(...),
             SignInWithPasskey::class => $this->finishSignIn(...),
+            StepUpWithPasskey::class => $this->finishStepUp(...),
         ];
     }
 
@@ -227,7 +230,7 @@ final readonly class Passkeys implements OperationHandler
         [$realm, $ceremonyId, $response, $device, $address, $deviceCookie] = [$command->realm, $command->ceremonyId, $command->response, $command->device, $command->address, $command->deviceCookie];
         $this->attempts->count('passkey_sign_in', $realm, null, $address);
         $ceremony = $this->recorded($realm, 'yorvoid.passkey.sign_in', $origin, fn (): Ceremony => $this->take($realm, $ceremonyId, CeremonyKind::SignIn));
-        [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.sign_in');
+        [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.sign_in', $permit);
 
         return $this->inUse($passkey, 'yorvoid.passkey.sign_in', $origin, function () use ($passkey, $credential, $userVerified, $counter, $permit, $origin, $device, $address, $deviceCookie): StartedSession {
             $this->recordUse($passkey, $credential, $counter, $origin);
@@ -266,27 +269,30 @@ final readonly class Passkeys implements OperationHandler
     }
 
     /**
-     * Finishes a step-up: checks the browser's answer, which must come from one of the session's
-     * principal's passkeys, adds the proof to the session for the requirement's operation, and gives the
-     * session a new token.
-     *
-     * @param string $response The browser's PublicKeyCredential, as JSON
+     * Finishes a step-up (StepUpWithPasskey, run from the session): checks the browser's answer, which
+     * must come from one of the session's principal's passkeys, adds the proof to the session for the
+     * requirement's operation, and gives the session a new token.
      *
      * @return Secret The session's new token; the old one stops working
      *
      * @throws PasskeyRefused
      */
-    public function finishStepUp(Session $session, string $ceremonyId, string $response, Origin $origin): Secret
+    public function finishStepUp(StepUpWithPasskey $command, Permit $permit, Origin $origin): Secret
     {
-        $ceremony = $this->recorded($session->realm, 'yorvoid.passkey.step_up', $origin, fn (): Ceremony => $this->takeForSession($session, $ceremonyId, CeremonyKind::StepUp));
-        [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.step_up', $session->principalId);
+        $permit->use($command);
+        $session = Credentials::session($permit, 'concepts/step-up.md');
+        // The session's principal is the one it's about: the passkey must be theirs (verify()).
+        $permit->about($session->principalId);
+        $ceremony = $this->recorded($session->realm, 'yorvoid.passkey.step_up', $origin, fn (): Ceremony => $this->takeForSession($session, $command->ceremonyId, CeremonyKind::StepUp));
+        [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $command->response, $origin, 'yorvoid.passkey.step_up', $permit, $session->principalId);
 
-        return $this->inUse($passkey, 'yorvoid.passkey.step_up', $origin, function () use ($session, $ceremony, $passkey, $credential, $userVerified, $counter, $origin): Secret {
+        return $this->inUse($passkey, 'yorvoid.passkey.step_up', $origin, function () use ($session, $ceremony, $passkey, $credential, $userVerified, $counter, $permit, $origin): Secret {
             $this->recordUse($passkey, $credential, $counter, $origin);
+            // For the operation the ceremony was begun for, never one the answer names.
             $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true, $ceremony->operation ?? AuthenticationFactor::NO_OPERATION);
 
             // The session ended, or its principal was suspended, while the person was at their authenticator.
-            return $this->sessions->stepUp($session->realm, $session->id, $factor, $origin) ?? throw new PasskeyRefused(Refusal::CeremonyExpired);
+            return $permit->cause($this->sessions->stepUp(...), new StepUpSession($session->realm, $session->id, $session->principalId, $factor), $origin) ?? throw new PasskeyRefused(Refusal::CeremonyExpired);
         });
     }
 
@@ -402,7 +408,7 @@ final readonly class Passkeys implements OperationHandler
      * @return array{Passkey, Credential, bool, CounterSuspicion} The passkey, its credential, whether the user was
      *                                                            verified, and whether the passkey may be a copy
      */
-    private function verify(Ceremony $ceremony, string $response, Origin $origin, string $action, ?PrincipalId $principalId = null): array
+    private function verify(Ceremony $ceremony, string $response, Origin $origin, string $action, Permit $permit, ?PrincipalId $principalId = null): array
     {
         $options = $this->serializer->deserialize($ceremony->options, PublicKeyCredentialRequestOptions::class, 'json');
         [$passkey, $credential, $assertion] = $this->recorded($ceremony->realm, $action, $origin, function () use ($ceremony, $response, $principalId): array {
@@ -464,7 +470,9 @@ final readonly class Passkeys implements OperationHandler
 
         if ($counter->suspected && ClonePolicy::Allow !== $this->policy->clonePolicy) {
             if (ClonePolicy::DisablePasskey === $this->policy->clonePolicy) {
-                $this->credentials->disable($credential, 'signature counter didn\'t go up: the passkey may have been copied', $origin);
+                // A consequence of the sign-in or step-up that found it out, about the passkey's principal.
+                $permit->about($passkey->principalId);
+                $permit->cause($this->credentials->disable(...), new DisableCredential($passkey->realm, $credential->id, $passkey->principalId, 'signature counter didn\'t go up: the passkey may have been copied'), $origin);
             }
 
             $this->refuse($passkey, $action, Refusal::SuspectedCopy, $origin);

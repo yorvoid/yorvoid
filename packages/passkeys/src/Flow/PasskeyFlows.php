@@ -82,8 +82,8 @@ final readonly class PasskeyFlows
             new Flow(self::INVITATION, [new InvitationStep($this->operations, $this->invitations, $this->principals), $passkey, $codes], [InvitationStep::NAME, PasskeyRegistrationStep::NAME]),
             new Flow(self::RECOVER_WITH_CODE, [new RecoveryCodeStep($this->operations, $this->stepUp->coolDown()), $later, $codes], [RecoveryCodeStep::NAME]),
             new Flow(self::RECOVER_WITH_LINK, [new RecoveryLinkStep($this->operations, $this->recoveryLinks, $this->principals, $this->stepUp->coolDown()), $later, $codes], [RecoveryLinkStep::NAME]),
-            new Flow(self::ADD_PASSKEY, [new StepUpStep($this->passkeys, $this->stepUp, $this->window, 'yorvoid.credential.add'), $passkey], [StepUpStep::NAME, PasskeyRegistrationStep::NAME]),
-            new Flow(self::STEP_UP, [new StepUpStep($this->passkeys, $this->stepUp, $this->window)], [StepUpStep::NAME]),
+            new Flow(self::ADD_PASSKEY, [new StepUpStep($this->passkeys, $this->operations, $this->stepUp, $this->window, 'yorvoid.credential.add'), $passkey], [StepUpStep::NAME, PasskeyRegistrationStep::NAME]),
+            new Flow(self::STEP_UP, [new StepUpStep($this->passkeys, $this->operations, $this->stepUp, $this->window)], [StepUpStep::NAME]),
             ...(null === $this->emailVerification ? [] : [new Flow(self::VERIFY_EMAIL, [new EmailVerificationStep($this->operations, $this->emailVerification)], [EmailVerificationStep::NAME])]),
         ];
     }

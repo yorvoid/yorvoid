@@ -79,13 +79,14 @@ final class PolicyTest extends TestCase
         $realm = new Realm('acme');
         $ada = Permits::call($principals->create(...), new CreatePrincipal($realm, PrincipalKind::Human), new Origin(OriginKind::Console));
         $memory->policy->assign(new RoleAssignment($realm, $ada->id, 'editor', new \DateTimeImmutable()));
+        $version = $memory->policy->version($realm);
 
         Permits::call($principals->suspend(...), new SuspendPrincipal($realm, $ada->id), new Origin(OriginKind::Console));
         self::assertCount(1, $memory->policy->assignments($realm, $ada->id), 'Suspending keeps the roles.');
-        self::assertSame(0, $memory->policy->version($realm));
+        self::assertSame($version, $memory->policy->version($realm));
 
         Permits::call($principals->delete(...), new DeletePrincipal($realm, $ada->id), new Origin(OriginKind::Console));
         self::assertSame([], $memory->policy->assignments($realm, $ada->id));
-        self::assertSame(1, $memory->policy->version($realm), 'The policy changed.');
+        self::assertGreaterThan($version, $memory->policy->version($realm), 'The policy changed.');
     }
 }

@@ -12,6 +12,8 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Time;
@@ -26,7 +28,7 @@ use YorvoID\Core\Time;
  *
  * @api
  */
-final readonly class StepUp
+final readonly class StepUp implements OperationHandler
 {
     /**
      * @param Duration|null $coolDown How long sensitive operations are held after an account recovery; none if not given
@@ -74,21 +76,26 @@ final readonly class StepUp
         return $this->coolDown;
     }
 
-    /**
-     * Starts the cool-down after an account recovery, if one is configured.
-     *
-     * @internal For the ways to recover, inside the recovery's operation
-     */
-    public function startCoolDown(Realm $realm, PrincipalId $principalId, Origin $origin): void
+    public function operations(): array
     {
+        return [StartCoolDown::class => $this->startCoolDown(...)];
+    }
+
+    /**
+     * Starts the cool-down after an account recovery, if one is configured: a recovery's consequence.
+     */
+    public function startCoolDown(StartCoolDown $command, Permit $permit, Origin $origin): void
+    {
+        $permit->use($command);
+
         if (null === $this->coolDown) {
             return;
         }
 
         $until = $this->coolDown->after(Time::stored($this->clock->now()));
         // Recording first takes the realm's log lock: two recoveries at once extend one after the other.
-        $this->log->record($realm, 'yorvoid.recovery.cool_down', Outcome::Success, $origin, null, 'principal', (string) $principalId, ['until' => $until->format(\DATE_ATOM)]);
-        $this->coolDowns->extend($realm, $principalId, $until);
+        $this->log->record($command->realm, 'yorvoid.recovery.cool_down', Outcome::Success, $origin, null, 'principal', (string) $command->principalId, ['until' => $until->format(\DATE_ATOM)]);
+        $this->coolDowns->extend($command->realm, $command->principalId, $until);
     }
 
     /**

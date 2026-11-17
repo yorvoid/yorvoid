@@ -254,20 +254,29 @@ final class RelationsAndGroupsTest extends TestCase
         $world = new PolicyWorld();
         $ada = $world->principal();
         $version = static fn (): int => $world->memory->policy->version($world->realm);
-        $start = $version();
-        $world->asOperator(new CreateGroup($world->realm, 'writers', 'Writers'));
-        $world->asOperator(new AddGroupMember($world->realm, 'writers', self::subject($ada)));
-        $world->asOperator(new AssignGroupRole($world->realm, 'writers', 'manager', new ResourceRef('site', 'a')));
-        $world->asOperator(new UnassignGroupRole($world->realm, 'writers', 'manager', new ResourceRef('site', 'a')));
-        $world->asOperator(new RemoveGroupMember($world->realm, 'writers', self::subject($ada)));
-        self::assertSame($start + 5, $version(), 'Each change increments the policy version.');
+
+        foreach ([
+            new CreateGroup($world->realm, 'writers', 'Writers'),
+            new AddGroupMember($world->realm, 'writers', self::subject($ada)),
+            new AssignGroupRole($world->realm, 'writers', 'manager', new ResourceRef('site', 'a')),
+            new UnassignGroupRole($world->realm, 'writers', 'manager', new ResourceRef('site', 'a')),
+            new RemoveGroupMember($world->realm, 'writers', self::subject($ada)),
+        ] as $command) {
+            $before = $version();
+            $world->asOperator($command);
+            self::assertGreaterThan($before, $version(), $command::class.': each change increments the policy version.');
+        }
+
         $entries = \count(self::entries($world, 'yorvoid.group.'));
 
+        $before = $version();
         self::assertFalse($world->asOperator(new RemoveGroupMember($world->realm, 'writers', self::subject($ada))));
+        self::assertGreaterThan($before, $before = $version(), 'A change that changed nothing counts too.');
         self::assertFalse($world->asOperator(new UnassignGroupRole($world->realm, 'writers', 'manager')));
+        self::assertGreaterThan($before, $before = $version(), 'A change that changed nothing counts too.');
         self::assertCount($entries, self::entries($world, 'yorvoid.group.'), 'Nothing removed, nothing recorded.');
         $world->asOperator(new DeleteGroup($world->realm, 'writers'));
-        self::assertSame($start + 8, $version());
+        self::assertGreaterThan($before, $version());
 
         self::assertSame([
             ['label' => 'Writers'],

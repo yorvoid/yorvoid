@@ -8,6 +8,7 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Uid\Uuid;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Authn\Credential\Credentials;
+use YorvoID\Authn\Credential\DisableCredential;
 use YorvoID\Authn\Session\EndSessions;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
@@ -84,7 +85,7 @@ final readonly class NotMe implements OperationHandler
             $disabled = null === $suspect ? null : $this->credentials->get($realm, $suspect);
 
             if (null !== $disabled && $disabled->principalId->equals($used->principalId)) {
-                $this->credentials->disable($disabled, 'its principal said they didn\'t add it', $origin);
+                $permit->cause($this->credentials->disable(...), new DisableCredential($realm, $disabled->id, $disabled->principalId, 'its principal said they didn\'t add it'), $origin);
             }
 
             $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Reported), $origin, new ActingPrincipal($realm, $used->principalId));

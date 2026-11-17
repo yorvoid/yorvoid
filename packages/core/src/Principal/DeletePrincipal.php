@@ -15,7 +15,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-#[Operation('yorvoid.principal.delete', 'Delete a principal, keeping a tombstone for the security log', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', causes: ['yorvoid.session.end_all'])]
+#[Operation('yorvoid.principal.delete', 'Delete a principal, keeping a tombstone for the security log', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: 'yorvoid.principals.manage', causes: ['yorvoid.session.end_all', 'yorvoid.credential.forget_all', 'yorvoid.role.forget_all', 'yorvoid.relation.forget_all', 'yorvoid.attribute.forget_all'])]
 final readonly class DeletePrincipal implements Command, ConcernsPrincipal
 {
     public function __construct(
