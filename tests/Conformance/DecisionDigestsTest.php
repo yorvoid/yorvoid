@@ -7,14 +7,29 @@ namespace YorvoID\Tests\Conformance;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\DecisionLog\DecisionDigests;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
+use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\NotPermitted;
+use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\Badges;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\Policy;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\RecordBadge;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\ScanBadge;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
+use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Stack;
 
@@ -102,6 +117,40 @@ final class DecisionDigestsTest extends DatabaseTestCase
         $verified = $digests->verify($realm);
         self::assertTrue($verified->isIntact(), implode(' ', $verified->problems));
         self::assertSame(0, $verified->undigested);
+    }
+
+    /**
+     * A failed attempt and a refusal in a transaction of the application's that commits: written once
+     * it has ended, apart, so the next digest covers them, and a deletion is reported (C1 of G-4).
+     */
+    #[DataProvider('platforms')]
+    public function testWhatIsWrittenAfterTheApplicationsCommitIsDigested(string $platform): void
+    {
+        $stack = $this->stack($platform);
+        $database = $stack->database;
+        \assert($database instanceof Database);
+        $digests = $this->digests($stack);
+        $realm = new Realm('acme');
+        $decisions = new DecisionLog($stack->decisions, transactions: $stack->transactions);
+        $log = new SecurityLog($stack->log, $stack->transactions, attempts: $decisions);
+        $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new ValidAuthority(), new Policy(false), new SelfService(), decisions: $decisions), $log, [new Badges()]);
+
+        $database->connection->beginTransaction();
+        $log->attempt($realm, 'yorvoid.setup.claim', Outcome::Failed, new Origin(OriginKind::Web));
+
+        try {
+            $operations->run(new IssueBadge($realm, new PrincipalId(new UuidV7())), new Member($realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web));
+        } catch (NotPermitted) {
+        }
+
+        $database->connection->commit();
+        self::wait();
+        $digest = $digests->take($realm);
+
+        self::assertSame(2, $digest?->details['count'] ?? null, 'What was written after the application\'s commit isn\'t digested.');
+        self::assertTrue($digests->verify($realm)->isIntact());
+        $database->connection->executeStatement(\sprintf('DELETE FROM %s WHERE realm = ?', $database->table(DbalDecisionLogStore::TABLE)), [$realm->name]);
+        self::assertFalse($digests->verify($realm)->isIntact(), 'Deleting the attempt and the refusal went unnoticed.');
     }
 
     private function digests(Stack $stack): DecisionDigests

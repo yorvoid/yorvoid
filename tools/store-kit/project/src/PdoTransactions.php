@@ -60,13 +60,21 @@ final class PdoTransactions implements Transactions
 
     public function afterEnd(\Closure $callback): void
     {
+        // A failure goes no further than its own callback: log it in a project of your own.
+        $guarded = static function () use ($callback): void {
+            try {
+                $callback();
+            } catch (\Throwable) {
+            }
+        };
+
         if (0 === $this->depth) {
-            $callback();
+            $guarded();
 
             return;
         }
 
-        $this->ended[] = $callback;
+        $this->ended[] = $guarded;
     }
 
     /**

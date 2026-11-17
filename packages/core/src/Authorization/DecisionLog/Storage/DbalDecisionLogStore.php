@@ -51,12 +51,14 @@ final readonly class DbalDecisionLogStore implements DecisionLogStore, WritesApa
         return null !== $this->writes;
     }
 
-    public function add(array $records): void
+    public function add(array $records, ?bool $apart = null): void
     {
         $connection = $this->writes ?? $this->database->connection;
         // Written apart from any caller's transaction: by the database's clock at the statement, for a
-        // digest to count it. Inside one, nothing: its citation covers it (I2 of D-42).
-        $apart = null !== $this->writes || !$this->database->connection->isTransactionActive();
+        // digest to count it. Inside one, nothing: its citation covers it (I2 of D-42). DecisionLog says so
+        // for what it writes apart: in a hook after the application's commit, DBAL still counts the
+        // transaction open, so it can't be told from here (C1).
+        $apart ??= null !== $this->writes || !$this->database->connection->isTransactionActive();
         $written = $apart ? $this->clock() : 'NULL';
 
         foreach (array_chunk($records, self::BATCH) as $batch) {

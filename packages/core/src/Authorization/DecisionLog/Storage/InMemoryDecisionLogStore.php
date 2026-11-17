@@ -27,7 +27,7 @@ final class InMemoryDecisionLogStore implements DecisionLogStore
 
     private int $prunedBefore = 0;
 
-    public function add(array $records): void
+    public function add(array $records, ?bool $apart = null): void
     {
         foreach ($records as $record) {
             $this->records[$record->realm->name][$record->id] = $record;

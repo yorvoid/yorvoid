@@ -23,14 +23,14 @@ final class FailingDecisionLogStore implements DecisionLogStore
     ) {
     }
 
-    public function add(array $records): void
+    public function add(array $records, ?bool $apart = null): void
     {
         if ($this->failing) {
             throw new \RuntimeException('The database went away.');
         }
 
         ++$this->writes;
-        $this->records->add($records);
+        $this->records->add($records, $apart);
     }
 
     public function find(Realm $realm, string $id): ?DecisionRecord

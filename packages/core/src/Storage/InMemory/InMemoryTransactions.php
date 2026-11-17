@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Storage\InMemory;
 
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
+use YorvoID\Core\Event\NoEventListeners;
+use YorvoID\Core\Log\AuditAlarm;
 use YorvoID\Core\Storage\Transactions;
 
 /**
@@ -26,6 +31,17 @@ final class InMemoryTransactions implements Transactions
 
     /** @var list<\Closure(): void> */
     private array $afterEnd = [];
+
+    private readonly AuditAlarm $alarm;
+
+    /**
+     * @param EventDispatcherInterface $events Where an afterEnd() callback's failure is announced (AuditFailed)
+     * @param LoggerInterface          $logger Where it's logged, at critical
+     */
+    public function __construct(EventDispatcherInterface $events = new NoEventListeners(), LoggerInterface $logger = new NullLogger())
+    {
+        $this->alarm = new AuditAlarm($events, $logger);
+    }
 
     /**
      * @template T
@@ -91,6 +107,8 @@ final class InMemoryTransactions implements Transactions
 
     public function afterEnd(\Closure $callback): void
     {
+        $callback = $this->alarm->guard($callback);
+
         if (0 === $this->depth) {
             $callback();
 

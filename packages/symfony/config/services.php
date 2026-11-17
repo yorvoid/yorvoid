@@ -213,7 +213,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(StorageLocation::class)->args([param('yorvoid.storage.prefix'), param('yorvoid.storage.schema')]);
     $services->set(Database::class)->args([service('yorvoid.connection'), service(StorageLocation::class)]);
     // The middleware's instance on that connection, set by YorvoIDBundle.
-    $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null]);
+    $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null, service('event_dispatcher'), service('logger')->nullOnInvalid()]);
     $services->alias(Transactions::class, DbalTransactions::class)->public();
     $services->set(IdentifierRenormalization::class);
 

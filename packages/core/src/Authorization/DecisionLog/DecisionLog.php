@@ -230,29 +230,33 @@ final class DecisionLog implements AttemptLog
      */
     private function independently(array $records): ?bool
     {
-        $write = function () use ($records): bool {
+        // Apart unless DecisionLog can't tell (no Transactions given): then the store tells.
+        $write = function (?bool $apart) use ($records): bool {
             try {
-                $this->store->add($records);
+                $this->store->add($records, $apart);
             } catch (\Throwable $e) {
                 $this->alarm->raise(new AuditFailed(AuditFailed::DECISION_LOG, $records[0]->realm, \count($records), false, $e));
 
                 return false;
             }
 
-            // Written: a listener's own failure isn't the record's.
             $this->announce($records);
 
             return true;
         };
 
-        if (null === $this->transactions || ($this->store instanceof WritesApart && $this->store->writesApart())) {
-            return $write();
+        if (null === $this->transactions) {
+            return $write(null);
+        }
+
+        if ($this->store instanceof WritesApart && $this->store->writesApart()) {
+            return $write(true);
         }
 
         // With no transaction open, afterEnd() runs it at once, and it's known whether it was written.
         $written = null;
         $this->transactions->afterEnd(static function () use ($write, &$written): void {
-            $written = $write();
+            $written = $write(true);
         });
 
         return $written;
@@ -264,7 +268,12 @@ final class DecisionLog implements AttemptLog
     private function announce(array $records): void
     {
         foreach ($records as $record) {
-            $this->events->dispatch(new DecisionRecorded($record));
+            // Written: a listener's own failure isn't the record's, nor the decision's (C2).
+            try {
+                $this->events->dispatch(new DecisionRecorded($record));
+            } catch (\Throwable $e) {
+                $this->logger->error('A listener of DecisionRecorded failed: {message}', ['message' => $e->getMessage(), 'exception' => $e]);
+            }
         }
     }
 

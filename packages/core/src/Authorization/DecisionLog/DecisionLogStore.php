@@ -20,8 +20,11 @@ interface DecisionLogStore
      * Records them, in one write where the store can.
      *
      * @param list<DecisionRecord> $records
+     * @param bool|null            $apart   Whether they're written apart from any caller's transaction, so a
+     *                                      digest covers them (D-42): true for refusals and attempts, which
+     *                                      DecisionLog writes so; null for the store to tell, as for a permit
      */
-    public function add(array $records): void;
+    public function add(array $records, ?bool $apart = null): void;
 
     /**
      * @throws \UnexpectedValueException When the stored record is malformed

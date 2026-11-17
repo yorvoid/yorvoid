@@ -19,6 +19,8 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
+// yorvoid.credential.disable twice: now, and again after the caller's rollback, until ARC-0059 lets one
+// afterEnd() do it (D-42).
 #[Operation('yorvoid.passkey.step_up', 'Step up a session with a passkey', AuthorizedBy::Authentication, causes: ['yorvoid.credential.disable', 'yorvoid.credential.disable', 'yorvoid.session.step_up'])]
 final readonly class StepUpWithPasskey implements Command
 {

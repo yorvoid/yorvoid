@@ -24,6 +24,9 @@ final readonly class AuditFailed
     /** A checkpoint or an anchor of the security log (AUD-003) */
     public const string CHECKPOINTS = 'checkpoints';
 
+    /** What waited for the end of a transaction, e.g. a copied passkey's disable (D-42) */
+    public const string AFTER_END = 'after_end';
+
     /**
      * @param string     $log     Which log: one of the constants
      * @param Realm|null $realm   The realm the records were for, when it's one

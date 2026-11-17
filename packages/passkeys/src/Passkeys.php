@@ -473,8 +473,8 @@ final readonly class Passkeys implements OperationHandler
                 // A consequence of the sign-in or step-up that found it out, about the passkey's principal.
                 // Now, in the caller's transaction, so its commit keeps it; and, if the caller rolls back
                 // with the refusal below, again once that has ended (ARC-0058, D-42): the operation names
-                // the disable twice for that. If the second fails, it heals itself: the counter wasn't
-                // recorded, so the copy's next answer is suspected again.
+                // the disable twice for that. If the second fails, the audit alert is raised, and it heals
+                // itself: the counter wasn't recorded, so the copy's next answer is suspected again.
                 $permit->about($passkey->principalId);
                 $disable = new DisableCredential($passkey->realm, $credential->id, $passkey->principalId, 'signature counter didn\'t go up: the passkey may have been copied');
                 $permit->cause($this->credentials->disable(...), $disable, $origin);
@@ -484,11 +484,8 @@ final readonly class Passkeys implements OperationHandler
                         return;
                     }
 
-                    try {
-                        $permit->cause($this->credentials->disable(...), $disable, $origin);
-                    } catch (\Throwable) {
-                        // See above: the next suspected answer disables it again.
-                    }
+                    // A failure raises the audit alert (Transactions::afterEnd()); see above for why it heals.
+                    $permit->cause($this->credentials->disable(...), $disable, $origin);
                 });
             }
 

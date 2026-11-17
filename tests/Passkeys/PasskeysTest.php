@@ -658,6 +658,42 @@ final class PasskeysTest extends DatabaseTestCase
     }
 
     /**
+     * A listener of DecisionRecorded fails, in a transaction of the application's that rolls back with
+     * the refusal: the application's own exception is what it gets, and the copied passkey is still
+     * disabled (C2 of G-4).
+     */
+    #[DataProvider('implementations')]
+    public function testAFailingListenerAfterTheEndChangesNothing(string $implementation): void
+    {
+        $this->stack = $this->stack($implementation);
+        $listeners = new RecordingDispatcher();
+        $listeners->listen(\YorvoID\Core\Authorization\DecisionLog\Event\DecisionRecorded::class, static function (): never {
+            throw new \RuntimeException('a SIEM went away');
+        });
+        $attempts = new \YorvoID\Core\Authorization\DecisionLog\DecisionLog($this->stack->decisions, events: $listeners, transactions: $this->stack->transactions);
+        $passkeys = $this->passkeys($implementation, clonePolicy: ClonePolicy::DisablePasskey, store: $this->stack->passkeys, attempts: $attempts);
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $ceremony = $passkeys->beginRegistration($session);
+        $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key'), new Origin(OriginKind::Web), $session);
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 5)), new Origin(OriginKind::Web));
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $copy = $authenticator->signIn($signIn->options, counter: 5);
+        $transactions = $this->stack->transactions;
+        $thrown = null;
+
+        try {
+            $transactions->run(static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web)));
+        } catch (\Throwable $exception) {
+            $thrown = $exception;
+        }
+
+        self::assertInstanceOf(PasskeyRefused::class, $thrown, 'The listener\'s failure replaced the refusal.');
+        self::assertSame(CredentialStatus::Disabled, $this->credentials->get(new Realm('acme'), $credential->id)?->status);
+    }
+
+    /**
      * The application removes the credential in the transaction the refusal left, and commits: once it
      * has ended, there's nothing to disable again.
      */
