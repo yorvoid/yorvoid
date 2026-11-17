@@ -6,6 +6,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Added
 
+- `ForgetRoles`, `ForgetRelations` and `ForgetAttributes` (`yorvoid.role.forget_all`, `yorvoid.relation.forget_all`, `yorvoid.attribute.forget_all`): a deletion's consequences, run by `ForgetRolesOfDeletedPrincipals`, `ForgetRelationsOfDeletedPrincipals` and `ForgetAttributesOfDeletedPrincipals`, which are their handlers.
 - Consequence-only operations for what only another operation may cause: `StepUpSession` (`yorvoid.session.step_up`), `StartCoolDown` (`yorvoid.recovery.cool_down`), `DisableCredential` (`yorvoid.credential.disable`) and `ForgetCredentials` (`yorvoid.credential.forget_all`). A way of stepping up of your own is an operation that causes `yorvoid.session.step_up` ([sessions](docs/concepts/sessions.md#starting-a-session)).
 - `StepUpWithPasskey` (`yorvoid.passkey.step_up`): a passkey step-up is an operation, decided and recorded like a sign-in.
 - `yorvoid/phpstan-rules`, PHPStan rules for an application: `yorvoid.storeCall` flags a call to one of YorvoID's stores, `yorvoid.internalUse` a use of what YorvoID marks `@internal` ([how-to](docs/how-to/phpstan-rules.md)).
@@ -13,6 +14,9 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Breaking
 
+- The constructors of the events YorvoID's listeners act on are `@internal`: `PrincipalCreated`, `PrincipalStatusChanging`, `IdentifierChanged`, `CredentialAdded`, `CredentialRemoving`, `CredentialRemoved`, `NewDeviceSignedIn`, `RecoveryCodeUsed`, `RecoveryCodesGenerated`, `RecoveryLinkUsed` and `SignedOperationRan`. Listen to them as before; YorvoID makes them.
+- `ForgetCredentialsOfDeletedPrincipals` takes only `Credentials`: give `Credentials` the `RecoveryCodeStore` (`recoveryCodes:`), and forgetting a deleted principal's credentials removes its recovery codes too.
+- `SecurityNotifications::signedOperation()` and `Database::deleteInBatches()` are `@internal`.
 - A passkey step-up runs through `Operations`: `$operations->run(new StepUpWithPasskey($realm, $ceremonyId, $response), $session, $origin)` instead of `Passkeys::finishStepUp($session, ...)`, which is now its handler. `StepUpStep` takes `Operations` as its second argument.
 - `Sessions::stepUp()`, `StepUp::startCoolDown()`, `Credentials::disable()` and `Credentials::forgetAll()` (was `forgetAllOf()`) are handlers of those consequences and take a `Permit`, so only the operation that causes them runs them.
 - A `PolicyStore` of your own increments the realm's version in every change, before it writes (`PolicyStoreContract::testEveryChangeIncrementsTheVersion`), so caches never read an older policy than what's stored; `bump()` stays, as the lock a change takes before it reads what it changes.
@@ -22,6 +26,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Security
 
+- A deletion's listeners run on its permit and only for the principal it deletes, and the events YorvoID's listeners act on can't be made by an application: a made-up event no longer removes someone's roles, relations, attributes or passkey, or sends them a security notification.
 - What only an operation may cause takes its permit (D-41, AR-01): a session's step-up, a recovery's cool-down, disabling and forgetting credentials. A step-up is about the principal who proved who they are, and can't step up anyone else's session.
 - Cache freshness after a policy change no longer depends on callers: every `PolicyStore` change increments the version itself (SS-05).
 - YorvoID's stores are marked `@spi`: implement them, don't call them. A call changes YorvoID's records without a decision or a log entry, as writing the database does ([interfaces you implement](docs/compatibility.md#interfaces-you-implement)). The Symfony bridge doesn't give them to application code (AR-01).

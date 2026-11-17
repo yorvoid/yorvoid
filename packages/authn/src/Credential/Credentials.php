@@ -10,6 +10,7 @@ use Symfony\Component\Clock\NativeClock;
 use YorvoID\Authn\Credential\Event\CredentialAdded;
 use YorvoID\Authn\Credential\Event\CredentialRemoved;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
+use YorvoID\Authn\Recovery\RecoveryCodeStore;
 use YorvoID\Authn\Session\EndSessions;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\SessionEndReason;
@@ -60,6 +61,7 @@ final readonly class Credentials implements OperationHandler
         private IdGenerator $ids = new UuidV7Generator(),
         private ClockInterface $clock = new NativeClock(),
         ?Duration $reauthenticationWindow = null,
+        private ?RecoveryCodeStore $recoveryCodes = null,
     ) {
         $this->reauthenticationWindow = $reauthenticationWindow ?? Duration::minutes(5);
     }
@@ -246,7 +248,8 @@ final readonly class Credentials implements OperationHandler
     /**
      * Removes every credential of a deleted principal, with no session or step-up: a deletion's
      * consequence (ForgetCredentials). Each is announced with CredentialRemoving first, so the packages
-     * that keep their secrets remove them in the same transaction; one log entry says how many.
+     * that keep their secrets remove them in the same transaction, and the recovery codes' hashes go
+     * when this was given their store; one log entry says how many.
      *
      * @return int How many
      */
@@ -262,6 +265,9 @@ final readonly class Credentials implements OperationHandler
                 $this->events->dispatch(new CredentialRemoving($credential, $origin));
                 $this->store->remove($command->realm, $credential->id);
             }
+
+            // The recovery codes' hashes too: nothing of how a deleted principal signed in stays behind.
+            $this->recoveryCodes?->replace($command->realm, $command->principalId, [], $this->clock->now());
 
             if ([] !== $credentials) {
                 $this->log->record($command->realm, 'yorvoid.credential.forget_all', Outcome::Success, $origin, $actor, 'principal', (string) $command->principalId, ['count' => \count($credentials)]);

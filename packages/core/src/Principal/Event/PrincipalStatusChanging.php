@@ -19,6 +19,9 @@ use YorvoID\Core\Principal\PrincipalId;
  */
 final class PrincipalStatusChanging extends CancellableEvent
 {
+    /**
+     * @internal YorvoID dispatches it: its listeners act on it, so an application doesn't make one
+     */
     public function __construct(
         public readonly Principal $before,
         public readonly Principal $after,

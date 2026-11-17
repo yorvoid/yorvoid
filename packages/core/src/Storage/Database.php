@@ -52,6 +52,8 @@ final readonly class Database
      * @param positive-int                    $batch      At most this many rows a statement
      *
      * @return int How many were deleted
+     *
+     * @internal For YorvoID's stores' purges: a delete here is a write to the database
      */
     public function deleteInBatches(string $name, string $where, array $parameters = [], array $types = [], int $batch = 10_000): int
     {

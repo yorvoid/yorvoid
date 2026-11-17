@@ -19,6 +19,8 @@ final readonly class SignedOperationRan
 {
     /**
      * @param string $key The verifier's ID of the key that signed
+     *
+     * @internal YorvoID dispatches it: its listeners act on it, so an application doesn't make one
      */
     public function __construct(
         public Realm $realm,

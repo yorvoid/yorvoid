@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Architecture;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\DependencyInjection\Container;
 use Symfony\Component\Filesystem\Filesystem;
 use YorvoID\Tests\Symfony\App\TestKernel;
 
@@ -20,13 +19,12 @@ final class WritePathsTest extends TestCase
     public function testEveryPublicMethodWithoutAPermitIsClassified(): void
     {
         $directory = sys_get_temp_dir().'/yorvoid-write-paths-'.bin2hex(random_bytes(4));
-        $kernel = new TestKernel($directory);
+        $collect = new PublicMethodsWithoutPermit();
+        $kernel = new TestKernel($directory, passes: [$collect]);
 
         try {
             $kernel->boot();
-            $container = $kernel->getContainer();
-            \assert($container instanceof Container);
-            $methods = PublicMethodsWithoutPermit::of($container);
+            $methods = $collect->methods;
         } finally {
             $kernel->shutdown();
             new Filesystem()->remove($directory);
@@ -36,5 +34,34 @@ final class WritePathsTest extends TestCase
         sort($listed);
 
         self::assertSame($listed, $methods, 'A public method without a permit isn\'t classified (or is gone): add it to WritesWithoutPermit, with what it is.');
+    }
+
+    /**
+     * A "logs" entry is a claim the threat model rests on (:120): it names the test that asserts the
+     * entry, and that test exists.
+     */
+    public function testEachWriteThatLogsNamesTheTestThatShowsIt(): void
+    {
+        foreach (WritesWithoutPermit::METHODS as $method => $entry) {
+            if ('logs' === $entry[0]) {
+                [$class, $test] = explode('::', $entry[2]) + [1 => ''];
+                self::assertTrue(method_exists($class, $test), $method.': its test '.$entry[2].' doesn\'t exist.');
+            }
+        }
+    }
+
+    /**
+     * A listener writes on an event: only YorvoID may make it, so its constructor is @internal, and an
+     * application's code that makes one is flagged (yorvoid.internalUse).
+     */
+    public function testEachListenersEventIsOneOnlyYorvoIDMakes(): void
+    {
+        foreach (WritesWithoutPermit::METHODS as $method => $entry) {
+            if ('event' === $entry[0]) {
+                $constructor = new \ReflectionClass($entry[2])->getConstructor();
+                self::assertNotNull($constructor, $entry[2]);
+                self::assertStringContainsString('@internal', (string) $constructor->getDocComment(), $method.': '.$entry[2].'\'s constructor isn\'t @internal.');
+            }
+        }
     }
 }

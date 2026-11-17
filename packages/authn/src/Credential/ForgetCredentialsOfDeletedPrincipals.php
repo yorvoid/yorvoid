@@ -4,17 +4,14 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\Credential;
 
-use Psr\Clock\ClockInterface;
-use Symfony\Component\Clock\NativeClock;
-use YorvoID\Authn\Recovery\RecoveryCodeStore;
 use YorvoID\Core\Principal\Event\PrincipalStatusChanging;
 use YorvoID\Core\Principal\PrincipalStatus;
 
 /**
  * A listener for PrincipalStatusChanging: when a principal is deleted, its credentials go in the same
  * transaction, with what other packages keep for them (a passkey's public key and user handle, through
- * CredentialRemoving), and its recovery codes' hashes. Nothing of how a deleted principal signed in
- * stays behind.
+ * CredentialRemoving), and its recovery codes' hashes (Credentials given their store). Nothing of how
+ * a deleted principal signed in stays behind.
  *
  * @api
  */
@@ -22,8 +19,6 @@ final readonly class ForgetCredentialsOfDeletedPrincipals
 {
     public function __construct(
         private Credentials $credentials,
-        private RecoveryCodeStore $recoveryCodes,
-        private ClockInterface $clock = new NativeClock(),
     ) {
     }
 
@@ -35,6 +30,5 @@ final readonly class ForgetCredentialsOfDeletedPrincipals
 
         // On the deletion's permit: forgetting is what DeletePrincipal causes.
         $event->permit->cause($this->credentials->forgetAll(...), new ForgetCredentials($event->after->realm, $event->after->id), $event->origin);
-        $this->recoveryCodes->replace($event->after->realm, $event->after->id, [], $this->clock->now());
     }
 }

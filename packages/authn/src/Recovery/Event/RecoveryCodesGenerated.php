@@ -15,6 +15,9 @@ use YorvoID\Core\Realm;
  */
 final readonly class RecoveryCodesGenerated
 {
+    /**
+     * @internal YorvoID dispatches it: its listeners act on it, so an application doesn't make one
+     */
     public function __construct(
         public Realm $realm,
         public PrincipalId $principalId,

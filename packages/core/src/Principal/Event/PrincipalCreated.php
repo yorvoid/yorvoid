@@ -19,6 +19,8 @@ final readonly class PrincipalCreated
 {
     /**
      * @param list<Identifier> $identifiers
+     *
+     * @internal YorvoID dispatches it: its listeners act on it, so an application doesn't make one
      */
     public function __construct(
         public Principal $principal,

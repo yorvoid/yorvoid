@@ -33,6 +33,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.ability.reset' => ['ability', 'operator'],
         'yorvoid.ability.revoke' => ['ability', 'operator'],
         'yorvoid.ability.set' => ['ability', 'operator'],
+        'yorvoid.attribute.forget_all' => ['consequence'],
         'yorvoid.attribute.set' => ['ability', 'operator'],
         'yorvoid.credential.add' => ['consequence'],
         'yorvoid.credential.disable' => ['consequence'],
@@ -69,10 +70,12 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.recovery_link.issue' => ['ability', 'operator'],
         'yorvoid.recovery_link.use' => ['authentication'],
         'yorvoid.relation.add' => ['ability', 'operator'],
+        'yorvoid.relation.forget_all' => ['consequence'],
         'yorvoid.relation.remove' => ['ability', 'operator'],
         'yorvoid.role.assign' => ['ability', 'operator'],
         'yorvoid.role.create' => ['ability', 'operator'],
         'yorvoid.role.delete' => ['ability', 'operator'],
+        'yorvoid.role.forget_all' => ['consequence'],
         'yorvoid.role.relabel' => ['ability', 'operator'],
         'yorvoid.role.unassign' => ['ability', 'operator'],
         'yorvoid.session.end' => ['self', 'ability', 'operator'],
@@ -102,7 +105,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.passkey.sign_in' => ['yorvoid.credential.disable', 'yorvoid.session.start'],
         'yorvoid.passkey.step_up' => ['yorvoid.credential.disable', 'yorvoid.session.step_up'],
         'yorvoid.principal.create' => ['yorvoid.token.issue'],
-        'yorvoid.principal.delete' => ['yorvoid.session.end_all', 'yorvoid.credential.forget_all'],
+        'yorvoid.principal.delete' => ['yorvoid.session.end_all', 'yorvoid.credential.forget_all', 'yorvoid.role.forget_all', 'yorvoid.relation.forget_all', 'yorvoid.attribute.forget_all'],
         'yorvoid.principal.suspend' => ['yorvoid.session.end_all'],
         'yorvoid.recovery_code.recover' => ['yorvoid.session.end_all', 'yorvoid.recovery.cool_down', 'yorvoid.session.start'],
         'yorvoid.recovery_code.redeem' => ['yorvoid.session.end_all', 'yorvoid.recovery.cool_down', 'yorvoid.session.start'],
@@ -165,7 +168,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
             }
         }
 
-        self::assertCount(56, $commands, 'The operations moved.');
+        self::assertCount(59, $commands, 'The operations moved.');
 
         return $commands;
     }

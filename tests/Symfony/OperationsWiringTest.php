@@ -91,7 +91,7 @@ final class OperationsWiringTest extends TestCase
         \assert($catalogue instanceof OperationCatalogue);
         $consequences = array_keys(array_filter($catalogue->all(), static fn ($operation): bool => [AuthorizedBy::Consequence] === $operation->authorizedBy));
 
-        self::assertSame(['yorvoid.credential.add', 'yorvoid.credential.disable', 'yorvoid.credential.forget_all', 'yorvoid.identifier.verify', 'yorvoid.recovery.cool_down', 'yorvoid.session.start', 'yorvoid.session.step_up'], $consequences);
+        self::assertSame(['yorvoid.attribute.forget_all', 'yorvoid.credential.add', 'yorvoid.credential.disable', 'yorvoid.credential.forget_all', 'yorvoid.identifier.verify', 'yorvoid.recovery.cool_down', 'yorvoid.relation.forget_all', 'yorvoid.role.forget_all', 'yorvoid.session.start', 'yorvoid.session.step_up'], $consequences);
     }
 
     /**
