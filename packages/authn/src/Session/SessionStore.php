@@ -12,6 +12,8 @@ use YorvoID\Core\Realm;
  * backup) holds no usable session.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface SessionStore
 {

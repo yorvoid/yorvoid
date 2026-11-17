@@ -17,6 +17,7 @@ parameters:
         - tools/compat/bc/vendor/*
         # Code that breaks the rules on purpose, to test them.
         - tests/Tools/PHPStan/data/*
+        - tests/PhpstanRules/data/*
     tmpDir: var/cache/phpstan
 
     # Secrets come only from a cryptographically secure generator (PLT-053). These functions are

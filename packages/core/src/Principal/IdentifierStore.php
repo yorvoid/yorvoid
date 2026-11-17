@@ -11,6 +11,8 @@ use YorvoID\Core\Realm;
  * its realm in its normalized form.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface IdentifierStore
 {

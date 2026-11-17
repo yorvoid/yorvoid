@@ -1,0 +1,11 @@
+# YorvoID's rules for an application's code: phpstan/extension-installer includes this file, or
+# include it yourself (vendor/yorvoid/phpstan-rules/rules.neon).
+services:
+    -
+        class: YorvoID\PhpstanRules\YorvoIDCode
+    -
+        class: YorvoID\PhpstanRules\StoreCallRule
+        tags: [phpstan.rules.rule]
+    -
+        class: YorvoID\PhpstanRules\InternalUseRule
+        tags: [phpstan.rules.rule]

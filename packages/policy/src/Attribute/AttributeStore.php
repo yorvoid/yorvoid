@@ -11,6 +11,8 @@ use YorvoID\Core\Realm;
  * Principals' security attributes as data.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface AttributeStore
 {

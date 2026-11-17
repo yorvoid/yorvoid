@@ -185,7 +185,11 @@ final readonly class Credentials implements OperationHandler
         return $this->transactions->run(function () use ($command, $session, $origin): Credential {
             $credential = $this->own($command->realm, $command->credentialId, $session);
             $renamed = new Credential($credential->id, $credential->realm, $credential->principalId, $credential->kind, self::label($command->label, $credential->kind), $credential->createdAt, $credential->lastUsedAt, $credential->status);
-            $this->store->update($renamed);
+            // Removed since it was read: as unknown as one that never was.
+            if (!$this->store->rename($renamed->realm, $renamed->id, $renamed->label)) {
+                throw new UnknownCredential($command->realm, $command->credentialId);
+            }
+
             $this->record('yorvoid.credential.rename', $renamed, $origin);
 
             return $renamed;
@@ -193,34 +197,43 @@ final readonly class Credentials implements OperationHandler
     }
 
     /**
-     * Records that the credential was just used to sign in. For the packages that check credentials.
+     * Records that the credential was just used to sign in, if it's still active: one that was disabled
+     * since the caller read it, e.g. by a "not me" report, isn't marked, and the sign-in must fail.
+     *
+     * @internal For the packages that check credentials: they mark its use inside a sign-in that logs
+     *
+     * @return bool Whether it was active
      */
-    public function markUsed(Credential $credential): Credential
+    public function markUsed(Realm $realm, CredentialId $id): bool
     {
-        $used = new Credential($credential->id, $credential->realm, $credential->principalId, $credential->kind, $credential->label, $credential->createdAt, Time::stored($this->clock->now()), $credential->status);
-        $this->store->update($used);
-
-        return $used;
+        return $this->store->markUsed($realm, $id, Time::stored($this->clock->now()));
     }
 
     /**
      * Makes a credential stop working, e.g. a passkey suspected of having been copied. Its owner sees
      * it as disabled, and removes it.
      *
+     * @internal For the packages that check credentials, and "This wasn't me"
+     *
      * @param string $reason Why, for the log, e.g. "signature counter went backwards"
+     *
+     * @return Credential|null The credential, disabled; null if it was removed meanwhile
      */
-    public function disable(Credential $credential, string $reason, Origin $origin): Credential
+    public function disable(Credential $credential, string $reason, Origin $origin): ?Credential
     {
-        return $this->transactions->run(function () use ($credential, $reason, $origin): Credential {
-            $disabled = new Credential($credential->id, $credential->realm, $credential->principalId, $credential->kind, $credential->label, $credential->createdAt, $credential->lastUsedAt, CredentialStatus::Disabled);
-            $this->store->update($disabled);
+        return $this->transactions->run(function () use ($credential, $reason, $origin): ?Credential {
+            // Removed since the caller read it: nothing to disable, and nothing to record.
+            if (!$this->store->disable($credential->realm, $credential->id)) {
+                return null;
+            }
+
             $this->log->record($credential->realm, 'yorvoid.credential.disable', Outcome::Success, $origin, null, 'credential', (string) $credential->id, [
                 'kind' => $credential->kind->value,
                 'principal' => (string) $credential->principalId,
                 'reason' => $reason,
             ]);
 
-            return $disabled;
+            return new Credential($credential->id, $credential->realm, $credential->principalId, $credential->kind, $credential->label, $credential->createdAt, $credential->lastUsedAt, CredentialStatus::Disabled);
         });
     }
 
@@ -233,6 +246,8 @@ final readonly class Credentials implements OperationHandler
      * Removes every credential of a principal that is deleted, with no session or step-up: for
      * ForgetCredentialsOfDeletedPrincipals. Each is announced with CredentialRemoving first, so the
      * packages that keep their secrets remove them in the same transaction; one log entry says how many.
+     *
+     * @internal For ForgetCredentialsOfDeletedPrincipals
      *
      * @return int How many
      */

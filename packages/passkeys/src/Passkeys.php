@@ -229,7 +229,7 @@ final readonly class Passkeys implements OperationHandler
         $ceremony = $this->recorded($realm, 'yorvoid.passkey.sign_in', $origin, fn (): Ceremony => $this->take($realm, $ceremonyId, CeremonyKind::SignIn));
         [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.sign_in');
 
-        return $this->transactions->run(function () use ($passkey, $credential, $userVerified, $counter, $permit, $origin, $device, $address, $deviceCookie): StartedSession {
+        return $this->inUse($passkey, 'yorvoid.passkey.sign_in', $origin, function () use ($passkey, $credential, $userVerified, $counter, $permit, $origin, $device, $address, $deviceCookie): StartedSession {
             $this->recordUse($passkey, $credential, $counter, $origin);
             $permit->about($passkey->principalId);
 
@@ -281,7 +281,7 @@ final readonly class Passkeys implements OperationHandler
         $ceremony = $this->recorded($session->realm, 'yorvoid.passkey.step_up', $origin, fn (): Ceremony => $this->takeForSession($session, $ceremonyId, CeremonyKind::StepUp));
         [$passkey, $credential, $userVerified, $counter] = $this->verify($ceremony, $response, $origin, 'yorvoid.passkey.step_up', $session->principalId);
 
-        return $this->transactions->run(function () use ($session, $ceremony, $passkey, $credential, $userVerified, $counter, $origin): Secret {
+        return $this->inUse($passkey, 'yorvoid.passkey.step_up', $origin, function () use ($session, $ceremony, $passkey, $credential, $userVerified, $counter, $origin): Secret {
             $this->recordUse($passkey, $credential, $counter, $origin);
             $factor = new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true, $ceremony->operation ?? AuthenticationFactor::NO_OPERATION);
 
@@ -474,11 +474,41 @@ final readonly class Passkeys implements OperationHandler
     }
 
     /**
+     * Runs what follows a passkey's check in one transaction. If the passkey was disabled after verify()
+     * read it, e.g. by a "not me" report, nothing of it is kept, and the refusal is recorded after the
+     * rollback.
+     *
+     * @template T
+     *
+     * @param \Closure(): T $use
+     *
+     * @return T
+     */
+    private function inUse(Passkey $passkey, string $action, Origin $origin, \Closure $use): mixed
+    {
+        try {
+            return $this->transactions->run($use);
+        } catch (PasskeyRefused $refused) {
+            if (Refusal::PasskeyDisabled === $refused->refusal) {
+                $this->refuse($passkey, $action, Refusal::PasskeyDisabled, $origin, $refused);
+            }
+
+            throw $refused;
+        }
+    }
+
+    /**
      * Records a passkey's use, when it was last used; verify() recorded its counter and backup state.
+     * The first write of the sign-in: it waits for a change of the credential's status that's under way,
+     * and fails if the credential is no longer active.
+     *
+     * @throws PasskeyRefused When the passkey was disabled since verify() read it
      */
     private function recordUse(Passkey $passkey, Credential $credential, CounterSuspicion $counter, Origin $origin): void
     {
-        $this->credentials->markUsed($credential);
+        if (!$this->credentials->markUsed($credential->realm, $credential->id)) {
+            throw new PasskeyRefused(Refusal::PasskeyDisabled);
+        }
 
         if ($counter->suspected) {
             $this->log->record($passkey->realm, 'yorvoid.passkey.suspected_copy', Outcome::Success, $origin, $passkey->principalId, 'credential', (string) $passkey->credentialId, ['principal' => (string) $passkey->principalId]);

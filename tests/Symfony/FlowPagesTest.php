@@ -178,7 +178,7 @@ final class FlowPagesTest extends TestCase
         self::assertSame(['flow' => 'yorvoid.sign_in', 'id' => $id, 'status' => 'completed', 'step' => null, 'view' => null, 'problems' => [], 'redirect' => '/', 'notice' => null], $done);
         self::assertSame((string) $ana->id, $this->get('/me')['user']);
         self::assertSame(['passkey'], $this->get('/me')['methods']);
-        $log = $this->container->get(\YorvoID\Core\Log\SecurityLogStore::class);
+        $log = $this->container->get('yorvoid.store.security_log');
         \assert($log instanceof \YorvoID\Core\Log\SecurityLogStore);
         $starts = array_values(array_filter(iterator_to_array($log->entries(Realm::default(), 1), false), static fn (\YorvoID\Core\Log\LogEntry $entry): bool => 'yorvoid.session.start' === $entry->action));
         self::assertSame('yorvoid_flow_submit', $starts[\count($starts) - 1]->origin->detail, 'The origin names the route.');

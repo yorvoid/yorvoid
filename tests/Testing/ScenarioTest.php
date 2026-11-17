@@ -74,7 +74,7 @@ final class ScenarioTest extends TestCase
         $ana = $scenario->principal('ana@example.com');
         self::assertSame('acme', $ana->realm->name);
         self::assertEquals($ana, $this->service(Principals::class)->findByIdentifier(new Realm('acme'), IdentifierKind::Email, 'ana@example.com'));
-        self::assertTrue($this->service(IdentifierStore::class)->find(new Realm('acme'), IdentifierKind::Email, 'ana@example.com')?->isVerified());
+        self::assertTrue($this->store('yorvoid.store.identifier', IdentifierStore::class)->find(new Realm('acme'), IdentifierKind::Email, 'ana@example.com')?->isVerified());
         // Without an address, each gets a new one: no clash.
         self::assertNotEquals($scenario->principal()->id, $scenario->principal()->id);
 
@@ -180,5 +180,22 @@ final class ScenarioTest extends TestCase
         \assert($service instanceof $id);
 
         return $service;
+    }
+
+    /**
+     * A store, by its ID: the bridge has none under its interface.
+     *
+     * @template T of object
+     *
+     * @param class-string<T> $interface
+     *
+     * @return T
+     */
+    private function store(string $id, string $interface): object
+    {
+        $store = $this->container->get($id);
+        \assert($store instanceof $interface);
+
+        return $store;
     }
 }

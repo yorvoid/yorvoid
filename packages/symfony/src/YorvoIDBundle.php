@@ -20,7 +20,7 @@ use Symfony\Component\Translation\Translator;
 use Symfony\Component\VarDumper\Cloner\AbstractCloner;
 use Twig\Extension\AbstractExtension;
 use YorvoID\Authn\Session\Sessions;
-use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Operation\OperationHandler;
@@ -203,7 +203,7 @@ final class YorvoIDBundle extends AbstractBundle
 
         if (null !== $decisions) {
             \assert(\is_string($decisions));
-            $builder->getDefinition(DbalDecisionLogStore::class)->setArgument(1, new Reference(\sprintf('doctrine.dbal.%s_connection', $decisions)));
+            $builder->getDefinition(DependencyInjection\Stores::IDS[DecisionLogStore::class].'.dbal')->setArgument(1, new Reference(\sprintf('doctrine.dbal.%s_connection', $decisions)));
         }
 
         $completed = $settings['flows.completed_paths'];

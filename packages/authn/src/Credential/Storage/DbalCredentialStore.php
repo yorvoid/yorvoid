@@ -72,19 +72,37 @@ final readonly class DbalCredentialStore implements CredentialStore
         return $credentials;
     }
 
-    public function update(Credential $credential): void
+    public function rename(Realm $realm, CredentialId $id, string $label): bool
     {
-        $this->database->connection->update(
+        return 1 === $this->database->connection->update($this->database->table(self::TABLE), ['label' => $label], self::key($realm, $id));
+    }
+
+    public function markUsed(Realm $realm, CredentialId $id, \DateTimeImmutable $at): bool
+    {
+        return 1 === $this->database->connection->update(
             $this->database->table(self::TABLE),
-            ['label' => $credential->label, 'last_used_at' => $credential->lastUsedAt, 'status' => $credential->status->value],
-            ['realm' => $credential->realm->name, 'id' => $credential->id->uuid->toRfc4122()],
+            ['last_used_at' => $at],
+            [...self::key($realm, $id), 'status' => CredentialStatus::Active->value],
             self::TIMES,
         );
     }
 
+    public function disable(Realm $realm, CredentialId $id): bool
+    {
+        return 1 === $this->database->connection->update($this->database->table(self::TABLE), ['status' => CredentialStatus::Disabled->value], self::key($realm, $id));
+    }
+
     public function remove(Realm $realm, CredentialId $id): bool
     {
-        return 1 === $this->database->connection->delete($this->database->table(self::TABLE), ['realm' => $realm->name, 'id' => $id->uuid->toRfc4122()]);
+        return 1 === $this->database->connection->delete($this->database->table(self::TABLE), self::key($realm, $id));
+    }
+
+    /**
+     * @return array{realm: string, id: string}
+     */
+    private static function key(Realm $realm, CredentialId $id): array
+    {
+        return ['realm' => $realm->name, 'id' => $id->uuid->toRfc4122()];
     }
 
     /**

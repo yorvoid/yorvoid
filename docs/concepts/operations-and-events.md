@@ -1,6 +1,6 @@
 # Operations and events
 
-Everything that changes YorvoID's state is an **operation**: a command object, handled by a service, inside one transaction. Each operation dispatches events, and is recorded in the security log.
+Everything that changes YorvoID's state is an **operation**: a command object, handled by a service, inside one transaction. Each operation dispatches events, and is recorded in the security log. The rest is recorded on the way, or is bookkeeping: what a sign-in or a step-up writes is logged as part of it, a session's new token too (`Sessions::refresh()`), and the last time a session or a credential was used isn't. Stores are written only through these ([interfaces you implement](../compatibility.md#interfaces-you-implement)).
 
 ## Operations
 

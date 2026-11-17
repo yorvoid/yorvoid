@@ -14,6 +14,8 @@ use YorvoID\Core\Realm;
  * increments the version first, which serializes them per realm.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface PolicyStore
 {

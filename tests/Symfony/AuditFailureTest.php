@@ -63,7 +63,7 @@ final class AuditFailureTest extends TestCase
         $operations = $container->get(Operations::class);
         \assert($operations instanceof Operations);
 
-        $store = $container->get(DbalDecisionLogStore::class);
+        $store = $container->get('yorvoid.store.decision_log.dbal');
         \assert($store instanceof DbalDecisionLogStore);
         self::assertTrue($store->writesApart(), 'On the connection configured for it.');
         self::assertTrue($checker->isGranted('acme.pages.view'), 'Recorded, it\'s permitted.');
@@ -84,7 +84,7 @@ final class AuditFailureTest extends TestCase
 
     public function testDecisionsAreWrittenOnTheApplicationsConnectionByDefault(): void
     {
-        $store = $this->boot([])->get(DbalDecisionLogStore::class);
+        $store = $this->boot([])->get('yorvoid.store.decision_log.dbal');
         \assert($store instanceof DbalDecisionLogStore);
 
         self::assertFalse($store->writesApart());

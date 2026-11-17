@@ -29,6 +29,11 @@ foreach ($optional[$package] ?? [] as $suggested) {
         : $config->ignoreErrorsOnPackage($suggested, [ErrorType::SHADOW_DEPENDENCY]);
 }
 
+// PHPStan's phar brings nikic/php-parser: rules take its nodes, as PHPStan's own API.
+if ('phpstan-rules' === $package) {
+    $config->ignoreErrorsOnPackage('nikic/php-parser', [ErrorType::SHADOW_DEPENDENCY]);
+}
+
 // Required for what they bring rather than for classes: the security bundle the firewall needs, the
 // translations the bundle registers.
 if ('symfony' === $package) {

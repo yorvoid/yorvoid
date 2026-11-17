@@ -11,6 +11,7 @@ use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\CredentialStatus;
+use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
 use YorvoID\Authn\Credential\RemoveCredential;
 use YorvoID\Authn\Session\AuthenticationContext;
@@ -54,6 +55,7 @@ use YorvoID\Passkeys\SignInWithPasskey;
 use YorvoID\Passkeys\UserVerification;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
+use YorvoID\Tests\Support\ReadThenRun;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 use YorvoID\Throttle\Limit;
@@ -891,7 +893,48 @@ final class PasskeysTest extends DatabaseTestCase
         self::assertStringContainsString('excludeCredentials', $passkeys->beginRegistration($session)->options);
     }
 
-    private function passkeys(string $implementation, UserVerification $userVerification = UserVerification::Required, ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn, AttemptLimits $limits = new AttemptLimits(), ?PasskeyStore $store = null, ?CryptoPolicy $crypto = null): Passkeys
+    /**
+     * The passkey is disabled, e.g. by a "not me" report, after the sign-in checked it and before it
+     * marks its use (ARC-0057): the sign-in is refused and recorded, and the passkey stays disabled.
+     * Writing the sign-in's copy of the credential back would make it active again.
+     */
+    #[DataProvider('implementations')]
+    public function testASignInFailsWhenItsPasskeyIsDisabledMeanwhile(string $implementation): void
+    {
+        $this->stack = $this->stack($implementation);
+        $reading = new ReadThenRun($this->stack->credentials, 'get');
+        $passkeys = $this->passkeys($implementation, store: $this->stack->passkeys, credentialStore: $reading);
+        $session = $this->session(email: 'ana@example.com');
+        $authenticator = new VirtualAuthenticator();
+        $stack = $this->stack;
+
+        foreach (['sign-in', 'step-up'] as $index => $kind) {
+            $ceremony = $passkeys->beginRegistration($session);
+            $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key '.$index), new Origin(OriginKind::Web), $session);
+            $reading->ran = false;
+            $reading->arm(static function () use ($stack, $credential): void {
+                $stack->credentials->disable($credential->realm, $credential->id);
+            });
+            $before = \count(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false));
+
+            if ('sign-in' === $kind) {
+                $signIn = $passkeys->beginSignIn(new Realm('acme'));
+                $this->refused(Refusal::PasskeyDisabled, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: $index)), new Origin(OriginKind::Web)));
+            } else {
+                $stepUp = $passkeys->beginStepUp($session, new AuthenticationRequirement(Duration::minutes(5), operation: 'acme.site.remove'));
+                $this->refused(Refusal::PasskeyDisabled, static fn () => $passkeys->finishStepUp($session, $stepUp->id, $authenticator->signIn($stepUp->options, credential: $index), new Origin(OriginKind::Web)));
+            }
+
+            $kept = $this->stack->credentials->get(new Realm('acme'), $credential->id);
+            self::assertTrue($reading->ran, $kind.': the check never read the credential.');
+            self::assertSame(CredentialStatus::Disabled, $kept?->status, $kind.': the sign-in made the disabled passkey active again.');
+            self::assertNull($kept->lastUsedAt, $kind.': a disabled passkey was marked as used.');
+            $entries = \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), $before);
+            self::assertSame([[Outcome::Failed, Refusal::PasskeyDisabled->value]], array_map(static fn (LogEntry $entry): array => [$entry->outcome, $entry->details['reason'] ?? null], $entries), $kind.': expected one recorded refusal.');
+        }
+    }
+
+    private function passkeys(string $implementation, UserVerification $userVerification = UserVerification::Required, ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn, AttemptLimits $limits = new AttemptLimits(), ?PasskeyStore $store = null, ?CryptoPolicy $crypto = null, ?CredentialStore $credentialStore = null): Passkeys
     {
         // Another store keeps the stack: the same passkeys, read through it.
         $this->stack = null === $store ? $this->stack($implementation) : $this->stack;
@@ -902,7 +945,7 @@ final class PasskeysTest extends DatabaseTestCase
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock);
-        $this->credentials = new Credentials($this->stack->credentials, $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        $this->credentials = new Credentials($credentialStore ?? $this->stack->credentials, $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
 
         return new Passkeys($store ?? $this->stack->passkeys, $this->stack->ceremonies, $this->credentials, $this->sessions, $this->principals, $log, $this->stack->transactions, new PasskeyPolicy('example.com', ['https://example.com'], $userVerification, $clonePolicy, crypto: $crypto), new Attempts(new Throttle($this->stack->throttle, $this->clock), $limits), $ids, $this->clock);
     }

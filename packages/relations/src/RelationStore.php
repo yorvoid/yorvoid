@@ -13,6 +13,8 @@ use YorvoID\Core\Realm;
  * transaction, so what's cached against it is never used once stale (AUZ-031, D-10).
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface RelationStore
 {

@@ -11,6 +11,8 @@ use YorvoID\Core\Realm;
  * Where one-time tokens are kept: each with the SHA-256 hash of its verifier, never the verifier.
  *
  * @api
+ *
+ * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
 interface OneTimeTokenStore
 {

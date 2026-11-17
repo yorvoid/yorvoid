@@ -6,7 +6,8 @@ $finder = new PhpCsFixer\Finder()
     ->in(__DIR__)
     ->exclude(['var', 'vendor', 'packages/browser/node_modules'])
     // Code that breaks the rules on purpose, to test them.
-    ->notPath('tests/Tools/PHPStan/data');
+    ->notPath('tests/Tools/PHPStan/data')
+    ->notPath('tests/PhpstanRules/data');
 
 return new PhpCsFixer\Config()
     ->setRiskyAllowed(true)

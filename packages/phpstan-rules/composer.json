@@ -1,0 +1,45 @@
+{
+    "name": "yorvoid/phpstan-rules",
+    "type": "phpstan-extension",
+    "description": "PHPStan rules for an application that uses YorvoID: they flag a call to one of YorvoID's stores, which are for implementing, not calling, and to what YorvoID marks @internal.",
+    "keywords": [
+        "phpstan",
+        "static-analysis",
+        "authorization",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "contact@yorvolabs.com"
+        }
+    ],
+    "support": {
+        "email": "contact@yorvolabs.com",
+        "issues": "https://github.com/yorvoid/yorvoid/issues",
+        "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/phpstan-rules",
+        "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+        "security": "https://github.com/yorvoid/yorvoid/security/policy"
+    },
+    "require": {
+        "php": ">=8.4",
+        "phpstan/phpstan": "^2.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\PhpstanRules\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.5.x-dev"
+        },
+        "phpstan": {
+            "includes": [
+                "rules.neon"
+            ]
+        }
+    }
+}

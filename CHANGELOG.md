@@ -4,6 +4,24 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ## Unreleased
 
+### Added
+
+- `yorvoid/phpstan-rules`, PHPStan rules for an application: `yorvoid.storeCall` flags a call to one of YorvoID's stores, `yorvoid.internalUse` a use of what YorvoID marks `@internal` ([how-to](docs/how-to/phpstan-rules.md)).
+- `@spi` marks the interfaces you implement and don't call: YorvoID's stores ([interfaces you implement](docs/compatibility.md#interfaces-you-implement)).
+
+### Breaking
+
+- `CredentialStore::update()` is gone. A store writes only what each change is about: `rename()` the label, `markUsed()` the last use, of an active credential only, and `disable()` the status. Each says whether it changed anything. A store of your own implements the three; `CredentialStoreContract` checks them, with a second instance over the same data (`sameCredentialStore()`), which you override for a store processes share.
+- `Credentials::markUsed()` takes the realm and the credential's ID, returns whether the credential was still active, and is `@internal`: it's for the packages that check credentials.
+- In Symfony, YorvoID's stores are services under IDs of their own, `yorvoid.store.<name>` (e.g. `yorvoid.store.session`), and no longer under their interfaces or classes: your services don't get a store by autowiring. A store of your own replaces YorvoID's by aliasing its ID, not its interface ([stores of your own](docs/concepts/storage.md#stores-of-your-own)).
+- `Sessions::stepUp()`, `Credentials::disable()`, `Credentials::forgetAllOf()` and `StepUp::startCoolDown()` are `@internal`: YorvoID's packages call them inside the operations that cause them (a passkey's step-up, a "This wasn't me" report, a deleted principal, a recovery). An application steps a session up with `Passkeys::beginStepUp()` and `finishStepUp()`, and removes a credential with `RemoveCredential` (AR-01).
+
+### Security
+
+- YorvoID's stores are marked `@spi`: implement them, don't call them. A call changes YorvoID's records without a decision or a log entry, as writing the database does ([interfaces you implement](docs/compatibility.md#interfaces-you-implement)). The Symfony bridge doesn't give them to application code (AR-01).
+- `Sessions::refresh()` records each new token in the security log (`yorvoid.session.refresh`), as a sign-in and a step-up do: it issues a credential (AR-01).
+- A passkey or a set of recovery codes disabled during a sign-in that uses it, e.g. by a "This wasn't me" report, stays disabled. Before, the sign-in wrote back its own copy of the credential, active, and went on. Now the sign-in is refused and recorded, and a recovery code it would have used is kept (ARC-0057).
+
 ### Fixed
 
 - The stores convert values through the connection (`Connection::convertToPHPValue()`), not `Type::getType()`, which Doctrine DBAL 4.6 deprecates: no deprecations with DBAL 4.6.

@@ -33,6 +33,8 @@ use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Event\SecurityLogEntryRecorded;
+use YorvoID\Core\Log\LogEntry;
+use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\OperationCancelled;
 use YorvoID\Core\Operation\OperationCatalogue;
@@ -297,11 +299,18 @@ final class SessionsTest extends DatabaseTestCase
         self::assertFalse($token->equals($started->token));
         self::assertNull($sessions->validate(new Realm('acme'), $started->token), 'The old token still works.');
         self::assertEquals($started->session, $sessions->validate(new Realm('acme'), $token));
-        self::assertSame([SessionRefreshed::class], $this->events->classes());
+        self::assertSame([SecurityLogEntryRecorded::class, SessionRefreshed::class], $this->events->classes());
+        $refreshes = array_values(array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.session.refresh' === $entry->action));
+        self::assertCount(1, $refreshes, 'A new token wasn\'t recorded.');
+        self::assertSame(Outcome::Success, $refreshes[0]->outcome);
+        self::assertEquals($started->session->principalId, $refreshes[0]->actor);
+        self::assertSame(['session', (string) $started->session->id], [$refreshes[0]->subjectType, $refreshes[0]->subjectId]);
+        self::assertSame(['principal' => (string) $started->session->principalId], $refreshes[0]->details);
 
         Permits::call($sessions->end(...), new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
         self::assertNull($sessions->refresh(new Realm('acme'), $started->session->id, new Origin(OriginKind::Web)), 'An ended session got a new token.');
         self::assertNull($sessions->refresh(new Realm('globex'), $started->session->id, new Origin(OriginKind::Web)));
+        self::assertCount(1, array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.session.refresh' === $entry->action), 'A refresh that issued nothing was recorded.');
     }
 
     #[DataProvider('implementations')]

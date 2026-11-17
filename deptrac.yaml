@@ -35,6 +35,10 @@ deptrac:
       collectors:
         - type: classLike
           value: ^YorvoID\\Policy\\.*
+    - name: PhpstanRules
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\PhpstanRules\\.*
     - name: PolicyTesting
       collectors:
         - type: classLike
@@ -112,6 +116,8 @@ deptrac:
     Policy:
       - Core
       - Relations
+    # For an application's PHPStan: it reads YorvoID's classes through PHPStan's reflection, and names none.
+    PhpstanRules: ~
     # A development tool: nothing else refers to it, neither the bridge production runs nor the store
     # contracts it builds on (M2-5).
     PolicyTesting:

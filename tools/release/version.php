@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * The version main is heading for, in every place that names it: each package's branch alias
- * (0.4.x-dev), what the packages require of each other (^0.4), the monorepo's own composer.json, the
+ * (0.4.x-dev), what the packages require of each other (^0.4; ~1.2.0 after 1.0), the monorepo's own composer.json, the
  * store kit's project and the snippets in the docs. All packages are released together, so a set
  * installs only when they require each other at the version they're released with (ADR-0005).
  *
@@ -52,6 +52,10 @@ if (!is_string($alias) || 1 !== preg_match('/^(\d+\.\d+)\.x-dev$/D', $alias, $ma
 
 $minor = 'set' === $action ? $argument : $match[1];
 $constraint = '^'.$minor;
+// What the packages require of each other: the same minor, also after 1.0 (~1.2.0, not ^1.2). A
+// package may use a sibling's @internal members, which are added, changed or removed only in a minor
+// release (D-41), so a set mixes patch releases of one minor, never two minors.
+$sibling = str_starts_with($minor, '0.') ? $constraint : '~'.$minor.'.0';
 $dev = $minor.'.x-dev';
 $problems = [];
 $relative = static fn (string $path): string => substr($path, strlen($root) + 1);
@@ -105,10 +109,10 @@ foreach ($composerFiles as $path) {
         $requires = $members($json)[$section] ?? null;
 
         foreach ($members($requires) as $name => $required) {
-            if (str_starts_with($name, 'yorvoid/') && $required !== $constraint) {
+            if (str_starts_with($name, 'yorvoid/') && $required !== $sibling) {
                 assert($requires instanceof stdClass);
-                $problems[] = sprintf('%s requires %s at "%s", not "%s".', $relative($path), $name, $text($required), $constraint);
-                $requires->{$name} = $constraint;
+                $problems[] = sprintf('%s requires %s at "%s", not "%s".', $relative($path), $name, $text($required), $sibling);
+                $requires->{$name} = $sibling;
                 $changed = true;
             }
         }
@@ -172,4 +176,4 @@ if ([] !== $problems) {
     exit(1);
 }
 
-echo sprintf("Every package requires the others at %s, and main is %s.%s\n", $constraint, $dev, null !== $argument ? ' Packagist has every package.' : '');
+echo sprintf("Every package requires the others at %s, and main is %s.%s\n", $sibling, $dev, null !== $argument ? ' Packagist has every package.' : '');

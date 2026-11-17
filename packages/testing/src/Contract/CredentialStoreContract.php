@@ -76,23 +76,64 @@ trait CredentialStoreContract
     }
 
     #[DataProvider('implementations')]
-    public function testUpdatesAndRemovesOnlyInItsRealm(string $implementation): void
+    public function testChangesAndRemovesOnlyInItsRealm(string $implementation): void
     {
         $store = $this->credentialStore($implementation);
         $credential = self::credential(new Realm('acme'), new PrincipalId(new UuidV7()));
         $store->add($credential);
-        $changed = new Credential($credential->id, $credential->realm, $credential->principalId, $credential->kind, 'YubiKey', $credential->createdAt, new \DateTimeImmutable('2026-10-28 08:00:00 UTC'), CredentialStatus::Disabled);
-        $elsewhere = new Credential($credential->id, new Realm('globex'), $credential->principalId, $credential->kind, 'Hijacked', $credential->createdAt);
+        $at = new \DateTimeImmutable('2026-10-28 08:00:00 UTC');
 
-        $store->update($elsewhere);
+        self::assertFalse($store->rename(new Realm('globex'), $credential->id, 'Hijacked'));
+        self::assertFalse($store->markUsed(new Realm('globex'), $credential->id, $at));
+        self::assertFalse($store->disable(new Realm('globex'), $credential->id));
         self::assertEquals($credential, $store->get(new Realm('acme'), $credential->id));
-        $store->update($changed);
-        self::assertEquals($changed, $store->get(new Realm('acme'), $credential->id));
+
+        self::assertTrue($store->rename(new Realm('acme'), $credential->id, 'YubiKey'));
+        self::assertTrue($store->markUsed(new Realm('acme'), $credential->id, $at));
+        self::assertTrue($store->disable(new Realm('acme'), $credential->id));
+        self::assertEquals(new Credential($credential->id, $credential->realm, $credential->principalId, $credential->kind, 'YubiKey', $credential->createdAt, $at, CredentialStatus::Disabled), $store->get(new Realm('acme'), $credential->id));
 
         self::assertFalse($store->remove(new Realm('globex'), $credential->id));
         self::assertTrue($store->remove(new Realm('acme'), $credential->id));
         self::assertFalse($store->remove(new Realm('acme'), $credential->id));
         self::assertNull($store->get(new Realm('acme'), $credential->id));
+        self::assertFalse($store->rename(new Realm('acme'), $credential->id, 'Gone'));
+        self::assertFalse($store->markUsed(new Realm('acme'), $credential->id, $at));
+        self::assertFalse($store->disable(new Realm('acme'), $credential->id));
+    }
+
+    /**
+     * Each change writes only what it's about: a sign-in that read the credential before it was
+     * disabled can't make it active again, and neither can a rename.
+     */
+    #[DataProvider('implementations')]
+    public function testADisabledCredentialStaysDisabled(string $implementation): void
+    {
+        $store = $this->credentialStore($implementation);
+        $credential = self::credential(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $store->add($credential);
+        $other = $this->sameCredentialStore($implementation, $store);
+        $stale = $other->get(new Realm('acme'), $credential->id);
+        self::assertNotNull($stale);
+        self::assertTrue($stale->isActive());
+
+        self::assertTrue($store->disable(new Realm('acme'), $credential->id));
+
+        self::assertFalse($other->markUsed(new Realm('acme'), $stale->id, new \DateTimeImmutable('2026-10-28 08:00:00 UTC')), 'A disabled credential was marked as used.');
+        self::assertTrue($other->rename(new Realm('acme'), $stale->id, 'YubiKey'));
+        $kept = $store->get(new Realm('acme'), $credential->id);
+        self::assertSame(CredentialStatus::Disabled, $kept?->status, 'A change from a stale copy made the credential active again.');
+        self::assertNull($kept->lastUsedAt);
+        self::assertSame('YubiKey', $kept->label);
+    }
+
+    /**
+     * The store as another process sees it, over the same records: the same instance unless you
+     * override it, which you do for a store processes share.
+     */
+    protected function sameCredentialStore(string $implementation, CredentialStore $store): CredentialStore
+    {
+        return $store;
     }
 
     private static function credential(Realm $realm, PrincipalId $principal): Credential

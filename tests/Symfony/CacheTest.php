@@ -14,9 +14,7 @@ use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Installation;
 use YorvoID\Core\Storage\Migration\Migrator;
 use YorvoID\Core\Storage\VersionedCache;
-use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\Storage\CachedPolicyStore;
-use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\Storage\CachedRelationStore;
 use YorvoID\Symfony\Migrations;
 use YorvoID\Tests\Symfony\App\TestKernel;
@@ -45,8 +43,8 @@ final class CacheTest extends TestCase
     public function testWhatDecisionsReadIsKeptInYorvoIDsPool(): void
     {
         $container = $this->boot([]);
-        self::assertInstanceOf(CachedPolicyStore::class, $container->get(PolicyStore::class));
-        self::assertInstanceOf(CachedRelationStore::class, $container->get(RelationStore::class));
+        self::assertInstanceOf(CachedPolicyStore::class, $container->get('yorvoid.store.policy'));
+        self::assertInstanceOf(CachedRelationStore::class, $container->get('yorvoid.store.relation'));
         $installation = $container->get(Installation::class);
         \assert($installation instanceof Installation);
         $pool = $container->get('yorvoid.cache');

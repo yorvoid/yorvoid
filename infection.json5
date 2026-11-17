@@ -79,6 +79,10 @@
             ]
         },
         "MethodCallRemoval": {
+            "ignore": [
+                // Equivalent: an exception with no message, only ever caught by RecoveryCodes.
+                "YorvoID\\Authn\\Recovery\\CredentialDisabledMeanwhile::__construct"
+            ],
             "ignoreSourceCodeByRegex": [
                 // Equivalent: IntentChecks checks the answer's origin itself, byte for byte, before the
                 // library's ceremony runs; the library's own check is a second one.
