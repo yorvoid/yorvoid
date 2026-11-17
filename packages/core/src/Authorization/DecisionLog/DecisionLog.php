@@ -253,11 +253,16 @@ final class DecisionLog implements AttemptLog
             return $write(true);
         }
 
-        // With no transaction open, afterEnd() runs it at once, and it's known whether it was written.
+        // Run at once (no transaction open, or one whose end can't be seen): the store tells whether it's
+        // apart, and it's known whether it was written. Deferred: apart, since the caller's transaction
+        // has ended (C5).
         $written = null;
-        $this->transactions->afterEnd(static function () use ($write, &$written): void {
-            $written = $write(true);
+        /** @var \ArrayObject<string, bool> $queue Whether afterEnd() returned before the write ran */
+        $queue = new \ArrayObject(['deferred' => false]);
+        $this->transactions->afterEnd(static function () use ($write, &$written, $queue): void {
+            $written = $write(true === $queue['deferred'] ? true : null);
         });
+        $queue['deferred'] = true;
 
         return $written;
     }

@@ -22,6 +22,7 @@ use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
+use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Badges;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -151,6 +152,36 @@ final class DecisionDigestsTest extends DatabaseTestCase
         self::assertTrue($digests->verify($realm)->isIntact());
         $database->connection->executeStatement(\sprintf('DELETE FROM %s WHERE realm = ?', $database->table(DbalDecisionLogStore::TABLE)), [$realm->name]);
         self::assertFalse($digests->verify($realm)->isIntact(), 'Deleting the attempt and the refusal went unnoticed.');
+    }
+
+    /**
+     * Without YorvoID's middleware the end of the application's transaction can't be seen, so a refusal
+     * is written at once, inside it: left to the store to tell, it's not digested, and a transaction that
+     * stays open across a digest isn't taken for a forgery (C5 of G-4).
+     */
+    public function testARefusalWrittenInsideATransactionWithoutTheMiddlewareIsntTakenForAForgery(): void
+    {
+        $stack = $this->stack('postgresql');
+        $database = $stack->database;
+        \assert($database instanceof Database);
+        $digests = $this->digests($stack);
+        $realm = new Realm('acme');
+        $plain = new DbalTransactions($database->connection);
+        $log = new SecurityLog($stack->log, $plain, attempts: new DecisionLog($stack->decisions, transactions: $plain));
+
+        // One written apart before: the digest taken while the transaction is open has an entry whose
+        // window spans the refusal's time.
+        $stack->decisions->add([self::record()], true);
+        $database->connection->beginTransaction();
+        $log->attempt($realm, 'yorvoid.setup.claim', Outcome::Failed, new Origin(OriginKind::Web));
+        self::wait();
+        self::assertSame(1, $this->digests($this->stack('postgresql'))->take($realm)?->details['count'] ?? null);
+        $database->connection->commit();
+        self::wait();
+        $digests->take($realm);
+
+        $verified = $digests->verify($realm);
+        self::assertTrue($verified->isIntact(), implode(' ', $verified->problems));
     }
 
     private function digests(Stack $stack): DecisionDigests
