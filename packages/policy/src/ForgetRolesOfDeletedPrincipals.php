@@ -26,7 +26,7 @@ final readonly class ForgetRolesOfDeletedPrincipals
             return;
         }
 
-        $this->store->bump($event->after->realm);
+        // The store increments the version itself; nothing is read first, so there's nothing to lock.
         $this->store->forgetPrincipal($event->after->realm, $event->after->id);
     }
 }

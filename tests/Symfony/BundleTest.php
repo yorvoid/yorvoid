@@ -26,6 +26,7 @@ use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Crypto\CryptoMode;
@@ -528,7 +529,7 @@ final class BundleTest extends TestCase
         \assert($principals instanceof Principals && $stepUp instanceof StepUp);
         $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::Console));
 
-        $stepUp->startCoolDown(Realm::default(), $ana->id, new Origin(OriginKind::Console));
+        Permits::call($stepUp->startCoolDown(...), new StartCoolDown(Realm::default(), $ana->id), new Origin(OriginKind::Console));
 
         self::assertNotNull($stepUp->coolDownEndsAt(Realm::default(), $ana->id));
     }

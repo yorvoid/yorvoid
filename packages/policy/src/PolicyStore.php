@@ -10,8 +10,10 @@ use YorvoID\Core\Realm;
 
 /**
  * A realm's policy as data: the roles created in it, its changes to the declared defaults, who has
- * which role, and a version that every change increments (AUZ-009). Changes run in a transaction that
- * increments the version first, which serializes them per realm.
+ * which role, and a version that every change increments (AUZ-009). Each change increments it itself,
+ * before it writes, so what's cached against the version is never older than what's stored (SS-05).
+ * A change that reads first, e.g. the changes it adds to, calls bump() before it reads: the realm's
+ * changes then go one after another.
  *
  * @api
  *
@@ -101,7 +103,8 @@ interface PolicyStore
     public function version(Realm $realm): int;
 
     /**
-     * Increments the version and holds it until the transaction ends, so changes of one realm don't interleave.
+     * Increments the version and holds it until the transaction ends, so changes of one realm don't
+     * interleave. Every change does it itself; call it before reading what a change depends on.
      *
      * @return int The new version
      */

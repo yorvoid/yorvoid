@@ -26,6 +26,7 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\HeldAfterRecovery;
+use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Core\Crypto\Digest;
@@ -280,7 +281,7 @@ final readonly class RecoveryCodes implements OperationHandler
         $permit->about($principalId);
         $recovered = new ActingPrincipal($realm, $principalId);
         $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $recovered);
-        $this->stepUp->startCoolDown($realm, $principalId, $origin);
+        $permit->cause($this->stepUp->startCoolDown(...), new StartCoolDown($realm, $principalId), $origin);
         $started = $permit->cause($this->sessions->start(...), new StartSession($realm, $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now())), $device, $address, $deviceCookie), $origin, $recovered);
 
         $this->transactions->afterCommit(function () use ($realm, $principalId, $remaining, $origin): void {

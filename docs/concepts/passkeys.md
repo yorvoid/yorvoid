@@ -64,14 +64,17 @@ A refused attempt throws `PasskeyRefused`. Show its message: it's the same for e
 When an operation needs a recent proof of identity, `NotPermitted` carries a `StepUpRemedy` ([remedies](authorization.md#remedies)), or `StepUpRequired` its requirement where a service asks itself, e.g. adding a passkey (see [step-up](step-up.md)). The person confirms it's them with one of their passkeys:
 
 ```php
+use YorvoID\Passkeys\StepUpWithPasskey;
+
 $ceremony = $passkeys->beginStepUp($session, $refusal->requirement);
 // The browser calls navigator.credentials.get(); it offers only this person's passkeys.
 
-$token = $passkeys->finishStepUp($session, $ceremonyId, $responseFromTheBrowser, $origin);
+$token = $operations->run(new StepUpWithPasskey($session->realm, $ceremonyId, $responseFromTheBrowser), $session, $origin);
 ```
 
+- `StepUpWithPasskey` is an operation, run from the session: decided and recorded like a sign-in.
 - The ceremony belongs to the session that began it, and the answer must come from one of its principal's active passkeys.
-- The proof counts for the requirement's operation only, and the session gets a new token: replace the old one in its cookie, or in your session under a new session ID ([sessions](sessions.md#starting-a-session)).
+- The proof counts for the operation the ceremony was begun for, whatever the answer says, and the session gets a new token: replace the old one in its cookie, or in your session under a new session ID ([sessions](sessions.md#starting-a-session)).
 - A requirement of two factors asks the device for user verification, whatever the policy.
 - A principal without an active passkey gets `PasskeyRefused` with `Refusal::NoPasskey`: offer another way, e.g. a recovery code.
 
@@ -98,6 +101,8 @@ Hardware keys count their signatures. If a sign-in reports a count that didn't g
 | `Allow` | Let it through, and record it. `yorvoid:doctor` warns about this |
 
 Passkeys that sync between devices always report 0 and are never suspected. Whether a passkey syncs (its backup flags) is recorded, and isn't a reason to refuse it.
+
+Run sign-ins and step-ups outside your own database transaction. Inside one, a rollback also undoes the disabling of a copied passkey (until 0.5's G-4), e.g. under Messenger's `doctrine_transaction` middleware. The Symfony bridge doesn't open one.
 
 ## Removing a passkey
 

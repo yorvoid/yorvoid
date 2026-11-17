@@ -26,7 +26,7 @@ final class InternalUseRuleTest extends RuleTestCase
     public function testFlagsAnApplicationsUseOfYorvoIDsInternals(): void
     {
         $this->analyse([__DIR__.'/data/internal-uses.php'], [
-            ['YorvoID\\Authn\\Session\\Sessions::stepUp() is internal to YorvoID: it\'s for YorvoID\'s own packages, and changes in any minor release. Your application doesn\'t use it.', 28, 'See https://github.com/yorvoid/yorvoid/blob/main/docs/compatibility.md#whats-covered'],
+            ['YorvoID\\Authn\\Credential\\Credentials::markUsed() is internal to YorvoID: it\'s for YorvoID\'s own packages, and changes in any minor release. Your application doesn\'t use it.', 28, 'See https://github.com/yorvoid/yorvoid/blob/main/docs/compatibility.md#whats-covered'],
             ['YorvoID\\Authn\\Credential\\Credentials::markUsed() is internal to YorvoID: it\'s for YorvoID\'s own packages, and changes in any minor release. Your application doesn\'t use it.', 29, 'See https://github.com/yorvoid/yorvoid/blob/main/docs/compatibility.md#whats-covered'],
             ['YorvoID\\Authn\\Credential\\Credentials::session() is internal to YorvoID: it\'s for YorvoID\'s own packages, and changes in any minor release. Your application doesn\'t use it.', 31, 'See https://github.com/yorvoid/yorvoid/blob/main/docs/compatibility.md#whats-covered'],
             ['YorvoID\\Policy\\RoleAssignment::applies() is internal to YorvoID: it\'s for YorvoID\'s own packages, and changes in any minor release. Your application doesn\'t use it.', 32, 'See https://github.com/yorvoid/yorvoid/blob/main/docs/compatibility.md#whats-covered'],

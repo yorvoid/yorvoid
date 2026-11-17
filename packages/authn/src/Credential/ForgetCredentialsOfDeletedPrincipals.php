@@ -33,7 +33,8 @@ final readonly class ForgetCredentialsOfDeletedPrincipals
             return;
         }
 
-        $this->credentials->forgetAllOf($event->after->realm, $event->after->id, $event->origin, $event->actor);
+        // On the deletion's permit: forgetting is what DeletePrincipal causes.
+        $event->permit->cause($this->credentials->forgetAll(...), new ForgetCredentials($event->after->realm, $event->after->id), $event->origin);
         $this->recoveryCodes->replace($event->after->realm, $event->after->id, [], $this->clock->now());
     }
 }

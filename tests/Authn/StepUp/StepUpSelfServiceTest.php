@@ -12,7 +12,9 @@ use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\StepUp\SessionStepUpCheck;
+use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpSelfService;
 use YorvoID\Core\Authorization\Evaluator;
@@ -94,7 +96,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
 
         self::assertSame('ana@example.org', $this->principals->identifiers(new Realm('acme'), $session->principalId)['email']->value ?? null);
 
-        $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.identifier.remove'), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->stepUp(...), new StepUpSession($session->realm, $session->id, $session->principalId, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.identifier.remove')), new Origin(OriginKind::Web));
         $identifiers->run(new RemoveIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email), $session, new Origin(OriginKind::Web));
         self::assertSame([], $this->principals->identifiers(new Realm('acme'), $session->principalId));
     }
@@ -104,7 +106,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
     {
         $identifiers = $this->identifiers($implementation, Duration::hours(24));
         $session = $this->session();
-        $this->stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
+        Permits::call($this->stepUp->startCoolDown(...), new StartCoolDown(new Realm('acme'), $session->principalId), new Origin(OriginKind::Web));
 
         try {
             $identifiers->run(new SetIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email, 'thief@example.net'), $session, new Origin(OriginKind::Web));
@@ -122,7 +124,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
         $identifiers = $this->identifiers($implementation, Duration::hours(24));
         $session = $this->session();
         Permits::call($this->principals->setIdentifier(...), new SetIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email, 'ana@example.com'), new Origin(OriginKind::Console));
-        $this->stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
+        Permits::call($this->stepUp->startCoolDown(...), new StartCoolDown(new Realm('acme'), $session->principalId), new Origin(OriginKind::Web));
 
         try {
             $identifiers->run(new RemoveIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email), $session, new Origin(OriginKind::Web));
@@ -228,10 +230,10 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
         self::assertSame([$required], $old->remedies);
         self::assertSame('Only a session proves who it is.', $check->check(new Operator(), $required)->detail);
 
-        $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->stepUp(...), new StepUpSession($session->realm, $session->id, $session->principalId, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true)), new Origin(OriginKind::Web));
         self::assertSame(TruthValue::Holds, $check->check($session, $required)->value);
 
-        $this->stepUp->startCoolDown(new Realm('acme'), $session->principalId, new Origin(OriginKind::Web));
+        Permits::call($this->stepUp->startCoolDown(...), new StartCoolDown(new Realm('acme'), $session->principalId), new Origin(OriginKind::Web));
         $held = $check->check($session, $required);
         self::assertSame('The account was recovered recently.', $held->detail);
         self::assertEquals([new WaitRemedy($this->clock->now()->modify('+24 hours'), WaitReason::Recovered)], $held->remedies, 'Held while a recovery cools down.');

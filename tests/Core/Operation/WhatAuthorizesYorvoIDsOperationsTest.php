@@ -35,6 +35,8 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.ability.set' => ['ability', 'operator'],
         'yorvoid.attribute.set' => ['ability', 'operator'],
         'yorvoid.credential.add' => ['consequence'],
+        'yorvoid.credential.disable' => ['consequence'],
+        'yorvoid.credential.forget_all' => ['consequence'],
         'yorvoid.credential.remove' => ['self'],
         'yorvoid.credential.rename' => ['self'],
         'yorvoid.email_verification.confirm' => ['authentication'],
@@ -55,10 +57,12 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.notification.not_me' => ['authentication'],
         'yorvoid.passkey.register' => ['self'],
         'yorvoid.passkey.sign_in' => ['authentication'],
+        'yorvoid.passkey.step_up' => ['authentication'],
         'yorvoid.principal.activate' => ['ability', 'operator'],
         'yorvoid.principal.create' => ['ability', 'operator'],
         'yorvoid.principal.delete' => ['ability', 'operator'],
         'yorvoid.principal.suspend' => ['ability', 'operator'],
+        'yorvoid.recovery.cool_down' => ['consequence'],
         'yorvoid.recovery_code.recover' => ['authentication'],
         'yorvoid.recovery_code.redeem' => ['authentication'],
         'yorvoid.recovery_codes.generate' => ['self'],
@@ -74,6 +78,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.session.end' => ['self', 'ability', 'operator'],
         'yorvoid.session.end_all' => ['self', 'ability', 'operator'],
         'yorvoid.session.start' => ['consequence'],
+        'yorvoid.session.step_up' => ['consequence'],
         'yorvoid.setup.claim' => ['authentication'],
         'yorvoid.setup.create_code' => ['operator'],
         'yorvoid.testing.sign_in' => ['authentication'],
@@ -92,17 +97,18 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.invitation.send' => ['yorvoid.principal.create', 'yorvoid.token.issue'],
         'yorvoid.invitation.withdraw' => ['yorvoid.token.revoke', 'yorvoid.principal.delete'],
         'yorvoid.not_me.issue' => ['yorvoid.token.issue'],
-        'yorvoid.notification.not_me' => ['yorvoid.session.end_all'],
+        'yorvoid.notification.not_me' => ['yorvoid.credential.disable', 'yorvoid.session.end_all'],
         'yorvoid.passkey.register' => ['yorvoid.credential.add'],
-        'yorvoid.passkey.sign_in' => ['yorvoid.session.start'],
+        'yorvoid.passkey.sign_in' => ['yorvoid.credential.disable', 'yorvoid.session.start'],
+        'yorvoid.passkey.step_up' => ['yorvoid.credential.disable', 'yorvoid.session.step_up'],
         'yorvoid.principal.create' => ['yorvoid.token.issue'],
-        'yorvoid.principal.delete' => ['yorvoid.session.end_all'],
+        'yorvoid.principal.delete' => ['yorvoid.session.end_all', 'yorvoid.credential.forget_all'],
         'yorvoid.principal.suspend' => ['yorvoid.session.end_all'],
-        'yorvoid.recovery_code.recover' => ['yorvoid.session.end_all', 'yorvoid.session.start'],
-        'yorvoid.recovery_code.redeem' => ['yorvoid.session.end_all', 'yorvoid.session.start'],
+        'yorvoid.recovery_code.recover' => ['yorvoid.session.end_all', 'yorvoid.recovery.cool_down', 'yorvoid.session.start'],
+        'yorvoid.recovery_code.redeem' => ['yorvoid.session.end_all', 'yorvoid.recovery.cool_down', 'yorvoid.session.start'],
         'yorvoid.recovery_codes.generate' => ['yorvoid.credential.add'],
         'yorvoid.recovery_link.issue' => ['yorvoid.token.issue'],
-        'yorvoid.recovery_link.use' => ['yorvoid.session.end_all', 'yorvoid.session.start'],
+        'yorvoid.recovery_link.use' => ['yorvoid.session.end_all', 'yorvoid.recovery.cool_down', 'yorvoid.session.start'],
         'yorvoid.setup.claim' => ['yorvoid.principal.create', 'yorvoid.session.start'],
         'yorvoid.testing.sign_in' => ['yorvoid.session.start'],
     ];
@@ -159,7 +165,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
             }
         }
 
-        self::assertCount(51, $commands, 'The operations moved.');
+        self::assertCount(56, $commands, 'The operations moved.');
 
         return $commands;
     }

@@ -25,7 +25,7 @@ final readonly class Admin
 
     public function handle(Realm $realm, SessionId $id, AuthenticationFactor $factor, Origin $origin, Credential $credential, Permit $permit): void
     {
-        $this->sessions->stepUp($realm, $id, $factor, $origin);
+        $this->credentials->markUsed($realm, $credential->id);
         $this->credentials->markUsed($realm, $credential->id);
         $this->credentials->get($realm, $credential->id);
         Credentials::session($permit);

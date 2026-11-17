@@ -70,6 +70,8 @@ final readonly class Credentials implements OperationHandler
             AddCredential::class => $this->add(...),
             RemoveCredential::class => $this->remove(...),
             RenameCredential::class => $this->rename(...),
+            DisableCredential::class => $this->disable(...),
+            ForgetCredentials::class => $this->forgetAll(...),
         ];
     }
 
@@ -210,27 +212,26 @@ final readonly class Credentials implements OperationHandler
     }
 
     /**
-     * Makes a credential stop working, e.g. a passkey suspected of having been copied. Its owner sees
-     * it as disabled, and removes it.
+     * Makes a credential stop working: a consequence of what found it out (DisableCredential).
      *
-     * @internal For the packages that check credentials, and "This wasn't me"
-     *
-     * @param string $reason Why, for the log, e.g. "signature counter went backwards"
-     *
-     * @return Credential|null The credential, disabled; null if it was removed meanwhile
+     * @return Credential|null The credential, disabled; null if it isn't the principal's, or was removed meanwhile
      */
-    public function disable(Credential $credential, string $reason, Origin $origin): ?Credential
+    public function disable(DisableCredential $command, Permit $permit, Origin $origin): ?Credential
     {
-        return $this->transactions->run(function () use ($credential, $reason, $origin): ?Credential {
-            // Removed since the caller read it: nothing to disable, and nothing to record.
-            if (!$this->store->disable($credential->realm, $credential->id)) {
+        $permit->use($command);
+
+        return $this->transactions->run(function () use ($command, $origin): ?Credential {
+            $credential = $this->store->get($command->realm, $command->credentialId);
+
+            // Removed since the caller read it, or someone else's: nothing to disable, and nothing to record.
+            if (null === $credential || !$credential->principalId->equals($command->principalId) || !$this->store->disable($command->realm, $command->credentialId)) {
                 return null;
             }
 
-            $this->log->record($credential->realm, 'yorvoid.credential.disable', Outcome::Success, $origin, null, 'credential', (string) $credential->id, [
+            $this->log->record($command->realm, 'yorvoid.credential.disable', Outcome::Success, $origin, null, 'credential', (string) $credential->id, [
                 'kind' => $credential->kind->value,
                 'principal' => (string) $credential->principalId,
-                'reason' => $reason,
+                'reason' => $command->reason,
             ]);
 
             return new Credential($credential->id, $credential->realm, $credential->principalId, $credential->kind, $credential->label, $credential->createdAt, $credential->lastUsedAt, CredentialStatus::Disabled);
@@ -243,26 +244,27 @@ final readonly class Credentials implements OperationHandler
     }
 
     /**
-     * Removes every credential of a principal that is deleted, with no session or step-up: for
-     * ForgetCredentialsOfDeletedPrincipals. Each is announced with CredentialRemoving first, so the
-     * packages that keep their secrets remove them in the same transaction; one log entry says how many.
-     *
-     * @internal For ForgetCredentialsOfDeletedPrincipals
+     * Removes every credential of a deleted principal, with no session or step-up: a deletion's
+     * consequence (ForgetCredentials). Each is announced with CredentialRemoving first, so the packages
+     * that keep their secrets remove them in the same transaction; one log entry says how many.
      *
      * @return int How many
      */
-    public function forgetAllOf(Realm $realm, PrincipalId $principalId, Origin $origin, ?PrincipalId $actor = null): int
+    public function forgetAll(ForgetCredentials $command, Permit $permit, Origin $origin): int
     {
-        return $this->transactions->run(function () use ($realm, $principalId, $origin, $actor): int {
-            $credentials = $this->store->of($realm, $principalId);
+        $permit->use($command);
+        $actor = $permit->actor->principalId;
+
+        return $this->transactions->run(function () use ($command, $origin, $actor): int {
+            $credentials = $this->store->of($command->realm, $command->principalId);
 
             foreach ($credentials as $credential) {
                 $this->events->dispatch(new CredentialRemoving($credential, $origin));
-                $this->store->remove($realm, $credential->id);
+                $this->store->remove($command->realm, $credential->id);
             }
 
             if ([] !== $credentials) {
-                $this->log->record($realm, 'yorvoid.credential.forget_all', Outcome::Success, $origin, $actor, 'principal', (string) $principalId, ['count' => \count($credentials)]);
+                $this->log->record($command->realm, 'yorvoid.credential.forget_all', Outcome::Success, $origin, $actor, 'principal', (string) $command->principalId, ['count' => \count($credentials)]);
             }
 
             return \count($credentials);

@@ -35,6 +35,7 @@ When a requirement isn't met, `StepUpRequired` carries it as the **remedy**: han
 
 ```php
 use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Passkeys\StepUpWithPasskey;
 
 try {
     $sites->remove($site, $session);
@@ -44,7 +45,7 @@ try {
 }
 
 // When the browser answers:
-$token = $passkeys->finishStepUp($session, $ceremonyId, $responseFromTheBrowser, $origin);
+$token = $operations->run(new StepUpWithPasskey($session->realm, $ceremonyId, $responseFromTheBrowser), $session, $origin);
 // The session has a new token: replace the old one in its cookie, or in your session under a new ID.
 ```
 

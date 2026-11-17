@@ -48,11 +48,14 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     public function saveRole(Realm $realm, string $name, string $label): void
     {
+        // Every change increments the version first (PolicyStore): caches are fresh by construction (SS-05).
+        $this->bump($realm);
         $this->roles[$realm->name][$name] = $label;
     }
 
     public function deleteRole(Realm $realm, string $name): void
     {
+        $this->bump($realm);
         unset($this->roles[$realm->name][$name]);
     }
 
@@ -63,6 +66,7 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     public function saveChanges(Realm $realm, AbilityChanges $changes): void
     {
+        $this->bump($realm);
         $this->changes[$realm->name] = $changes;
     }
 
@@ -91,11 +95,13 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     public function assign(RoleAssignment $assignment): void
     {
+        $this->bump($assignment->realm);
         $this->assignments[self::key($assignment->realm, $assignment->principalId, $assignment->role, $assignment->scope)] = $assignment;
     }
 
     public function unassign(Realm $realm, PrincipalId $principalId, string $role, ?ResourceRef $scope): bool
     {
+        $this->bump($realm);
         $key = self::key($realm, $principalId, $role, $scope);
         $had = isset($this->assignments[$key]);
         unset($this->assignments[$key]);
@@ -105,6 +111,7 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     public function unassignRole(Realm $realm, string $role): void
     {
+        $this->bump($realm);
         foreach ($this->assignments as $key => $assignment) {
             if ($assignment->realm->equals($realm) && $assignment->role === $role) {
                 unset($this->assignments[$key]);
@@ -128,11 +135,13 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     public function saveGroup(Realm $realm, string $name, string $label): void
     {
+        $this->bump($realm);
         $this->groups[$realm->name][$name] = $label;
     }
 
     public function deleteGroup(Realm $realm, string $name): void
     {
+        $this->bump($realm);
         unset($this->groups[$realm->name][$name]);
 
         foreach ($this->groupAssignments as $key => $assignment) {
@@ -170,11 +179,13 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     public function assignGroup(GroupRoleAssignment $assignment): void
     {
+        $this->bump($assignment->realm);
         $this->groupAssignments[self::groupKey($assignment->realm, $assignment->group, $assignment->role, $assignment->scope)] = $assignment;
     }
 
     public function unassignGroup(Realm $realm, string $group, string $role, ?ResourceRef $scope): bool
     {
+        $this->bump($realm);
         $key = self::groupKey($realm, $group, $role, $scope);
         $had = isset($this->groupAssignments[$key]);
         unset($this->groupAssignments[$key]);
@@ -184,6 +195,7 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     public function forgetPrincipal(Realm $realm, PrincipalId $principalId): void
     {
+        $this->bump($realm);
         foreach ($this->assignments as $key => $assignment) {
             if ($assignment->realm->equals($realm) && $assignment->principalId->equals($principalId)) {
                 unset($this->assignments[$key]);

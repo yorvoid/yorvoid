@@ -15,6 +15,7 @@ use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Verdict;
@@ -32,6 +33,7 @@ use YorvoID\Policy\Change\RevokeAbilities;
 use YorvoID\Policy\Change\SetAbilities;
 use YorvoID\Policy\Change\UnassignRole;
 use YorvoID\Policy\NoEscalation;
+use YorvoID\Policy\RoleAssignment;
 use YorvoID\Policy\UnknownAbility;
 use YorvoID\Policy\UnknownRole;
 use YorvoID\Policy\YorvoIDDeclarations;
@@ -49,23 +51,30 @@ final class PolicyChangesTest extends TestCase
         $world = new PolicyWorld();
         $ada = $world->principal();
         $id = self::id($ada)->uuid->toRfc4122();
-        $start = $world->memory->policy->version($world->realm);
         $until = new \DateTimeImmutable('2026-12-01 10:00:00.123456 UTC');
 
-        $world->asOperator(new CreateRole($world->realm, 'reviewer', 'Reviewer', from: 'member'));
-        $world->asOperator(new CreateRole($world->realm, 'helper', 'Helper'));
-        $world->asOperator(new RelabelRole($world->realm, 'reviewer', 'Senior'));
-        $assignment = $world->asOperator(new AssignRole($world->realm, self::id($ada), 'reviewer', new ResourceRef('site', '1'), $until));
-        self::assertTrue($world->asOperator(new UnassignRole($world->realm, self::id($ada), 'reviewer', new ResourceRef('site', '1'))));
-        self::assertFalse($world->asOperator(new UnassignRole($world->realm, self::id($ada), 'reviewer')), 'There\'s none in the whole realm.');
-        $world->asOperator(new GrantAbilities($world->realm, 'reviewer', ['acme.pages.publish', 'acme.pages.publish', 'acme.pages.view_drafts']));
-        $world->asOperator(new RevokeAbilities($world->realm, 'reviewer', ['acme.pages.publish']));
-        $world->asOperator(new SetAbilities($world->realm, 'reviewer', ['acme.pages.view_drafts', 'acme.pages.view_drafts', 'acme.pages.publish']));
-        $world->asOperator(new ResetAbilities($world->realm, ['acme.pages.view_drafts']));
-        $world->asOperator(new ResetAbilities($world->realm));
-        $world->asOperator(new DeleteRole($world->realm, 'reviewer'));
+        // Every change counts, one that changed nothing too.
+        $change = static function (Command $command) use ($world): mixed {
+            $before = $world->memory->policy->version($world->realm);
+            $result = $world->asOperator($command);
+            self::assertGreaterThan($before, $world->memory->policy->version($world->realm), $command::class.' didn\'t increment the version.');
 
-        self::assertSame($start + 12, $world->memory->policy->version($world->realm), 'Every change counts, one that changed nothing too.');
+            return $result;
+        };
+        $change(new CreateRole($world->realm, 'reviewer', 'Reviewer', from: 'member'));
+        $change(new CreateRole($world->realm, 'helper', 'Helper'));
+        $change(new RelabelRole($world->realm, 'reviewer', 'Senior'));
+        $assignment = $change(new AssignRole($world->realm, self::id($ada), 'reviewer', new ResourceRef('site', '1'), $until));
+        \assert($assignment instanceof RoleAssignment);
+        self::assertTrue($change(new UnassignRole($world->realm, self::id($ada), 'reviewer', new ResourceRef('site', '1'))));
+        self::assertFalse($change(new UnassignRole($world->realm, self::id($ada), 'reviewer')), 'There\'s none in the whole realm.');
+        $change(new GrantAbilities($world->realm, 'reviewer', ['acme.pages.publish', 'acme.pages.publish', 'acme.pages.view_drafts']));
+        $change(new RevokeAbilities($world->realm, 'reviewer', ['acme.pages.publish']));
+        $change(new SetAbilities($world->realm, 'reviewer', ['acme.pages.view_drafts', 'acme.pages.view_drafts', 'acme.pages.publish']));
+        $change(new ResetAbilities($world->realm, ['acme.pages.view_drafts']));
+        $change(new ResetAbilities($world->realm));
+        $change(new DeleteRole($world->realm, 'reviewer'));
+
         self::assertEquals($world->clock->now(), $assignment->assignedAt);
         self::assertEquals(new \DateTimeImmutable('2026-12-01 10:00:00 UTC'), $assignment->expiresAt, 'Stored as every time is.');
         self::assertSame([

@@ -12,6 +12,7 @@ use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\CredentialStatus;
 use YorvoID\Authn\Credential\CredentialStore;
+use YorvoID\Authn\Credential\DisableCredential;
 use YorvoID\Authn\Credential\Event\CredentialRemoving;
 use YorvoID\Authn\Credential\RemoveCredential;
 use YorvoID\Authn\Session\AuthenticationContext;
@@ -23,6 +24,7 @@ use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\SessionId;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
@@ -52,6 +54,7 @@ use YorvoID\Passkeys\Refusal;
 use YorvoID\Passkeys\RegisterPasskey;
 use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\SignInWithPasskey;
+use YorvoID\Passkeys\StepUpWithPasskey;
 use YorvoID\Passkeys\UserVerification;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
@@ -501,7 +504,7 @@ final class PasskeysTest extends DatabaseTestCase
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
         $this->refused(Refusal::UnknownPasskey, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $stranger->signIn($signIn->options)), new Origin(OriginKind::Web)));
 
-        $this->sessions->stepUp($session->realm, $session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove'), new Origin(OriginKind::Web));
+        Permits::call($this->sessions->stepUp(...), new StepUpSession($session->realm, $session->id, $session->principalId, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove')), new Origin(OriginKind::Web));
         Permits::call($this->credentials->remove(...), new RemoveCredential(new Realm('acme'), $credentials[0]->id), new Origin(OriginKind::Web), $session);
         self::assertCount(2, $passkeys->of(new Realm('acme'), $session->principalId), 'The removed passkey\'s key was kept.');
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
@@ -514,7 +517,7 @@ final class PasskeysTest extends DatabaseTestCase
         $ceremony = $passkeys->beginRegistration($session);
         $credentials[] = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key 3'), new Origin(OriginKind::Web), $session);
 
-        $this->credentials->disable($credentials[1], 'reported lost', new Origin(OriginKind::Web));
+        Permits::call($this->credentials->disable(...), new DisableCredential($credentials[1]->realm, $credentials[1]->id, $credentials[1]->principalId, 'reported lost'), new Origin(OriginKind::Web));
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
         $this->refused(Refusal::PasskeyDisabled, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: 1)), new Origin(OriginKind::Web)));
 
@@ -592,6 +595,35 @@ final class PasskeysTest extends DatabaseTestCase
         $this->refused(Refusal::AlreadyRegistered, static fn () => Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $again->id, $authenticator->register($again->options, credentialId: $authenticator->credentials[0]['id']), 'Phone again'), new Origin(OriginKind::Web), $session));
 
         self::assertCount(1, $this->credentials->of(new Realm('acme'), $session->principalId), 'A refused registration left a credential behind.');
+    }
+
+    /**
+     * The application runs the sign-in inside a transaction of its own, e.g. Messenger's
+     * doctrine_transaction middleware, and the refusal leaves it: the copied passkey must stay disabled
+     * all the same (C3 of G-1's Part B).
+     */
+    #[DataProvider('implementations')]
+    public function testACopiedPasskeyStaysDisabledWhenTheApplicationsTransactionRollsBack(string $implementation): void
+    {
+        $passkeys = $this->passkeys($implementation, clonePolicy: ClonePolicy::DisablePasskey);
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $ceremony = $passkeys->beginRegistration($session);
+        $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key'), new Origin(OriginKind::Web), $session);
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 5)), new Origin(OriginKind::Web));
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $copy = $authenticator->signIn($signIn->options, counter: 5);
+        $transactions = $this->stack->transactions;
+
+        $this->refused(Refusal::SuspectedCopy, static fn () => $transactions->run(static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web))));
+
+        $status = $this->credentials->get(new Realm('acme'), $credential->id)?->status;
+
+        // Known, until G-4 writes the disable outside the caller's transaction: remove this then.
+        if (CredentialStatus::Disabled !== $status) {
+            self::markTestIncomplete('ARC-0058 / G-4: the disable must be written outside the caller\'s transaction; the application\'s rollback made the copied passkey work again');
+        }
     }
 
     #[DataProvider('implementations')]
@@ -697,8 +729,9 @@ final class PasskeysTest extends DatabaseTestCase
         \assert(\is_string($options['challenge']));
         self::assertSame(43, \strlen($options['challenge']), '256 random bits.');
 
-        $token = $passkeys->finishStepUp($session, $ceremony->id, $authenticator->signIn($ceremony->options), new Origin(OriginKind::Web));
+        $token = Permits::call($passkeys->finishStepUp(...), new StepUpWithPasskey($session->realm, $ceremony->id, $authenticator->signIn($ceremony->options)), new Origin(OriginKind::Web), $session);
 
+        // The proof is for the ceremony's operation (C2 of G-1's Part B): StepUpWithPasskey names none.
         $steppedUp = $this->sessions->validate(new Realm('acme'), $token);
         self::assertNotNull($steppedUp);
         self::assertTrue($steppedUp->id->equals($session->id), 'The step-up started another session.');
@@ -727,24 +760,24 @@ final class PasskeysTest extends DatabaseTestCase
         $requirement = new AuthenticationRequirement(Duration::minutes(5));
 
         $ceremony = $passkeys->beginStepUp($session, $requirement);
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishStepUp($other, $ceremony->id, $stranger->signIn($ceremony->options), new Origin(OriginKind::Web)), 'Another session finished the step-up.');
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishStepUp(...), new StepUpWithPasskey($other->realm, $ceremony->id, $stranger->signIn($ceremony->options)), new Origin(OriginKind::Web), $other), 'Another session finished the step-up.');
 
         $entries = \count(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false));
         $ceremony = $passkeys->beginStepUp($session, $requirement);
-        $this->refused(Refusal::UnknownPasskey, static fn () => $passkeys->finishStepUp($session, $ceremony->id, $stranger->signIn($ceremony->options), new Origin(OriginKind::Web)), 'Someone else\'s passkey stepped the session up.');
+        $this->refused(Refusal::UnknownPasskey, static fn () => Permits::call($passkeys->finishStepUp(...), new StepUpWithPasskey($session->realm, $ceremony->id, $stranger->signIn($ceremony->options)), new Origin(OriginKind::Web), $session), 'Someone else\'s passkey stepped the session up.');
         $recorded = \array_slice(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), $entries);
         self::assertCount(1, $recorded, 'The refusal wasn\'t recorded, or more was.');
         self::assertSame(['yorvoid.passkey.step_up', Outcome::Failed, null, null, ['reason' => 'unknown_passkey']], [$recorded[0]->action, $recorded[0]->outcome, $recorded[0]->actor, $recorded[0]->subjectId, $recorded[0]->details], 'Someone else\'s passkey was recorded as theirs.');
 
         $signIn = $passkeys->beginSignIn(new Realm('acme'));
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishStepUp($session, $signIn->id, $authenticator->signIn($signIn->options), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishStepUp(...), new StepUpWithPasskey($session->realm, $signIn->id, $authenticator->signIn($signIn->options)), new Origin(OriginKind::Web), $session));
         $ceremony = $passkeys->beginStepUp($session, $requirement);
         $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $ceremony->id, $authenticator->signIn($ceremony->options)), new Origin(OriginKind::Web)), 'A step-up ceremony started a session.');
 
         $ceremony = $passkeys->beginStepUp($session, $requirement);
         $answer = $authenticator->signIn($ceremony->options);
         Permits::call($this->sessions->end(...), new EndSession(new Realm('acme'), $session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));
-        $this->refused(Refusal::CeremonyExpired, static fn () => $passkeys->finishStepUp($session, $ceremony->id, $answer, new Origin(OriginKind::Web)), 'An ended session stepped up.');
+        $this->refused(Refusal::CeremonyExpired, static fn () => Permits::call($passkeys->finishStepUp(...), new StepUpWithPasskey($session->realm, $ceremony->id, $answer), new Origin(OriginKind::Web), $session), 'An ended session stepped up.');
         // The authenticator counted the signature, which is recorded; the passkey wasn't used.
         self::assertNull($this->credentials->get(new Realm('acme'), $passkeys->of(new Realm('acme'), $session->principalId)[0]->credentialId)?->lastUsedAt, 'A refused step-up was recorded as a use.');
     }
@@ -765,17 +798,17 @@ final class PasskeysTest extends DatabaseTestCase
             $credentials[] = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Key '.$i), new Origin(OriginKind::Web), $session);
         }
 
-        $this->credentials->disable($credentials[0], 'reported lost', new Origin(OriginKind::Web));
+        Permits::call($this->credentials->disable(...), new DisableCredential($credentials[0]->realm, $credentials[0]->id, $credentials[0]->principalId, 'reported lost'), new Origin(OriginKind::Web));
         $ceremony = $passkeys->beginStepUp($session, $requirement);
         self::assertSame([VirtualAuthenticator::encode($authenticator->credentials[1]['id'])], array_column((array) self::json($ceremony->options)['allowCredentials'], 'id'), 'A disabled passkey was offered.');
 
-        $this->refused(Refusal::PasskeyDisabled, static fn () => $passkeys->finishStepUp($session, $ceremony->id, $authenticator->signIn($ceremony->options, credential: 0), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::PasskeyDisabled, static fn () => Permits::call($passkeys->finishStepUp(...), new StepUpWithPasskey($session->realm, $ceremony->id, $authenticator->signIn($ceremony->options, credential: 0)), new Origin(OriginKind::Web), $session));
         $entries = iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false);
         $failed = $entries[\count($entries) - 1];
         self::assertSame(['yorvoid.passkey.step_up', Outcome::Failed, (string) $credentials[0]->id], [$failed->action, $failed->outcome, $failed->subjectId]);
         self::assertSame(['principal' => (string) $session->principalId, 'reason' => 'passkey_disabled'], $failed->details);
 
-        $this->credentials->disable($credentials[1], 'reported lost', new Origin(OriginKind::Web));
+        Permits::call($this->credentials->disable(...), new DisableCredential($credentials[1]->realm, $credentials[1]->id, $credentials[1]->principalId, 'reported lost'), new Origin(OriginKind::Web));
         $this->refused(Refusal::NoPasskey, static fn () => $passkeys->beginStepUp($session, $requirement));
 
         // A key whose registry entry is gone, as without RemovePasskeyWithCredential, is no passkey either.
@@ -794,11 +827,11 @@ final class PasskeysTest extends DatabaseTestCase
 
         $ceremony = $passkeys->beginStepUp($session, new AuthenticationRequirement(Duration::minutes(5), multiFactor: true));
         self::assertSame('required', self::json($ceremony->options)['userVerification']);
-        $this->refused(Refusal::UserNotVerified, static fn () => $passkeys->finishStepUp($session, $ceremony->id, $authenticator->signIn($ceremony->options, userVerified: false), new Origin(OriginKind::Web)));
+        $this->refused(Refusal::UserNotVerified, static fn () => Permits::call($passkeys->finishStepUp(...), new StepUpWithPasskey($session->realm, $ceremony->id, $authenticator->signIn($ceremony->options, userVerified: false)), new Origin(OriginKind::Web), $session));
 
         $ceremony = $passkeys->beginStepUp($session, new AuthenticationRequirement(Duration::minutes(5)));
         self::assertSame('preferred', self::json($ceremony->options)['userVerification']);
-        $token = $passkeys->finishStepUp($session, $ceremony->id, $authenticator->signIn($ceremony->options, userVerified: false), new Origin(OriginKind::Web));
+        $token = Permits::call($passkeys->finishStepUp(...), new StepUpWithPasskey($session->realm, $ceremony->id, $authenticator->signIn($ceremony->options, userVerified: false)), new Origin(OriginKind::Web), $session);
         self::assertFalse($this->sessions->validate(new Realm('acme'), $token)?->authentication->factors[1]->multiFactor, 'Without user verification, a passkey is one factor.');
     }
 
@@ -850,7 +883,7 @@ final class PasskeysTest extends DatabaseTestCase
         $phones = $passkeys->of(new Realm('acme'), $session->principalId)[0];
         $credential = $this->credentials->get(new Realm('acme'), $phones->credentialId);
         \assert(null !== $credential);
-        $this->credentials->disable($credential, 'Lost', new Origin(OriginKind::Console));
+        Permits::call($this->credentials->disable(...), new DisableCredential($credential->realm, $credential->id, $credential->principalId, 'Lost'), new Origin(OriginKind::Console));
         self::assertSame([VirtualAuthenticator::encode($laptop->credentials[0]['id'])], $passkeys->signals($session)?->toArray()['allAcceptedCredentialIds'], 'The browser was told a disabled passkey is accepted.');
 
         $other = $this->session(username: 'bob');
@@ -922,7 +955,7 @@ final class PasskeysTest extends DatabaseTestCase
                 $this->refused(Refusal::PasskeyDisabled, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, credential: $index)), new Origin(OriginKind::Web)));
             } else {
                 $stepUp = $passkeys->beginStepUp($session, new AuthenticationRequirement(Duration::minutes(5), operation: 'acme.site.remove'));
-                $this->refused(Refusal::PasskeyDisabled, static fn () => $passkeys->finishStepUp($session, $stepUp->id, $authenticator->signIn($stepUp->options, credential: $index), new Origin(OriginKind::Web)));
+                $this->refused(Refusal::PasskeyDisabled, static fn () => Permits::call($passkeys->finishStepUp(...), new StepUpWithPasskey($session->realm, $stepUp->id, $authenticator->signIn($stepUp->options, credential: $index)), new Origin(OriginKind::Web), $session));
             }
 
             $kept = $this->stack->credentials->get(new Realm('acme'), $credential->id);

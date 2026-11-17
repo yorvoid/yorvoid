@@ -14,6 +14,7 @@ use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\Setup\ClaimSetup;
 use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Authn\Setup\InvalidSetupCode;
@@ -105,7 +106,7 @@ final class LostRaceTest extends DatabaseTestCase
         $entries = iterator_count($this->stack->log->entries(new Realm('acme'), 1));
 
         self::assertNull($sessions->refresh(new Realm('acme'), $started->session->id, new Origin(OriginKind::Web)));
-        self::assertNull($sessions->stepUp(new Realm('acme'), $started->session->id, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), operation: 'acme.site.remove'), new Origin(OriginKind::Web)));
+        self::assertNull(Permits::call($sessions->stepUp(...), new StepUpSession(new Realm('acme'), $started->session->id, $started->session->principalId, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), operation: 'acme.site.remove')), new Origin(OriginKind::Web)));
         self::assertSame($entries, iterator_count($this->stack->log->entries(new Realm('acme'), 1)), 'A step-up that lost was recorded.');
         self::assertNotNull($sessions->validate(new Realm('acme'), $started->token), 'The old token stopped working.');
     }

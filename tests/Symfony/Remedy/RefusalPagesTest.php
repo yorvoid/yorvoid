@@ -19,6 +19,7 @@ use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\IndeterminateReason;
@@ -310,7 +311,7 @@ final class RefusalPagesTest extends TestCase
         $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
 
         if ($recovered) {
-            $stepUp->startCoolDown(Realm::default(), $ana->id, new Origin(OriginKind::Console));
+            Permits::call($stepUp->startCoolDown(...), new StartCoolDown(Realm::default(), $ana->id), new Origin(OriginKind::Console));
         }
 
         $signedIn = new \DateTimeImmutable($recovered ? 'now' : '-1 hour');

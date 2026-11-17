@@ -17,6 +17,7 @@ use YorvoID\Passkeys\BegunCeremony;
 use YorvoID\Passkeys\PasskeyRefused;
 use YorvoID\Passkeys\Passkeys;
 use YorvoID\Passkeys\RegisterPasskey;
+use YorvoID\Passkeys\StepUpWithPasskey;
 use YorvoID\Symfony\Security\CurrentSession;
 use YorvoID\Symfony\Security\Json;
 use YorvoID\Symfony\Security\RequestOrigins;
@@ -107,7 +108,7 @@ final readonly class CeremonyController
     public function stepUp(Request $request): JsonResponse
     {
         return $this->signedIn($request, function (Session $session, array $body): JsonResponse {
-            $token = $this->passkeys->finishStepUp($session, (string) Json::string($body, 'ceremony'), json_encode($body['response'] ?? null, \JSON_THROW_ON_ERROR), $this->origins->of('yorvoid_step_up'));
+            $token = $this->operations->run(new StepUpWithPasskey($session->realm, (string) Json::string($body, 'ceremony'), json_encode($body['response'] ?? null, \JSON_THROW_ON_ERROR)), $session, $this->origins->of('yorvoid_step_up'));
             $this->current->hold($token);
 
             return new JsonResponse(['stepped_up' => true]);

@@ -10,6 +10,7 @@ use YorvoID\Authn\Credential\CredentialKind;
 use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\CredentialStatus;
 use YorvoID\Authn\Credential\CredentialStore;
+use YorvoID\Authn\Credential\DisableCredential;
 use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
 use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Recovery\RedeemRecoveryCode;
@@ -57,7 +58,7 @@ final class DisabledDuringSignInTest extends DatabaseTestCase
         // What NotMe::confirm() does to the credential, on the owner's connection, once the sign-in has read it.
         $reading = new ReadThenRun($signIn->credentials);
         $reading->arm(static function () use ($ownerCredentials, $set): void {
-            $ownerCredentials->disable($set, 'its principal said they didn\'t add it', new Origin(OriginKind::Web));
+            Permits::call($ownerCredentials->disable(...), new DisableCredential($set->realm, $set->id, $set->principalId, 'its principal said they didn\'t add it'), new Origin(OriginKind::Web));
         });
         $codes = $this->codes($signIn, $this->credentials($signIn, $reading));
 

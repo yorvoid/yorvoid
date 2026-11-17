@@ -17,6 +17,7 @@ use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
+use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\IssuedToken;
 use YorvoID\Authn\Token\IssueToken;
@@ -119,7 +120,7 @@ final readonly class RecoveryLinks implements OperationHandler
             $permit->about($used->principalId);
             $recovered = new ActingPrincipal($realm, $used->principalId);
             $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Recovered), $origin, $recovered);
-            $this->stepUp->startCoolDown($realm, $used->principalId, $origin);
+            $permit->cause($this->stepUp->startCoolDown(...), new StartCoolDown($realm, $used->principalId), $origin);
 
             $this->transactions->afterCommit(function () use ($realm, $used, $origin): void {
                 $this->events->dispatch(new RecoveryLinkUsed($realm, $used->principalId, $origin));

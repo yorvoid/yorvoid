@@ -15,7 +15,7 @@ use PHPStan\Type\Type;
 /**
  * Flags an application's use of what YorvoID marks @internal: a method it calls, a property it reads,
  * a class it creates, whether the class or the member is marked. They're YorvoID's own, e.g. what one
- * of its packages calls in another (Sessions::stepUp(), for the packages that check a proof), and
+ * of its packages calls in another (Credentials::markUsed(), for the packages that check a credential), and
  * change in any minor release.
  *
  * @implements Rule<Node\Expr>

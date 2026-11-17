@@ -34,6 +34,8 @@ $request->getSession()->migrate(true);   // a new ID for your session first: see
 $request->getSession()->set('yorvoid_session', $started->token->reveal());
 ```
 
+A way of stepping up of your own works the same: an operation (`#[Operation(..., AuthorizedBy::Authentication, causes: ['yorvoid.session.step_up'])]`) run from the session, whose handler checks the proof, says whom it's about, and causes `StepUpSession` for the session with the factor it proved: `$permit->cause($sessions->stepUp(...), new StepUpSession($realm, $session->id, $session->principalId, $factor), $origin)`. The step-up is only as good as that check: YorvoID records it, and refuses a step-up of anyone else's session, but it can't tell whether your handler verified anything. Take the factor's operation from what you asked the person to confirm, never from the request.
+
 **Give your session a new ID before you store the token in it,** on sign-in and whenever a step-up renews the token (`session_regenerate_id(true)` in plain PHP, `$request->session()->regenerate(true)` in Laravel). Otherwise someone who planted a session cookie in the person's browser beforehand shares the signed-in session afterwards (session fixation). The Symfony bridge does it; [without a bridge](../how-to/without-a-bridge.md) lists what else it does.
 
 - Only an **active** principal can have a session (`InactivePrincipal` otherwise).

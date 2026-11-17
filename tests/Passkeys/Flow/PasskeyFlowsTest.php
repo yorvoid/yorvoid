@@ -22,6 +22,7 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Authn\Setup\SetupCodes;
+use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
@@ -468,7 +469,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         $step = new RecoveryCodesStep($this->operations, $this->recoveryCodes, $stepUp);
         self::assertTrue($step->applies($state, $context));
 
-        $stepUp->startCoolDown($this->realm, $bob->id, new Origin(OriginKind::Web));
+        Permits::call($stepUp->startCoolDown(...), new StartCoolDown($this->realm, $bob->id), new Origin(OriginKind::Web));
 
         self::assertFalse($step->applies($state, $context), 'New codes would replace the owner\'s during the cool-down.');
         self::assertTrue(new RecoveryCodesStep($this->operations, $this->recoveryCodes)->applies($state, $context), 'Without StepUp there\'s no cool-down to wait out.');
