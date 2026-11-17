@@ -269,7 +269,8 @@ final class DoctorChecksTest extends DatabaseTestCase
             'Decisions are written on the application\'s connection: a transaction of the application\'s that rolls back takes their records with it, after what they allowed may have happened.',
             'Decisions refuse when their record can\'t be written, but not every Permit of an ability is recorded, so those go ahead unrecorded.',
         ], array_map(static fn (Finding $finding): string => $finding->what, $findings));
-        self::assertFalse($findings[0]->problem || $findings[1]->problem, 'Warnings: it works, less safely than configured.');
+        self::assertTrue($findings[0]->problem, 'A problem: the bundle refuses to boot so (D-42).');
+        self::assertFalse($findings[1]->problem, 'A warning: it works, less safely than configured.');
     }
 
     public function testReportsTheCryptoModeAndWhatTheProviderLacks(): void

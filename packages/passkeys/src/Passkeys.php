@@ -470,13 +470,19 @@ final readonly class Passkeys implements OperationHandler
 
         if ($counter->suspected && ClonePolicy::Allow !== $this->policy->clonePolicy) {
             if (ClonePolicy::DisablePasskey === $this->policy->clonePolicy) {
-                // A consequence of the sign-in or step-up that found it out, about the passkey's principal,
-                // and one the refusal below must not undo: once the caller's transaction has ended, whichever
-                // way (ARC-0058, D-42). If it fails then, it heals itself: the counter wasn't recorded, so the
-                // copy's next answer is suspected again.
+                // A consequence of the sign-in or step-up that found it out, about the passkey's principal.
+                // Now, in the caller's transaction, so its commit keeps it; and, if the caller rolls back
+                // with the refusal below, again once that has ended (ARC-0058, D-42): the operation names
+                // the disable twice for that. If the second fails, it heals itself: the counter wasn't
+                // recorded, so the copy's next answer is suspected again.
                 $permit->about($passkey->principalId);
                 $disable = new DisableCredential($passkey->realm, $credential->id, $passkey->principalId, 'signature counter didn\'t go up: the passkey may have been copied');
+                $permit->cause($this->credentials->disable(...), $disable, $origin);
                 $this->transactions->afterEnd(function () use ($permit, $disable, $origin): void {
+                    if (true !== $this->credentials->get($disable->realm, $disable->credentialId)?->isActive()) {
+                        return;
+                    }
+
                     try {
                         $permit->cause($this->credentials->disable(...), $disable, $origin);
                     } catch (\Throwable) {

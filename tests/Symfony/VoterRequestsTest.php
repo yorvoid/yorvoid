@@ -154,7 +154,7 @@ final class VoterRequestsTest extends TestCase
 
     public function testTheVoteSaysTheVerdictAndTheRecordNotTheReason(): void
     {
-        $checker = $this->checker(['audit' => ['on_failure' => 'refuse'], 'decision_log' => ['permits' => 'sampled', 'sample_rate' => 0.0]]);
+        $checker = $this->checker(['audit' => ['on_failure' => 'refuse'], 'decision_log' => ['permits' => 'sampled', 'sample_rate' => 0.0, 'connection' => 'audit']]);
         // Symfony 7.4's interface declares the AccessDecision only in a comment; its checker takes it, as 8's does.
         \assert($checker instanceof AuthorizationChecker);
 
@@ -176,7 +176,7 @@ final class VoterRequestsTest extends TestCase
         FailingInserts::$tables = [];
         $this->kernel?->shutdown();
         $this->directory .= '-all';
-        $checker = $this->checker(['audit' => ['on_failure' => 'refuse'], 'decision_log' => ['permits' => 'all']]);
+        $checker = $this->checker(['audit' => ['on_failure' => 'refuse'], 'decision_log' => ['permits' => 'all', 'connection' => 'audit']]);
         \assert($checker instanceof AuthorizationChecker);
         FailingInserts::$tables = [DbalDecisionLogStore::TABLE];
         $unavailable = new AccessDecision();

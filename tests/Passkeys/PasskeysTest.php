@@ -621,6 +621,41 @@ final class PasskeysTest extends DatabaseTestCase
         self::assertSame(CredentialStatus::Disabled, $this->credentials->get(new Realm('acme'), $credential->id)?->status, 'The application\'s rollback made the copied passkey work again (ARC-0058).');
     }
 
+    /**
+     * The application's transaction already holds the realm's log lock, and the refusals go to a
+     * connection of their own: the copied passkey's disable waits for the end of the application's
+     * transaction, on its connection, so the two connections never wait for each other (I1 of D-42).
+     */
+    public function testACopiedPasskeysDisableNeverWaitsOnTheCallersLocks(): void
+    {
+        $this->stack = $this->stack('postgresql');
+        $apart = $this->database('postgresql');
+        $apart->connection->executeStatement("SET lock_timeout = '3s'");
+        $database = $this->stack->database;
+        \assert(null !== $database);
+        $database->connection->executeStatement("SET lock_timeout = '3s'");
+        $attempts = new \YorvoID\Core\Authorization\DecisionLog\DecisionLog(new \YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore($database, $apart->connection), transactions: $this->stack->transactions);
+        $passkeys = $this->passkeys('postgresql', clonePolicy: ClonePolicy::DisablePasskey, store: $this->stack->passkeys, attempts: $attempts);
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $ceremony = $passkeys->beginRegistration($session);
+        $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key'), new Origin(OriginKind::Web), $session);
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 5)), new Origin(OriginKind::Web));
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $copy = $authenticator->signIn($signIn->options, counter: 5);
+        $started = microtime(true);
+
+        $database->connection->beginTransaction();
+        // An earlier change of the application's, in the same transaction: it holds the realm's log lock.
+        new SecurityLog($this->stack->log, $this->stack->transactions)->lock(new Realm('acme'));
+        $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web)));
+        $database->connection->commit();
+
+        self::assertLessThan(2.5, microtime(true) - $started, 'The disable waited on the application\'s locks.');
+        self::assertSame(CredentialStatus::Disabled, $this->credentials->get(new Realm('acme'), $credential->id)?->status);
+    }
+
     #[DataProvider('implementations')]
     public function testACounterThatDoesntGoUpIsASuspectedCopy(string $implementation): void
     {
@@ -962,14 +997,14 @@ final class PasskeysTest extends DatabaseTestCase
         }
     }
 
-    private function passkeys(string $implementation, UserVerification $userVerification = UserVerification::Required, ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn, AttemptLimits $limits = new AttemptLimits(), ?PasskeyStore $store = null, ?CryptoPolicy $crypto = null, ?CredentialStore $credentialStore = null): Passkeys
+    private function passkeys(string $implementation, UserVerification $userVerification = UserVerification::Required, ClonePolicy $clonePolicy = ClonePolicy::RefuseSignIn, AttemptLimits $limits = new AttemptLimits(), ?PasskeyStore $store = null, ?CryptoPolicy $crypto = null, ?CredentialStore $credentialStore = null, ?\YorvoID\Core\Log\AttemptLog $attempts = null): Passkeys
     {
         // Another store keeps the stack: the same passkeys, read through it.
         $this->stack = null === $store ? $this->stack($implementation) : $this->stack;
         $this->clock ??= new MockClock('2026-10-27 18:45:30 UTC');
         $this->events = new RecordingDispatcher();
         $ids = new UuidV7Generator($this->clock);
-        $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock, attempts: $attempts);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock);

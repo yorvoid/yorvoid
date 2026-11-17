@@ -281,6 +281,7 @@ final class BundleTest extends TestCase
         yield 'a completed path that ends with a line break' => [['flows' => ['completed_path' => "/home\n"]], 'is not a path on this site'];
         yield 'a completed path with a backslash later on' => [['flows' => ['completed_path' => '/home\\..\\x']], 'is not a path on this site'];
         yield 'a flow\'s completed path with a backslash' => [['flows' => ['completed_paths' => ['yorvoid.sign_in' => '/\\example.org/']]], 'is not a path on this site'];
+        yield 'refusing without a connection for the decisions' => [['audit' => ['on_failure' => 'refuse']], 'refuse needs yorvoid.decision_log.connection'];
     }
 
     /**

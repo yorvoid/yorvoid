@@ -19,7 +19,7 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
-#[Operation('yorvoid.passkey.step_up', 'Step up a session with a passkey', AuthorizedBy::Authentication, causes: ['yorvoid.credential.disable', 'yorvoid.session.step_up'])]
+#[Operation('yorvoid.passkey.step_up', 'Step up a session with a passkey', AuthorizedBy::Authentication, causes: ['yorvoid.credential.disable', 'yorvoid.credential.disable', 'yorvoid.session.step_up'])]
 final readonly class StepUpWithPasskey implements Command
 {
     /**

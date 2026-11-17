@@ -39,6 +39,12 @@ final class BootCheck
             }
         }
 
+        // Refusing a decision without its record needs the record written before it's returned, also
+        // inside the application's transaction: only a connection of its own does that (D-42).
+        if ('refuse' === $value('audit.on_failure') && null === $value('decision_log.connection')) {
+            throw new InvalidConfigurationException('yorvoid.audit.on_failure: refuse needs yorvoid.decision_log.connection, a DoctrineBundle connection of its own to the same database: without it, a record written in the application\'s transaction is undone with it.');
+        }
+
         $text = static function (string $name) use ($value): string {
             $text = $value($name);
             \assert(\is_string($text));
