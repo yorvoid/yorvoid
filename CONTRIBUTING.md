@@ -69,6 +69,8 @@ So each package directory carries what its repository needs on its own: a README
    docker compose exec php composer qa
    ```
 
+   The tests run in parallel, one process per CPU (ParaTest). `composer test -- --filter …` takes PHPUnit's options. `composer test-serial` runs them in one process, which is easier to debug. A test that fails only in parallel or in a random order depends on another test: rerun with `composer test -- --order-by=random --random-order-seed=<seed>`, with the seed CI's nightly run printed.
+
    For the browser client, `docker compose run --rm node npm run qa` (types, tests with full coverage, the build) and `npm run mutation`. `npm run assets` copies the build into the Symfony bridge, which ships it: commit it with your change.
 
    The browser tests run YorvoID's flows in Chromium, with a virtual authenticator, against the app in `e2e/app`:
