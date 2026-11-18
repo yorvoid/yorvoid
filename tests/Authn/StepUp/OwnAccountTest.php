@@ -247,6 +247,14 @@ final class OwnAccountTest extends TestCase
         self::assertSame(TruthValue::Fails, $refused->value);
         self::assertInstanceOf(WaitRemedy::class, $refused->remedies[0] ?? null, 'It didn\'t wait out the recovery.');
         self::assertSame(TruthValue::Holds, $policy->decide($preferences, new GenerateRecoveryCodes($this->realm), $held)->value, 'Another self-service operation asks only a recent proof.');
+
+        // A fresh proof that isn't phishing-resistant isn't enough either.
+        $password = $this->actor(false, 'fresh', AuthenticationMethod::Password);
+        $weak = $policy->decide($totp, new GenerateRecoveryCodes($this->realm), $password);
+        self::assertSame(TruthValue::Fails, $weak->value);
+        self::assertInstanceOf(StepUpRemedy::class, $remedy = $weak->remedies[0] ?? null);
+        self::assertTrue($remedy->phishingResistant, 'It didn\'t ask a phishing-resistant proof.');
+        self::assertSame(TruthValue::Holds, $policy->decide($preferences, new GenerateRecoveryCodes($this->realm), $password)->value);
     }
 
     /**
@@ -338,7 +346,7 @@ final class OwnAccountTest extends TestCase
      * A session of a new principal, a manager or not: proved now (fresh), five minutes and a second ago
      * (stale), or proved now after a recovery (hold).
      */
-    private function actor(bool $manager, string $state): Session
+    private function actor(bool $manager, string $state, AuthenticationMethod $method = AuthenticationMethod::Passkey): Session
     {
         $principal = Permits::call($this->principals->create(...), new CreatePrincipal($this->realm, PrincipalKind::Human, email: bin2hex(random_bytes(4)).'@example.com'), new Origin(OriginKind::Console));
 
@@ -346,7 +354,7 @@ final class OwnAccountTest extends TestCase
             $this->managers[] = $principal->id;
         }
 
-        $session = Permits::call($this->sessions->start(...), new StartSession($this->realm, $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true))), new Origin(OriginKind::Web))->session;
+        $session = Permits::call($this->sessions->start(...), new StartSession($this->realm, $principal->id, new AuthenticationContext(new AuthenticationFactor($method, $this->clock->now(), AuthenticationMethod::Passkey === $method, AuthenticationMethod::Passkey === $method))), new Origin(OriginKind::Web))->session;
 
         match ($state) {
             'hold' => Permits::call($this->stepUp->startCoolDown(...), new StartCoolDown($this->realm, $principal->id), new Origin(OriginKind::Web)),

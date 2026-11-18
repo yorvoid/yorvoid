@@ -18,12 +18,18 @@ use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\HeldAfterRecovery;
 use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Core\Authorization\Remedy;
+use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\WaitReason;
+use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\Principals;
@@ -256,6 +262,10 @@ final class FlowsTest extends DatabaseTestCase
             [static fn (): never => throw new HeldAfterRecovery(new \DateTimeImmutable('+1 day')), null, 'yorvoid.flow.held_after_recovery'],
             [static fn (int $times): null => 1 === $times ? null : throw new StepUpRequired($lapsed), static fn (): never => throw new StepUpRequired($lapsed), 'yorvoid.flow.confirm_again'],
             [null, static fn (): never => throw new HeldAfterRecovery(new \DateTimeImmutable('+1 day')), 'yorvoid.flow.held_after_recovery'],
+            // A step-up refused as a decision (G-8), as the exceptions were.
+            [static fn (): never => throw self::refused(new StepUpRemedy(Duration::minutes(5))), null, 'yorvoid.flow.confirm_again'],
+            [static fn (): never => throw self::refused(new WaitRemedy(new \DateTimeImmutable('+1 day'), WaitReason::Recovered)), null, 'yorvoid.flow.held_after_recovery'],
+            [null, static fn (): never => throw self::refused(new WaitRemedy(new \DateTimeImmutable('+1 day'), WaitReason::Recovered)), 'yorvoid.flow.held_after_recovery'],
         ];
 
         foreach ($cases as $i => [$enter, $submit, $message]) {
@@ -277,6 +287,40 @@ final class FlowsTest extends DatabaseTestCase
         $refused = $this->flows(new Flow('acme.lapse', [new TestStep('case', static fn (): never => throw new StepUpRequired($lapsed))]));
         $started = $refused->start('acme.lapse', new Realm('acme'), $this->context);
         self::assertEquals([FlowStatus::InProgress, [new Problem('yorvoid.flow.confirm_again')]], [$refused->submit($started->state->id, 'case', new Input(), $this->context)?->status, $refused->submit($started->state->id, 'case', new Input(), $this->context)?->problems]);
+
+        $decided = $this->flows(new Flow('acme.decided', [new TestStep('case', static fn (): never => throw self::refused(new StepUpRemedy(Duration::minutes(5))))]));
+        $started = $decided->start('acme.decided', new Realm('acme'), $this->context);
+        self::assertEquals([FlowStatus::InProgress, [new Problem('yorvoid.flow.confirm_again')]], [$decided->submit($started->state->id, 'case', new Input(), $this->context)?->status, $decided->submit($started->state->id, 'case', new Input(), $this->context)?->problems]);
+    }
+
+    /**
+     * A refusal a flow has no answer for is the application's to handle, entering a step or answering it.
+     */
+    public function testARefusalWithoutAStepUpOrAHoldIsThrown(): void
+    {
+        $refusal = self::refused(new WaitRemedy(new \DateTimeImmutable('+1 day')));
+
+        foreach (['enter' => [static fn (): never => throw $refusal, null], 'submit' => [null, static fn (): never => throw $refusal]] as $case => [$enter, $submit]) {
+            $flows = $this->flows(new Flow('acme.case', [new TestStep('first'), new TestStep('case', $submit, enter: $enter)]));
+            $started = $flows->start('acme.case', new Realm('acme'), $this->context);
+
+            try {
+                $flows->submit($started->state->id, 'first', new Input(), $this->context);
+
+                if (null !== $submit) {
+                    $flows->submit($started->state->id, 'case', new Input(), $this->context);
+                }
+
+                self::fail(\sprintf('The refusal on %s wasn\'t thrown.', $case));
+            } catch (NotPermitted $thrown) {
+                self::assertSame($refusal, $thrown, $case);
+            }
+        }
+    }
+
+    private static function refused(Remedy $remedy): NotPermitted
+    {
+        return new NotPermitted('acme.case', Decision::deny('Not now.', remedies: [$remedy]));
     }
 
     public function testAStepCantKeepDataUnderAReservedPrefix(): void
