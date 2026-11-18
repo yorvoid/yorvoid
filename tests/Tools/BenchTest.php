@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Tools;
 
 use PHPUnit\Framework\TestCase;
+use YorvoID\Bench\Durability;
 
 /**
  * The benchmarks' gate and record (tools/bench/bench.php): it refuses what isn't a measurement, says what
@@ -23,6 +24,22 @@ final class BenchTest extends TestCase
     protected function tearDown(): void
     {
         self::removeDirectory($this->directory);
+    }
+
+    /**
+     * The gate measures without durability, main with it (M2-8, step 2): any of the three settings
+     * otherwise, or missing, fails the run.
+     */
+    public function testMeasuresOnlyWithTheDurabilityItsModeNeeds(): void
+    {
+        $off = ['fsync' => 'off', 'synchronous_commit' => 'off', 'full_page_writes' => 'off'];
+        $on = ['fsync' => 'on', 'synchronous_commit' => 'on', 'full_page_writes' => 'on'];
+
+        self::assertSame([], Durability::mismatches($off, 'off'));
+        self::assertSame([], Durability::mismatches($on, 'on'));
+        self::assertSame(['fsync is on, not off', 'synchronous_commit is on, not off', 'full_page_writes is on, not off'], Durability::mismatches($on, 'off'));
+        self::assertSame(['synchronous_commit is off, not on'], Durability::mismatches(['synchronous_commit' => 'off'] + $on, 'on'));
+        self::assertSame(['full_page_writes is unknown, not off'], Durability::mismatches(['fsync' => 'off', 'synchronous_commit' => 'off'], 'off'));
     }
 
     public function testGatesOnTheLowerQuartile(): void

@@ -501,6 +501,9 @@ jobs:
     name: Benchmarks
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # A pull request's gate measures PostgreSQL without durability; main keeps it (M2-8, step 2).
+      COMPOSE_FILE: ${{ github.event_name == 'pull_request' && 'compose.yaml:compose.bench-gate.yaml' || 'compose.yaml' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

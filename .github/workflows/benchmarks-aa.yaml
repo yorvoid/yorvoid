@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - tools/bench/**
+      - compose.bench-gate.yaml
       - .github/workflows/benchmarks-aa.yaml
 
 permissions:
@@ -23,6 +24,9 @@ jobs:
     name: A/A ${{ matrix.run }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # As the pull request's gate measures: PostgreSQL without durability (M2-8, step 2).
+      COMPOSE_FILE: compose.yaml:compose.bench-gate.yaml
     strategy:
       fail-fast: false
       matrix:

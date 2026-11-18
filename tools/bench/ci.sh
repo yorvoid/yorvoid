@@ -11,6 +11,9 @@
 #
 # Each checkout runs its own benchmark code. The tables are Markdown, written to $GITHUB_STEP_SUMMARY
 # when it's set, and the runs' dumps stay in var/bench for the job's artifact.
+#
+# pr and aa measure PostgreSQL without durability (compose.bench-gate.yaml), main with it: each mode
+# checks that first, and fails if it isn't so.
 set -eu
 
 # The container has no home to write git's configuration to: the checkout is trusted for this run.
@@ -99,6 +102,7 @@ compare() {
 
 case "${1:-}" in
 	pr)
+		php "$root/tools/bench/durability.php" off
 		base=$(checkout base "$2")
 		changed "$2" HEAD
 		echo "## Benchmarks: the head against the base ($(git -C "$root" rev-parse --short "$2"))" >>"$summary"
@@ -106,6 +110,7 @@ case "${1:-}" in
 		compare "$(cat "$out/a.list")" "$(cat "$out/b.list")"
 		;;
 	main)
+		php "$root/tools/bench/durability.php" on
 		echo '## Benchmarks' >>"$summary"
 		run "$root" "$out/head.json"
 		php "$root/tools/bench/bench.php" report "$out/head.json" >>"$summary"
@@ -121,6 +126,7 @@ case "${1:-}" in
 		fi
 		;;
 	aa)
+		php "$root/tools/bench/durability.php" off
 		: >"$out/changed.txt"
 		echo '## Benchmarks: the head against itself' >>"$summary"
 		turns "$root" "$root"
