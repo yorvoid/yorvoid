@@ -33,10 +33,16 @@ final class BootCheck
         $value = static fn (string $name): mixed => $settings[$name] ?? null;
         $known = static fn (string ...$names): bool => [] === array_filter($names, static fn (string $name): bool => $isPlaceholder($value($name)));
 
-        foreach (['connection', 'realm', 'cookies.device', 'storage.prefix', 'passkeys.timeout', 'step_up.window', 'flows.script', 'intents.summaries_domain'] as $name) {
+        foreach (['connection', 'realm', 'cookies.device', 'storage.prefix', 'passkeys.timeout', 'step_up.window', 'flows.script', 'intents.summaries_domain', 'decision_log.digest_grace'] as $name) {
             if (!\is_string($value($name)) || ('' === $value($name) && 'storage.prefix' !== $name)) {
                 throw new InvalidConfigurationException(\sprintf('yorvoid.%s must be text.', $name));
             }
+        }
+
+        // Refusing a decision without its record needs the record written before it's returned, also
+        // inside the application's transaction: only a connection of its own does that (D-42).
+        if ('refuse' === $value('audit.on_failure') && null === $value('decision_log.connection')) {
+            throw new InvalidConfigurationException('yorvoid.audit.on_failure: refuse needs yorvoid.decision_log.connection, a DoctrineBundle connection of its own to the same database: without it, a record written in the application\'s transaction is undone with it.');
         }
 
         $text = static function (string $name) use ($value): string {
@@ -70,6 +76,10 @@ final class BootCheck
 
         if (\is_array($origins) && $known('passkeys.relying_party_id', 'passkeys.timeout') && [] === array_filter($origins, $isPlaceholder)) {
             $build('passkeys', static fn () => Factories::passkeyPolicy($text('passkeys.relying_party_id'), array_values(array_filter($origins, \is_string(...))), $text('passkeys.user_verification'), $text('passkeys.clone_policy'), $text('passkeys.timeout')));
+        }
+
+        if ($known('decision_log.digest_grace')) {
+            $build('decision_log.digest_grace', static fn () => Duration::parse($text('decision_log.digest_grace')));
         }
 
         if ($known('step_up.window', 'step_up.cool_down')) {

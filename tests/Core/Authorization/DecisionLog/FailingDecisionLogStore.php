@@ -23,14 +23,14 @@ final class FailingDecisionLogStore implements DecisionLogStore
     ) {
     }
 
-    public function add(array $records): void
+    public function add(array $records, ?bool $apart = null): void
     {
         if ($this->failing) {
             throw new \RuntimeException('The database went away.');
         }
 
         ++$this->writes;
-        $this->records->add($records);
+        $this->records->add($records, $apart);
     }
 
     public function find(Realm $realm, string $id): ?DecisionRecord
@@ -41,5 +41,30 @@ final class FailingDecisionLogStore implements DecisionLogStore
     public function prune(\DateTimeImmutable $before): int
     {
         return $this->records->prune($before);
+    }
+
+    public function now(): int
+    {
+        return $this->records->now();
+    }
+
+    public function written(Realm $realm, int $after, int $until): array
+    {
+        return $this->records->written($realm, $after, $until);
+    }
+
+    public function digestedUntil(Realm $realm): int
+    {
+        return $this->records->digestedUntil($realm);
+    }
+
+    public function digested(Realm $realm, int $until): void
+    {
+        $this->records->digested($realm, $until);
+    }
+
+    public function prunedBefore(): int
+    {
+        return $this->records->prunedBefore();
     }
 }

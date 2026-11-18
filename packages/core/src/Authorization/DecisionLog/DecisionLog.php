@@ -9,15 +9,24 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Clock\NativeClock;
+use YorvoID\Core\Authorization\DecisionLog\Event\DecisionRecorded;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\NoEventListeners;
+use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Id\IdGenerator;
+use YorvoID\Core\Id\UuidV7Generator;
+use YorvoID\Core\Log\AttemptLog;
 use YorvoID\Core\Log\AuditAlarm;
 use YorvoID\Core\Log\Event\AuditFailed;
+use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\Verdict;
+use YorvoID\Core\Principal\PrincipalId;
+use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * Records decisions apart from the security log (AUZ-040, ADR-09):
@@ -34,7 +43,7 @@ use YorvoID\Core\Operation\Verdict;
  *
  * @api
  */
-final class DecisionLog
+final class DecisionLog implements AttemptLog
 {
     public const int BUFFER = 100;
 
@@ -61,7 +70,9 @@ final class DecisionLog
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly ClockInterface $clock = new NativeClock(),
         private readonly AuditFailure $onFailure = AuditFailure::Continue,
-        EventDispatcherInterface $events = new NoEventListeners(),
+        private readonly EventDispatcherInterface $events = new NoEventListeners(),
+        private readonly ?Transactions $transactions = null,
+        private readonly IdGenerator $ids = new UuidV7Generator(),
     ) {
         if ($sampleRate < 0.0 || $sampleRate > 1.0) {
             throw new IntegratorError(\sprintf('The decision log\'s sample rate is %s.', $sampleRate), 'Give a share between 0 and 1, e.g. 0.01 for one request in a hundred.', 'concepts/security-log.md#the-decision-log');
@@ -102,6 +113,8 @@ final class DecisionLog
         /** @var array<int, DecisionRecord> $records The records of those to be recorded, by their place */
         $records = [];
         $now = [];
+        $refused = [];
+        $refusedAt = [];
 
         foreach ($decided as $i => [$request, $decision]) {
             $operation = null !== $request->operation;
@@ -112,7 +125,12 @@ final class DecisionLog
 
             $records[$i] = DecisionRecord::of($request, $decision);
 
-            if ($operation || AuditFailure::Refuse === $this->onFailure) {
+            if (!self::permits($decision) && ($operation || AuditFailure::Refuse === $this->onFailure)) {
+                // A refusal changes nothing: it's written outside the caller's transaction, and its
+                // failure raises the alert rather than replace the refusal (D-42).
+                $refused[] = $records[$i];
+                $refusedAt[$i] = $i;
+            } elseif ($operation || AuditFailure::Refuse === $this->onFailure) {
                 $now[] = $records[$i];
             } else {
                 $this->buffer[] = $records[$i];
@@ -134,21 +152,38 @@ final class DecisionLog
                 // Refusing, all of them were to be written now.
                 $lost = true;
             }
+
+            if (!$lost) {
+                $this->announce($now);
+            }
         }
+
+        // Written at once and failed: like any record that couldn't be written, it has no hash.
+        $unwritten = [] !== $refused && false === $this->independently($refused) ? $refusedAt : [];
 
         if (\count($this->buffer) >= self::BUFFER) {
             $this->flush();
         }
 
-        return array_map(static function (int $i, array $one) use ($records, $lost): Decision {
+        return array_map(static function (int $i, array $one) use ($records, $lost, $unwritten): Decision {
             $record = $records[$i] ?? null;
 
             return match (true) {
                 null === $record => $one[1],
+                isset($unwritten[$i]) => $one[1],
                 $lost => self::unrecorded($one[1]),
                 default => $one[1]->recorded($record->hash()),
             };
         }, array_keys($decided), $decided);
+    }
+
+    /**
+     * Keeps a failed attempt or a refusal outside the chain, outside the caller's transaction (D-42):
+     * SecurityLog::attempt() checked it.
+     */
+    public function attempt(Realm $realm, string $action, Outcome $outcome, Origin $origin, ?PrincipalId $actor, ?string $subjectType, ?string $subjectId, array $details): void
+    {
+        $this->independently([DecisionRecord::attempt((string) $this->ids->next(), $realm, $this->clock->now(), $action, $outcome->value, null === $actor ? null : (string) $actor, $subjectType, $subjectId, $origin, $details)]);
     }
 
     /**
@@ -162,12 +197,7 @@ final class DecisionLog
 
         $records = $this->buffer;
         $this->buffer = [];
-
-        try {
-            $this->store->add($records);
-        } catch (\Throwable $e) {
-            $this->alarm->raise(new AuditFailed(AuditFailed::DECISION_LOG, $records[0]->realm, \count($records), false, $e));
-        }
+        $this->independently($records);
     }
 
     /**
@@ -187,6 +217,77 @@ final class DecisionLog
     public function reset(): void
     {
         $this->flush();
+    }
+
+    /**
+     * Writes records outside the caller's transaction (D-42): at once on a store with a connection of
+     * its own, or with no transaction open; otherwise once the caller's transaction has ended, committed
+     * or rolled back. A write that fails raises the audit alert, and nothing else.
+     *
+     * @param non-empty-list<DecisionRecord> $records
+     *
+     * @return bool|null Whether they were written, when that was at once; null when they wait for the end
+     */
+    private function independently(array $records): ?bool
+    {
+        // Apart unless DecisionLog can't tell (no Transactions given): then the store tells.
+        $write = function (?bool $apart) use ($records): bool {
+            try {
+                $this->store->add($records, $apart);
+            } catch (\Throwable $e) {
+                $this->alarm->raise(new AuditFailed(AuditFailed::DECISION_LOG, $records[0]->realm, \count($records), false, $e));
+
+                return false;
+            }
+
+            $this->announce($records);
+
+            return true;
+        };
+
+        if (null === $this->transactions) {
+            return $write(null);
+        }
+
+        if ($this->store instanceof WritesApart && $this->store->writesApart()) {
+            return $write(true);
+        }
+
+        // Run at once (no transaction open, or one whose end can't be seen): the store tells whether it's
+        // apart, and it's known whether it was written. Deferred: apart, since the caller's transaction
+        // has ended (C5).
+        $written = null;
+        /** @var \ArrayObject<string, bool> $queue Whether afterEnd() returned before the write ran */
+        $queue = new \ArrayObject(['deferred' => false]);
+        $this->transactions->afterEnd(static function () use ($write, &$written, $queue): void {
+            $written = $write(true === $queue['deferred'] ? true : null);
+        });
+        $queue['deferred'] = true;
+
+        return $written;
+    }
+
+    /**
+     * @param list<DecisionRecord> $records Written
+     */
+    private function announce(array $records): void
+    {
+        foreach ($records as $record) {
+            // Written: a listener's own failure isn't the record's, nor the decision's (C2).
+            try {
+                $this->events->dispatch(new DecisionRecorded($record));
+            } catch (\Throwable $e) {
+                $this->logger->error('A listener of DecisionRecorded failed: {message}', ['message' => $e->getMessage(), 'exception' => $e]);
+            }
+        }
+    }
+
+    private static function permits(Decision $decision): bool
+    {
+        return match ($decision->verdict) {
+            Verdict::Permit, Verdict::PermitOffline => true,
+            Verdict::Deny, Verdict::Indeterminate => false,
+        };
     }
 
     /**

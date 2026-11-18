@@ -7,13 +7,15 @@ namespace YorvoID\Tests\Core\Operation;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\UuidV7;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
+use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
+use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\Precedence;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\LogEntry;
-use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Operation\AbilityPolicy;
@@ -53,6 +55,8 @@ final class OperationsTest extends TestCase
 
     private InMemorySecurityLogStore $log;
 
+    private InMemoryDecisionLogStore $decisions;
+
     private Badges $badges;
 
     protected function setUp(): void
@@ -60,6 +64,7 @@ final class OperationsTest extends TestCase
         $this->realm = new Realm('acme');
         $this->ana = new PrincipalId(new UuidV7());
         $this->log = new InMemorySecurityLogStore();
+        $this->decisions = new InMemoryDecisionLogStore();
         $this->badges = new Badges();
     }
 
@@ -127,12 +132,10 @@ final class OperationsTest extends TestCase
         self::assertSame(Verdict::Deny, $decision->verdict);
         self::assertSame([], $this->badges->permits);
 
-        [$entry] = $this->entries();
-        self::assertSame('acme.badge.issue', $entry->action);
-        self::assertSame(Outcome::Denied, $entry->outcome);
-        self::assertNull($entry->actor);
-        self::assertSame('request-1', $entry->origin->correlationId);
-        self::assertSame(['reason' => \sprintf('The host\'s operator acts from the command line or as the system, not from "%s".', $kind->value), 'verdict' => 'deny'], array_diff_key($entry->details, ['decision' => true]));
+        $record = $this->record($decision);
+        self::assertSame(['acme.badge.issue', 'deny', null], [$record->name, $record->verdict, $record->actor]);
+        self::assertSame([$kind->value, 'request-1'], $record->origin);
+        self::assertSame(\sprintf('The host\'s operator acts from the command line or as the system, not from "%s".', $kind->value), $record->reason);
     }
 
     public function testSomeoneRunsAnOperationOnTheirOwnAccount(): void
@@ -167,7 +170,8 @@ final class OperationsTest extends TestCase
         self::assertSame(Verdict::Indeterminate, $decision->verdict);
         self::assertNull($decision->basis);
         self::assertSame('A permit couldn\'t be evaluated: The ability policy can\'t tell who holds "acme.badges.issue".', $decision->reason);
-        self::assertSame(['indeterminate' => ['missing_data'], 'reason' => 'A permit couldn\'t be evaluated: The ability policy can\'t tell who holds "acme.badges.issue".', 'verdict' => 'indeterminate'], array_diff_key($this->entries()[0]->details, ['decision' => true]));
+        $record = $this->record($decision);
+        self::assertSame([['missing_data'], 'A permit couldn\'t be evaluated: The ability policy can\'t tell who holds "acme.badges.issue".', 'indeterminate'], [$record->indeterminate, $record->reason, $record->verdict]);
     }
 
     public function testTheAbilityPolicyLetsSomeoneElseRunIt(): void
@@ -185,11 +189,12 @@ final class OperationsTest extends TestCase
         $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new ViewingAs(new Member($this->realm, $boss), new Member($this->realm, $this->ana)), new Origin(OriginKind::Web), new Policy(true));
 
         self::assertSame(Verdict::Deny, $decision->verdict);
-        $entry = $this->entries()[0];
-        self::assertTrue($boss->equals($entry->actor ?? throw new \LogicException()), 'The viewer tried it, not the target.');
-        self::assertSame((string) $this->ana, $entry->details['viewing_as'] ?? null);
-        self::assertArrayNotHasKey('viewing_as', $this->refusedEntry(new Member($this->realm, $boss)), 'Only viewing as someone.');
-        self::assertArrayNotHasKey('viewing_as', $this->refusedEntry(new ViewingAs(new Member($this->realm, $boss), new Anonymous())), 'Viewing as nobody in particular.');
+        $record = $this->record($decision);
+        self::assertSame((string) $boss, $record->viewer['actor'] ?? null, 'The viewer tried it.');
+        self::assertSame((string) $this->ana, $record->actor, 'As the target.');
+        self::assertNull($this->refusedRecord(new Member($this->realm, $boss))->viewer, 'Only viewing as someone.');
+        $asNobody = $this->refusedRecord(new ViewingAs(new Member($this->realm, $boss), new Anonymous()));
+        self::assertSame([(string) $boss, null], [$asNobody->viewer['actor'] ?? null, $asNobody->actor], 'Viewing as nobody in particular.');
     }
 
     public function testAnAuthorizationThatPermitsAViewAsIsAMistake(): void
@@ -214,14 +219,16 @@ final class OperationsTest extends TestCase
     }
 
     /**
-     * @return array<mixed> The details of its refusal's entry
+     * The record of its refusal.
      */
-    private function refusedEntry(Actor $actor): array
+    private function refusedRecord(Actor $actor): DecisionRecord
     {
-        $this->refused(new IssueBadge($this->realm, $this->ana), $actor, new Origin(OriginKind::Web), new Policy(false));
-        $entries = $this->entries();
+        return $this->record($this->refused(new IssueBadge($this->realm, $this->ana), $actor, new Origin(OriginKind::Web), new Policy(false)));
+    }
 
-        return end($entries)->details ?? [];
+    private function record(Decision $decision): DecisionRecord
+    {
+        return $this->decisions->find($this->realm, $decision->id ?? '') ?? throw new \LogicException('The decision wasn\'t recorded.');
     }
 
     public function testTheAbilityPolicyRefuses(): void
@@ -394,8 +401,9 @@ final class OperationsTest extends TestCase
         try {
             $this->operations($policy)->run($command, $actor, $origin);
         } catch (NotPermitted $refused) {
-            $entries = $this->entries();
-            self::assertSame($refused->operation, end($entries)->action ?? null);
+            // A refusal changes nothing: the chain has no entry, its decision record is its trace (D-42).
+            self::assertSame([], array_filter($this->entries(), static fn (LogEntry $entry): bool => $refused->operation === $entry->action), 'The refusal is in the chain.');
+            self::assertSame($refused->operation, $this->record($refused->decision)->name);
             self::assertSame([], $this->badges->permits, 'Nothing ran.');
 
             return $refused->decision;
@@ -411,7 +419,7 @@ final class OperationsTest extends TestCase
     {
         $catalogue = new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]);
         $log = new SecurityLog($this->log, new InMemoryTransactions());
-        $authorization = Evaluator::builtIn(new ValidAuthority(), $policy ?? new NoAbilityPolicy(), new SelfService());
+        $authorization = Evaluator::builtIn(new ValidAuthority(), $policy ?? new NoAbilityPolicy(), new SelfService(), decisions: new DecisionLog($this->decisions));
 
         return new Operations($catalogue, $authorization, $log, $handlers ?? [$this->badges]);
     }

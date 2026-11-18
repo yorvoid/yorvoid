@@ -108,6 +108,55 @@ final class TransactionsTest extends DatabaseTestCase
         self::assertSame(['new device'], $ran->getArrayCopy(), 'After the application\'s commit, security notifications stopped.');
     }
 
+    /**
+     * The application's own transaction, committed or rolled back: what waits for the end runs after it,
+     * on the same connection, and what it writes stays (D-42).
+     */
+    #[DataProvider('platforms')]
+    public function testWhatWaitsForTheEndRunsAfterTheApplicationsOwnTransaction(string $platform): void
+    {
+        $stack = $this->stack($platform);
+        $database = $stack->database;
+        \assert($database instanceof Database);
+        $written = self::principal();
+
+        $database->connection->beginTransaction();
+        $stack->transactions->afterEnd(static function () use ($stack, $written): void {
+            $stack->transactions->run(static fn () => $stack->principals->add($written));
+        });
+        self::assertNull($stack->principals->get($written->realm, $written->id), 'It ran before the application\'s transaction ended.');
+        $database->connection->rollBack();
+
+        self::assertNotNull($stack->principals->get($written->realm, $written->id), 'The application\'s rollback undid it, or it never ran.');
+        self::assertFalse($database->connection->isTransactionActive(), 'A transaction was left open.');
+    }
+
+    /**
+     * Without YorvoID's middleware the end can't be seen: it runs at once, inside the transaction, and
+     * the rollback undoes it (documented: ARC-0058 then still applies).
+     */
+    #[DataProvider('platforms')]
+    public function testWithoutTheMiddlewareWhatWaitsForTheEndRunsAtOnceAndIsUndone(string $platform): void
+    {
+        $stack = $this->stack($platform);
+        $database = $stack->database;
+        \assert($database instanceof Database);
+        $transactions = new DbalTransactions($database->connection);
+        $written = self::principal();
+
+        try {
+            $transactions->run(static function () use ($transactions, $stack, $written): void {
+                $transactions->afterEnd(static fn () => $stack->principals->add($written));
+                self::assertNotNull($stack->principals->get($written->realm, $written->id), 'It didn\'t run at once.');
+
+                throw new \RuntimeException('failed');
+            });
+        } catch (\RuntimeException) {
+        }
+
+        self::assertNull($stack->principals->get($written->realm, $written->id));
+    }
+
     #[DataProvider('platforms')]
     public function testRefusesToQueueCallbacksWithoutTheMiddleware(string $platform): void
     {

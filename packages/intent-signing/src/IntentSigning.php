@@ -94,10 +94,11 @@ final readonly class IntentSigning
      */
     private function record(Session $session, string $action, Outcome $outcome, Intent $intent, Origin $origin, array $details = []): void
     {
-        $this->log->record($session->realm, $action, $outcome, $origin, $session->principalId, 'intent', $intent->nonce, [
-            'operation' => $intent->action,
-            'principal' => (string) $session->principalId,
-            ...$details,
-        ]);
+        $details = ['operation' => $intent->action, 'principal' => (string) $session->principalId, ...$details];
+
+        // A refused signature changed nothing: it's an attempt, outside the chain (D-42).
+        Outcome::Success === $outcome
+            ? $this->log->record($session->realm, $action, $outcome, $origin, $session->principalId, 'intent', $intent->nonce, $details)
+            : $this->log->attempt($session->realm, $action, $outcome, $origin, $session->principalId, 'intent', $intent->nonce, $details);
     }
 }

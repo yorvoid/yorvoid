@@ -12,6 +12,7 @@ use Symfony\Component\Clock\NativeClock;
 use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Event\AuditFailed;
@@ -52,6 +53,7 @@ final readonly class SecurityLog
         private IdGenerator $ids = new UuidV7Generator(),
         private ClockInterface $clock = new NativeClock(),
         LoggerInterface $logger = new NullLogger(),
+        private ?AttemptLog $attempts = null,
     ) {
         $this->current = new CurrentDecision();
         $this->alarm = new AuditAlarm($events, $logger);
@@ -100,6 +102,33 @@ final readonly class SecurityLog
     public function lock(Realm $realm): void
     {
         $this->store->lock($realm);
+    }
+
+    /**
+     * Records a failed attempt or a refusal: something that changed nothing, e.g. a wrong code or a
+     * throttled form (D-42). With an attempt log (the decision log, in Symfony), it's kept there, outside
+     * the caller's transaction and without the realm's lock; without one, it's an entry of the chain, as
+     * before 0.5.
+     *
+     * @param Outcome              $outcome Failed or Denied
+     * @param array<string, mixed> $details Facts, never secrets, as for an entry
+     *
+     * @throws IntegratorError When the action, the subject or the details aren't valid, as for an entry
+     */
+    public function attempt(Realm $realm, string $action, Outcome $outcome, Origin $origin, ?PrincipalId $actor = null, ?string $subjectType = null, ?string $subjectId = null, array $details = []): void
+    {
+        if (Outcome::Success === $outcome) {
+            throw new IntegratorError(\sprintf('"%s" succeeded: record it with record().', $action), 'An attempt is what failed or was refused.', 'concepts/security-log.md#entries');
+        }
+
+        if (null === $this->attempts) {
+            $this->record($realm, $action, $outcome, $origin, $actor, $subjectType, $subjectId, $details);
+
+            return;
+        }
+
+        [$subjectId, $details] = LogEntry::checked($action, $subjectType, $subjectId, $details);
+        $this->attempts->attempt($realm, $action, $outcome, $origin, $actor, $subjectType, $subjectId, $details);
     }
 
     /**

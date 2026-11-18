@@ -99,6 +99,41 @@ trait DecisionLogStoreContract
         foreach ($kept as $record) {
             self::assertNotNull($store->find($record->realm, $record->id), 'One decided at the time itself is kept.');
         }
+
+        self::assertSame((int) $before->format('Uu'), $store->prunedBefore(), 'Verifying a digest needs to know what was pruned.');
+    }
+
+    /**
+     * What a digest covers (D-42): the records written since a time, up to another, by the store's own
+     * clock, in the order written, with the hash of what's stored; and how far a realm is digested.
+     */
+    #[DataProvider('implementations')]
+    public function testListsWhatWasWrittenForADigest(string $implementation): void
+    {
+        $store = $this->decisionLogStore($implementation);
+        $acme = new Realm('acme');
+        $start = $store->now();
+        $first = self::decisionRecord($acme, new \DateTimeImmutable(), 'deny', null, null);
+        $store->add([$first]);
+        // A store's clock may count milliseconds only (SQLite): apart enough to tell them.
+        usleep(2_000);
+        $middle = $store->now();
+        usleep(2_000);
+        $second = self::decisionRecord($acme, new \DateTimeImmutable('-1 hour'), 'deny', null, null);
+        $store->add([$second, self::decisionRecord(new Realm('globex'), new \DateTimeImmutable(), 'deny', null, null)]);
+        usleep(2_000);
+        $end = $store->now();
+
+        self::assertGreaterThanOrEqual($start, $middle);
+        self::assertSame([[$first->id, $first->hash()], [$second->id, $second->hash()]], $store->written($acme, $start - 1, $end), 'In the order written, whenever decided.');
+        self::assertSame([[$second->id, $second->hash()]], $store->written($acme, $middle, $end), 'After the first time, up to the second.');
+        self::assertSame([], $store->written($acme, $end, $end));
+
+        self::assertSame(0, $store->digestedUntil($acme));
+        $store->digested($acme, $middle);
+        $store->digested($acme, $end);
+        self::assertSame([$end, 0], [$store->digestedUntil($acme), $store->digestedUntil(new Realm('globex'))]);
+        self::assertSame(0, $store->prunedBefore());
     }
 
     private static function decisionRecord(Realm $realm, \DateTimeImmutable $at, string $verdict, ?string $actor, ?ResourceRef $resource): DecisionRecord

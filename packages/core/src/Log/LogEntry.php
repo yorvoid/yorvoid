@@ -75,26 +75,7 @@ final readonly class LogEntry
         array $details,
         string $previousHash,
     ): self {
-        if (1 !== preg_match(Operation::NAME, $action)) {
-            throw new IntegratorError(\sprintf('The log action "%s" is invalid.', $action), 'Use an operation name, e.g. "yorvoid.principal.create".', 'concepts/security-log.md#entries');
-        }
-
-        if (null !== $subjectType && 1 !== preg_match('/^[a-z][a-z0-9_]{0,62}$/D', $subjectType)) {
-            throw new IntegratorError(\sprintf('The log subject type "%s" is invalid.', $subjectType), 'Use up to 63 lowercase letters, digits and underscores, e.g. "principal".', 'concepts/security-log.md#entries');
-        }
-
-        $subjectId = null === $subjectId ? null : Text::utf8($subjectId);
-
-        if (null !== $subjectId && ('' === $subjectId || \strlen($subjectId) > 191)) {
-            throw new IntegratorError('The log subject ID is empty or longer than 191 characters.', 'Use the subject\'s ID, e.g. a UUID.', 'concepts/security-log.md#entries');
-        }
-
-        /** @var array<string, mixed> $details Keys stay strings; only their order changes */
-        $details = self::normalized($details);
-
-        if (\strlen(self::json($details)) > self::MAX_DETAILS_BYTES) {
-            throw new IntegratorError(\sprintf('The details of a "%s" log entry are larger than %d bytes.', $action, self::MAX_DETAILS_BYTES), 'Keep details to the facts needed to reconstruct what happened; point to records instead of copying them.', 'concepts/security-log.md#entries');
-        }
+        [$subjectId, $details] = self::checked($action, $subjectType, $subjectId, $details);
 
         $recordedAt = Time::stored($recordedAt);
         $hash = new self($realm, $sequence, $id, $recordedAt, $action, $outcome, $origin, $actor, $subjectType, $subjectId, $details, self::ALGORITHM, $previousHash, '')->computeHash();
@@ -127,6 +108,44 @@ final readonly class LogEntry
             'details' => self::normalized($this->details),
             'previous_hash' => $this->previousHash,
         ]));
+    }
+
+    /**
+     * What an entry's action, subject and details must be, checked and normalized: for an entry, and for
+     * an attempt the decision log keeps instead (D-42).
+     *
+     * @param array<string, mixed> $details
+     *
+     * @return array{string|null, array<string, mixed>} The subject's ID and the details, normalized
+     *
+     * @throws IntegratorError When one isn't valid
+     *
+     * @internal For SecurityLog
+     */
+    public static function checked(string $action, ?string $subjectType, ?string $subjectId, array $details): array
+    {
+        if (1 !== preg_match(Operation::NAME, $action)) {
+            throw new IntegratorError(\sprintf('The log action "%s" is invalid.', $action), 'Use an operation name, e.g. "yorvoid.principal.create".', 'concepts/security-log.md#entries');
+        }
+
+        if (null !== $subjectType && 1 !== preg_match('/^[a-z][a-z0-9_]{0,62}$/D', $subjectType)) {
+            throw new IntegratorError(\sprintf('The log subject type "%s" is invalid.', $subjectType), 'Use up to 63 lowercase letters, digits and underscores, e.g. "principal".', 'concepts/security-log.md#entries');
+        }
+
+        $subjectId = null === $subjectId ? null : Text::utf8($subjectId);
+
+        if (null !== $subjectId && ('' === $subjectId || \strlen($subjectId) > 191)) {
+            throw new IntegratorError('The log subject ID is empty or longer than 191 characters.', 'Use the subject\'s ID, e.g. a UUID.', 'concepts/security-log.md#entries');
+        }
+
+        /** @var array<string, mixed> $details Keys stay strings; only their order changes */
+        $details = self::normalized($details);
+
+        if (\strlen(self::json($details)) > self::MAX_DETAILS_BYTES) {
+            throw new IntegratorError(\sprintf('The details of a "%s" log entry are larger than %d bytes.', $action, self::MAX_DETAILS_BYTES), 'Keep details to the facts needed to reconstruct what happened; point to records instead of copying them.', 'concepts/security-log.md#entries');
+        }
+
+        return [$subjectId, $details];
     }
 
     /**

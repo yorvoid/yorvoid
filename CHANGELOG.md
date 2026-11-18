@@ -6,6 +6,10 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Added
 
+- `Transactions::afterEnd()`: runs once the outermost transaction has ended, committed or rolled back. `TransactionsContract` checks it.
+- Decision digests: `yorvoid:log:checkpoint` first appends `yorvoid.decision.digest` with the decision records written since the last one (`DecisionDigests`), and `yorvoid:log:verify --decisions` checks them. `yorvoid.decision_log.digest_grace` (a minute) is how long a record may take to be written.
+- `DecisionRecorded`: dispatched for each decision record written, refusals and failed attempts among them.
+- `SecurityLog::attempt()` and `AttemptLog`: failed attempts and refusals, kept apart from the chain.
 - `ForgetRoles`, `ForgetRelations` and `ForgetAttributes` (`yorvoid.role.forget_all`, `yorvoid.relation.forget_all`, `yorvoid.attribute.forget_all`): a deletion's consequences, run by `ForgetRolesOfDeletedPrincipals`, `ForgetRelationsOfDeletedPrincipals` and `ForgetAttributesOfDeletedPrincipals`, which are their handlers.
 - Consequence-only operations for what only another operation may cause: `StepUpSession` (`yorvoid.session.step_up`), `StartCoolDown` (`yorvoid.recovery.cool_down`), `DisableCredential` (`yorvoid.credential.disable`) and `ForgetCredentials` (`yorvoid.credential.forget_all`). A way of stepping up of your own is an operation that causes `yorvoid.session.step_up` ([sessions](docs/concepts/sessions.md#starting-a-session)).
 - `StepUpWithPasskey` (`yorvoid.passkey.step_up`): a passkey step-up is an operation, decided and recorded like a sign-in.
@@ -14,6 +18,11 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Breaking
 
+- Refusals and failed attempts are no longer entries of the security log (D-42): a refused operation, a code, token, link or passkey that didn't work, a refused signature, a throttled form. They're decision records (`kind: attempt` for those that aren't an operation's decision), written outside the application's transaction and without the realm's lock. `SecurityLogEntryRecorded` listeners no longer see them: listen to `DecisionRecorded`. Without a decision log (`SecurityLog` given no `attempts:`), they're entries as before.
+- `DecisionRecord` is format 2 (attempts with their details; the read set's slot); format-1 records still read and verify. `DecisionLogStore::add()` takes whether the records are written apart from any caller's transaction, and the store adds `now()`, `written()`, `digestedUntil()`, `digested()` and `prunedBefore()`; a migration adds `written_us` and two tables.
+- `Transactions` adds `afterEnd()`: a `Transactions` of your own implements it, and a callback's failure goes no further than raising your alert. `DbalTransactions` and `InMemoryTransactions` take an event dispatcher and a logger for it (`AuditFailed::AFTER_END`).
+- `yorvoid.audit.on_failure: refuse` needs `yorvoid.decision_log.connection`: the bundle refuses to start without it.
+- The passkey sign-in and step-up name `yorvoid.credential.disable` twice in `causes`.
 - The constructors of the events YorvoID's listeners act on are `@internal`: `PrincipalCreated`, `PrincipalStatusChanging`, `IdentifierChanged`, `CredentialAdded`, `CredentialRemoving`, `CredentialRemoved`, `NewDeviceSignedIn`, `RecoveryCodeUsed`, `RecoveryCodesGenerated`, `RecoveryLinkUsed` and `SignedOperationRan`. Listen to them as before; YorvoID makes them.
 - `ForgetCredentialsOfDeletedPrincipals` takes only `Credentials`: give `Credentials` the `RecoveryCodeStore` (`recoveryCodes:`), and forgetting a deleted principal's credentials removes its recovery codes too.
 - `SecurityNotifications::signedOperation()` and `Database::deleteInBatches()` are `@internal`.
@@ -26,6 +35,8 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Security
 
+- A refusal survives the application's rollback and takes no realm lock, and a decision log that can't be written gives `NotPermitted` and the audit alert, not a storage error (AR-03).
+- A copied passkey stays disabled when the application's transaction rolls back with the refusal (ARC-0058).
 - A deletion's listeners run on its permit and only for the principal it deletes, and the events YorvoID's listeners act on can't be made by an application: a made-up event no longer removes someone's roles, relations, attributes or passkey, or sends them a security notification.
 - What only an operation may cause takes its permit (D-41, AR-01): a session's step-up, a recovery's cool-down, disabling and forgetting credentials. A step-up is about the principal who proved who they are, and can't step up anyone else's session.
 - Cache freshness after a policy change no longer depends on callers: every `PolicyStore` change increments the version itself (SS-05).
@@ -35,6 +46,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Fixed
 
+- YorvoID's `TransactionMiddleware` rolls back before it runs what waits for the end of the transaction.
 - The stores convert values through the connection (`Connection::convertToPHPValue()`), not `Type::getType()`, which Doctrine DBAL 4.6 deprecates: no deprecations with DBAL 4.6.
 - `yorvoid/policy-testing` suggests `symfony/config` with the other packages its Symfony bundle needs: Symfony's `Bundle` doesn't load without it.
 

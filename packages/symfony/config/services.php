@@ -36,6 +36,7 @@ use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
 use YorvoID\Core\Authorization\DecisionLog\AuditFailure;
+use YorvoID\Core\Authorization\DecisionLog\DecisionDigests;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
@@ -198,9 +199,9 @@ return static function (ContainerConfigurator $container): void {
 
     // The stores, by ID only (Stores): YorvoID's services get them by binding, which applies to the
     // services this file defines and to no one else's, so application code can't autowire a store.
-    // Those wired by ID below (e.g. the known devices: device recognition can be off) aren't bound:
+    // Those wired by ID below (the known devices: device recognition can be off) aren't bound:
     // Symfony refuses a binding nothing uses.
-    foreach (array_diff_key(Stores::IDS, array_flip([KnownDeviceStore::class, DecisionLogStore::class])) as $interface => $id) {
+    foreach (array_diff_key(Stores::IDS, array_flip([KnownDeviceStore::class])) as $interface => $id) {
         $services->bind($interface, service($id));
     }
 
@@ -212,7 +213,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(StorageLocation::class)->args([param('yorvoid.storage.prefix'), param('yorvoid.storage.schema')]);
     $services->set(Database::class)->args([service('yorvoid.connection'), service(StorageLocation::class)]);
     // The middleware's instance on that connection, set by YorvoIDBundle.
-    $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null]);
+    $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null, service('event_dispatcher'), service('logger')->nullOnInvalid()]);
     $services->alias(Transactions::class, DbalTransactions::class)->public();
     $services->set(IdentifierRenormalization::class);
 
@@ -268,7 +269,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(KeyFiles::class)->args([param('yorvoid.keys.file'), param('yorvoid.keys.per_realm'), param('yorvoid.keys.directory')]);
 
     // The services.
-    $services->set(SecurityLog::class)->tag('kernel.reset', ['method' => 'reset']);
+    // Failed attempts and refusals go to the decision log, outside the chain (D-42).
+    $services->set(SecurityLog::class)->arg('$attempts', service(DecisionLog::class))->tag('kernel.reset', ['method' => 'reset']);
     // Ability decisions wait for the end of what asked for them: a request, a command, a message.
     $services->set(DecisionLog::class)
         ->args([
@@ -280,6 +282,7 @@ return static function (ContainerConfigurator $container): void {
             service(ClockInterface::class),
             inline_service(AuditFailure::class)->factory([AuditFailure::class, 'from'])->args([param('yorvoid.audit.on_failure')]),
             service('event_dispatcher'),
+            service(Transactions::class),
         ])
         ->tag('kernel.reset', ['method' => 'reset'])
         ->tag('kernel.event_listener', ['event' => 'kernel.terminate', 'method' => 'flush'])
@@ -434,6 +437,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(EnvironmentCheck::class)->args([param('kernel.environment'), param('kernel.debug'), param('kernel.secret')])->tag('yorvoid.doctor_check', ['name' => 'Environment']);
     $services->set(KeysRotateCommand::class)->tag('console.command');
     $services->set(ConfiguredCheckpoints::class)->arg('$file', param('yorvoid.log.checkpoint_file'))->arg('$toLogger', param('yorvoid.log.checkpoint_logger'))->arg('$events', service('event_dispatcher'))->arg('$logger', service('logger')->nullOnInvalid());
+    // Each checkpoint first digests the decision records since the last (D-42).
+    $services->set(DecisionDigests::class)->arg('$grace', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.decision_log.digest_grace')]));
     $services->set(LogCheckpointCommand::class)->tag('console.command');
     $services->set(LogAnchorCommand::class)->tag('console.command');
     $services->set(LogVerifyCommand::class)->tag('console.command');

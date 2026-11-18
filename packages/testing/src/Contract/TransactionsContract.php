@@ -215,6 +215,89 @@ trait TransactionsContract
         self::assertNull($principals->get($undone->realm, $undone->id));
     }
 
+    /**
+     * What waits for the end runs after a commit and after a rollback, outside the transaction, so it
+     * outlasts the caller's outcome; outside a transaction, at once (D-42).
+     */
+    #[DataProvider('implementations')]
+    public function testWhatWaitsForTheEndRunsCommittedOrRolledBack(string $implementation): void
+    {
+        $transactions = $this->transactions($implementation);
+        $principals = $this->principalStore($implementation);
+        $order = [];
+
+        $transactions->afterEnd(static function () use (&$order): void {
+            $order[] = 'outside';
+        });
+        $transactions->run(static function () use ($transactions, &$order): void {
+            $transactions->afterEnd(static function () use (&$order): void {
+                $order[] = 'committed';
+            });
+            $order[] = 'in the transaction';
+        });
+        $kept = self::principal();
+
+        try {
+            $transactions->run(static function () use ($transactions, $principals, $kept, &$order): void {
+                $transactions->afterEnd(static function () use ($transactions, $principals, $kept, &$order): void {
+                    $order[] = 'rolled back';
+                    // It runs in no transaction: what it writes in one of its own stays.
+                    $transactions->run(static fn () => $principals->add($kept));
+                });
+
+                try {
+                    $transactions->run(static function () use ($transactions, &$order): void {
+                        $transactions->afterEnd(static function () use (&$order): void {
+                            $order[] = 'a failed nested unit\'s';
+                        });
+
+                        throw new \RuntimeException('inner failed');
+                    });
+                } catch (\RuntimeException) {
+                }
+
+                throw new \RuntimeException('failed');
+            });
+        } catch (\RuntimeException) {
+        }
+
+        self::assertSame(['outside', 'in the transaction', 'committed', 'rolled back', 'a failed nested unit\'s'], $order);
+        self::assertNotNull($principals->get($kept->realm, $kept->id), 'What it wrote was undone with the caller.');
+    }
+
+    /**
+     * A callback for the end that fails doesn't stop the others, and doesn't replace the caller's own
+     * outcome: the implementation raises its audit alert instead (D-42).
+     */
+    #[DataProvider('implementations')]
+    public function testAFailingCallbackForTheEndGoesNoFurther(string $implementation): void
+    {
+        $transactions = $this->transactions($implementation);
+        $ran = [];
+        $thrown = null;
+
+        try {
+            $transactions->run(static function () use ($transactions, &$ran): void {
+                $transactions->afterEnd(static function (): void {
+                    throw new \RuntimeException('the callback failed');
+                });
+                $transactions->afterEnd(static function () use (&$ran): void {
+                    $ran[] = 'the next one';
+                });
+
+                throw new \RuntimeException('the caller failed');
+            });
+        } catch (\RuntimeException $exception) {
+            $thrown = $exception->getMessage();
+        }
+
+        self::assertSame('the caller failed', $thrown);
+        self::assertSame(['the next one'], $ran);
+        $transactions->afterEnd(static function (): void {
+            throw new \RuntimeException('failed at once');
+        });
+    }
+
     private static function principal(): Principal
     {
         $now = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');

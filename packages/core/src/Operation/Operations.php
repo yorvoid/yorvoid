@@ -5,14 +5,11 @@ declare(strict_types=1);
 namespace YorvoID\Core\Operation;
 
 use YorvoID\Core\Authorization\Evaluator;
-use YorvoID\Core\Authorization\IndeterminateReason;
-use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
-use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 
@@ -112,15 +109,8 @@ final readonly class Operations
         };
 
         if (null === $offline || null === $decision->basis) {
-            // Viewing as someone else, the viewer tried it.
-            $this->log->citing($decision, fn (): LogEntry => $this->log->record($command->realm, $operation->name, Outcome::Denied, $origin, $actor instanceof ViewingAs ? $actor->viewer->principalId : $actor->principalId, details: array_filter([
-                'viewing_as' => $actor instanceof ViewingAs && null !== $actor->target->principalId ? (string) $actor->target->principalId : [],
-                'verdict' => $decision->verdict->value,
-                'reason' => $decision->reason,
-                'indeterminate' => array_map(static fn (IndeterminateReason $reason): string => $reason->value, $decision->indeterminate),
-                'remedies' => array_map(static fn (Remedy $remedy): string => $remedy->name(), $decision->remedies),
-            ], static fn (string|array $value): bool => [] !== $value)));
-
+            // A refusal changes nothing: its decision record is its trace, written outside the caller's
+            // transaction and without the realm's lock (D-42). Viewing as someone else, it names the viewer.
             throw new NotPermitted($operation->name, $decision);
         }
 

@@ -17,7 +17,6 @@ use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
-use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Operation\AbilityPolicy;
@@ -92,9 +91,7 @@ final class DecisionPointPropertiesTest extends TestCase
                 self::assertFalse($permits, 'A Permit was refused.');
                 self::assertSame([], $badges->permits, 'A handler ran without a Permit.');
                 self::assertSame($decision, $refused->decision);
-                $entries = iterator_to_array($store->entries($realm, 1), false);
-                self::assertCount(1, $entries);
-                self::assertSame(Outcome::Denied, $entries[0]->outcome);
+                self::assertSame([], iterator_to_array($store->entries($realm, 1), false), 'A refusal changes nothing: the chain has no entry (D-42).');
             }
         });
     }

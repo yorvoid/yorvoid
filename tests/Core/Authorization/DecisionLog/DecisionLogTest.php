@@ -136,7 +136,7 @@ final class DecisionLogTest extends TestCase
         self::assertSame([], $this->entries()[2]->details, 'Once it ran, nothing cites it.');
     }
 
-    public function testARefusalIsRecordedAndItsLogEntryCitesIt(): void
+    public function testARefusalIsRecordedAndNotChained(): void
     {
         [$operations] = $this->operations();
         $ana = new PrincipalId(new UuidV7());
@@ -151,8 +151,7 @@ final class DecisionLogTest extends TestCase
         $record = $this->store->find($this->realm, (string) $decision->id);
         self::assertSame('deny', $record?->verdict);
         self::assertSame($record->hash(), $decision->hash);
-        self::assertSame(['hash' => $decision->hash, 'id' => $decision->id], $this->entries()[0]->details['decision'] ?? null);
-        self::assertSame(Outcome::Denied, $this->entries()[0]->outcome);
+        self::assertSame([], $this->entries(), 'A refusal changes nothing: the chain has no entry for it (D-42).');
     }
 
     public function testAnOperationThatFailsStopsCitingItsDecision(): void

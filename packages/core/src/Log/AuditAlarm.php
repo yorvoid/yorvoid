@@ -40,4 +40,23 @@ final readonly class AuditAlarm
             $this->logger->error('A listener of YorvoID\'s audit alert failed: {message}', ['message' => $e->getMessage(), 'exception' => $e]);
         }
     }
+
+    /**
+     * What waits for the end of a transaction, guarded: a failure raises the alert and goes no further,
+     * so it never replaces the caller's own outcome or stops what waits after it (D-42).
+     *
+     * @param \Closure(): void $callback
+     *
+     * @return \Closure(): void
+     */
+    public function guard(\Closure $callback): \Closure
+    {
+        return function () use ($callback): void {
+            try {
+                $callback();
+            } catch (\Throwable $e) {
+                $this->raise(new AuditFailed(AuditFailed::AFTER_END, null, 1, false, $e));
+            }
+        };
+    }
 }

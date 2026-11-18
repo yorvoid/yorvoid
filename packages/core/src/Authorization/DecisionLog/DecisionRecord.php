@@ -10,6 +10,7 @@ use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Crypto\Digest;
+use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\ViewingAs;
@@ -26,12 +27,13 @@ use YorvoID\Core\Text;
  */
 final readonly class DecisionRecord
 {
-    public const int FORMAT = 1;
+    /** Format 2 (0.5, D-42): attempts, with their details, and the read set */
+    public const int FORMAT = 2;
 
     public const string ALGORITHM = 'sha256';
 
     /**
-     * @param 'operation'|'ability'                                                                               $kind
+     * @param 'operation'|'ability'|'attempt'                                                                     $kind
      * @param string                                                                                              $name          The operation's name, or the ability's
      * @param string|null                                                                                         $actor         The acting principal's ID, if there's one
      * @param list<string>                                                                                        $indeterminate Why it couldn't decide
@@ -42,6 +44,8 @@ final readonly class DecisionRecord
      * @param array{actor: string|null, verdict: string|null, elements: list<array{string, string, string}>}|null $viewer        Viewing as
      *                                                                                                                           someone else: the viewer, and its own decision if one was made
      *                                                                                                                           (none for an operation, which is refused); the actor is then the target
+     * @param array<string, mixed>                                                                                $details       An attempt's facts, as its log entry had them (format 2)
+     * @param int                                                                                                 $format        The canonical form it's hashed over: 1 for records written before 0.5
      */
     public function __construct(
         public string $id,
@@ -60,6 +64,8 @@ final readonly class DecisionRecord
         public array $versions,
         public array $origin,
         public ?array $viewer = null,
+        public array $details = [],
+        public int $format = self::FORMAT,
     ) {
     }
 
@@ -90,6 +96,19 @@ final readonly class DecisionRecord
             [$request->origin->kind->value, $request->origin->correlationId],
             self::viewer($request, $decision),
         );
+    }
+
+    /**
+     * A failed attempt or a refusal of something that isn't an operation's decision (D-42): a wrong
+     * code, a passkey nobody has, a throttled form. Its verdict is the outcome ("failed", "denied").
+     *
+     * @param array<string, mixed> $details As LogEntry::checked() left them
+     */
+    public static function attempt(string $id, Realm $realm, \DateTimeImmutable $at, string $action, string $outcome, ?string $actor, ?string $subjectType, ?string $subjectId, Origin $origin, array $details): self
+    {
+        $subject = null === $subjectType || null === $subjectId ? null : new ResourceRef($subjectType, $subjectId);
+
+        return new self($id, $realm, $at, 'attempt', $action, $actor, $subject, $outcome, null, '', [], [], [], [], [$origin->kind->value, $origin->correlationId], null, $details);
     }
 
     /**
@@ -128,8 +147,8 @@ final readonly class DecisionRecord
         $versions = $this->versions;
         ksort($versions, \SORT_STRING);
 
-        return [
-            'format' => self::FORMAT,
+        $form = [
+            'format' => $this->format,
             'id' => $this->id,
             'realm' => $this->realm->name,
             'decided_at' => $this->at->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z'),
@@ -147,6 +166,14 @@ final readonly class DecisionRecord
             'origin' => $this->origin,
             'viewer' => $this->viewer,
         ];
+
+        // Format 1 is hashed over exactly what it held; format 2 adds the details and the read set (G-3 fills it).
+        if ($this->format >= 2) {
+            $form['details'] = $this->details;
+            $form['read'] = ['sources' => $versions];
+        }
+
+        return $form;
     }
 
     public function json(): string
@@ -172,7 +199,7 @@ final readonly class DecisionRecord
             throw new \UnexpectedValueException('A stored decision isn\'t valid JSON.', previous: $e);
         }
 
-        if (!\is_array($data) || self::FORMAT !== ($data['format'] ?? null)) {
+        if (!\is_array($data) || !\in_array($data['format'] ?? null, [1, 2], true)) {
             throw new \UnexpectedValueException('A stored decision has an unknown format.');
         }
 
@@ -180,7 +207,9 @@ final readonly class DecisionRecord
         $resource = $data['resource'] ?? null;
         $kind = self::string($data, 'kind');
 
-        if (false === $at || !\in_array($kind, ['operation', 'ability'], true)) {
+        $format = $data['format'];
+
+        if (false === $at || !\in_array($kind, 2 === $format ? ['operation', 'ability', 'attempt'] : ['operation', 'ability'], true)) {
             throw new \UnexpectedValueException('A stored decision is malformed.');
         }
 
@@ -201,7 +230,35 @@ final readonly class DecisionRecord
             self::versions($data),
             self::origin($data),
             self::viewerOf($data),
+            2 === $format ? self::detailsOf($data) : [],
+            $format,
         );
+    }
+
+    /**
+     * @param array<mixed> $data
+     *
+     * @return array<string, mixed>
+     */
+    private static function detailsOf(array $data): array
+    {
+        $details = $data['details'] ?? [];
+
+        if (!\is_array($details) || ([] !== $details && array_is_list($details))) {
+            throw new \UnexpectedValueException('A stored decision\'s details are malformed.');
+        }
+
+        $keyed = [];
+
+        foreach ($details as $key => $value) {
+            if (!\is_string($key)) {
+                throw new \UnexpectedValueException('A stored decision\'s details are malformed.');
+            }
+
+            $keyed[$key] = $value;
+        }
+
+        return $keyed;
     }
 
     /**

@@ -471,8 +471,22 @@ final readonly class Passkeys implements OperationHandler
         if ($counter->suspected && ClonePolicy::Allow !== $this->policy->clonePolicy) {
             if (ClonePolicy::DisablePasskey === $this->policy->clonePolicy) {
                 // A consequence of the sign-in or step-up that found it out, about the passkey's principal.
+                // Now, in the caller's transaction, so its commit keeps it; and, if the caller rolls back
+                // with the refusal below, again once that has ended (ARC-0058, D-42): the operation names
+                // the disable twice for that. If the second fails, the audit alert is raised, and it heals
+                // itself: the counter wasn't recorded, so the copy's next answer is suspected again.
                 $permit->about($passkey->principalId);
-                $permit->cause($this->credentials->disable(...), new DisableCredential($passkey->realm, $credential->id, $passkey->principalId, 'signature counter didn\'t go up: the passkey may have been copied'), $origin);
+                $disable = new DisableCredential($passkey->realm, $credential->id, $passkey->principalId, 'signature counter didn\'t go up: the passkey may have been copied');
+                $permit->cause($this->credentials->disable(...), $disable, $origin);
+                $this->transactions->afterEnd(function () use ($permit, $disable, $origin): void {
+                    // Kept by a commit, or removed meanwhile: nothing to do again.
+                    if (true !== $this->credentials->get($disable->realm, $disable->credentialId)?->isActive()) {
+                        return;
+                    }
+
+                    // A failure raises the audit alert (Transactions::afterEnd()); see above for why it heals.
+                    $permit->cause($this->credentials->disable(...), $disable, $origin);
+                });
             }
 
             $this->refuse($passkey, $action, Refusal::SuspectedCopy, $origin);
@@ -599,7 +613,7 @@ final readonly class Passkeys implements OperationHandler
         try {
             return $read();
         } catch (PasskeyRefused $refused) {
-            $this->log->record($realm, $action, Outcome::Failed, $origin, details: ['reason' => $refused->refusal->value]);
+            $this->log->attempt($realm, $action, Outcome::Failed, $origin, details: ['reason' => $refused->refusal->value]);
 
             throw $refused;
         }
@@ -607,7 +621,7 @@ final readonly class Passkeys implements OperationHandler
 
     private function refuse(Passkey $passkey, string $action, Refusal $refusal, Origin $origin, ?\Throwable $previous = null): never
     {
-        $this->log->record($passkey->realm, $action, Outcome::Failed, $origin, null, 'credential', (string) $passkey->credentialId, [
+        $this->log->attempt($passkey->realm, $action, Outcome::Failed, $origin, null, 'credential', (string) $passkey->credentialId, [
             'principal' => (string) $passkey->principalId,
             'reason' => $refusal->value,
         ]);

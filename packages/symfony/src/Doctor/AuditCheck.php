@@ -39,7 +39,7 @@ final readonly class AuditCheck implements Check, Reports
         }
 
         if ($this->store instanceof DbalDecisionLogStore && !$this->store->writesApart()) {
-            yield Finding::warning('Decisions are written on the application\'s connection: a transaction of the application\'s that rolls back takes their records with it, after what they allowed may have happened.', 'Give the decision log a connection of its own to the same database: yorvoid.decision_log.connection.', 'concepts/security-log.md#when-a-record-cant-be-written');
+            yield Finding::problem('Decisions are written on the application\'s connection: a transaction of the application\'s that rolls back takes their records with it, after what they allowed may have happened.', 'Give the decision log a connection of its own to the same database: yorvoid.decision_log.connection.', 'concepts/security-log.md#when-a-record-cant-be-written');
         }
 
         if ('all' !== $this->permits) {

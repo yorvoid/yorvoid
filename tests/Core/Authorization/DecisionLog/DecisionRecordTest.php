@@ -44,7 +44,7 @@ final class DecisionRecordTest extends TestCase
         $record = DecisionRecord::of($request, $decision);
 
         self::assertSame([
-            'format' => 1,
+            'format' => 2,
             'id' => 'd-1',
             'realm' => 'acme',
             'decided_at' => '2026-11-08T18:00:00.500000Z',
@@ -61,9 +61,38 @@ final class DecisionRecordTest extends TestCase
             'versions' => ['policy' => 7, 'relations' => 2],
             'origin' => ['web', 'request-1'],
             'viewer' => null,
+            'details' => [],
+            'read' => ['sources' => ['policy' => 7, 'relations' => 2]],
         ], $record->toArray(), 'The elements\' texts aren\'t kept.');
         self::assertSame(hash('sha256', $record->json()), $record->hash());
         self::assertSame($record->json(), DecisionRecord::fromJson($record->json())->json());
+    }
+
+    /**
+     * A record written before 0.5 (format 1) reads, and hashes as it was written: over exactly what it
+     * held, so the chain's citations of it still match (D-42).
+     */
+    public function testAFormatOneRecordStillReadsAndHashesAsWritten(): void
+    {
+        $json = json_encode(['format' => 1, 'id' => 'd-1', 'realm' => 'acme', 'decided_at' => '2026-11-08T18:00:00.000000Z', 'kind' => 'operation', 'name' => 'acme.badge.issue', 'actor' => null, 'resource' => null, 'verdict' => 'deny', 'basis' => null, 'reason' => 'No.', 'indeterminate' => [], 'remedies' => [], 'elements' => [], 'versions' => ['policy' => 1], 'origin' => ['web', 'r'], 'viewer' => null], \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR);
+        $record = DecisionRecord::fromJson($json);
+
+        self::assertSame(1, $record->format);
+        self::assertSame($json, $record->json());
+        self::assertSame(hash('sha256', $json), $record->hash());
+    }
+
+    /**
+     * A failed attempt (D-42): its outcome as the verdict, its subject as the resource, its details kept
+     * and read back.
+     */
+    public function testAnAttemptKeepsItsDetails(): void
+    {
+        $record = DecisionRecord::attempt('a-1', new Realm('acme'), new \DateTimeImmutable('2026-11-17 18:00:00 UTC'), 'yorvoid.recovery_code.use', 'failed', null, 'credential', 'c-1', new Origin(OriginKind::Web, correlationId: 'r'), ['principal' => 'p-1']);
+
+        self::assertSame(['attempt', 'yorvoid.recovery_code.use', 'failed', ['credential', 'c-1'], ['principal' => 'p-1']], [$record->kind, $record->name, $record->verdict, $record->toArray()['resource'], $record->details]);
+        self::assertSame($record->json(), DecisionRecord::fromJson($record->json())->json());
+        self::assertNull(DecisionRecord::attempt('a-2', new Realm('acme'), new \DateTimeImmutable(), 'yorvoid.setup.claim', 'failed', null, null, null, new Origin(OriginKind::Web), [])->resource);
     }
 
     public function testAnOperationsRecordNamesItAndItsBasis(): void
@@ -88,7 +117,10 @@ final class DecisionRecordTest extends TestCase
 
         yield 'not JSON' => ['{', 'A stored decision isn\'t valid JSON.'];
         yield 'not a map' => ['"text"', 'A stored decision has an unknown format.'];
-        yield 'another format' => [$with(['format' => 2]), 'A stored decision has an unknown format.'];
+        yield 'another format' => [$with(['format' => 3]), 'A stored decision has an unknown format.'];
+        yield 'an attempt in format 1' => [$with(['kind' => 'attempt']), 'A stored decision is malformed.'];
+        yield 'details that are a list' => [$with(['format' => 2, 'details' => ['a']]), 'A stored decision\'s details are malformed.'];
+        yield 'details with a number for a name' => [$with(['format' => 2, 'details' => ['a' => 1, 7 => 'b']]), 'A stored decision\'s details are malformed.'];
         yield 'no ID' => [$with(['id' => 1]), 'A stored decision\'s "id" isn\'t text.'];
         yield 'a bad time' => [$with(['decided_at' => 'yesterday']), 'A stored decision is malformed.'];
         yield 'another kind' => [$with(['kind' => 'guess']), 'A stored decision is malformed.'];

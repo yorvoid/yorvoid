@@ -5,7 +5,12 @@ declare(strict_types=1);
 namespace YorvoID\Core\Storage\Dbal;
 
 use Doctrine\DBAL\Connection;
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
+use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Log\AuditAlarm;
 use YorvoID\Core\Storage\Transactions;
 
 /**
@@ -16,10 +21,19 @@ use YorvoID\Core\Storage\Transactions;
  */
 final readonly class DbalTransactions implements Transactions
 {
+    private AuditAlarm $alarm;
+
+    /**
+     * @param EventDispatcherInterface $events Where an afterEnd() callback's failure is announced (AuditFailed)
+     * @param LoggerInterface          $logger Where it's logged, at critical
+     */
     public function __construct(
         private Connection $connection,
         private ?TransactionMiddleware $middleware = null,
+        EventDispatcherInterface $events = new NoEventListeners(),
+        LoggerInterface $logger = new NullLogger(),
     ) {
+        $this->alarm = new AuditAlarm($events, $logger);
     }
 
     public function run(\Closure $work): mixed
@@ -73,5 +87,20 @@ final readonly class DbalTransactions implements Transactions
         }
 
         $hooks->add($callback);
+    }
+
+    public function afterEnd(\Closure $callback): void
+    {
+        $callback = $this->alarm->guard($callback);
+        $hooks = $this->middleware?->hooks();
+
+        // No transaction, or none whose end YorvoID can see: now (D-42).
+        if (!$this->connection->isTransactionActive() || null === $hooks || !$hooks->isWatching()) {
+            $callback();
+
+            return;
+        }
+
+        $hooks->addEnded($callback);
     }
 }

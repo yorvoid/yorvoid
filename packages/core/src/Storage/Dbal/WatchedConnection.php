@@ -30,7 +30,11 @@ final class WatchedConnection extends AbstractConnectionMiddleware
 
     public function rollBack(): void
     {
-        $this->hooks->rolledBack();
-        parent::rollBack();
+        // Rolled back first: what waits for the end may open a transaction of its own (D-42).
+        try {
+            parent::rollBack();
+        } finally {
+            $this->hooks->rolledBack();
+        }
     }
 }

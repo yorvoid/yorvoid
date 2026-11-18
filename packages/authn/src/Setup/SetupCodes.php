@@ -119,7 +119,7 @@ final readonly class SetupCodes implements OperationHandler
             return $this->claimWith($command, $permit, $origin);
         } catch (InvalidSetupCode $invalid) {
             // After the rollback: a failed attempt is recorded, without what was typed.
-            $this->log->record($realm, 'yorvoid.setup.claim', Outcome::Failed, $origin);
+            $this->log->attempt($realm, 'yorvoid.setup.claim', Outcome::Failed, $origin);
 
             throw $invalid;
         }

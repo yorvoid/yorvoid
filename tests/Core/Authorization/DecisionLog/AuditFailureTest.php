@@ -11,6 +11,7 @@ use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\DecisionLog\AuditFailure;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
+use YorvoID\Core\Authorization\DecisionLog\Event\DecisionRecorded;
 use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
@@ -148,9 +149,33 @@ final class AuditFailureTest extends TestCase
         }
 
         self::assertSame([], $badges->permits, 'The handler didn\'t run.');
-        $entry = iterator_to_array($entries->entries($this->realm, 1), false)[0] ?? null;
-        self::assertSame([Outcome::Denied, ['audit_unavailable']], [$entry?->outcome, $entry?->details['indeterminate'] ?? null], 'The security log has the refusal.');
+        // A refusal changes nothing, so the chain doesn't have it (D-42): with the decision log down, the
+        // audit alert is its trace.
+        self::assertSame([], iterator_to_array($entries->entries($this->realm, 1), false));
         self::assertCount(1, $this->events->of(AuditFailed::class));
+    }
+
+    /**
+     * A record written is announced, for a SIEM; one that couldn't be written isn't (D-42).
+     */
+    public function testEachRecordWrittenIsAnnouncedAndNoneLost(): void
+    {
+        [$operations] = $this->operations(AuditFailure::Refuse);
+        $ana = new PrincipalId(new UuidV7());
+        $operations->run(new IssueBadge($this->realm, $ana), new Member($this->realm, $ana), new Origin(OriginKind::Web));
+
+        $recorded = $this->events->of(DecisionRecorded::class);
+        self::assertCount(1, $recorded);
+        self::assertSame(['operation', 'permit'], [$recorded[0]->record->kind, $recorded[0]->record->verdict]);
+
+        $this->store->failing = true;
+
+        try {
+            $operations->run(new IssueBadge($this->realm, $ana), new Member($this->realm, $ana), new Origin(OriginKind::Web));
+        } catch (NotPermitted) {
+        }
+
+        self::assertCount(1, $this->events->of(DecisionRecorded::class), 'A record that wasn\'t written was announced.');
     }
 
     public function testContinuingAnOperationStillDoesntRunWithoutItsRecordAndRaisesTheAlert(): void

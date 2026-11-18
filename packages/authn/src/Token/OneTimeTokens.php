@@ -149,7 +149,7 @@ final readonly class OneTimeTokens implements OperationHandler
 
             if (null === $working || !$this->store->delete($realm, $working->token->selector)) {
                 // Nothing of the token: it could be a typo of a real one.
-                $this->log->record($realm, 'yorvoid.token.consume', Outcome::Failed, $origin, details: ['purpose' => $purpose]);
+                $this->log->attempt($realm, 'yorvoid.token.consume', Outcome::Failed, $origin, details: ['purpose' => $purpose]);
 
                 return null;
             }
@@ -227,7 +227,7 @@ final readonly class OneTimeTokens implements OperationHandler
             'actor' => null === $permit->actor->principalId ? null : (string) $permit->actor->principalId,
             'reason' => $refusal,
         ], static fn (?string $value): bool => null !== $value));
-        $this->log->record($realm, $operation, Outcome::Denied, $origin, $permit->actor->principalId, 'principal', (string) $principalId, array_filter([
+        $this->log->attempt($realm, $operation, Outcome::Denied, $origin, $permit->actor->principalId, 'principal', (string) $principalId, array_filter([
             'purpose' => $purpose,
             'consequence_of' => $permit->parent?->operation,
             'reason' => $refusal,

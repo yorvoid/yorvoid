@@ -18,7 +18,9 @@ use YorvoID\Core\Secret;
  *
  * @api
  */
-#[Operation('yorvoid.passkey.sign_in', 'Sign in with a passkey', AuthorizedBy::Authentication, causes: ['yorvoid.credential.disable', 'yorvoid.session.start'])]
+// yorvoid.credential.disable twice: now, and again after the caller's rollback, until ARC-0059 lets one
+// afterEnd() do it (D-42).
+#[Operation('yorvoid.passkey.sign_in', 'Sign in with a passkey', AuthorizedBy::Authentication, causes: ['yorvoid.credential.disable', 'yorvoid.credential.disable', 'yorvoid.session.start'])]
 final readonly class SignInWithPasskey implements Command
 {
     /**

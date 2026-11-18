@@ -21,6 +21,13 @@
         "global-ignoreSourceCodeByRegex": [
             "\\\\assert\\(.*"
         ],
+        // The in-memory decision log's digest window: two of its records never share a microsecond, so
+        // its bounds and order can't be told apart by a test; DecisionLogStoreContract checks them on DBAL.
+        "global-ignore": [
+            "YorvoID\\Core\\Authorization\\DecisionLog\\Storage\\InMemoryDecisionLogStore::written",
+            // Its clock: microseconds or nearly, the window can't tell.
+            "YorvoID\\Core\\Authorization\\DecisionLog\\Storage\\InMemoryDecisionLogStore::now"
+        ],
         "UnwrapArrayValues": {
             "ignoreSourceCodeByRegex": [
                 // Equivalent: a store reads the pairs asked for whatever their keys; array_values only
@@ -33,6 +40,8 @@
                 // Equivalent: PHP closes the file, and so releases its lock, as soon as an exception
                 // leaves the function, finally or not.
                 "YorvoID\\IntentVerifier\\Storage\\LockedFile::run",
+                // Equivalent unless the driver's rollback throws, which no test can make it do: the callbacks are cleared either way.
+                "YorvoID\\Core\\Storage\\Dbal\\WatchedConnection::rollBack",
                 // Equivalent: the finally only wipes the expanded private key (see FunctionCallRemoval).
                 "YorvoID\\Core\\Key\\SigningKey::sign"
             ]
@@ -74,6 +83,9 @@
             "ignoreSourceCodeByRegex": [
                 // Equivalent: PDO counts affected rows as an int, on PostgreSQL and on SQLite.
                 ".*\\$count = \\(int\\) \\$this->connection->executeStatement\\(.*",
+                // Equivalent: the decision log's prune counts rows and the cut-off's digits the same either way.
+                ".*\\$removed = \\(int\\) \\$this->database->connection->executeStatement\\(.*",
+                ".*\\$us = \\(int\\) \\$before->format\\('Uu'\\);.*",
                 // Equivalent: the digits the pattern matched compute the same as a number or as a string.
                 ".*\\(int\\) \\$parts\\['seconds'\\] \\* 1_000_000_000 \\+ \\(int\\) str_pad\\(\\$parts\\['fraction'\\].*"
             ]

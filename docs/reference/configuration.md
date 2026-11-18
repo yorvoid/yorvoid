@@ -41,8 +41,11 @@ yorvoid:
         # With permits: sampled, the share of requests whose permits are recorded
         sample_rate:          0.01
 
-        # A DoctrineBundle connection of its own to the same database, which writes decisions outside the application's transactions: give one with audit.on_failure: refuse
+        # A DoctrineBundle connection of its own to the same database, which writes decisions, refusals and failed attempts among them, outside the application's transactions: give one with audit.on_failure: refuse. Not on SQLite: there it waits for the application's write lock; without one, they're written once the application's transaction ends
         connection:           null
+
+        # How long a decision record may take to be written after it's decided, e.g. a request's buffered records: yorvoid:log:checkpoint digests records older than that
+        digest_grace:         1m
     crypto:
 
         # Which algorithms YorvoID uses: standard, or fips, only with OpenSSL's FIPS provider alone active, which it checks at boot (CRY-01)

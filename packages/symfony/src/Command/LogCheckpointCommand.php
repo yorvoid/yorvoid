@@ -10,6 +10,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use YorvoID\Core\Authorization\DecisionLog\DecisionDigests;
 use YorvoID\Core\Realm;
 use YorvoID\Symfony\Key\ConfiguredCheckpoints;
 
@@ -24,6 +25,7 @@ final class LogCheckpointCommand extends Command
 {
     public function __construct(
         private readonly ConfiguredCheckpoints $checkpoints,
+        private readonly DecisionDigests $digests,
     ) {
         parent::__construct();
     }
@@ -36,8 +38,15 @@ final class LogCheckpointCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $realm = new Realm(Options::string($input->getOption('realm')));
-        $checkpoint = $this->checkpoints->checkpoints()->take($realm);
         $io = new SymfonyStyle($input, $output);
+        // The decision records since the last checkpoint first: the checkpoint then covers their digest (D-42).
+        $digest = $this->digests->take($realm);
+
+        if (null !== $digest) {
+            $io->writeln(\sprintf('Digested %d decision record(s) of the realm "%s" in entry %d.', \is_int($digest->details['count'] ?? null) ? $digest->details['count'] : 0, $realm->name, $digest->sequence));
+        }
+
+        $checkpoint = $this->checkpoints->checkpoints()->take($realm);
 
         if (null === $checkpoint) {
             $io->writeln(\sprintf('The realm "%s" has no entries yet: nothing to checkpoint.', $realm->name));
