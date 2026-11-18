@@ -107,7 +107,16 @@ final class OperationsTest extends TestCase
             self::assertSame(Verdict::Deny, $decision->verdict, $kind->value);
         }
 
+        // Nor does a copy: an origin isn't cloned, and one unserialized is restored.
+        $unserialized = unserialize(serialize(Origin::system('badges')));
+        \assert($unserialized instanceof Origin);
+        self::assertTrue($unserialized->isRestored());
+        self::assertSame(Verdict::Deny, $this->refused(new IssueBadge($this->realm, $this->ana), new Operator(), $unserialized)->verdict);
+
         self::assertSame('recorded', $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::system('badges')));
+
+        $this->expectException(\LogicException::class);
+        $copy = clone Origin::restored(OriginKind::System, null, 'restored-1');
     }
 
     private static function origin(OriginKind $kind, ?string $detail = null, ?string $correlationId = null): Origin

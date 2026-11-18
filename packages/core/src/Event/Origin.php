@@ -87,6 +87,44 @@ final class Origin
     }
 
     /**
+     * Immutable: nothing needs a copy, and a copy would lose the restored mark.
+     */
+    public function __clone(): void
+    {
+        throw new \LogicException('An Origin isn\'t cloned: it\'s immutable, use it as it is.');
+    }
+
+    /**
+     * @return array{kind: string, detail: ?string, correlationId: string}
+     */
+    public function __serialize(): array
+    {
+        return ['kind' => $this->kind->value, 'detail' => $this->detail, 'correlationId' => $this->correlationId];
+    }
+
+    /**
+     * An origin unserialized, e.g. from a queued message, is read back from a record: it decides nothing.
+     *
+     * @param array<mixed> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        $kind = OriginKind::tryFrom(\is_string($data['kind'] ?? null) ? $data['kind'] : '') ?? throw new \UnexpectedValueException('A serialized origin has no kind.');
+        $detail = $data['detail'] ?? null;
+        $correlationId = $data['correlationId'] ?? null;
+
+        if ((null !== $detail && !\is_string($detail)) || !\is_string($correlationId) || 1 !== preg_match(self::CORRELATION_ID, $correlationId)) {
+            throw new \UnexpectedValueException('A serialized origin is malformed.');
+        }
+
+        $this->kind = $kind;
+        $this->detail = null === $detail ? null : mb_substr(Text::utf8($detail), 0, 255);
+        $this->correlationId = $correlationId;
+        self::$restored ??= new \WeakMap();
+        self::$restored[$this] = true;
+    }
+
+    /**
      * Whether it was read back from a record, rather than made for what runs now: nothing that
      * decides takes it as the request's origin.
      */
