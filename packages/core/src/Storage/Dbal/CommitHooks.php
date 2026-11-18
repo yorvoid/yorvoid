@@ -124,7 +124,9 @@ final class CommitHooks
             return;
         }
 
-        $apart = fn (\Closure $callback) => $this->apart($driver, $callback);
+        // Without the DBAL connection (no DbalTransactions attached), nothing was queued through YorvoID.
+        $connection = $this->connection;
+        $apart = null === $connection ? null : fn (\Closure $callback) => $this->apart($connection, $driver, $callback);
         $this->run($apart);
         $this->runEnded($apart);
     }
@@ -190,30 +192,65 @@ final class CommitHooks
     /**
      * Runs the callback in a transaction of its own on the driver. If it fails, or leaves a transaction
      * of DBAL's open, DBAL's savepoints are rolled back first, while they still exist, then the
-     * driver's transaction: the connection stays usable, e.g. in a long-running worker.
+     * driver's transaction: the connection stays usable, e.g. in a long-running worker. If that fails
+     * too, the DBAL connection is closed, so it reconnects in a known state on its next use.
+     *
+     * Once DBAL counts no transaction (a callback ended the application's, as DBAL sees it, or the
+     * connection was closed), the next callbacks run as after YorvoID's own commit: just called.
      *
      * @param \Closure(): void $callback
      */
-    private function apart(WatchedConnection $driver, \Closure $callback): void
+    private function apart(Connection $connection, WatchedConnection $driver, \Closure $callback): void
     {
+        if (0 === $connection->getTransactionNestingLevel()) {
+            $callback();
+
+            return;
+        }
+
         $driver->beginApart();
 
         try {
             $callback();
 
-            if (null !== $this->connection && $this->connection->getTransactionNestingLevel() > 1) {
+            if ($connection->getTransactionNestingLevel() > 1) {
                 throw new \LogicException('A callback after the commit left a transaction open.');
             }
-        } catch (\Throwable $e) {
-            while (null !== $this->connection && $this->connection->getTransactionNestingLevel() > 1) {
-                $this->connection->rollBack();
+
+            // DBAL's commit() or rollBack() at its level 1 ended it (WatchedConnection).
+            if (!$driver->isApart()) {
+                throw new \LogicException('A callback after the commit ended the transaction it ran in.');
             }
-
-            $driver->rollBackApart();
-
-            throw $e;
+        } catch (\Throwable $e) {
+            $this->unwind($connection, $driver, $e);
         }
 
         $driver->commitApart();
+    }
+
+    /**
+     * Rolls back what a failed callback left: DBAL's savepoints, then its own transaction on the
+     * driver. Throws the callback's failure, or, if rolling back failed too, both.
+     *
+     * @return never
+     */
+    private function unwind(Connection $connection, WatchedConnection $driver, \Throwable $failure): void
+    {
+        try {
+            try {
+                while ($connection->getTransactionNestingLevel() > 1) {
+                    $connection->rollBack();
+                }
+            } finally {
+                $driver->rollBackApart();
+            }
+        } catch (\Throwable $rollback) {
+            // The connection's state is unknown: DBAL forgets it, and reconnects on its next use.
+            $connection->close();
+
+            throw new CallbackRollbackFailed($failure, $rollback);
+        }
+
+        throw $failure;
     }
 }

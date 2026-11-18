@@ -273,6 +273,13 @@ final class TransactionsTest extends DatabaseTestCase
         self::assertCount(1, $failed);
         self::assertSame([AuditFailed::AFTER_END, null, 1, false, 'The disable failed.'], [$failed[0]->log, $failed[0]->realm, $failed[0]->records, $failed[0]->refused, $failed[0]->error->getMessage()]);
         self::assertSame(0, $database->connection->getTransactionNestingLevel());
+
+        // The application's next commit on the connection still runs what waits for it.
+        $ran = new \ArrayObject();
+        $database->connection->transactional(static fn () => $stack->transactions->run(static fn () => $stack->transactions->afterCommit(static function () use ($ran): void {
+            $ran->append('ran');
+        })));
+        self::assertCount(1, $ran, 'After a failed callback, the next commit\'s callbacks didn\'t run.');
     }
 
     /**
@@ -312,6 +319,137 @@ final class TransactionsTest extends DatabaseTestCase
         self::assertNotNull($stack->principals->get($later->realm, $later->id));
         self::assertNotNull($stack->principals->get($laterStill->realm, $laterStill->id));
         self::assertSame(0, $connection->getTransactionNestingLevel());
+    }
+
+    /**
+     * A listener ends the transaction it runs in after the application's commit, as DBAL sees it the
+     * application's (level 1): a defensive rollBack(), or a commit(). Only its own transaction ends: the
+     * callbacks still waiting run, and it's reported (D-43, B1).
+     *
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function endings(): iterable
+    {
+        foreach (self::platforms() as $name => [$platform]) {
+            yield $name.', rollBack()' => [$platform, false];
+            yield $name.', commit()' => [$platform, true];
+        }
+    }
+
+    #[DataProvider('endings')]
+    public function testACallbackEndingItsTransactionLeavesTheOthersWaiting(string $platform, bool $commits): void
+    {
+        $logger = new RecordingLogger();
+        $alerts = new RecordingDispatcher();
+        $stack = $this->stack($platform, events: $alerts, logger: $logger);
+        $database = $stack->database;
+        \assert($database instanceof Database);
+        $connection = $database->connection;
+        [$own, $next, $atTheEnd] = [self::principal(), self::principal(), self::principal()];
+        /** @var \ArrayObject<int, string> $order */
+        $order = new \ArrayObject();
+
+        $connection->transactional(static function () use ($stack, $connection, $commits, $own, $next, $atTheEnd, $order): void {
+            $stack->transactions->run(static fn (): null => null);
+            $stack->transactions->afterCommit(static function () use ($stack, $connection, $commits, $own): void {
+                $stack->principals->add($own);
+
+                if ($connection->isTransactionActive()) {
+                    $commits ? $connection->commit() : $connection->rollBack();
+                }
+            });
+            $stack->transactions->afterCommit(static function () use ($stack, $next, $order): void {
+                // First: its own unit of work then runs what waits for the end, which has come.
+                $order->append('next');
+                $stack->transactions->run(static fn () => $stack->principals->add($next));
+            });
+            $stack->transactions->afterEnd(static function () use ($stack, $atTheEnd, $order): void {
+                $stack->transactions->run(static fn () => $stack->principals->add($atTheEnd));
+                $order->append('end');
+            });
+        });
+
+        self::assertSame(['next', 'end'], $order->getArrayCopy(), 'What waits for the end ran inside the callback that ended the transaction.');
+        self::assertSame($commits, null !== $stack->principals->get($own->realm, $own->id), 'Its own write wasn\'t what it did with it.');
+        self::assertNotNull($stack->principals->get($next->realm, $next->id), 'The next callback was dropped.');
+        self::assertNotNull($stack->principals->get($atTheEnd->realm, $atTheEnd->id), 'What waited for the end was dropped.');
+        self::assertSame(['A callback after the commit ended the transaction it ran in.'], array_map(static fn (array $entry): mixed => $entry[2]['message'], $logger->of('error')));
+        self::assertSame([], $alerts->of(AuditFailed::class));
+        self::assertSame(0, $connection->getTransactionNestingLevel());
+        $connection->transactional(static fn () => $stack->principals->add(self::principal()));
+    }
+
+    /**
+     * Rolling back what a failed callback left fails too: its raw ROLLBACK took DBAL's savepoint with it.
+     * The connection is closed, so the next unit of work reconnects in a known state, and both failures
+     * are reported (D-43, B2).
+     */
+    #[DataProvider('platforms')]
+    public function testACallbackWhoseRollbackFailsLeavesTheConnectionUsable(string $platform): void
+    {
+        $logger = new RecordingLogger();
+        $stack = $this->stack($platform, logger: $logger);
+        $database = $stack->database;
+        \assert($database instanceof Database);
+        $connection = $database->connection;
+        [$next, $later] = [self::principal(), self::principal()];
+
+        $connection->transactional(static function () use ($stack, $connection, $next): void {
+            $stack->transactions->run(static fn (): null => null);
+            $stack->transactions->afterCommit(static function () use ($connection): never {
+                $connection->beginTransaction();
+                $connection->executeStatement('ROLLBACK');
+
+                throw new \RuntimeException('The listener failed.');
+            });
+            $stack->transactions->afterCommit(static fn () => $stack->transactions->run(static fn () => $stack->principals->add($next)));
+        });
+
+        $errors = $logger->of('error');
+        self::assertCount(1, $errors);
+        $reported = $errors[0][2]['exception'];
+        self::assertInstanceOf(\Throwable::class, $reported);
+        self::assertSame('The listener failed.', $reported->getPrevious()?->getMessage(), 'The callback\'s own failure was lost.');
+        self::assertStringContainsString('rolling back what it left failed too', $reported->getMessage());
+        self::assertNotNull($stack->principals->get($next->realm, $next->id), 'The next callback didn\'t run.');
+        self::assertSame(0, $connection->getTransactionNestingLevel());
+
+        $stack->transactions->run(static fn () => $stack->principals->add($later));
+        self::assertNotNull($stack->principals->get($later->realm, $later->id));
+    }
+
+    /**
+     * Rolling back DBAL's savepoint fails, since the callback released it, but its own transaction is
+     * still open and holds a row lock: it's rolled back anyway, before the next callback, which takes the
+     * same row on the reconnected connection (D-43, B2).
+     */
+    public function testACallbackWhoseSavepointIsGoneReleasesItsLocksBeforeTheNext(): void
+    {
+        $logger = new RecordingLogger();
+        $stack = $this->stack('postgresql', logger: $logger);
+        $database = $stack->database;
+        \assert($database instanceof Database);
+        $connection = $database->connection;
+        $principal = self::principal();
+
+        $connection->transactional(static function () use ($stack, $connection, $principal): void {
+            $stack->transactions->run(static fn (): null => null);
+            $stack->transactions->afterCommit(static function () use ($stack, $connection, $principal): never {
+                $connection->beginTransaction();
+                // DBAL's name for its savepoint at level 2.
+                $connection->executeStatement('RELEASE SAVEPOINT DOCTRINE_2');
+                $stack->principals->add($principal);
+
+                throw new \RuntimeException('The listener failed.');
+            });
+            $stack->transactions->afterCommit(static function () use ($stack, $connection, $principal): void {
+                $connection->executeStatement("SET lock_timeout = '2s'");
+                $stack->transactions->run(static fn () => $stack->principals->add($principal));
+            });
+        });
+
+        self::assertNotNull($stack->principals->get($principal->realm, $principal->id), 'The next callback waited on the failed one\'s lock.');
+        self::assertCount(1, $logger->of('error'));
     }
 
     /**
