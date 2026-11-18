@@ -25,7 +25,7 @@ final class WatchedConnection extends AbstractConnectionMiddleware
     public function commit(): void
     {
         parent::commit();
-        $this->hooks->committed();
+        $this->hooks->committed($this);
     }
 
     public function rollBack(): void
@@ -36,5 +36,26 @@ final class WatchedConnection extends AbstractConnectionMiddleware
         } finally {
             $this->hooks->rolledBack();
         }
+    }
+
+    /**
+     * Begins a transaction on the driver that DBAL doesn't count, for a callback after a commit (D-43).
+     */
+    public function beginApart(): void
+    {
+        parent::beginTransaction();
+    }
+
+    /**
+     * Commits it, without running callbacks: those it added run next, in CommitHooks' loop.
+     */
+    public function commitApart(): void
+    {
+        parent::commit();
+    }
+
+    public function rollBackApart(): void
+    {
+        parent::rollBack();
     }
 }

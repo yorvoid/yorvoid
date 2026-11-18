@@ -27,6 +27,9 @@ final readonly class AuditFailed
     /** What waited for the end of a transaction, e.g. a copied passkey's disable (D-42) */
     public const string AFTER_END = 'after_end';
 
+    /** A security notification that couldn't be sent, e.g. a new sign-in's email (D-43) */
+    public const string SECURITY_NOTICE = 'security_notice';
+
     /**
      * @param string     $log     Which log: one of the constants
      * @param Realm|null $realm   The realm the records were for, when it's one

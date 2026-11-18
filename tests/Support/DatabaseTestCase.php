@@ -11,6 +11,8 @@ use Doctrine\DBAL\Logging\Middleware as LoggingMiddleware;
 use Doctrine\DBAL\Tools\DsnParser;
 use PHPUnit\Framework\TestCase;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
@@ -78,10 +80,10 @@ abstract class DatabaseTestCase extends TestCase
     /**
      * YorvoID's stores on one implementation, migrated and ready.
      */
-    protected function stack(string $implementation, ?StatementLog $statements = null, ?EventDispatcherInterface $events = null): Stack
+    protected function stack(string $implementation, ?StatementLog $statements = null, ?EventDispatcherInterface $events = null, ?LoggerInterface $logger = null): Stack
     {
         if ('memory' === $implementation) {
-            \assert(null === $events, 'The in-memory stack\'s transactions raise no audit alert.');
+            \assert(null === $events && null === $logger, 'The in-memory stack\'s transactions raise no audit alert.');
 
             $memory = new InMemoryStorage();
 
@@ -92,7 +94,7 @@ abstract class DatabaseTestCase extends TestCase
         $middleware = new TransactionMiddleware();
         $database = new Database($this->connect($implementation, $middleware, $statements), new StorageLocation(StorageLocation::DEFAULT_PREFIX, 'postgresql' === $implementation ? $this->locations[$implementation] : null));
 
-        return Stack::onDatabase($implementation, $database, $middleware, $events ?? new NoEventListeners(), migrate: !$migrated);
+        return Stack::onDatabase($implementation, $database, $middleware, $events ?? new NoEventListeners(), $logger ?? new NullLogger(), migrate: !$migrated);
     }
 
     /**

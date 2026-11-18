@@ -146,6 +146,8 @@ Whatever the mode, every failed write raises the **audit alert**:
 
 Neither needs the database. Route them to whoever must act, e.g. a Monolog handler that pages, or a listener. A listener that throws is logged as an error and doesn't change the outcome.
 
+The same alert is raised for two things that aren't records but must not go unnoticed: what was waiting for a transaction to end and failed (`after_end`, e.g. disabling a copied passkey, which then stays active until someone disables it), and a [security notification](notifications.md) that couldn't be sent (`security_notice`).
+
 ```php
 use YorvoID\Core\Log\Event\AuditFailed;
 

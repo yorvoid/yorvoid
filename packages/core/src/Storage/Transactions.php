@@ -28,7 +28,9 @@ interface Transactions
 
     /**
      * Runs the callback once the outermost transaction has committed, or now if none is open. If the
-     * transaction rolls back, the callback never runs.
+     * transaction rolls back, the callback never runs. It may open a transaction of its own, also after a
+     * commit the application started. If it fails, the failure is logged at error and not thrown: what
+     * it waited for is committed (D-43).
      *
      * @param \Closure(): void $callback
      */
@@ -37,8 +39,9 @@ interface Transactions
     /**
      * Runs the callback once the outermost transaction has ended, committed or rolled back, or now if
      * none is open: for what must happen whatever the caller's transaction does, e.g. disabling a
-     * passkey a refused sign-in showed was copied (D-42). The callback runs in no transaction; it opens
-     * one of its own. A process that ends before then loses it.
+     * passkey a refused sign-in showed was copied (D-42). The callback's writes are its own transaction's,
+     * not the caller's. If it fails, the audit alert is raised (AuditFailed, after_end). A process that
+     * ends before then loses it.
      *
      * Where the end of a transaction can't be seen (a connection without YorvoID's middleware), it runs
      * now, inside the transaction, and is undone with it.

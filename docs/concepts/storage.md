@@ -58,7 +58,9 @@ Use one middleware per connection. The Symfony bridge does all of this for you. 
 
 If part of the work fails inside your transaction (a savepoint rolls back) and you carry on, the events of that part are dropped with it.
 
-Listeners of "-ed" events may write in transactions of their own, e.g. a [notification](notifications.md) that issues a link. When the outermost transaction is YorvoID's (`$transactions->run()`), they run once DBAL has finished committing. When you commit a transaction yourself with `$connection->commit()`, they run during that commit, while DBAL still counts the transaction as open: such listeners can't start transactions then. So run work that YorvoID joins through `$transactions->run()`.
+Listeners of "-ed" events may write in transactions of their own, e.g. a [notification](notifications.md) that issues a link. That works whoever commits: `$transactions->run()`, your own `$connection->commit()` or `transactional()`, Doctrine's `wrapInTransaction()`, or Messenger's `doctrine_transaction` middleware. After your commit, DBAL still counts your transaction as open while YorvoID's listeners run, so each runs in a transaction of its own on the connection. What a listener writes is committed when it returns, and undone if it fails.
+
+A listener that fails after the commit doesn't fail the commit: your data is committed, and an exception would say otherwise and invite a retry. YorvoID logs the failure at error and runs the remaining listeners. What waits for the end of a transaction, e.g. disabling a copied passkey, raises the audit alert instead (`AuditFailed`, `after_end`), as does a [security notification](notifications.md) that couldn't be sent. A listener must end the transactions it begins: one it leaves open is rolled back and reported, and the connection stays usable.
 
 ### Without a database
 

@@ -23,15 +23,23 @@ final readonly class AuditAlarm
     ) {
     }
 
-    public function raise(AuditFailed $failure): void
+    /**
+     * @param array<string, string> $context More for the log entry, e.g. which notice for whom
+     */
+    public function raise(AuditFailed $failure, array $context = []): void
     {
-        $this->logger->critical('YorvoID couldn\'t write {records} audit record(s) to the {log}{refused}: {message}', [
+        $message = AuditFailed::SECURITY_NOTICE === $failure->log
+            ? 'YorvoID couldn\'t send {records} security notice(s){refused}: {message}'
+            : 'YorvoID couldn\'t write {records} audit record(s) to the {log}{refused}: {message}';
+
+        $this->logger->critical($message, [
             'log' => str_replace('_', ' ', $failure->log),
             'records' => $failure->records,
             'refused' => $failure->refused ? ', and refused what they were for' : '',
             'realm' => $failure->realm?->name,
             'message' => $failure->error->getMessage(),
             'exception' => $failure->error,
+            ...$context,
         ]);
 
         try {

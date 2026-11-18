@@ -15,7 +15,8 @@ use YorvoID\Core\Storage\Transactions;
 
 /**
  * Transactions on the application's DBAL connection. With the connection's TransactionMiddleware,
- * after-commit callbacks wait for the outermost transaction, also one the application opened.
+ * after-commit callbacks wait for the outermost transaction, also one the application opened; after
+ * the application's commit, each runs in a transaction of its own (D-43).
  *
  * @api
  */
@@ -23,9 +24,11 @@ final readonly class DbalTransactions implements Transactions
 {
     private AuditAlarm $alarm;
 
+    private LoggerInterface $logger;
+
     /**
      * @param EventDispatcherInterface $events Where an afterEnd() callback's failure is announced (AuditFailed)
-     * @param LoggerInterface          $logger Where it's logged, at critical
+     * @param LoggerInterface          $logger Where it's logged, at critical, and an afterCommit() callback's at error
      */
     public function __construct(
         private Connection $connection,
@@ -34,6 +37,8 @@ final readonly class DbalTransactions implements Transactions
         LoggerInterface $logger = new NullLogger(),
     ) {
         $this->alarm = new AuditAlarm($events, $logger);
+        $this->logger = $logger;
+        $middleware?->hooks()->attach($connection, $logger, $this->alarm);
     }
 
     public function run(\Closure $work): mixed
@@ -64,7 +69,8 @@ final readonly class DbalTransactions implements Transactions
             }
         }
 
-        // Now that DBAL has finished committing, callbacks can open transactions of their own.
+        // Now that DBAL has finished committing, callbacks can open transactions of their own. A failure
+        // is reported, not thrown: the work is committed (D-43).
         if ($outermost) {
             $hooks->runCommitted();
         }
@@ -75,7 +81,11 @@ final readonly class DbalTransactions implements Transactions
     public function afterCommit(\Closure $callback): void
     {
         if (!$this->connection->isTransactionActive()) {
-            $callback();
+            try {
+                $callback();
+            } catch (\Throwable $e) {
+                $this->logger->error('What YorvoID ran after a commit failed: {message}', ['message' => $e->getMessage(), 'exception' => $e]);
+            }
 
             return;
         }
@@ -91,16 +101,16 @@ final readonly class DbalTransactions implements Transactions
 
     public function afterEnd(\Closure $callback): void
     {
-        $callback = $this->alarm->guard($callback);
         $hooks = $this->middleware?->hooks();
 
         // No transaction, or none whose end YorvoID can see: now (D-42).
         if (!$this->connection->isTransactionActive() || null === $hooks || !$hooks->isWatching()) {
-            $callback();
+            $this->alarm->guard($callback)();
 
             return;
         }
 
+        // Unguarded: CommitHooks rolls back the callback's own transaction before it raises the alert.
         $hooks->addEnded($callback);
     }
 }

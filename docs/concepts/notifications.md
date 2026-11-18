@@ -37,7 +37,8 @@ foreach (SecurityNotifications::events() as $event => $method) {
 
 - `$mailer` delivers the emails ([mail](mail.md)); `$translator` is any Symfony `TranslatorInterface` with YorvoID's [catalogues](translations.md).
 - `notMeUrl` is your page for "This wasn't me", with `{token}` and `{credential}` where they go: an `https://` address (`http://` only for `localhost`), with the token in its path or query, never in the host, and no user name or password before the host.
-- The events come after the commit; the listeners issue each email's token through `Operations` (`IssueNotMeLink`, the operator only), so run your work through `$transactions->run()` ([storage](storage.md#transactions)).
+- The events come after the commit, whoever commits; the listeners issue each email's token through `Operations` (`IssueNotMeLink`, the operator only), in a transaction of their own ([storage](storage.md#transactions)).
+- A notification that can't be sent, e.g. while the mail server is down, doesn't fail what it's about. It raises the [audit alert](security-log.md#when-a-record-cant-be-written) (`AuditFailed::SECURITY_NOTICE`): a missed security notice is an audit fact. Pass your event dispatcher and logger as `$events` and `$logger`; the Symfony bridge does.
 
 ## "This wasn't me"
 
