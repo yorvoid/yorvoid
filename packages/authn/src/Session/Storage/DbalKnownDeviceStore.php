@@ -9,7 +9,6 @@ use YorvoID\Authn\Session\KnownDeviceStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
-use YorvoID\Core\Storage\SqlPlatform;
 
 /**
  * @api
@@ -32,10 +31,13 @@ final readonly class DbalKnownDeviceStore implements KnownDeviceStore
             return true;
         }
 
-        $this->database->connection->executeStatement(match ($this->database->platform) {
-            SqlPlatform::PostgreSQL => \sprintf('INSERT INTO %s (realm, principal_id, cookie_hash, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING', $table),
-            SqlPlatform::SQLite => \sprintf('INSERT OR IGNORE INTO %s (realm, principal_id, cookie_hash, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?)', $table),
-        }, [$realm->name, $principal, $cookieHash, $at, $at], [3 => Types::DATETIMETZ_IMMUTABLE, 4 => Types::DATETIMETZ_IMMUTABLE]);
+        $this->database->insertUnlessExists(self::TABLE, [
+            'realm' => $realm->name,
+            'principal_id' => $principal,
+            'cookie_hash' => $cookieHash,
+            'first_seen_at' => $at,
+            'last_seen_at' => $at,
+        ], ['realm', 'principal_id', 'cookie_hash'], ['first_seen_at' => Types::DATETIMETZ_IMMUTABLE, 'last_seen_at' => Types::DATETIMETZ_IMMUTABLE]);
 
         return false;
     }
