@@ -46,6 +46,11 @@ trait RecoveryCodeStoreContract
      */
     abstract protected function transactions(string $implementation): Transactions;
 
+    public function testRecoveryCodeStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, RecoveryCodeStoreConcurrencyContract::class));
+    }
+
     #[DataProvider('implementations')]
     public function testRecoveryCodeStoreTakesPartInTheTransactions(string $implementation): void
     {

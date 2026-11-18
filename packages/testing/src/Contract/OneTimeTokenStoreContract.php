@@ -48,6 +48,11 @@ trait OneTimeTokenStoreContract
      */
     abstract protected function transactions(string $implementation): Transactions;
 
+    public function testOneTimeTokenStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, OneTimeTokenStoreConcurrencyContract::class));
+    }
+
     #[DataProvider('implementations')]
     public function testOneTimeTokenStoreTakesPartInTheTransactions(string $implementation): void
     {

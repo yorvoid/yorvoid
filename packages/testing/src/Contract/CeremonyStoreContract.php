@@ -49,6 +49,11 @@ trait CeremonyStoreContract
      */
     abstract protected function transactions(string $implementation): Transactions;
 
+    public function testCeremonyStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, CeremonyStoreConcurrencyContract::class));
+    }
+
     #[DataProvider('implementations')]
     public function testCeremonyStoreTakesPartInTheTransactions(string $implementation): void
     {

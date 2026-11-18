@@ -14,12 +14,14 @@ use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Contract\ConcurrencyTestedIn;
 use YorvoID\Testing\Contract\SecurityLogStoreContract;
 use YorvoID\Tests\Support\DatabaseTestCase;
 
 /**
  * Every SecurityLogStore keeps the same promises (PLT-025).
  */
+#[ConcurrencyTestedIn(StoreConcurrencyTest::class)]
 final class SecurityLogStoreTest extends DatabaseTestCase
 {
     use SecurityLogStoreContract;

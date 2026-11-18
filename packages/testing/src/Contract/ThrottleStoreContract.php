@@ -43,6 +43,11 @@ trait ThrottleStoreContract
      */
     abstract protected function transactions(string $implementation): Transactions;
 
+    public function testThrottleStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, ThrottleStoreConcurrencyContract::class));
+    }
+
     /**
      * An attempt counted inside a transaction outlives it: a rollback after a failed attempt would
      * otherwise undo its count, and with it the limit. A store may refuse to count inside one instead.

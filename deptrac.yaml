@@ -137,10 +137,12 @@ deptrac:
       - Core
     Translation:
       - Core
+    # The verifier's store contracts use it only when it's installed (a "suggest"); it still depends on nothing.
     Testing:
       - Core
       - Authn
       - Flows
+      - IntentVerifier
       - Passkeys
       - Policy
       - Relations

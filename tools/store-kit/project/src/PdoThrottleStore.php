@@ -29,6 +29,11 @@ final readonly class PdoThrottleStore implements ThrottleStore
 
     public function advance(string $key, int $now, int $interval, int $latest): ?int
     {
+        // Counted outside transactions: a rollback after a failed attempt would undo its count.
+        if ($this->pdo->inTransaction()) {
+            throw new \LogicException('Attempts are counted outside transactions.');
+        }
+
         // One statement: a new key is inserted, a known one moved, each only within the limit.
         $statement = $this->pdo->prepare(<<<'SQL'
             INSERT INTO acme_throttle (key, clear_at) SELECT :key, :now + :interval WHERE :now <= :latest

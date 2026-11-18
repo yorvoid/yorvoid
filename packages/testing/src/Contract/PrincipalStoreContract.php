@@ -50,6 +50,11 @@ trait PrincipalStoreContract
      */
     abstract protected function transactions(string $implementation): Transactions;
 
+    public function testPrincipalStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, PrincipalStoreConcurrencyContract::class));
+    }
+
     #[DataProvider('implementations')]
     public function testPrincipalStoreTakesPartInTheTransactions(string $implementation): void
     {

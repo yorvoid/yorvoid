@@ -23,7 +23,7 @@ final class InTransaction
      * Writes, then fails the transaction: afterwards, $gone must say the write isn't there.
      *
      * @param \Closure(): mixed $write
-     * @param \Closure(): bool $gone
+     * @param \Closure(): bool  $gone
      */
     public static function assertGoneAfterARollback(Transactions $transactions, \Closure $write, \Closure $gone, string $message = self::NOT_TAKING_PART): void
     {
@@ -46,7 +46,7 @@ final class InTransaction
      * Writes, then reads inside the same transaction: $seen must say the write is there.
      *
      * @param \Closure(): mixed $write
-     * @param \Closure(): bool $seen
+     * @param \Closure(): bool  $seen
      */
     public static function assertSeenInsideItsTransaction(Transactions $transactions, \Closure $write, \Closure $seen): void
     {

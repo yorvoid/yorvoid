@@ -13,12 +13,14 @@ use YorvoID\Passkeys\CeremonyStore;
 use YorvoID\Passkeys\Passkey;
 use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Testing\Contract\CeremonyStoreContract;
+use YorvoID\Testing\Contract\ConcurrencyTestedIn;
 use YorvoID\Testing\Contract\PasskeyStoreContract;
 use YorvoID\Tests\Support\DatabaseTestCase;
 
 /**
  * Every PasskeyStore and CeremonyStore keeps the same promises (PLT-025).
  */
+#[ConcurrencyTestedIn(StoreConcurrencyTest::class)]
 final class PasskeyStoreTest extends DatabaseTestCase
 {
     use CeremonyStoreContract;
