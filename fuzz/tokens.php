@@ -45,11 +45,11 @@ $fresh = static function (): array {
     $principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifierStore(), $log, $transactions);
     $tokens = new OneTimeTokens(new InMemoryOneTimeTokenStore(), $principals, $log, $transactions);
     $setup = new SetupCodes(new InMemorySetupStore(), $principals, $log, $transactions, new Attempts(new Throttle(new InMemoryThrottleStore())), new Sessions(new InMemorySessionStore(), $principals, $log, $transactions));
-    $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
-    Permits::call($tokens->issue(...), new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), new Origin(OriginKind::System));
+    $principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), Origin::system('fuzz'));
+    Permits::call($tokens->issue(...), new IssueToken(Realm::default(), $principal->id, 'fuzz.test', Duration::days(1)), Origin::system('fuzz'));
     // A realm of its own: a realm with an active principal gets no setup code.
     $unclaimed = new Realm('unclaimed');
-    Permits::call($setup->create(...), new CreateSetupCode($unclaimed, Duration::days(1)), new Origin(OriginKind::System));
+    Permits::call($setup->create(...), new CreateSetupCode($unclaimed, Duration::days(1)), Origin::system('fuzz'));
 
     return [$tokens, $setup, $unclaimed];
 };
