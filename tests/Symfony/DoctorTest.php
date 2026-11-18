@@ -171,7 +171,8 @@ final class DoctorTest extends TestCase
 
         self::assertSame(Command::FAILURE, $status);
         self::assertStringContainsString('✘ Clock', $display);
-        self::assertStringContainsString('Problem: The application\'s clock is 3600 seconds behind the database\'s.', $display);
+        // An hour, and the seconds a loaded machine took since the clock was set.
+        self::assertMatchesRegularExpression('/Problem: The application\'s clock is 36[0-5]\d seconds behind the database\'s\./', $display);
     }
 
     public function testOutsideDevelopmentAFrozenClockAndDroppedEmailsAreProblems(): void

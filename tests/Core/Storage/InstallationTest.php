@@ -15,6 +15,7 @@ use YorvoID\Core\Storage\Migration\Migrator;
 use YorvoID\Core\Storage\StorageException;
 use YorvoID\Core\Storage\VersionedCache;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\FreshDatabase;
 
 /**
  * The installation's ID: made once, by the migration, kept in the database, and random, so two
@@ -23,6 +24,7 @@ use YorvoID\Tests\Support\DatabaseTestCase;
 final class InstallationTest extends DatabaseTestCase
 {
     #[DataProvider('platforms')]
+    #[FreshDatabase]
     public function testTheMigrationMakesARandomId(string $platform): void
     {
         $database = $this->stack($platform)->database;

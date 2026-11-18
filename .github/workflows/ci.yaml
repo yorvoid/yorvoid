@@ -136,12 +136,13 @@ jobs:
         run: docker compose logs
 
   # Each night, the tests in a random order, to catch tests that depend on what ran before them, which
-  # ParaTest's distribution of classes can hide. The seed is in the log: rerun with it to reproduce.
+  # ParaTest's distribution of classes and the shared test databases can hide. The seed is in the log:
+  # rerun with it to reproduce. Then on databases migrated for each test.
   tests-random-order:
-    name: Tests in a random order
+    name: Tests in a random order, and on fresh databases
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -172,6 +173,10 @@ jobs:
           SEED=$(( (RANDOM << 15) | RANDOM ))
           echo "Random order seed: $SEED (composer test -- --order-by=random --random-order-seed=$SEED)"
           docker compose exec -T php composer test -- --order-by=random --random-order-seed="$SEED"
+      # The tests share a migrated database per process, reset between them; here each migrates its own,
+      # as before, so a difference between a reset and a migration shows.
+      - name: Run the tests on databases migrated for each
+        run: docker compose exec -T -e YORVOID_TEST_FRESH_DATABASES=1 php composer test
       - name: Show logs on failure
         if: failure()
         run: docker compose logs

@@ -84,11 +84,22 @@ final readonly class Stack
      * YorvoID's stores on the database, migrated: for the tests and the benchmarks (tools/bench).
      *
      * @param TransactionMiddleware $middleware The one on the database's connection
+     * @param bool                  $migrate    False when the database is a copy of a migrated one already
      */
-    public static function onDatabase(string $implementation, Database $database, TransactionMiddleware $middleware): self
+    public static function onDatabase(string $implementation, Database $database, TransactionMiddleware $middleware, bool $migrate = true): self
     {
-        new Migrator($database, [...CoreMigrations::all(), ...AuthnMigrations::all(), ...PasskeysMigrations::all(), ...PolicyMigrations::all(), ...RelationsMigrations::all(), ...ThrottleMigrations::all()])->migrate();
+        if ($migrate) {
+            self::migrate($database);
+        }
 
         return new self($implementation, new DbalTransactions($database->connection, $middleware), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database), new DbalRelationStore($database), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database));
+    }
+
+    /**
+     * Runs every package's migrations on the database.
+     */
+    public static function migrate(Database $database): void
+    {
+        new Migrator($database, [...CoreMigrations::all(), ...AuthnMigrations::all(), ...PasskeysMigrations::all(), ...PolicyMigrations::all(), ...RelationsMigrations::all(), ...ThrottleMigrations::all()])->migrate();
     }
 }
