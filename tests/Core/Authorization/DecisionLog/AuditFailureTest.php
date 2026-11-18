@@ -178,6 +178,26 @@ final class AuditFailureTest extends TestCase
         self::assertCount(1, $this->events->of(DecisionRecorded::class), 'A record that wasn\'t written was announced.');
     }
 
+    /**
+     * A listener of DecisionRecorded fails: the record stands, and the logger gets the failure with its
+     * message and exception (C2).
+     */
+    public function testAFailingListenerOfARecordIsLogged(): void
+    {
+        $failure = new \LogicException('The SIEM is down.');
+        $this->events->listen(DecisionRecorded::class, static function () use ($failure): never {
+            throw $failure;
+        });
+
+        $decision = $this->log(AuditFailure::Refuse, PermitRecording::All)->record($this->ability(), $this->decided(self::permit()));
+
+        self::assertSame([], $decision->indeterminate);
+        $listener = $this->logger->of('error');
+        self::assertCount(1, $listener);
+        self::assertSame(['A listener of DecisionRecorded failed: {message}', 'The SIEM is down.'], [$listener[0][1], $listener[0][2]['message']]);
+        self::assertSame($failure, $listener[0][2]['exception']);
+    }
+
     public function testContinuingAnOperationStillDoesntRunWithoutItsRecordAndRaisesTheAlert(): void
     {
         [$operations, $badges] = $this->operations(AuditFailure::Continue);

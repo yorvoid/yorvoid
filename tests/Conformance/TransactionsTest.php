@@ -6,12 +6,15 @@ namespace YorvoID\Tests\Conformance;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Log\Event\AuditFailed;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
+use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Testing\Contract\TransactionsContract;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\RecordingDispatcher;
 
 /**
  * Every Transactions implementation keeps the same promises (PLT-025): all or nothing, after-commit
@@ -46,6 +49,39 @@ final class TransactionsTest extends DatabaseTestCase
         self::assertSame(['nested callback', 'callback'], $order);
         self::assertNotNull($stack->principals->get($written->realm, $written->id));
         self::assertFalse(null !== $stack->database && $stack->database->connection->isTransactionActive(), 'A transaction was left open.');
+    }
+
+    /**
+     * A callback for the end that fails raises the implementation's audit alert, once for each: after the
+     * caller's transaction, and at once outside one (D-42).
+     */
+    #[DataProvider('implementations')]
+    public function testAFailingCallbackForTheEndRaisesTheAuditAlert(string $implementation): void
+    {
+        $alerts = new RecordingDispatcher();
+        $database = $this->stack($implementation)->database;
+        $transactions = null === $database ? new InMemoryTransactions($alerts) : new DbalTransactions($database->connection, events: $alerts);
+        $failing = static function (): never {
+            throw new \RuntimeException('the callback failed');
+        };
+
+        try {
+            $transactions->run(static function () use ($transactions, $failing): never {
+                $transactions->afterEnd($failing);
+
+                throw new \RuntimeException('the caller failed');
+            });
+        } catch (\RuntimeException) {
+        }
+
+        $transactions->afterEnd($failing);
+        $raised = $alerts->of(AuditFailed::class);
+
+        self::assertCount(2, $raised);
+
+        foreach ($raised as $alert) {
+            self::assertSame([AuditFailed::AFTER_END, null, 1, false, 'the callback failed'], [$alert->log, $alert->realm, $alert->records, $alert->refused, $alert->error->getMessage()]);
+        }
     }
 
     #[DataProvider('platforms')]

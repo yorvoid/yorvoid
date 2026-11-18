@@ -658,6 +658,67 @@ final class PasskeysTest extends DatabaseTestCase
     }
 
     /**
+     * The application's transaction commits with the copied passkey's disable in it: kept, so it isn't
+     * done again once the transaction has ended, where DBAL can't open one yet (ARC-0059), and no audit
+     * alert is raised.
+     */
+    #[DataProvider('platforms')]
+    public function testACopiedPasskeyDisabledInACommittedTransactionIsDisabledOnce(string $platform): void
+    {
+        $alerts = new RecordingDispatcher();
+        $this->stack = $this->stack($platform, events: $alerts);
+        $database = $this->stack->database;
+        \assert(null !== $database);
+        $passkeys = $this->passkeys($platform, clonePolicy: ClonePolicy::DisablePasskey, store: $this->stack->passkeys);
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $ceremony = $passkeys->beginRegistration($session);
+        $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key'), new Origin(OriginKind::Web), $session);
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 5)), new Origin(OriginKind::Web));
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $copy = $authenticator->signIn($signIn->options, counter: 5);
+
+        $database->connection->beginTransaction();
+        $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web)));
+        $database->connection->commit();
+
+        self::assertSame(CredentialStatus::Disabled, $this->credentials->get(new Realm('acme'), $credential->id)?->status);
+        self::assertCount(1, array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.credential.disable' === $entry->action));
+        self::assertSame([], $alerts->of(\YorvoID\Core\Log\Event\AuditFailed::class), 'Disabling it again failed after the commit.');
+    }
+
+    /**
+     * The application's transaction removes the copied passkey's credential after the refusal, and
+     * commits: gone by the end, so there's nothing to disable again, and no audit alert is raised.
+     */
+    #[DataProvider('platforms')]
+    public function testACopiedPasskeyRemovedBeforeTheEndIsntDisabledAgain(string $platform): void
+    {
+        $alerts = new RecordingDispatcher();
+        $this->stack = $this->stack($platform, events: $alerts);
+        $database = $this->stack->database;
+        \assert(null !== $database);
+        $passkeys = $this->passkeys($platform, clonePolicy: ClonePolicy::DisablePasskey, store: $this->stack->passkeys);
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $ceremony = $passkeys->beginRegistration($session);
+        $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key'), new Origin(OriginKind::Web), $session);
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 5)), new Origin(OriginKind::Web));
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $copy = $authenticator->signIn($signIn->options, counter: 5);
+
+        $database->connection->beginTransaction();
+        $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web)));
+        self::assertTrue($this->stack->credentials->remove(new Realm('acme'), $credential->id));
+        $database->connection->commit();
+
+        self::assertNull($this->credentials->get(new Realm('acme'), $credential->id));
+        self::assertSame([], $alerts->of(\YorvoID\Core\Log\Event\AuditFailed::class), 'Looking it up again failed after the commit.');
+    }
+
+    /**
      * A listener of DecisionRecorded fails, in a transaction of the application's that rolls back with
      * the refusal: the application's own exception is what it gets, and the copied passkey is still
      * disabled (C2 of G-4).
