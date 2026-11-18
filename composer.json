@@ -55,6 +55,7 @@
         "yorvoid/virtual-authenticator": "^0.5"
     },
     "require-dev": {
+        "brianium/paratest": "^7.29",
         "deptrac/deptrac": "^4.7",
         "doctrine/doctrine-bundle": "^3.3",
         "friendsofphp/php-cs-fixer": "^3.95",
@@ -109,8 +110,9 @@
             "@composer install -d tools/compat/bc --no-interaction --no-progress --quiet",
             "@php tools/compat/bc-check.php"
         ],
-        "test": "phpunit",
-        "test-fips": "phpunit --exclude-group ed25519-keys",
+        "test": "paratest",
+        "test-serial": "phpunit",
+        "test-fips": "paratest --exclude-group ed25519-keys",
         "bench": [
             "Composer\\Config::disableProcessTimeout",
             "@php -d opcache.enable_cli=1 -d pcov.enabled=0 tools/bench/run.php --out=var/bench/run.json",
@@ -119,7 +121,8 @@
         "infection": [
             "Composer\\Config::disableProcessTimeout",
             "@php tools/infection/no-skipped.php clear",
-            "@php -d memory_limit=4G vendor/bin/infection --threads=max --only-covering-test-cases --show-mutations",
+            "@php tools/infection/coverage.php",
+            "@php -d memory_limit=4G vendor/bin/infection --threads=max --only-covering-test-cases --show-mutations --coverage=var/infection/coverage --skip-initial-tests",
             "@php tools/infection/no-skipped.php"
         ],
         "docs-reference": "YORVOID_WRITE_REFERENCE=1 phpunit --filter ReferenceDocsTest",

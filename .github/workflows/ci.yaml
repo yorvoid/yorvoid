@@ -115,10 +115,63 @@ jobs:
       - name: Install dependencies
         run: docker compose exec -T php composer install --no-interaction --no-progress
       - name: Run the tests
-        # With PHP's coverage once, on the newest PostgreSQL: the summary is in the job's log.
+        # In parallel (ParaTest). With PHP's coverage once, on the newest PostgreSQL: the summary is in
+        # the job's log, and the coverage is what the mutation job mutates against.
         env:
-          COVERAGE: ${{ matrix.postgres == '18' && '--coverage-text --only-summary-for-coverage-text' || '' }}
+          COVERAGE: ${{ matrix.postgres == '18' && '--coverage-text --only-summary-for-coverage-text --coverage-xml=var/infection/coverage/coverage-xml --log-junit=var/infection/coverage/junit.xml' || '' }}
         run: docker compose exec -T php composer test -- $COVERAGE
+      - name: Name the commit the coverage is of
+        if: matrix.postgres == '18'
+        run: git rev-parse HEAD > var/infection/coverage/commit
+      # Only to this run's mutation job, on this commit: never through a cache another commit could hit.
+      - name: Keep the coverage for the mutation job
+        if: matrix.postgres == '18'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ github.sha }}
+          path: var/infection/coverage
+          retention-days: 1
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+  # Each night, the tests in a random order, to catch tests that depend on what ran before them, which
+  # ParaTest's distribution of classes can hide. The seed is in the log: rerun with it to reproduce.
+  tests-random-order:
+    name: Tests in a random order
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the development images
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        with:
+          pull: true
+          load: true
+          source: .
+          files: compose.yaml
+          targets: php,postgres
+          set: |
+            php.cache-from=type=gha,scope=dev-${{ github.ref }}
+            php.cache-from=type=gha,scope=dev-refs/heads/main
+      - name: Start services
+        run: |
+          GID=$(id -g)
+          export UID GID
+          docker compose up --wait --no-build
+      - name: Install dependencies
+        run: docker compose exec -T php composer install --no-interaction --no-progress
+      - name: Run the tests in a random order
+        run: |
+          SEED=$(( (RANDOM << 15) | RANDOM ))
+          echo "Random order seed: $SEED (composer test -- --order-by=random --random-order-seed=$SEED)"
+          docker compose exec -T php composer test -- --order-by=random --random-order-seed="$SEED"
       - name: Show logs on failure
         if: failure()
         run: docker compose logs
@@ -223,6 +276,8 @@ jobs:
 
   mutation:
     name: Mutation testing
+    # It mutates against the tests job's coverage of this commit, rather than running the suite again.
+    needs: tests
     runs-on: ubuntu-latest
     # A pull request's lines take minutes; the full run on main and each night takes much longer.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 120 }}
@@ -254,16 +309,21 @@ jobs:
           docker compose up --wait --no-build
       - name: Install dependencies
         run: docker compose exec -T php composer install --no-interaction --no-progress
+      - name: Get the tests job's coverage
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage-${{ github.sha }}
+          path: var/infection/coverage
       - name: Mutate the lines the pull request changes
         if: github.event_name == 'pull_request'
         env:
           BASE: origin/${{ github.base_ref }}
-        run: docker compose exec -T php composer infection -- --git-diff-lines --git-diff-base="$BASE" --ignore-msi-with-no-mutations --logger-github
+        run: docker compose exec -T -e YORVOID_COVERAGE=reuse php composer infection -- --git-diff-lines --git-diff-base="$BASE" --ignore-msi-with-no-mutations --logger-github
       # Also catches what a pull request's lines can't show: a change to a test that lets mutants of
       # code it didn't touch survive.
       - name: Mutate all the code
         if: github.event_name != 'pull_request'
-        run: docker compose exec -T php composer infection
+        run: docker compose exec -T -e YORVOID_COVERAGE=reuse php composer infection
       - name: Show logs on failure
         if: failure()
         run: docker compose logs

@@ -6,9 +6,11 @@
         "excludes": ["vendor", "node_modules", "testing/src/Contract"]
     },
     // Infection skips mutants whose covering tests take longer than this, and leaves them out of the
-    // score: long enough for the slowest (the bridge's tests in separate processes), and
-    // tools/infection/no-skipped.php fails the run if any was skipped all the same.
-    "timeout": 900,
+    // score: tools/infection/no-skipped.php fails the run if any was. About twice the slowest covering
+    // run measured: a line of Realm covered by 1,522 tests that take 678 s in one process (2026-11-18).
+    "timeout": 1400,
+    // A mutant that runs out of time escaped: it may only have made the tests slow, not failed them.
+    "timeoutsAsEscaped": true,
     "logs": {
         "text": "var/infection/infection.log",
         "summary": "var/infection/summary.log",
