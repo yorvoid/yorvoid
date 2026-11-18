@@ -22,9 +22,9 @@ $operations->run(new RemoveCredential($realm, $credentialId, endOtherSessions: t
 
 Packages add credentials as part of their own flow, e.g. [registering a passkey](passkeys.md).
 
-- **Adding or removing needs a recent proof of identity:** the session must have signed in, or [stepped up](step-up.md) for the change, within the last 5 minutes (configurable). Otherwise `StepUpRequired` names what to prove. A session taken over hours ago can't add the attacker's passkey or remove the owner's. Packages call `requireStepUp($session, 'yorvoid.credential.add')` before starting a ceremony.
+- **Adding or removing needs a recent proof of identity:** the session must have signed in, or [stepped up](step-up.md) for the change, within the last 5 minutes (configurable). Otherwise the operation is refused before it's permitted: `NotPermitted`, with a `StepUpRemedy` that names what to prove ([remedies](authorization.md#remedies)). A session taken over hours ago can't add the attacker's passkey or remove the owner's. Packages call `requireStepUp($session, 'yorvoid.credential.add')` before starting a ceremony, which throws `StepUpRequired`: no operation runs yet.
 - **Removing needs a phishing-resistant proof**, e.g. a passkey: a session that signed in with a recovery code can add a passkey, but not remove the owner's.
-- **Removing waits out the [cool-down after a recovery](step-up.md#the-cool-down-after-a-recovery)**, if one is configured (`HeldAfterRecovery`). Adding doesn't.
+- **Removing waits out the [cool-down after a recovery](step-up.md#the-cool-down-after-a-recovery)**, if one is configured: `NotPermitted`, with a `WaitRemedy` until when. Adding doesn't.
 - **The last way to sign in can't be removed** (`LastCredential`). Passkeys and passwords sign in; recovery codes and authenticator apps don't count, and neither do disabled credentials.
 - Removing can **end the principal's other sessions** (`endOtherSessions`), e.g. because the passkey was on a lost phone. The session that asked stays.
 - Labels are kept to 64 characters, on one line: line breaks and other control characters become spaces, and characters that change the reading direction are dropped. An empty one becomes the kind's name ("Passkey").

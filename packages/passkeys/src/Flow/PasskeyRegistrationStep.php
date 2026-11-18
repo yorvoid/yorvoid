@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Flow;
 
-use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Core\Authorization\Remedy;
+use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Flows\FlowContext;
 use YorvoID\Flows\FlowState;
@@ -72,8 +74,12 @@ final readonly class PasskeyRegistrationStep implements Step
             $credential = $this->operations->run(new RegisterPasskey($context->session->realm, Ceremonies::id($state, self::NAME), $input->json('response') ?? '', $input->string('label') ?? ''), $context->session, $context->origin);
         } catch (PasskeyRefused $refused) {
             return StepResult::refused(Ceremonies::problem($refused));
-        } catch (StepUpRequired) {
-            // The proof lapsed at the authenticator: confirm again, where the flow has a step-up.
+        } catch (NotPermitted $refused) {
+            // The proof lapsed at the authenticator: confirm again, where the flow has a step-up (G-8).
+            if ([] === array_filter($refused->decision->remedies, static fn (Remedy $remedy): bool => $remedy instanceof StepUpRemedy)) {
+                throw $refused;
+            }
+
             return StepResult::reopen(new Problem('yorvoid.flow.confirm_again'), StepUpStep::NAME);
         }
 

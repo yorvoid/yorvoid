@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Support;
 
+use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpSelfService;
 use YorvoID\Core\Authorization\Evaluator;
@@ -31,7 +32,9 @@ final class TestOperations
 
     public static function with(SecurityLog $log, PrincipalStore $principals, AbilityPolicy $abilities, ?StepUp $stepUp, OperationHandler ...$handlers): Operations
     {
-        $authorization = Evaluator::builtIn(new PrincipalAuthority($principals), $abilities, null === $stepUp ? new NoSelfService() : new StepUpSelfService($stepUp), actors: [new TrustedActors()]);
+        // As the bridge does: Credentials, if it's one of the handlers, tells a first set of recovery codes from a new one.
+        $credentials = array_values(array_filter($handlers, static fn (OperationHandler $handler): bool => $handler instanceof Credentials))[0] ?? null;
+        $authorization = Evaluator::builtIn(new PrincipalAuthority($principals), $abilities, null === $stepUp ? new NoSelfService() : new StepUpSelfService($stepUp, credentials: $credentials), actors: [new TrustedActors()]);
 
         return new Operations(OperationCatalogue::of($handlers), $authorization, $log, $handlers);
     }

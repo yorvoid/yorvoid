@@ -33,10 +33,13 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
-use YorvoID\Authn\StepUp\HeldAfterRecovery;
 use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Core\Authorization\Remedy;
+use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\WaitReason;
+use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -44,6 +47,8 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Event\SecurityLogEntryRecorded;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\DeletePrincipal;
@@ -57,6 +62,7 @@ use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\ReadThenRun;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\TestOperations;
 
 /**
  * The credential registry on every implementation (IDN-013, ATN-005, ATN-027, SES-006).
@@ -74,6 +80,10 @@ final class CredentialsTest extends DatabaseTestCase
     private Sessions $sessions;
 
     private StepUp $stepUp;
+
+    private SecurityLog $log;
+
+    private Credentials $credentials;
 
     #[DataProvider('implementations')]
     public function testAddsACredentialFromARecentlyAuthenticatedSession(string $implementation): void
@@ -106,17 +116,13 @@ final class CredentialsTest extends DatabaseTestCase
 
         $this->clock->sleep(1);
 
-        foreach ([
-            static fn () => $credentials->requireStepUp($session, 'yorvoid.credential.add'),
-            static fn () => Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Attacker\'s'), new Origin(OriginKind::Web), $session),
-        ] as $change) {
-            try {
-                $change();
-                self::fail('A session that proved nothing recently changed how its principal signs in.');
-            } catch (StepUpRequired $exception) {
-                self::assertSame('Confirm it\'s you, then try once more.', $exception->getMessage());
-                self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), operation: 'yorvoid.credential.add'), $exception->requirement, 'The remedy names what to prove.');
-            }
+        // Before a passkey's ceremony begins: the operation that adds it is decided with the same requirement (G-8).
+        try {
+            $credentials->requireStepUp($session, 'yorvoid.credential.add');
+            self::fail('A session that proved nothing recently changed how its principal signs in.');
+        } catch (StepUpRequired $exception) {
+            self::assertSame('Confirm it\'s you, then try once more.', $exception->getMessage());
+            self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), operation: 'yorvoid.credential.add'), $exception->requirement, 'The remedy names what to prove.');
         }
 
         self::assertSame([], $credentials->of(new Realm('acme'), $session->principalId));
@@ -131,12 +137,8 @@ final class CredentialsTest extends DatabaseTestCase
         Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
         $this->clock->sleep(300);
 
-        try {
-            Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
-            self::fail('A session that proved nothing recently removed a passkey.');
-        } catch (StepUpRequired $exception) {
-            self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), phishingResistant: true, operation: 'yorvoid.credential.remove', heldAfterRecovery: true), $exception->requirement);
-        }
+        $remedies = $this->refused(new RemoveCredential(new Realm('acme'), $phone->id), $session, 'A session that proved nothing recently removed a passkey.');
+        self::assertEquals([new StepUpRemedy(Duration::minutes(5), phishingResistant: true, operation: 'yorvoid.credential.remove')], $remedies);
 
         self::assertCount(2, $credentials->of(new Realm('acme'), $session->principalId));
     }
@@ -152,15 +154,11 @@ final class CredentialsTest extends DatabaseTestCase
 
         Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $recovered);
 
-        try {
-            Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $recovered);
-            self::fail('A recovery code\'s proof removed a passkey.');
-        } catch (StepUpRequired $exception) {
-            self::assertTrue($exception->requirement->phishingResistant);
-        }
+        $remedies = $this->refused(new RemoveCredential(new Realm('acme'), $phone->id), $recovered, 'A recovery code\'s proof removed a passkey.');
+        self::assertEquals([new StepUpRemedy(Duration::minutes(5), phishingResistant: true, operation: 'yorvoid.credential.remove')], $remedies, 'A refused decision, with what would satisfy it (G-8).');
 
         self::assertCount(2, $credentials->of(new Realm('acme'), $owner->principalId));
-        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $owner);
+        $this->decided(new RemoveCredential(new Realm('acme'), $phone->id), $owner);
         self::assertCount(1, $credentials->of(new Realm('acme'), $owner->principalId), 'A passkey\'s proof didn\'t remove one.');
     }
 
@@ -233,7 +231,7 @@ final class CredentialsTest extends DatabaseTestCase
 
         $this->expectException(StepUpRequired::class);
 
-        Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Passkey'), new Origin(OriginKind::Web), $session);
+        $credentials->requireStepUp($session, 'yorvoid.credential.add');
     }
 
     #[DataProvider('implementations')]
@@ -247,12 +245,12 @@ final class CredentialsTest extends DatabaseTestCase
         Permits::call($this->sessions->stepUp(...), new StepUpSession($session->realm, $session->id, $session->principalId, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.remove')), new Origin(OriginKind::Web));
 
         try {
-            Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Attacker\'s'), new Origin(OriginKind::Web), $session);
+            $credentials->requireStepUp($session, 'yorvoid.credential.add');
             self::fail('Confirming a removal let the session add a passkey.');
         } catch (StepUpRequired) {
         }
 
-        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
+        $this->decided(new RemoveCredential(new Realm('acme'), $phone->id), $session);
         self::assertCount(1, $credentials->of(new Realm('acme'), $session->principalId));
     }
 
@@ -267,16 +265,12 @@ final class CredentialsTest extends DatabaseTestCase
         // Adding isn't held: someone who lost their passkeys recovers to add a new one.
         $laptop = Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Laptop'), new Origin(OriginKind::Web), $session);
 
-        try {
-            Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
-            self::fail('A credential was removed during the cool-down.');
-        } catch (HeldAfterRecovery $exception) {
-            self::assertEquals(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'), $exception->until);
-        }
+        $remedies = $this->refused(new RemoveCredential(new Realm('acme'), $phone->id), $session, 'A credential was removed during the cool-down.');
+        self::assertEquals([new WaitRemedy(new \DateTimeImmutable('2026-10-28 18:45:30 UTC'), WaitReason::Recovered)], $remedies);
 
         $this->clock->sleep(86_400);
         $session = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $session->principalId, self::passkey($this->clock)), new Origin(OriginKind::Web))->session;
-        Permits::call($credentials->remove(...), new RemoveCredential(new Realm('acme'), $phone->id), new Origin(OriginKind::Web), $session);
+        $this->decided(new RemoveCredential(new Realm('acme'), $phone->id), $session);
         self::assertEquals([$laptop->id], array_map(static fn (Credential $credential): CredentialId => $credential->id, $credentials->of(new Realm('acme'), $session->principalId)));
     }
 
@@ -499,13 +493,40 @@ final class CredentialsTest extends DatabaseTestCase
         $this->clock = new MockClock('2026-10-27 18:45:30 UTC');
         $this->events = new RecordingDispatcher();
         $ids = new UuidV7Generator($this->clock);
-        $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        $log = $this->log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock, $coolDown);
 
         // The default window: 5 minutes.
-        return new Credentials(null === $store ? $this->stack->credentials : $store($this->stack->credentials), $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock, recoveryCodes: $this->stack->recoveryCodes);
+        return $this->credentials = new Credentials(null === $store ? $this->stack->credentials : $store($this->stack->credentials), $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock, recoveryCodes: $this->stack->recoveryCodes);
+    }
+
+    /**
+     * Runs the command as the session through Operations, which decides its step-up (G-8).
+     *
+     * @param Command<mixed> $command
+     */
+    private function decided(Command $command, Session $session): mixed
+    {
+        return TestOperations::of($this->log, $this->stack->principals, $this->stepUp, $this->credentials, $this->sessions)->run($command, $session, new Origin(OriginKind::Web));
+    }
+
+    /**
+     * The remedies of the command's refusal.
+     *
+     * @param Command<mixed> $command
+     *
+     * @return list<Remedy>
+     */
+    private function refused(Command $command, Session $session, string $message): array
+    {
+        try {
+            $this->decided($command, $session);
+            self::fail($message);
+        } catch (NotPermitted $refused) {
+            return $refused->decision->remedies;
+        }
     }
 
     private function session(): Session

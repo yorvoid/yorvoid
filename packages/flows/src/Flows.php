@@ -13,8 +13,12 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\StepUp\HeldAfterRecovery;
 use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\WaitReason;
+use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
 use YorvoID\Flows\Event\FlowCompleted;
@@ -160,6 +164,13 @@ final class Flows
             $result = StepResult::refused(new Problem(self::CONFIRM_AGAIN));
         } catch (HeldAfterRecovery) {
             $result = StepResult::failed(new Problem(self::HELD));
+        } catch (NotPermitted $refused) {
+            // A step-up refused as a decision (G-8): as the exceptions were.
+            $result = match (self::remedy($refused)) {
+                self::CONFIRM_AGAIN => StepResult::refused(new Problem(self::CONFIRM_AGAIN)),
+                self::HELD => StepResult::failed(new Problem(self::HELD)),
+                default => throw $refused,
+            };
         }
 
         if (null !== $result->failure) {
@@ -328,7 +339,29 @@ final class Flows
             throw new StepFailed(new Problem(self::CONFIRM_AGAIN));
         } catch (HeldAfterRecovery) {
             throw new StepFailed(new Problem(self::HELD));
+        } catch (NotPermitted $refused) {
+            $problem = self::remedy($refused);
+
+            throw null === $problem ? $refused : new StepFailed(new Problem($problem));
         }
+    }
+
+    /**
+     * The problem a refusal's remedy is: a recent proof, or waiting out a recovery; null for any other.
+     */
+    private static function remedy(NotPermitted $refused): ?string
+    {
+        foreach ($refused->decision->remedies as $remedy) {
+            if ($remedy instanceof StepUpRemedy) {
+                return self::CONFIRM_AGAIN;
+            }
+
+            if ($remedy instanceof WaitRemedy && WaitReason::Recovered === $remedy->reason) {
+                return self::HELD;
+            }
+        }
+
+        return null;
     }
 
     /**

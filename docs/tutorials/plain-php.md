@@ -90,7 +90,7 @@ $passkeys = new Passkeys(
 $handlers = [$principals, $sessions, $credentials, $setupCodes, $passkeys];
 $operations = new Operations(
     OperationCatalogue::of($handlers),
-    Evaluator::builtIn(new PrincipalAuthority($principalStore), selfService: new StepUpSelfService($stepUp), actors: [new StoredSessions($sessionStore)]),
+    Evaluator::builtIn(new PrincipalAuthority($principalStore), selfService: new StepUpSelfService($stepUp, credentials: $credentials), actors: [new StoredSessions($sessionStore)]),
     $log,
     $handlers,
 );
