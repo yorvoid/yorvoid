@@ -9,6 +9,7 @@ use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 use YorvoID\Policy\AbilityChanges;
 use YorvoID\Policy\GroupRoleAssignment;
 use YorvoID\Policy\PolicyStore;
@@ -43,6 +44,31 @@ trait PolicyStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function policyStore(string $implementation): PolicyStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    #[DataProvider('implementations')]
+    public function testPolicyStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->policyStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        $at = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
+        [$failed, $seen, $kept] = [new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7())];
+        $version = $store->version($acme);
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->assign(new RoleAssignment($acme, $failed, 'editor', $at)), static fn (): bool => [] === $store->assignments($acme, $failed));
+        self::assertSame($version, $store->version($acme), 'A rolled-back change left the version incremented: caches would read it as a change.');
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->assign(new RoleAssignment($acme, $seen, 'editor', $at)), static fn (): bool => [] !== $store->assignments($acme, $seen));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn (): bool => $store->unassign($acme, $failed, 'editor', null),
+            static fn (): bool => $store->unassignGroup($acme, 'nobody', 'editor', null),
+            static fn () => $store->deleteRole($acme, 'none'),
+        ], static fn () => $store->assign(new RoleAssignment($acme, $kept, 'editor', $at)), static fn (): bool => [] !== $store->assignments($acme, $kept));
+    }
 
     /**
      * The same store as another process has it: a new instance over the same data, e.g. on a second

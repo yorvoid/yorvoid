@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 use YorvoID\Policy\Attribute\AttributeStore;
 
 /**
@@ -39,6 +40,27 @@ trait AttributeStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function attributeStore(string $implementation): AttributeStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    #[DataProvider('implementations')]
+    public function testAttributeStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->attributeStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        $ada = new PrincipalId(new UuidV7());
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->set($acme, $ada, 'acme.failed', 1), static fn (): bool => !\array_key_exists('acme.failed', $store->of($acme, $ada)));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->set($acme, $ada, 'acme.seen', 1), static fn (): bool => \array_key_exists('acme.seen', $store->of($acme, $ada)));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn (): bool => $store->remove($acme, $ada, 'acme.none'),
+            static fn () => $store->forget($acme, new PrincipalId(new UuidV7())),
+        ], static fn () => $store->set($acme, $ada, 'acme.kept', 1), static fn (): bool => \array_key_exists('acme.kept', $store->of($acme, $ada)));
+    }
 
     #[DataProvider('implementations')]
     public function testKeepsEachPrincipalsAttributesWithTheirTypes(string $implementation): void

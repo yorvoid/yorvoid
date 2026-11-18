@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use YorvoID\Core\Storage\Transactions;
 use YorvoID\Throttle\ThrottleStore;
 
 /**
@@ -36,6 +37,40 @@ trait ThrottleStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function throttleStore(string $implementation): ThrottleStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    /**
+     * An attempt counted inside a transaction outlives it: a rollback after a failed attempt would
+     * otherwise undo its count, and with it the limit. A store may refuse to count inside one instead.
+     */
+    #[DataProvider('implementations')]
+    public function testACountOutlivesATransactionThatFails(string $implementation): void
+    {
+        $store = $this->throttleStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $failure = new \RuntimeException('The transaction fails.');
+        $thrown = null;
+
+        try {
+            $transactions->run(static function () use ($store, $failure): never {
+                $store->advance('a', self::NOW, 10, self::NOW + 20);
+
+                throw $failure;
+            });
+        } catch (\Throwable $exception) {
+            $thrown = $exception;
+        }
+
+        if ($thrown === $failure) {
+            self::assertSame(self::NOW + 10, $store->clearAt('a'), 'An attempt counted inside a transaction was undone with it: so would the limit be.');
+        } else {
+            self::assertNull($store->clearAt('a'), 'An attempt refused inside a transaction was counted.');
+        }
+    }
 
     /** Milliseconds in 2026: beyond 32 bits */
     private const int NOW = 1_793_210_400_000;

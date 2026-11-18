@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Policy\Storage;
 
 use Doctrine\DBAL\ArrayParameterType;
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Authorization\ResourceRef;
@@ -255,16 +254,7 @@ final readonly class DbalPolicyStore implements PolicyStore
     public function bump(Realm $realm): int
     {
         // The update holds the row until the transaction ends: the realm's changes go one after another.
-        $table = $this->table(self::VERSION_TABLE);
-
-        if (0 === $this->database->connection->executeStatement(\sprintf('UPDATE %s SET version = version + 1 WHERE realm = ?', $table), [$realm->name])) {
-            try {
-                $this->database->connection->insert($table, ['realm' => $realm->name, 'version' => 1]);
-            } catch (UniqueConstraintViolationException) {
-                // Another change made the row first; wait for it like any other.
-                $this->database->connection->executeStatement(\sprintf('UPDATE %s SET version = version + 1 WHERE realm = ?', $table), [$realm->name]);
-            }
-        }
+        $this->database->increment(self::VERSION_TABLE, 'realm', $realm->name);
 
         return $this->version($realm);
     }

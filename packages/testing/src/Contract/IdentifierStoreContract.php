@@ -11,6 +11,7 @@ use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\IdentifierStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every IdentifierStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -41,6 +42,26 @@ trait IdentifierStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function identifierStore(string $implementation): IdentifierStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    #[DataProvider('implementations')]
+    public function testIdentifierStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->identifierStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn (): bool => $store->add(self::identifier($acme, self::id(), 'failed@example.com')), static fn (): bool => null === $store->find($acme, IdentifierKind::Email, 'failed@example.com'));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn (): bool => $store->add(self::identifier($acme, self::id(), 'seen@example.com')), static fn (): bool => null !== $store->find($acme, IdentifierKind::Email, 'seen@example.com'));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn (): bool => $store->add(self::identifier($acme, self::id(), 'seen@example.com')),
+            static fn () => $store->remove($acme, self::id(), IdentifierKind::Email),
+        ], static fn (): bool => $store->add(self::identifier($acme, self::id(), 'kept@example.com')), static fn (): bool => null !== $store->find($acme, IdentifierKind::Email, 'kept@example.com'));
+    }
 
     #[DataProvider('implementations')]
     public function testKeepsEveryFieldAndFindsByTheNormalizedForm(string $implementation): void

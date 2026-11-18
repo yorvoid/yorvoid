@@ -7,6 +7,7 @@ namespace YorvoID\Testing\Contract;
 use PHPUnit\Framework\Attributes\DataProvider;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\Subject;
@@ -40,6 +41,30 @@ trait RelationStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function relationStore(string $implementation): RelationStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    #[DataProvider('implementations')]
+    public function testRelationStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->relationStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        $ada = new Subject(new ResourceRef('principal', 'ada'));
+        [$failed, $seen, $kept] = [new ResourceRef('page', 'failed'), new ResourceRef('page', 'seen'), new ResourceRef('page', 'kept')];
+        $version = $store->version($acme);
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add(new RelationTuple($acme, $failed, 'viewer', $ada)), static fn (): bool => [] === $store->of($acme, $failed));
+        self::assertSame($version, $store->version($acme), 'A rolled-back change left the version incremented: caches would read it as a change.');
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add(new RelationTuple($acme, $seen, 'viewer', $ada)), static fn (): bool => [] !== $store->of($acme, $seen));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn () => $store->add(new RelationTuple($acme, $seen, 'viewer', $ada)),
+            static fn (): bool => $store->remove(new RelationTuple($acme, $failed, 'viewer', $ada)),
+        ], static fn () => $store->add(new RelationTuple($acme, $kept, 'viewer', $ada)), static fn (): bool => [] !== $store->of($acme, $kept));
+    }
 
     /**
      * The same store as another process has it: a new instance over the same data, e.g. on a second

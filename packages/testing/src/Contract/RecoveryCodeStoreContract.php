@@ -9,6 +9,7 @@ use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Recovery\RecoveryCodeStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every RecoveryCodeStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -39,6 +40,28 @@ trait RecoveryCodeStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function recoveryCodeStore(string $implementation): RecoveryCodeStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    #[DataProvider('implementations')]
+    public function testRecoveryCodeStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->recoveryCodeStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        [$failed, $seen, $kept] = [new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7())];
+        $at = new \DateTimeImmutable('2026-10-28 18:00:00 UTC');
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->replace($acme, $failed, [self::hash('a')], $at), static fn (): bool => 0 === $store->count($acme, $failed));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->replace($acme, $seen, [self::hash('b')], $at), static fn (): bool => 1 === $store->count($acme, $seen));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn (): bool => $store->use($acme, $kept, self::hash('c')),
+            static fn (): bool => $store->use($acme, $seen, self::hash('a')),
+        ], static fn () => $store->replace($acme, $kept, [self::hash('c')], $at), static fn (): bool => 1 === $store->count($acme, $kept));
+    }
 
     #[DataProvider('implementations')]
     public function testACodeWorksOnceForItsPrincipal(string $implementation): void

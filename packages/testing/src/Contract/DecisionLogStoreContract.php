@@ -10,6 +10,7 @@ use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every DecisionLogStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -40,6 +41,46 @@ trait DecisionLogStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function decisionLogStore(string $implementation): DecisionLogStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    /**
+     * A record added inside a caller's transaction, for the store to tell where (D-42): either it goes
+     * with a rollback, and no digest lists it, or the store wrote it apart, and a digest lists it.
+     */
+    #[DataProvider('implementations')]
+    public function testARecordInsideATransactionGoesWithItOrIsListedForADigest(string $implementation): void
+    {
+        $store = $this->decisionLogStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        $record = self::decisionRecord($acme, new \DateTimeImmutable('2026-11-08 18:00:00 UTC'), 'permit', 'ada', null);
+        $start = $store->now();
+
+        try {
+            $transactions->run(static function () use ($store, $record): never {
+                $store->add([$record]);
+
+                throw new \RuntimeException('The transaction fails.');
+            });
+        } catch (\RuntimeException) {
+            // As it should.
+        }
+
+        $listed = \in_array([$record->id, $record->hash()], $store->written($acme, $start - 1, $store->now()), true);
+
+        if (null === $store->find($acme, $record->id)) {
+            self::assertFalse($listed, 'A record gone with the rollback is listed for a digest.');
+        } else {
+            self::assertTrue($listed, 'A record kept after the caller\'s rollback was written apart, so a digest must list it.');
+        }
+
+        $seen = self::decisionRecord($acme, new \DateTimeImmutable('2026-11-08 18:00:00 UTC'), 'permit', 'ada', null);
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add([$seen]), static fn (): bool => null !== $store->find($acme, $seen->id));
+    }
 
     #[DataProvider('implementations')]
     public function testFindsEachRecordAsItWasHashed(string $implementation): void

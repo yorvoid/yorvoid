@@ -41,6 +41,59 @@ final readonly class Database
     }
 
     /**
+     * Inserts the row, unless a row with the same values in the conflict columns exists (SS-01). A row
+     * that's there already isn't an error, so the caller's transaction goes on, also on PostgreSQL, where a
+     * failed statement aborts it. A conflict on any other unique key still throws.
+     *
+     * @param string                                   $name       The table, as given to table()
+     * @param non-empty-array<string, mixed>           $row        By column
+     * @param non-empty-list<string>|null              $conflictOn The columns of the unique key that may conflict;
+     *                                                             null for any, only where every unique key of the
+     *                                                             table means "it exists"
+     * @param array<string, ParameterType|Type|string> $types      By column
+     *
+     * @return bool Whether it was inserted
+     *
+     * @internal For YorvoID's stores: an insert here is a write to the database
+     */
+    public function insertUnlessExists(string $name, array $row, ?array $conflictOn, array $types = []): bool
+    {
+        // PostgreSQL and SQLite (3.24 and later) have the same form; another platform adds its own here.
+        $sql = \sprintf(
+            'INSERT INTO %s (%s) VALUES (%s) ON CONFLICT %sDO NOTHING',
+            $this->table($name),
+            implode(', ', array_map($this->connection->quoteSingleIdentifier(...), array_keys($row))),
+            implode(', ', array_map(static fn (string $column): string => ':'.$column, array_keys($row))),
+            null === $conflictOn ? '' : '('.implode(', ', array_map($this->connection->quoteSingleIdentifier(...), $conflictOn)).') ',
+        );
+
+        return 1 === (int) $this->connection->executeStatement($sql, $row, $types);
+    }
+
+    /**
+     * Increments a counter row, making it at 1 if there's none, in one statement: two changes that both
+     * find no row don't collide. The row stays locked until the transaction ends, so changes to it go one
+     * after another.
+     *
+     * @param string $name   The table, as given to table()
+     * @param string $key    Its key column
+     * @param string $column The counter's column
+     *
+     * @internal For YorvoID's stores' versions
+     */
+    public function increment(string $name, string $key, string $value, string $column = 'version'): void
+    {
+        $table = $this->table($name);
+        $key = $this->connection->quoteSingleIdentifier($key);
+        $column = $this->connection->quoteSingleIdentifier($column);
+
+        $this->connection->executeStatement(
+            \sprintf('INSERT INTO %1$s (%2$s, %3$s) VALUES (?, 1) ON CONFLICT (%2$s) DO UPDATE SET %3$s = %1$s.%3$s + 1', $table, $key, $column),
+            [$value],
+        );
+    }
+
+    /**
      * Deletes the rows of one of YorvoID's tables that match a condition, a batch at a time, each batch a
      * statement of its own: however many rows there are, no statement runs long, holds many locks or
      * writes a burst of WAL. Outside a transaction, each batch commits on its own.

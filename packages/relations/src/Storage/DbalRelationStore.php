@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Relations\Storage;
 
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
@@ -37,11 +36,10 @@ final readonly class DbalRelationStore implements RelationStore
 
     public function add(RelationTuple $tuple): void
     {
-        try {
-            $this->database->connection->insert($this->table(), ['realm' => $tuple->realm->name, ...self::columns($tuple)]);
-        } catch (UniqueConstraintViolationException) {
-            // It's there already.
-            return;
+        $row = ['realm' => $tuple->realm->name, ...self::columns($tuple)];
+
+        if (!$this->database->insertUnlessExists(self::TABLE, $row, array_keys($row))) {
+            return; // It's there already.
         }
 
         $this->bump($tuple->realm);
@@ -123,17 +121,7 @@ final readonly class DbalRelationStore implements RelationStore
      */
     private function bump(Realm $realm): void
     {
-        $table = $this->database->table(self::VERSION_TABLE);
-        $increment = \sprintf('UPDATE %s SET version = version + 1 WHERE realm = ?', $table);
-
-        if (0 === $this->database->connection->executeStatement($increment, [$realm->name])) {
-            try {
-                $this->database->connection->insert($table, ['realm' => $realm->name, 'version' => 1]);
-            } catch (UniqueConstraintViolationException) {
-                // Another change made the row first.
-                $this->database->connection->executeStatement($increment, [$realm->name]);
-            }
-        }
+        $this->database->increment(self::VERSION_TABLE, 'realm', $realm->name);
     }
 
     /**

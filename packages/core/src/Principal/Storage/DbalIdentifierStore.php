@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Principal\Storage;
 
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Principal\Identifier;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -33,21 +32,16 @@ final readonly class DbalIdentifierStore implements IdentifierStore
 
     public function add(Identifier $identifier): bool
     {
-        try {
-            $this->database->connection->insert($this->database->table(self::TABLE), [
-                'realm' => $identifier->realm->name,
-                'kind' => $identifier->kind->value,
-                'normalized' => $identifier->normalized,
-                'value' => $identifier->value,
-                'principal_id' => $identifier->principalId->uuid->toRfc4122(),
-                'created_at' => $identifier->createdAt,
-                'verified_at' => $identifier->verifiedAt,
-            ], ['created_at' => Types::DATETIMETZ_IMMUTABLE, 'verified_at' => Types::DATETIMETZ_IMMUTABLE]);
-        } catch (UniqueConstraintViolationException) {
-            return false;
-        }
-
-        return true;
+        // Both of its unique keys mean taken: the identifier, and the principal's one of its kind.
+        return $this->database->insertUnlessExists(self::TABLE, [
+            'realm' => $identifier->realm->name,
+            'kind' => $identifier->kind->value,
+            'normalized' => $identifier->normalized,
+            'value' => $identifier->value,
+            'principal_id' => $identifier->principalId->uuid->toRfc4122(),
+            'created_at' => $identifier->createdAt,
+            'verified_at' => $identifier->verifiedAt,
+        ], null, ['created_at' => Types::DATETIMETZ_IMMUTABLE, 'verified_at' => Types::DATETIMETZ_IMMUTABLE]);
     }
 
     public function remove(Realm $realm, PrincipalId $principalId, IdentifierKind $kind): void

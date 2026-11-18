@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\Token\Storage;
 
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Authn\Token\OneTimeToken;
 use YorvoID\Authn\Token\OneTimeTokenStore;
@@ -28,19 +27,17 @@ final readonly class DbalOneTimeTokenStore implements OneTimeTokenStore
 
     public function add(OneTimeToken $token, string $verifierHash): void
     {
-        try {
-            $this->database->connection->insert($this->database->table(self::TABLE), [
-                'selector' => $token->selector,
-                'realm' => $token->realm->name,
-                'principal_id' => $token->principalId->uuid->toRfc4122(),
-                'purpose' => $token->purpose,
-                'verifier_hash' => $verifierHash,
-                'email' => $token->email,
-                'created_at' => $token->createdAt,
-                'expires_at' => $token->expiresAt,
-            ], ['created_at' => Types::DATETIMETZ_IMMUTABLE, 'expires_at' => Types::DATETIMETZ_IMMUTABLE]);
-        } catch (UniqueConstraintViolationException $exception) {
-            throw new StorageException(\sprintf('A token with the selector %s exists.', $token->selector), previous: $exception);
+        if (!$this->database->insertUnlessExists(self::TABLE, [
+            'selector' => $token->selector,
+            'realm' => $token->realm->name,
+            'principal_id' => $token->principalId->uuid->toRfc4122(),
+            'purpose' => $token->purpose,
+            'verifier_hash' => $verifierHash,
+            'email' => $token->email,
+            'created_at' => $token->createdAt,
+            'expires_at' => $token->expiresAt,
+        ], ['selector'], ['created_at' => Types::DATETIMETZ_IMMUTABLE, 'expires_at' => Types::DATETIMETZ_IMMUTABLE])) {
+            throw new StorageException(\sprintf('A token with the selector %s exists.', $token->selector));
         }
     }
 

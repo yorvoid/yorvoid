@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Principal\Storage;
 
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
@@ -32,19 +31,17 @@ final readonly class DbalPrincipalStore implements PrincipalStore
 
     public function add(Principal $principal): void
     {
-        try {
-            $this->database->connection->insert($this->database->table(self::TABLE), [
-                'id' => $principal->id->uuid->toRfc4122(),
-                'realm' => $principal->realm->name,
-                'kind' => $principal->kind->value,
-                'status' => $principal->status->value,
-                'created_at' => $principal->createdAt,
-                'updated_at' => $principal->updatedAt,
-                'status_changed_at' => $principal->statusChangedAt,
-                'status_version' => $principal->statusVersion,
-            ], self::TIMES);
-        } catch (UniqueConstraintViolationException $exception) {
-            throw new StorageException(\sprintf('A principal with the ID %s exists.', $principal->id), previous: $exception);
+        if (!$this->database->insertUnlessExists(self::TABLE, [
+            'id' => $principal->id->uuid->toRfc4122(),
+            'realm' => $principal->realm->name,
+            'kind' => $principal->kind->value,
+            'status' => $principal->status->value,
+            'created_at' => $principal->createdAt,
+            'updated_at' => $principal->updatedAt,
+            'status_changed_at' => $principal->statusChangedAt,
+            'status_version' => $principal->statusVersion,
+        ], ['id'], self::TIMES)) {
+            throw new StorageException(\sprintf('A principal with the ID %s exists.', $principal->id));
         }
     }
 
