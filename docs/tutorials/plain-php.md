@@ -29,6 +29,7 @@ use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
 use YorvoID\Authn\Session\SessionPolicy;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\Storage\DbalSessionStore;
+use YorvoID\Authn\Session\StoredSessions;
 use YorvoID\Authn\Setup\SetupCodes;
 use YorvoID\Authn\Setup\Storage\DbalSetupStore;
 use YorvoID\Authn\StepUp\StepUp;
@@ -67,7 +68,8 @@ $realm = Realm::default();
 $log = new SecurityLog(new DbalSecurityLogStore($database), $transactions);
 $principalStore = new DbalPrincipalStore($database);
 $principals = new Principals($principalStore, new DbalIdentifierStore($database), $log, $transactions);
-$sessions = new Sessions(new DbalSessionStore($database), $principals, $log, $transactions, SessionPolicy::aal2());
+$sessionStore = new DbalSessionStore($database);
+$sessions = new Sessions($sessionStore, $principals, $log, $transactions, SessionPolicy::aal2());
 $attempts = new Attempts(new Throttle(new DbalThrottleStore($database)));
 $setupCodes = new SetupCodes(new DbalSetupStore($database), $principals, $log, $transactions, $attempts, $sessions);
 $stepUp = new StepUp($sessions, new DbalCoolDownStore($database), $log);
@@ -88,14 +90,14 @@ $passkeys = new Passkeys(
 $handlers = [$principals, $sessions, $credentials, $setupCodes, $passkeys];
 $operations = new Operations(
     OperationCatalogue::of($handlers),
-    Evaluator::builtIn(new PrincipalAuthority($principalStore), selfService: new StepUpSelfService($stepUp)),
+    Evaluator::builtIn(new PrincipalAuthority($principalStore), selfService: new StepUpSelfService($stepUp), actors: [new StoredSessions($sessionStore)]),
     $log,
     $handlers,
 );
 ```
 
 - **The passkey policy** names the domain passkeys belong to, and the origins of the pages that use them ([passkeys](../concepts/passkeys.md#configuration)).
-- **Operations** runs every change ([running an operation](../concepts/operations-and-events.md#running-an-operation)), as the evaluator decides ([authorization](../concepts/authorization.md)): the host's `Operator` from the console, a session on its own account with a recent proof (`StepUpSelfService`), and anyone signing in, each only while their principal is active. For administrators, `composer require yorvoid/policy` and give the evaluator the role permit and the two rules that come with it (`new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles, new SessionStepUpCheck($stepUp))` in `elements:`), and assign roles ([roles](../concepts/authorization.md#roles)). Without the role permit, nobody holds an ability, e.g. `yorvoid.principals.manage`; without the two rules, the evaluator isn't built.
+- **Operations** runs every change ([running an operation](../concepts/operations-and-events.md#running-an-operation)), as the evaluator decides. It reads each decision's session from its store (`StoredSessions`), so a session that ended or was never started decides nothing ([actors](../concepts/operations-and-events.md#actors)) ([authorization](../concepts/authorization.md)): the host's `Operator` from the console, a session on its own account with a recent proof (`StepUpSelfService`), and anyone signing in, each only while their principal is active. For administrators, `composer require yorvoid/policy` and give the evaluator the role permit and the two rules that come with it (`new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles, new SessionStepUpCheck($stepUp))` in `elements:`), and assign roles ([roles](../concepts/authorization.md#roles)). Without the role permit, nobody holds an ability, e.g. `yorvoid.principals.manage`; without the two rules, the evaluator isn't built.
 - **PostgreSQL** in production: change the connection's parameters; the rest stays ([storage](../concepts/storage.md)).
 
 ## Create the tables

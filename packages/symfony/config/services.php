@@ -24,6 +24,7 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\SessionStore;
 use YorvoID\Authn\Session\Storage\DbalKnownDeviceStore;
 use YorvoID\Authn\Session\Storage\DbalSessionStore;
+use YorvoID\Authn\Session\StoredSessions;
 use YorvoID\Authn\Setup\SetupCodes;
 use YorvoID\Authn\Setup\SetupStore;
 use YorvoID\Authn\Setup\Storage\DbalSetupStore;
@@ -350,7 +351,10 @@ return static function (ContainerConfigurator $container): void {
         tagged_iterator('yorvoid.version_source'),
         service(IdGenerator::class),
         service(DecisionLog::class),
+        // Every decision reads its session from the store (D-45).
+        tagged_iterator('yorvoid.actor_prover'),
     ]);
+    $services->set(StoredSessions::class)->args([service(Stores::IDS[SessionStore::class]), service(ClockInterface::class)])->tag('yorvoid.actor_prover');
     $services->alias(Authorization::class, Evaluator::class);
     $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->public();
     $services->set(Policy::class)->public();
@@ -370,7 +374,7 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(PrincipalUsers::class, DefaultPrincipalUsers::class);
     $services->set(PrincipalUserProvider::class)->public();
     $services->set(PrincipalUserChecker::class)->public();
-    $services->set(RequestOrigins::class)->public();
+    $services->set(RequestOrigins::class)->arg('$apiPaths', param('yorvoid.api.paths'))->public();
     $services->set(CurrentSession::class)->public()->tag('kernel.reset', ['method' => 'reset']);
     // Before the firewall (8), which would sign in from the PHP session.
     $services->set(ValidateSessionListener::class)->tag('kernel.event_listener', ['event' => 'kernel.request', 'priority' => 9]);

@@ -44,6 +44,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
 use YorvoID\Tests\Relations\Fixtures\AcmeRelations;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * The permit by roles: defaults with the realm's changes, super roles and strict abilities, the
@@ -339,7 +340,7 @@ final class RolesTest extends TestCase
     private function decide(Actor $actor, string $ability, ?ResourceRef $resource = null, ?Realm $realm = null): Decision
     {
         $roles = $this->roles();
-        $evaluator = new Evaluator([new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles)], new StubAuthority(Truth::holds('valid')), $this->clock);
+        $evaluator = new Evaluator([new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles)], new StubAuthority(Truth::holds('valid')), $this->clock, actors: [new TrustedActors()]);
 
         return $evaluator->decideAbility($actor, $ability, $realm ?? $this->realm, $resource, new Origin(OriginKind::Web));
     }

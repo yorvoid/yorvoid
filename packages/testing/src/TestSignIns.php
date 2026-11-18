@@ -12,7 +12,6 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartedSession;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 
@@ -40,6 +39,6 @@ final readonly class TestSignIns implements OperationHandler
         $permit->use($command);
         $passkey = AuthenticationMethod::Passkey === $command->method;
 
-        return $permit->cause($this->sessions->start(...), new StartSession($command->realm, $command->principalId, new AuthenticationContext(new AuthenticationFactor($command->method, $this->clock->now(), $passkey, $passkey))), $origin, new ActingPrincipal($command->realm, $command->principalId));
+        return $permit->cause($this->sessions->start(...), new StartSession($command->realm, $command->principalId, new AuthenticationContext(new AuthenticationFactor($command->method, $this->clock->now(), $passkey, $passkey))), $origin, $command->principalId);
     }
 }

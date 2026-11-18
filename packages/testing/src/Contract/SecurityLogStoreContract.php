@@ -85,7 +85,7 @@ trait SecurityLogStoreContract
         )));
         $bare = $transactions->run(static fn (): LogEntry => $log->append($realm, static fn (int $sequence, ?string $previous): LogEntry => LogEntry::create(
             $realm, $sequence, new UuidV7(), new \DateTimeImmutable('2026-10-27 18:41:00 UTC'), 'yorvoid.log.verify', Outcome::Success,
-            new Origin(OriginKind::System, null, 'x'), null, null, null, [], (string) $previous,
+            Origin::restored(OriginKind::System, null, 'x'), null, null, null, [], (string) $previous,
         )));
 
         $read = iterator_to_array($log->entries($realm, 1), false);
@@ -222,7 +222,7 @@ trait SecurityLogStoreContract
             return $log->append($realm, static function (int $sequence, ?string $previous) use ($realm, &$seen): LogEntry {
                 $seen[] = [$sequence, $previous];
 
-                return LogEntry::create($realm, $sequence, new UuidV7(), new \DateTimeImmutable(), 'yorvoid.test.append', Outcome::Success, new Origin(OriginKind::System), null, null, null, [], $previous ?? 'genesis');
+                return LogEntry::create($realm, $sequence, new UuidV7(), new \DateTimeImmutable(), 'yorvoid.test.append', Outcome::Success, Origin::system('test'), null, null, null, [], $previous ?? 'genesis');
             });
         });
     }

@@ -19,6 +19,7 @@ use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Operation\AbilityPolicy;
+use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Operation\Authorization;
@@ -46,6 +47,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\RecordBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ScanBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
+use YorvoID\Tests\Support\TrustedActors;
 
 final class OperationsTest extends TestCase
 {
@@ -66,6 +68,32 @@ final class OperationsTest extends TestCase
         $this->log = new InMemorySecurityLogStore();
         $this->decisions = new InMemoryDecisionLogStore();
         $this->badges = new Badges();
+    }
+
+    /**
+     * A principal YorvoID verified acts only in what that causes: an application can't run an operation as
+     * anyone by naming them (D-45, L-4; verify-1's forged administrator).
+     */
+    public function testAnActingPrincipalRunsNoOperation(): void
+    {
+        $this->expectException(IntegratorError::class);
+        $this->expectExceptionMessage('was run as an ActingPrincipal');
+
+        $this->operations()->run(new IssueBadge($this->realm, $this->ana), new ActingPrincipal($this->realm, $this->ana), new Origin(OriginKind::Web));
+    }
+
+    /**
+     * Only YorvoID's own work is the System, which the operator acts as from anywhere (ARC-0016).
+     */
+    public function testOnlyYorvoIDMakesASystemOrigin(): void
+    {
+        self::assertSame(OriginKind::System, Origin::system('digest')->kind);
+        self::assertSame(['x', 'id-1'], [Origin::restored(OriginKind::System, 'x', 'id-1')->detail, Origin::restored(OriginKind::System, 'x', 'id-1')->correlationId]);
+
+        $this->expectException(IntegratorError::class);
+        $this->expectExceptionMessage('An origin of the System kind was made outside YorvoID.');
+
+        new Origin(OriginKind::System);
     }
 
     public function testTheOperatorRunsAnOperationFromTheConsole(): void
@@ -103,7 +131,7 @@ final class OperationsTest extends TestCase
     #[DataProvider('operatorOrigins')]
     public function testTheOperatorActsFromTheHostOnly(OriginKind $kind): void
     {
-        $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), new Origin($kind));
+        $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::restored($kind, null, null));
 
         self::assertSame(AuthorizedBy::Operator, $this->badges->permits[0]->basis);
     }
@@ -121,13 +149,13 @@ final class OperationsTest extends TestCase
     public function testTheOperatorDoesntActFromARequest(OriginKind $kind): void
     {
         try {
-            $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), new Origin($kind));
+            $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::restored($kind, null, null));
         } catch (NotPermitted $refused) {
             self::assertSame('Not permitted to run "acme.badge.issue".', $refused->getMessage());
         }
 
         $this->log = new InMemorySecurityLogStore();
-        $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Operator(), new Origin($kind, 'badges', 'request-1'));
+        $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::restored($kind, 'badges', 'request-1'));
 
         self::assertSame(Verdict::Deny, $decision->verdict);
         self::assertSame([], $this->badges->permits);
@@ -149,7 +177,7 @@ final class OperationsTest extends TestCase
 
     public function testWithoutASelfServicePolicyNobodyRunsOperationsOnTheirOwnAccount(): void
     {
-        $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new ValidAuthority()), new SecurityLog($this->log, new InMemoryTransactions()), [$this->badges]);
+        $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new ValidAuthority(), actors: [new TrustedActors()]), new SecurityLog($this->log, new InMemoryTransactions()), [$this->badges]);
 
         try {
             $operations->run(new IssueBadge($this->realm, $this->ana), new Member($this->realm, $this->ana), new Origin(OriginKind::Web));
@@ -330,17 +358,17 @@ final class OperationsTest extends TestCase
     {
         $log = new SecurityLog($this->log, new InMemoryTransactions());
         $catalogue = new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]);
-        $served = new Operations($catalogue, Evaluator::builtIn(new ValidAuthority(), commandLine: false), $log, [$this->badges]);
+        $served = new Operations($catalogue, Evaluator::builtIn(new ValidAuthority(), commandLine: false, actors: [new TrustedActors()]), $log, [$this->badges]);
 
         foreach ([OriginKind::Console, OriginKind::Job] as $kind) {
             try {
-                $served->run(new IssueBadge($this->realm, $this->ana), new Operator(), new Origin($kind));
+                $served->run(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::restored($kind, null, null));
                 self::fail(\sprintf('A web server ran an operation as the %s.', $kind->value));
             } catch (NotPermitted) {
             }
         }
 
-        $served->run(new IssueBadge($this->realm, $this->ana), new Operator(), new Origin(OriginKind::System));
+        $served->run(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::system('test'));
         self::assertSame(AuthorizedBy::Operator, $this->badges->permits[0]->basis, 'YorvoID itself acts from anywhere.');
     }
 
@@ -419,7 +447,7 @@ final class OperationsTest extends TestCase
     {
         $catalogue = new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]);
         $log = new SecurityLog($this->log, new InMemoryTransactions());
-        $authorization = Evaluator::builtIn(new ValidAuthority(), $policy ?? new NoAbilityPolicy(), new SelfService(), decisions: new DecisionLog($this->decisions));
+        $authorization = Evaluator::builtIn(new ValidAuthority(), $policy ?? new NoAbilityPolicy(), new SelfService(), decisions: new DecisionLog($this->decisions), actors: [new TrustedActors()]);
 
         return new Operations($catalogue, $authorization, $log, $handlers ?? [$this->badges]);
     }

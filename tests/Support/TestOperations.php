@@ -31,7 +31,7 @@ final class TestOperations
 
     public static function with(SecurityLog $log, PrincipalStore $principals, AbilityPolicy $abilities, ?StepUp $stepUp, OperationHandler ...$handlers): Operations
     {
-        $authorization = Evaluator::builtIn(new PrincipalAuthority($principals), $abilities, null === $stepUp ? new NoSelfService() : new StepUpSelfService($stepUp));
+        $authorization = Evaluator::builtIn(new PrincipalAuthority($principals), $abilities, null === $stepUp ? new NoSelfService() : new StepUpSelfService($stepUp), actors: [new TrustedActors()]);
 
         return new Operations(OperationCatalogue::of($handlers), $authorization, $log, $handlers);
     }

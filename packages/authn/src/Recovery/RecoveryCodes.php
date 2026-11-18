@@ -37,7 +37,6 @@ use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\InvalidIdentifier;
@@ -279,10 +278,9 @@ final readonly class RecoveryCodes implements OperationHandler
 
         $this->log->record($realm, self::USE, Outcome::Success, $origin, $principalId, 'credential', (string) $credential->id, ['principal' => (string) $principalId, 'remaining' => $remaining]);
         $permit->about($principalId);
-        $recovered = new ActingPrincipal($realm, $principalId);
-        $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $recovered);
+        $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, SessionEndReason::Recovered), $origin, $principalId);
         $permit->cause($this->stepUp->startCoolDown(...), new StartCoolDown($realm, $principalId), $origin);
-        $started = $permit->cause($this->sessions->start(...), new StartSession($realm, $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now())), $device, $address, $deviceCookie), $origin, $recovered);
+        $started = $permit->cause($this->sessions->start(...), new StartSession($realm, $principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now())), $device, $address, $deviceCookie), $origin, $principalId);
 
         $this->transactions->afterCommit(function () use ($realm, $principalId, $remaining, $origin): void {
             $this->events->dispatch(new RecoveryCodeUsed($realm, $principalId, $remaining, $origin));

@@ -39,6 +39,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\RecordBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ScanBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * The decision log (AUZ-040, ADR-09): every decision identified with the versions it read, an
@@ -87,7 +88,7 @@ final class DecisionLogTest extends TestCase
                 $this->logs[] = [(string) $message, $context];
             }
         };
-        $evaluator = Evaluator::builtIn(new ValidAuthority(), clock: $this->clock, logger: $logger, versions: [self::version('relations', 4), $failing, self::version('policy', 12)]);
+        $evaluator = Evaluator::builtIn(new ValidAuthority(), clock: $this->clock, logger: $logger, versions: [self::version('relations', 4), $failing, self::version('policy', 12)], actors: [new TrustedActors()]);
 
         $first = $evaluator->decideAbility(new Operator(), 'acme.pages.edit', $this->realm, null, new Origin(OriginKind::Console));
         $second = $evaluator->decideAbility(new Operator(), 'acme.pages.edit', $this->realm, null, new Origin(OriginKind::Console));
@@ -343,7 +344,7 @@ final class DecisionLogTest extends TestCase
     private function operations(): array
     {
         $badges = new LoggingBadges($this->log);
-        $evaluator = Evaluator::builtIn(new ValidAuthority(), selfService: new SelfService(), clock: $this->clock, versions: [self::version('policy', 3)], decisions: new DecisionLog($this->store));
+        $evaluator = Evaluator::builtIn(new ValidAuthority(), selfService: new SelfService(), clock: $this->clock, versions: [self::version('policy', 3)], decisions: new DecisionLog($this->store), actors: [new TrustedActors()]);
 
         return [new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), $evaluator, $this->log, [$badges]), $badges];
     }

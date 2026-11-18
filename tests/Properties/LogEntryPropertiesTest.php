@@ -83,6 +83,6 @@ final class LogEntryPropertiesTest extends TestCase
             $details[(string) $key] = $item;
         }
 
-        return LogEntry::create(Realm::default(), 1, Uuid::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8c'), new \DateTimeImmutable('2026-10-27 19:00:00 UTC'), 'yorvoid.test.property', Outcome::Success, new Origin(OriginKind::System, null, 'x'), null, null, null, $details, 'previous')->hash;
+        return LogEntry::create(Realm::default(), 1, Uuid::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8c'), new \DateTimeImmutable('2026-10-27 19:00:00 UTC'), 'yorvoid.test.property', Outcome::Success, Origin::restored(OriginKind::System, null, 'x'), null, null, null, $details, 'previous')->hash;
     }
 }

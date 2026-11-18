@@ -32,6 +32,7 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubForbid;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * Explanations (AUZ-020): the row of the precedence that decided, the elements behind it and what they
@@ -127,6 +128,6 @@ final class ExplanationTest extends TestCase
             }
         };
 
-        return new Evaluator($elements, new StubAuthority($authority), versions: [$versions])->decideAbility(new Member(new Realm('acme'), new PrincipalId(new UuidV7())), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
+        return new Evaluator($elements, new StubAuthority($authority), versions: [$versions], actors: [new TrustedActors()])->decideAbility(new Member(new Realm('acme'), new PrincipalId(new UuidV7())), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
     }
 }

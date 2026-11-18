@@ -51,14 +51,14 @@ final class SecurityLogTest extends DatabaseTestCase
         $realm = Realm::default();
 
         $stack->transactions->run(static function () use ($log, $realm, $events): void {
-            $log->record($realm, 'yorvoid.test.one', Outcome::Success, new Origin(OriginKind::System));
+            $log->record($realm, 'yorvoid.test.one', Outcome::Success, Origin::system('test'));
             self::assertSame([], $events->dispatched, 'The entry was dispatched before the commit.');
         });
         self::assertSame([SecurityLogEntryRecorded::class], $events->classes());
 
         try {
             $stack->transactions->run(static function () use ($log, $realm): void {
-                $log->record($realm, 'yorvoid.test.two', Outcome::Success, new Origin(OriginKind::System));
+                $log->record($realm, 'yorvoid.test.two', Outcome::Success, Origin::system('test'));
 
                 throw new \RuntimeException('rolled back');
             });

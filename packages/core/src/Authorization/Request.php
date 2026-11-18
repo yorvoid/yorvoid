@@ -30,6 +30,8 @@ final readonly class Request
      * @param OperationDescription|null $operation Null when it's about an ability only
      * @param Command<mixed>|null       $command   The operation's command
      * @param object|null               $subject   The application's own object it's about, e.g. the page
+     * @param string|null               $execution The execution it's part of, e.g. an agent's run (@experimental, M3-2)
+     * @param string|null               $purpose   What it's for, as the actor or caller says (@experimental, M3-2)
      */
     private function __construct(
         private string $name,
@@ -42,7 +44,19 @@ final readonly class Request
         public Origin $origin,
         public \DateTimeImmutable $at,
         public ?object $subject = null,
+        public ?string $execution = null,
+        public ?string $purpose = null,
     ) {
+    }
+
+    /**
+     * The same request, by the actor as proven (ProvesActors).
+     *
+     * @internal
+     */
+    public function withActor(Actor $actor): self
+    {
+        return new self($this->name, $this->realm, $this->ability, $this->resource, $this->operation, $this->command, $actor, $this->origin, $this->at, $this->subject, $this->execution, $this->purpose);
     }
 
     /**

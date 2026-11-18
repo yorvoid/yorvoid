@@ -28,6 +28,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * Fault injection (XP-02): a store that can't be reached makes a decision Indeterminate with the reason
@@ -122,7 +123,7 @@ final class StoreReachabilityTest extends DatabaseTestCase
     private static function decideWith(Connection $connection): Decision
     {
         // Self-service that lets anyone: what this is about is the store.
-        $evaluator = Evaluator::builtIn(new PrincipalAuthority(new DbalPrincipalStore(new Database($connection))), selfService: new SelfService());
+        $evaluator = Evaluator::builtIn(new PrincipalAuthority(new DbalPrincipalStore(new Database($connection))), selfService: new SelfService(), actors: [new TrustedActors()]);
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Self], null, null, IssueBadge::class, []);
         $principal = new PrincipalId(new UuidV7());
 

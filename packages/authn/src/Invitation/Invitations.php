@@ -18,7 +18,6 @@ use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Token\RevokeTokens;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\ActivatePrincipal;
@@ -171,11 +170,10 @@ final readonly class Invitations implements OperationHandler
             // Invitations are always sent to the invitee's address, and work only while it's theirs.
             $email = $used->email;
             \assert(null !== $email);
-            $invitee = new ActingPrincipal($realm, $used->principalId);
-            $principal = $permit->cause($this->principals->activate(...), new ActivatePrincipal($realm, $used->principalId), $origin, $invitee);
-            $permit->cause($this->principals->verifyIdentifier(...), new VerifyIdentifier($realm, $principal->id, IdentifierKind::Email, $email), $origin, $invitee);
+            $principal = $permit->cause($this->principals->activate(...), new ActivatePrincipal($realm, $used->principalId), $origin, $used->principalId);
+            $permit->cause($this->principals->verifyIdentifier(...), new VerifyIdentifier($realm, $principal->id, IdentifierKind::Email, $email), $origin, $used->principalId);
 
-            return $permit->cause($this->sessions->start(...), new StartSession($realm, $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::EmailLink, $this->clock->now())), $command->device, $command->address, $command->deviceCookie), $origin, $invitee);
+            return $permit->cause($this->sessions->start(...), new StartSession($realm, $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::EmailLink, $this->clock->now())), $command->device, $command->address, $command->deviceCookie), $origin, $used->principalId);
         });
     }
 

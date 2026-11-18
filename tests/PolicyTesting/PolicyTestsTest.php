@@ -36,6 +36,7 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * Policy cases (AUZ-043) on a policy built as production builds it, here in plain PHP: each set up
@@ -105,7 +106,7 @@ final class PolicyTestsTest extends TestCase
     public function testComparesTheRemediesByName(): void
     {
         $world = new PolicyWorld();
-        $policy = new PolicyUnderTest(static fn (): PolicyServices => new PolicyServices($world->operations, new Policy(new Evaluator([new StubPermit('acme.proof', Truth::fails('Prove it.', new StepUpRemedy(Duration::minutes(5))))], new StubAuthority(Truth::holds('valid')))), $world->realm));
+        $policy = new PolicyUnderTest(static fn (): PolicyServices => new PolicyServices($world->operations, new Policy(new Evaluator([new StubPermit('acme.proof', Truth::fails('Prove it.', new StepUpRemedy(Duration::minutes(5))))], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()])), $world->realm));
         $tests = new PolicyTests();
 
         self::assertTrue($tests->one($policy, PolicyCase::that('step-up')->anonymous()->asks('acme.pages.publish')->denies(['step_up']))->passed());

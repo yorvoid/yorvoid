@@ -24,6 +24,7 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * The request's subject (G1): the application's own object, for elements to read; the resource is the
@@ -100,7 +101,7 @@ final class SubjectTest extends TestCase
         };
         $store = new InMemoryDecisionLogStore();
         $log = new DecisionLog($store, PermitRecording::All);
-        $evaluator = new Evaluator([$element], new StubAuthority(Truth::holds('valid')), logger: $logger, decisions: $log);
+        $evaluator = new Evaluator([$element], new StubAuthority(Truth::holds('valid')), logger: $logger, decisions: $log, actors: [new TrustedActors()]);
         $origin = new Origin(OriginKind::Web);
 
         $decisions = [

@@ -65,6 +65,7 @@ use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Tests\Authn\StepUp\Fixtures\SetPreferences;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Support\Permits;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * M2-13 fix 5 (H-4): a change to one's own account asks what self-service asks of it, whatever permits
@@ -199,7 +200,7 @@ final class OwnAccountTest extends TestCase
     public function testEveryEvaluatorHoldsOnesOwnAccount(): void
     {
         $session = $this->actor(true, 'fresh');
-        $byRole = new Evaluator([$this->managers()], $this->authority, $this->clock);
+        $byRole = new Evaluator([$this->managers()], $this->authority, $this->clock, actors: [new TrustedActors()]);
         $own = $this->decide($byRole, new SetIdentifier($this->realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session);
         self::assertSame(Verdict::Deny, $own->verdict, 'No self-service policy: nobody changes their own.');
         self::assertSame('A forbid applies: On one\'s own account: this application has no self-service: someone else changes one\'s own account.', $own->reason);
@@ -210,17 +211,17 @@ final class OwnAccountTest extends TestCase
 
         // C5: anyone still signs out, here or everywhere.
         $plain = $this->actor(false, 'fresh');
-        $noSelfService = Evaluator::builtIn($this->authority, clock: $this->clock);
+        $noSelfService = Evaluator::builtIn($this->authority, clock: $this->clock, actors: [new TrustedActors()]);
         self::assertSame(Verdict::Permit, $this->decide($noSelfService, new EndSession($this->realm, $plain->id, SessionEndReason::SignedOut), $plain)->verdict);
         self::assertSame(Verdict::Permit, $this->decide($byRole, new EndSessions($this->realm, $session->principalId, SessionEndReason::SignedOut), $session)->verdict);
         self::assertSame(Verdict::Deny, $this->decide($byRole, new SetIdentifier($this->realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session)->verdict);
 
         $policy = new StepUpSelfService($this->stepUp);
-        new Evaluator([new SelfServicePermit($policy), new SelfServiceForOwnAccount($policy)], $this->authority);
+        new Evaluator([new SelfServicePermit($policy), new SelfServiceForOwnAccount($policy)], $this->authority, actors: [new TrustedActors()]);
 
         foreach ([[new SelfServicePermit($policy), new SelfServiceForOwnAccount(new NoSelfService())], [new SelfServiceForOwnAccount($policy), $this->impostor()]] as $elements) {
             try {
-                new Evaluator($elements, $this->authority);
+                new Evaluator($elements, $this->authority, actors: [new TrustedActors()]);
                 self::fail('Another own-account forbid.');
             } catch (IntegratorError $error) {
                 self::assertSame('The policy element "yorvoid.self_service.own_account" isn\'t the self-service permit\'s own.', strtok($error->getMessage(), "\n"));
@@ -275,7 +276,7 @@ final class OwnAccountTest extends TestCase
                 return Truth::unknown(IndeterminateReason::StoreUnreachable, 'The sessions are out of reach.');
             }
         };
-        $decision = $this->decide(Evaluator::builtIn($this->authority, selfService: $unknown, clock: $this->clock), new SetIdentifier($this->realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session);
+        $decision = $this->decide(Evaluator::builtIn($this->authority, selfService: $unknown, clock: $this->clock, actors: [new TrustedActors()]), new SetIdentifier($this->realm, $session->principalId, IdentifierKind::Email, 'ana@example.org'), $session);
 
         self::assertSame(Verdict::Indeterminate, $decision->verdict);
         self::assertSame('A forbid couldn\'t be ruled out: The sessions are out of reach.', $decision->reason);
@@ -356,7 +357,7 @@ final class OwnAccountTest extends TestCase
             {
                 return null !== $actor->principalId && [] !== array_filter(($this->managers)(), $actor->principalId->equals(...));
             }
-        }, new StepUpSelfService($this->stepUp, $requirements), commandLine: true, clock: $this->clock);
+        }, new StepUpSelfService($this->stepUp, $requirements), commandLine: true, clock: $this->clock, actors: [new TrustedActors()]);
     }
 
     /**

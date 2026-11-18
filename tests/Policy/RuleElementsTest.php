@@ -32,6 +32,7 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
 use YorvoID\Tests\Policy\Fixtures\CountingRule;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * Rules in PHP (AUZ-006, 007): a refusal wins over every role, super roles included; a permit needs no
@@ -102,7 +103,7 @@ final class RuleElementsTest extends TestCase
         }
 
         $roles = new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $store);
-        $evaluator = new Evaluator([new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles), ...RuleElements::of(self::rule($answer))], new StubAuthority(Truth::holds('valid')));
+        $evaluator = new Evaluator([new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles), ...RuleElements::of(self::rule($answer))], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]);
 
         return $evaluator->decideAbility($member, $ability, new Realm('acme'), new ResourceRef('page', 'locked'), new Origin(OriginKind::Web));
     }

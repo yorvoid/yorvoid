@@ -23,6 +23,7 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubOfflineDecider;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * The evaluator gives the precedence model's outcome for every request the model enumerates
@@ -79,7 +80,7 @@ final class PrecedenceFixturesTest extends TestCase
                 $elements[] = 'P' === $code[0] ? new StubPermit('element-'.$j, $truth) : new StubForbid('element-'.$j, $truth);
             }
 
-            $evaluator = new Evaluator($elements, new StubAuthority(self::truth(['holds' => '+', 'fails' => '-', 'unknown' => '?', 'unreachable' => '~'][$authority])), offline: null === $decider ? null : new StubOfflineDecider(self::truth('holds' === $decider ? '+' : '-')));
+            $evaluator = new Evaluator($elements, new StubAuthority(self::truth(['holds' => '+', 'fails' => '-', 'unknown' => '?', 'unreachable' => '~'][$authority])), offline: null === $decider ? null : new StubOfflineDecider(self::truth('holds' === $decider ? '+' : '-')), actors: [new TrustedActors()]);
             $decision = $evaluator->decide($operation, $command, $actor, new Origin(OriginKind::Web));
 
             self::assertSame(Verdict::from($outcome), $decision->verdict, \sprintf('%s: elements "%s", authority %s, decider %s', $configuration, $codes, $authority, $decider ?? 'none'));

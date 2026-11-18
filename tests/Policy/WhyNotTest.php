@@ -15,7 +15,6 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Operation\NotPermitted;
@@ -36,6 +35,8 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
 use YorvoID\Tests\Policy\Fixtures\Page;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
+use YorvoID\Tests\Support\TestPrincipal;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * Why-not (AUZ-021): the decision, its explanation and what would permit it, answered from the policy;
@@ -75,12 +76,12 @@ final class WhyNotTest extends TestCase
     public function testCarriesTheRemedies(): void
     {
         $world = new PolicyWorld();
-        $policy = new Policy(new Evaluator([new StubPermit('roles', Truth::fails('Prove it.', new StepUpRemedy(Duration::minutes(5))))], new StubAuthority(Truth::holds('valid'))), $world->roles);
-        $ada = new ActingPrincipal($world->realm, new PrincipalId(new \Symfony\Component\Uid\UuidV7()));
+        $policy = new Policy(new Evaluator([new StubPermit('roles', Truth::fails('Prove it.', new StepUpRemedy(Duration::minutes(5))))], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]), $world->roles);
+        $ada = new TestPrincipal($world->realm, new PrincipalId(new \Symfony\Component\Uid\UuidV7()));
 
         self::assertCount(1, $policy->whyNot($ada, $ada, 'acme.pages.publish', $world->realm, null, new Origin(OriginKind::Web))->remedies);
 
-        $withoutRelations = new Policy(new Evaluator([], new StubAuthority(Truth::holds('valid'))), new Roles(PolicyCatalogue::of([new YorvoIDDeclarations(), new AcmeDeclarations()]), $world->policyStore));
+        $withoutRelations = new Policy(new Evaluator([], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]), new Roles(PolicyCatalogue::of([new YorvoIDDeclarations(), new AcmeDeclarations()]), $world->policyStore));
         self::assertSame([], $withoutRelations->whyNot($ada, $ada, 'acme.pages.publish', $world->realm, new ResourceRef('page', '1'), new Origin(OriginKind::Web))->relations, 'Roles read without relations: none.');
     }
 
@@ -91,10 +92,10 @@ final class WhyNotTest extends TestCase
         $bob = $world->principal('manager');
         self::assertTrue($world->roles->ability(YorvoIDDeclarations::POLICY_EXPLAIN)?->recordsPermits, 'Its permits are always recorded.');
 
-        $same = new ActingPrincipal($world->realm, self::id($ada));
+        $same = new TestPrincipal($world->realm, self::id($ada));
         self::assertSame(Verdict::Deny, $this->whyNot($world, $same, $ada, 'acme.pages.publish', null)->decision->verdict, 'The same principal is herself.');
 
-        foreach ([$bob, new ActingPrincipal(new Realm('other'), self::id($ada)), new Anonymous()] as $other) {
+        foreach ([$bob, new TestPrincipal(new Realm('other'), self::id($ada)), new Anonymous()] as $other) {
             try {
                 $this->whyNot($world, $other, $ada, 'acme.pages.publish', null);
                 self::fail('Someone else asked without the ability.');
@@ -122,7 +123,7 @@ final class WhyNotTest extends TestCase
 
         $this->expectException(IntegratorError::class);
         $this->expectExceptionMessage('Why-not reads the roles, and the policy has none.');
-        new Policy(new Evaluator([], new StubAuthority(Truth::holds('valid'))))->whyNot($ada, $ada, 'acme.pages.publish', $world->realm, null, new Origin(OriginKind::Web));
+        new Policy(new Evaluator([], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]))->whyNot($ada, $ada, 'acme.pages.publish', $world->realm, null, new Origin(OriginKind::Web));
     }
 
     private function whyNot(PolicyWorld $world, Actor $asking, Actor $about, string $ability, ?ResourceRef $resource, ?object $subject = null): WhyNot
@@ -150,7 +151,7 @@ final class WhyNotTest extends TestCase
         };
     }
 
-    private static function id(ActingPrincipal $principal): PrincipalId
+    private static function id(TestPrincipal $principal): PrincipalId
     {
         \assert(null !== $principal->principalId);
 

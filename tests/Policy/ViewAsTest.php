@@ -8,7 +8,6 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Log\LogEntry;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\SuspendPrincipal;
@@ -22,6 +21,7 @@ use YorvoID\Policy\ViewAs\CannotViewAs;
 use YorvoID\Policy\ViewAs\ViewAsStart;
 use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
+use YorvoID\Tests\Support\TestPrincipal;
 
 /**
  * View-as (AUZ-023, G6): beginning it takes "yorvoid.policy.view_as" and says what's beyond the viewer;
@@ -173,10 +173,10 @@ final class ViewAsTest extends TestCase
         }
 
         $this->expectException(UnknownPrincipal::class);
-        $this->begin($world, $admin, new ActingPrincipal($world->realm, new PrincipalId(new UuidV7())));
+        $this->begin($world, $admin, new TestPrincipal($world->realm, new PrincipalId(new UuidV7())));
     }
 
-    private function begin(PolicyWorld $world, ActingPrincipal $viewer, ActingPrincipal $target): ViewAsStart
+    private function begin(PolicyWorld $world, TestPrincipal $viewer, TestPrincipal $target): ViewAsStart
     {
         return $world->as($viewer, new BeginViewAs($world->realm, self::id($target)));
     }
@@ -189,7 +189,7 @@ final class ViewAsTest extends TestCase
         return array_values(array_filter(iterator_to_array($world->memory->log->entries($world->realm, 1), false), static fn (LogEntry $entry): bool => 'yorvoid.view_as.begin' === $entry->action && 'success' === $entry->outcome->value));
     }
 
-    private static function id(ActingPrincipal $principal): PrincipalId
+    private static function id(TestPrincipal $principal): PrincipalId
     {
         return $principal->principalId ?? throw new \LogicException('No principal.');
     }

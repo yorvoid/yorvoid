@@ -33,6 +33,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * Each checkpoint's digest covers the decision records written apart from a caller's transaction since
@@ -134,7 +135,7 @@ final class DecisionDigestsTest extends DatabaseTestCase
         $realm = new Realm('acme');
         $decisions = new DecisionLog($stack->decisions, transactions: $stack->transactions);
         $log = new SecurityLog($stack->log, $stack->transactions, attempts: $decisions);
-        $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new ValidAuthority(), new Policy(false), new SelfService(), decisions: $decisions), $log, [new Badges()]);
+        $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new ValidAuthority(), new Policy(false), new SelfService(), decisions: $decisions, actors: [new TrustedActors()]), $log, [new Badges()]);
 
         $database->connection->beginTransaction();
         $log->attempt($realm, 'yorvoid.setup.claim', Outcome::Failed, new Origin(OriginKind::Web));

@@ -26,6 +26,7 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Policy\Fixtures\OrderedRule;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * Rules on an ordered fact (XP-15) decide as the precedence model's ordered conditions
@@ -111,7 +112,7 @@ final class OrderedFixturesTest extends TestCase
                     $elements[] = 'P' === $code[0] ? new StubPermit('element-'.$j, $truth) : new StubForbid('element-'.$j, $truth);
                 }
 
-                $decision = new Evaluator($elements, new StubAuthority(self::truth(['holds' => '+', 'fails' => '-', 'unknown' => '?'][$authority])))->decide($operation, $command, $actor, new Origin(OriginKind::Web));
+                $decision = new Evaluator($elements, new StubAuthority(self::truth(['holds' => '+', 'fails' => '-', 'unknown' => '?'][$authority])), actors: [new TrustedActors()])->decide($operation, $command, $actor, new Origin(OriginKind::Web));
                 self::assertSame(Verdict::from($outcome), $decision->verdict, \sprintf('%s: elements "%s", authority %s, readiness %s', $configuration, $codes, $authority, $state));
 
                 // MP-1: by default, a rule on the unknown fact is missing data.

@@ -39,6 +39,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * An application's own abilities through Policy, with the actor's authority: a suspended principal
@@ -56,7 +57,7 @@ final class PolicyTest extends TestCase
         $principals->add($ada);
         $store->assign(new RoleAssignment($realm, $ada->id, 'editor', $now));
         $roles = new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $store);
-        $policy = new Policy(Evaluator::builtIn(new PrincipalAuthority($principals), elements: [new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles)]));
+        $policy = new Policy(Evaluator::builtIn(new PrincipalAuthority($principals), elements: [new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles)], actors: [new TrustedActors()]));
         $page = new ResourceRef('page', '1');
         $origin = new Origin(OriginKind::Web);
 

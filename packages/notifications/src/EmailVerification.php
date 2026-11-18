@@ -11,7 +11,6 @@ use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\Event\IdentifierChanged;
@@ -124,7 +123,7 @@ final readonly class EmailVerification implements OperationHandler
 
             $permit->about($used->principalId);
 
-            return $permit->cause($this->principals->verifyIdentifier(...), new VerifyIdentifier($realm, $used->principalId, IdentifierKind::Email, $used->email), $origin, new ActingPrincipal($realm, $used->principalId));
+            return $permit->cause($this->principals->verifyIdentifier(...), new VerifyIdentifier($realm, $used->principalId, IdentifierKind::Email, $used->email), $origin, $used->principalId);
         });
     }
 

@@ -19,7 +19,6 @@ use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\PrincipalId;
@@ -88,7 +87,7 @@ final readonly class NotMe implements OperationHandler
                 $permit->cause($this->credentials->disable(...), new DisableCredential($realm, $disabled->id, $disabled->principalId, 'its principal said they didn\'t add it'), $origin);
             }
 
-            $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Reported), $origin, new ActingPrincipal($realm, $used->principalId));
+            $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Reported), $origin, $used->principalId);
             $this->log->record($realm, 'yorvoid.notification.not_me', Outcome::Success, $origin, $used->principalId, 'principal', (string) $used->principalId, null === $suspect ? [] : ['credential' => (string) $suspect]);
 
             $this->transactions->afterCommit(function () use ($realm, $used, $suspect, $origin): void {

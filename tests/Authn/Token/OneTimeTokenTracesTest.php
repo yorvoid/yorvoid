@@ -47,7 +47,7 @@ final class OneTimeTokenTracesTest extends DatabaseTestCase
         foreach (Itf::traces(self::TRACES) as $number => $trace) {
             // Each execution in a realm of its own, starting at the model's time 0.
             $realm = new Realm('trace-'.$number);
-            $principal = Permits::call($principals->create(...), new CreatePrincipal($realm, PrincipalKind::Human), new Origin(OriginKind::System));
+            $principal = Permits::call($principals->create(...), new CreatePrincipal($realm, PrincipalKind::Human), Origin::system('test'));
             $start = $clock->now();
             /** @var array<string, Secret> $issued */
             $issued = [];
@@ -58,7 +58,7 @@ final class OneTimeTokenTracesTest extends DatabaseTestCase
                     $t = $token($state);
                     $expiry = $state->var('expiry');
                     \assert(\is_array($expiry) && \is_int($expiry[$t]) && \is_int($state->var('now')));
-                    $issued[$t] = Permits::call($tokens->issue(...), new IssueToken($realm, $principal->id, 'acme.test', Duration::minutes($expiry[$t] - $state->var('now'))), new Origin(OriginKind::System))->secret;
+                    $issued[$t] = Permits::call($tokens->issue(...), new IssueToken($realm, $principal->id, 'acme.test', Duration::minutes($expiry[$t] - $state->var('now'))), Origin::system('test'))->secret;
                 },
                 'tick' => static fn (): null => $clock->sleep(60),
                 'consumeAtomically' => static function (ItfState $state) use (&$issued, $tokens, $realm, $token): void {

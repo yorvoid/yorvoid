@@ -7,7 +7,6 @@ namespace YorvoID\Core\Authorization\DecisionLog;
 use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
@@ -67,7 +66,7 @@ final readonly class DecisionDigests
         $records = $this->store->written($realm, $after, $until);
 
         return $this->transactions->run(function () use ($realm, $after, $until, $records): ?LogEntry {
-            $entry = [] === $records ? null : $this->log->record($realm, self::ACTION, Outcome::Success, new Origin(OriginKind::System, 'decision-digest'), null, null, null, [
+            $entry = [] === $records ? null : $this->log->record($realm, self::ACTION, Outcome::Success, Origin::system('decision-digest'), null, null, null, [
                 'after' => $after,
                 'until' => $until,
                 'count' => \count($records),

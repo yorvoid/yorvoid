@@ -14,7 +14,6 @@ use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\RoleGrant;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Policy\Change\AddGroupMember;
 use YorvoID\Policy\Change\AssignGroupRole;
@@ -30,6 +29,7 @@ use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\Subject;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Policy\Fixtures\StubStepUpCheck;
+use YorvoID\Tests\Support\TestPrincipal;
 
 /**
  * What decisions rest on (G5): the role permit names every role that has the ability and how, the
@@ -131,7 +131,7 @@ final class GroundsTest extends TestCase
         self::assertEquals([Ground::evidence('step_up')], new StepUpForSensitiveChanges($world->roles, $stepUp)->evaluate($request)->grounds);
     }
 
-    private static function id(ActingPrincipal $principal): PrincipalId
+    private static function id(TestPrincipal $principal): PrincipalId
     {
         \assert(null !== $principal->principalId);
 

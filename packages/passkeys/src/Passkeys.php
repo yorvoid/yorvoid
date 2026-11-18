@@ -53,7 +53,6 @@ use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -237,7 +236,7 @@ final readonly class Passkeys implements OperationHandler
             $permit->about($passkey->principalId);
 
             try {
-                return $permit->cause($this->sessions->start(...), new StartSession($passkey->realm, $passkey->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true)), $device, $address, $deviceCookie), $origin, new ActingPrincipal($passkey->realm, $passkey->principalId));
+                return $permit->cause($this->sessions->start(...), new StartSession($passkey->realm, $passkey->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), $userVerified, true)), $device, $address, $deviceCookie), $origin, $passkey->principalId);
             } catch (InactivePrincipal $exception) {
                 throw new PasskeyRefused(Refusal::PrincipalInactive, $exception);
             }

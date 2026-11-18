@@ -139,7 +139,7 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
             $recordedAt,
             Row::string($row, 'action'),
             Outcome::from(Row::string($row, 'outcome')),
-            new Origin(OriginKind::from(Row::string($row, 'origin_kind')), Row::nullableString($row, 'origin_detail'), Row::string($row, 'correlation_id')),
+            Origin::restored(OriginKind::from(Row::string($row, 'origin_kind')), Row::nullableString($row, 'origin_detail'), Row::string($row, 'correlation_id')),
             null === $actor ? null : PrincipalId::fromString($actor),
             Row::nullableString($row, 'subject_type'),
             Row::nullableString($row, 'subject_id'),
