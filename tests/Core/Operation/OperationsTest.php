@@ -96,6 +96,25 @@ final class OperationsTest extends TestCase
         new Origin(OriginKind::System);
     }
 
+    /**
+     * An origin read back from a record is for reading: as an operation's origin, it makes nobody the
+     * operator, System or not (D-45, R1).
+     */
+    public function testARestoredOriginMakesNobodyTheOperator(): void
+    {
+        foreach ([OriginKind::System, OriginKind::Console] as $kind) {
+            $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::restored($kind, null, 'restored-1'));
+            self::assertSame(Verdict::Deny, $decision->verdict, $kind->value);
+        }
+
+        self::assertSame('recorded', $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::system('badges')));
+    }
+
+    private static function origin(OriginKind $kind, ?string $detail = null, ?string $correlationId = null): Origin
+    {
+        return OriginKind::System === $kind ? Origin::system($detail ?? 'test', $correlationId) : new Origin($kind, $detail, $correlationId);
+    }
+
     public function testTheOperatorRunsAnOperationFromTheConsole(): void
     {
         $command = new IssueBadge($this->realm, $this->ana);
@@ -131,7 +150,7 @@ final class OperationsTest extends TestCase
     #[DataProvider('operatorOrigins')]
     public function testTheOperatorActsFromTheHostOnly(OriginKind $kind): void
     {
-        $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::restored($kind, null, null));
+        $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), self::origin($kind));
 
         self::assertSame(AuthorizedBy::Operator, $this->badges->permits[0]->basis);
     }
@@ -149,13 +168,13 @@ final class OperationsTest extends TestCase
     public function testTheOperatorDoesntActFromARequest(OriginKind $kind): void
     {
         try {
-            $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::restored($kind, null, null));
+            $this->operations()->run(new IssueBadge($this->realm, $this->ana), new Operator(), self::origin($kind));
         } catch (NotPermitted $refused) {
             self::assertSame('Not permitted to run "acme.badge.issue".', $refused->getMessage());
         }
 
         $this->log = new InMemorySecurityLogStore();
-        $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::restored($kind, 'badges', 'request-1'));
+        $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Operator(), self::origin($kind, 'badges', 'request-1'));
 
         self::assertSame(Verdict::Deny, $decision->verdict);
         self::assertSame([], $this->badges->permits);
@@ -362,7 +381,7 @@ final class OperationsTest extends TestCase
 
         foreach ([OriginKind::Console, OriginKind::Job] as $kind) {
             try {
-                $served->run(new IssueBadge($this->realm, $this->ana), new Operator(), Origin::restored($kind, null, null));
+                $served->run(new IssueBadge($this->realm, $this->ana), new Operator(), self::origin($kind));
                 self::fail(\sprintf('A web server ran an operation as the %s.', $kind->value));
             } catch (NotPermitted) {
             }

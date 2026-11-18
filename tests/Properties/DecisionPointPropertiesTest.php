@@ -84,7 +84,7 @@ final class DecisionPointPropertiesTest extends TestCase
             $permits = Verdict::Permit === $verdict && null !== $basis;
 
             try {
-                $operations->run(new ScanBadge($realm, 'K7'), new Anonymous(), Origin::restored($kind, null, null));
+                $operations->run(new ScanBadge($realm, 'K7'), new Anonymous(), OriginKind::System === $kind ? Origin::system('property') : new Origin($kind));
                 self::assertTrue($permits, 'It ran without a Permit.');
                 self::assertCount(1, $badges->permits);
                 self::assertSame($basis, $badges->permits[0]->basis);
@@ -124,7 +124,7 @@ final class DecisionPointPropertiesTest extends TestCase
             $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', $rules, \in_array(AuthorizedBy::Ability, $rules, true) ? 'acme.badges.issue' : null, null, IssueBadge::class, []);
             $authorization = Evaluator::builtIn(self::validAuthority(), self::abilities($holds), self::selfService($selfService), commandLine: $commandLine, actors: [new TrustedActors()]);
 
-            $decision = $authorization->decide($operation, new IssueBadge($realm, $ana), $actor, Origin::restored($kind, null, null));
+            $decision = $authorization->decide($operation, new IssueBadge($realm, $ana), $actor, OriginKind::System === $kind ? Origin::system('property') : new Origin($kind));
 
             $inRealm = \in_array($who, ['own', 'other'], true);
             $allowed = [

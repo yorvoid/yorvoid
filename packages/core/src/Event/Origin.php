@@ -25,6 +25,9 @@ final class Origin
 
     public readonly ?string $detail;
 
+    /** @var \WeakMap<self, true>|null Origins read back from a record: for reading, never for deciding (D-45); kept apart, so a restored origin equals the one recorded */
+    private static ?\WeakMap $restored = null;
+
     /** Whether YorvoID's own factory is making it, which alone may make a System origin */
     private static bool $internal = false;
 
@@ -69,13 +72,27 @@ final class Origin
     }
 
     /**
-     * An origin as a store recorded it, System included.
+     * An origin as a store recorded it, System included: for reading only, since nothing that decides
+     * accepts it (isRestored()).
      *
      * @internal
      */
     public static function restored(OriginKind $kind, ?string $detail, ?string $correlationId): self
     {
-        return self::made($kind, $detail, $correlationId);
+        $origin = self::made($kind, $detail, $correlationId);
+        self::$restored ??= new \WeakMap();
+        self::$restored[$origin] = true;
+
+        return $origin;
+    }
+
+    /**
+     * Whether it was read back from a record, rather than made for what runs now: nothing that
+     * decides takes it as the request's origin.
+     */
+    public function isRestored(): bool
+    {
+        return isset(self::$restored[$this]);
     }
 
     private static function made(OriginKind $kind, ?string $detail, ?string $correlationId): self
