@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Authn\StepUp;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
+use YorvoID\Authn\Recovery\GenerateRecoveryCodes;
 use YorvoID\Authn\Recovery\IssueRecoveryLink;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
@@ -32,6 +33,7 @@ use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
@@ -227,6 +229,24 @@ final class OwnAccountTest extends TestCase
                 self::assertSame('The policy element "yorvoid.self_service.own_account" isn\'t the self-service permit\'s own.', strtok($error->getMessage(), "\n"));
             }
         }
+    }
+
+    /**
+     * An operation that changes how someone signs in, and isn't in the table, e.g. a future TOTP's: the
+     * strictest proof, waiting out a recovery included, so a missing entry asks too much, never too little
+     * (G-8, R1).
+     */
+    public function testAnUnlistedChangeOfSignInAsksTheStrictestProof(): void
+    {
+        $policy = new StepUpSelfService($this->stepUp);
+        $held = $this->actor(false, 'hold');
+        $totp = new OperationDescription('acme.totp.set', 'Set up an authenticator app', [AuthorizedBy::Self], null, null, GenerateRecoveryCodes::class, [], causes: ['yorvoid.credential.add']);
+        $preferences = new OperationDescription('acme.preferences.mine', 'Set one\'s preferences', [AuthorizedBy::Self], null, null, GenerateRecoveryCodes::class, []);
+
+        $refused = $policy->decide($totp, new GenerateRecoveryCodes($this->realm), $held);
+        self::assertSame(TruthValue::Fails, $refused->value);
+        self::assertInstanceOf(WaitRemedy::class, $refused->remedies[0] ?? null, 'It didn\'t wait out the recovery.');
+        self::assertSame(TruthValue::Holds, $policy->decide($preferences, new GenerateRecoveryCodes($this->realm), $held)->value, 'Another self-service operation asks only a recent proof.');
     }
 
     /**

@@ -37,6 +37,9 @@ final readonly class StepUpSelfService implements SelfServicePolicy
 {
     private const string GENERATE_CODES = 'yorvoid.recovery_codes.generate';
 
+    /** What changes how someone signs in: an operation that is one, or causes one */
+    private const array SIGN_IN_CHANGES = ['yorvoid.credential.add', 'yorvoid.credential.remove'];
+
     private Duration $window;
 
     /** @var array<string, AuthenticationRequirement|null> */
@@ -84,6 +87,9 @@ final readonly class StepUpSelfService implements SelfServicePolicy
         $self = $command instanceof SelfOperation;
         $requirement = match (true) {
             \array_key_exists($operation->name, $this->requirements) => $this->requirements[$operation->name],
+            // Changing how someone signs in, by an operation not in the table: the strictest proof, so a missing
+            // entry asks too much, never too little (G-8).
+            self::changesSignIn($operation) => new AuthenticationRequirement($this->window, phishingResistant: true, operation: $operation->name, heldAfterRecovery: true),
             // Self-service by declaration; anything else about one's own principal, only if asked (C2).
             $self => new AuthenticationRequirement($this->window, operation: $operation->name),
             default => null,
@@ -129,5 +135,10 @@ final readonly class StepUpSelfService implements SelfServicePolicy
         }
 
         return false;
+    }
+
+    private static function changesSignIn(OperationDescription $operation): bool
+    {
+        return \in_array($operation->name, self::SIGN_IN_CHANGES, true) || [] !== array_intersect($operation->causes, self::SIGN_IN_CHANGES);
     }
 }
