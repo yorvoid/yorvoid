@@ -119,6 +119,64 @@ final class OperationsTest extends TestCase
         $copy = clone Origin::restored(OriginKind::System, null, 'restored-1');
     }
 
+    /**
+     * An unserialized origin is what was serialized, marked restored, every one of them; a malformed one
+     * is refused.
+     */
+    public function testAnUnserializedOriginIsTheOneSerializedAndRestored(): void
+    {
+        $origin = new Origin(OriginKind::Web, 'checkout', 'request-1');
+        $first = unserialize(serialize($origin));
+        $second = unserialize(serialize(new Origin(OriginKind::Job, null, 'job-1')));
+        \assert($first instanceof Origin && $second instanceof Origin);
+
+        self::assertSame([OriginKind::Web, 'checkout', 'request-1'], [$first->kind, $first->detail, $first->correlationId]);
+        self::assertNull($second->detail);
+        self::assertTrue($first->isRestored(), 'Restoring another forgot the first was restored.');
+        self::assertTrue($second->isRestored());
+        self::assertFalse($origin->isRestored());
+
+        // A detail is cut at 255 characters, not bytes.
+        $long = self::unserialized(['kind' => 'web', 'detail' => 'é'.str_repeat('ü', 300), 'correlationId' => 'request-2']);
+        self::assertSame('é'.str_repeat('ü', 254), $long->detail);
+    }
+
+    /**
+     * @param array<mixed> $data
+     */
+    #[DataProvider('malformedOrigins')]
+    public function testAMalformedSerializedOriginIsRefused(array $data, string $message): void
+    {
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage($message);
+
+        self::unserialized($data);
+    }
+
+    /**
+     * @return iterable<string, array{array<mixed>, string}>
+     */
+    public static function malformedOrigins(): iterable
+    {
+        yield 'no kind' => [['detail' => null, 'correlationId' => 'request-1'], 'has no kind'];
+        yield 'an unknown kind' => [['kind' => 'nowhere', 'detail' => null, 'correlationId' => 'request-1'], 'has no kind'];
+        yield 'a detail that isn\'t text' => [['kind' => 'web', 'detail' => 7, 'correlationId' => 'request-1'], 'is malformed'];
+        yield 'no correlation ID' => [['kind' => 'web', 'detail' => 'x'], 'is malformed'];
+        yield 'a correlation ID that isn\'t text' => [['kind' => 'web', 'detail' => 'x', 'correlationId' => 7], 'is malformed'];
+        yield 'a correlation ID out of shape' => [['kind' => 'web', 'detail' => 'x', 'correlationId' => 'not one'], 'is malformed'];
+    }
+
+    /**
+     * @param array<mixed> $data
+     */
+    private static function unserialized(array $data): Origin
+    {
+        $origin = new \ReflectionClass(Origin::class)->newInstanceWithoutConstructor();
+        $origin->__unserialize($data);
+
+        return $origin;
+    }
+
     private static function origin(OriginKind $kind, ?string $detail = null, ?string $correlationId = null): Origin
     {
         return OriginKind::System === $kind ? Origin::system($detail ?? 'test', $correlationId) : new Origin($kind, $detail, $correlationId);

@@ -365,16 +365,15 @@ final readonly class Evaluator implements Authorization
             if ($prover->proves($actor)) {
                 try {
                     return $prover->prove($actor);
-                } catch (IntegratorError $error) {
-                    throw $error;
                 } catch (\Throwable $exception) {
-                    // A store that's down, as for any element: unknown, not refused.
+                    // A store that's down, as for any element: unknown, not refused; a mistake in the
+                    // setup is thrown on (safely()).
                     return self::safely(static fn (): never => throw $exception);
                 }
             }
         }
 
-        if (!isset($this->warned[$actor::class])) {
+        if (true !== ($this->warned[$actor::class] ?? null)) {
             $this->warned[$actor::class] = true;
 
             $this->logger->warning('YorvoID can\'t prove actors of {class}: their decisions are Indeterminate (unproven_actor).', ['class' => $actor::class]);
@@ -520,6 +519,13 @@ final readonly class Evaluator implements Authorization
 
         // A Request is the key elements keep what they preloaded by: the same sides, if it was a batch.
         [$viewerSide, $targetSide] = $this->sides[$request] ?? self::sides($request);
+
+        // A viewer that isn't proven views nothing: each side is judged by why it isn't (D-45).
+        if (null !== ($unproven = $this->unproven[$request] ?? null)) {
+            $this->unproven[$viewerSide] = $unproven;
+            $this->unproven[$targetSide] = $unproven;
+        }
+
         $viewer = $this->judge($viewerSide);
         $target = $this->judge($targetSide);
 

@@ -130,7 +130,7 @@ final class Origin
      */
     public function isRestored(): bool
     {
-        return isset(self::$restored[$this]);
+        return true === (self::$restored[$this] ?? null);
     }
 
     private static function made(OriginKind $kind, ?string $detail, ?string $correlationId): self
