@@ -16,7 +16,6 @@ use YorvoID\Authn\Recovery\IssueRecoveryLink;
 use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -85,7 +84,7 @@ final readonly class AppController
     public function setupCode(): Response
     {
         // The test app stands in for the host's shell, from its web server: as YorvoID itself.
-        return new Response($this->operations->run(new CreateSetupCode(Realm::default(), Duration::days(1)), new Operator(), new Origin(OriginKind::System, 'e2e'))->reveal());
+        return new Response($this->operations->run(new CreateSetupCode(Realm::default(), Duration::days(1)), new Operator(), Origin::system('e2e'))->reveal());
     }
 
     public function recoveryLink(Request $request): Response
@@ -93,7 +92,7 @@ final readonly class AppController
         $principal = $this->principals->findByIdentifier(Realm::default(), IdentifierKind::Email, $request->getPayload()->getString('email'));
         \assert(null !== $principal);
 
-        return new Response($this->operations->run(new IssueRecoveryLink(Realm::default(), $principal->id), new Operator(), new Origin(OriginKind::System, 'e2e'))->secret->reveal());
+        return new Response($this->operations->run(new IssueRecoveryLink(Realm::default(), $principal->id), new Operator(), Origin::system('e2e'))->secret->reveal());
     }
 
     /**
