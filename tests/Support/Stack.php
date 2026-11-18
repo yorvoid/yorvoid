@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Support;
 
+use Psr\EventDispatcher\EventDispatcherInterface;
 use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
 use YorvoID\Authn\Migrations\AuthnMigrations;
@@ -22,6 +23,7 @@ use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
+use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
 use YorvoID\Core\Migrations\CoreMigrations;
@@ -83,16 +85,17 @@ final readonly class Stack
     /**
      * YorvoID's stores on the database, migrated: for the tests and the benchmarks (tools/bench).
      *
-     * @param TransactionMiddleware $middleware The one on the database's connection
-     * @param bool                  $migrate    False when the database is a copy of a migrated one already
+     * @param TransactionMiddleware    $middleware The one on the database's connection
+     * @param EventDispatcherInterface $events     Where the transactions raise the audit alert
+     * @param bool                     $migrate    False when the database is a copy of a migrated one already
      */
-    public static function onDatabase(string $implementation, Database $database, TransactionMiddleware $middleware, bool $migrate = true): self
+    public static function onDatabase(string $implementation, Database $database, TransactionMiddleware $middleware, EventDispatcherInterface $events = new NoEventListeners(), bool $migrate = true): self
     {
         if ($migrate) {
             self::migrate($database);
         }
 
-        return new self($implementation, new DbalTransactions($database->connection, $middleware), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database), new DbalRelationStore($database), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database));
+        return new self($implementation, new DbalTransactions($database->connection, $middleware, $events), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database), new DbalRelationStore($database), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database));
     }
 
     /**

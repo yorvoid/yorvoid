@@ -184,6 +184,32 @@ final class DecisionDigestsTest extends DatabaseTestCase
         self::assertTrue($verified->isIntact(), implode(' ', $verified->problems));
     }
 
+    /**
+     * On a connection of its own (decision_log.connection), a refusal inside the application's open
+     * transaction is written at once and apart: another process sees it before the commit, and the next
+     * digest covers it (C1 of G-4).
+     */
+    public function testARefusalOnTheDecisionLogsOwnConnectionIsWrittenAtOnceAndDigested(): void
+    {
+        $stack = $this->stack('postgresql');
+        $database = $stack->database;
+        \assert($database instanceof Database);
+        $realm = new Realm('acme');
+        $decisions = new DecisionLog(new DbalDecisionLogStore($database, $this->database('postgresql')->connection), transactions: $stack->transactions);
+        $log = new SecurityLog($stack->log, $stack->transactions, attempts: $decisions);
+        $other = $this->database('postgresql');
+
+        $database->connection->beginTransaction();
+        $log->attempt($realm, 'yorvoid.setup.claim', Outcome::Failed, new Origin(OriginKind::Web));
+        $written = $other->connection->fetchOne(\sprintf('SELECT written_us FROM %s WHERE realm = ?', $other->table(DbalDecisionLogStore::TABLE)), [$realm->name]);
+
+        self::assertNotFalse($written, 'It waited for the application\'s transaction to end.');
+        self::assertNotNull($written, 'Written apart, but not as apart: no digest covers it.');
+        self::wait();
+        self::assertSame(1, $this->digests($this->stack('postgresql'))->take($realm)?->details['count'] ?? null);
+        $database->connection->commit();
+    }
+
     private function digests(Stack $stack): DecisionDigests
     {
         return new DecisionDigests($stack->decisions, new SecurityLog($stack->log, $stack->transactions), $stack->log, $stack->transactions, Duration::seconds(self::GRACE));
