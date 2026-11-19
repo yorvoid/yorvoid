@@ -103,7 +103,10 @@
         "cs": "php-cs-fixer fix --dry-run --diff",
         "cs-fix": "php-cs-fixer fix",
         "phpstan": "phpstan analyse --memory-limit=1G",
-        "deptrac": "deptrac analyse --no-progress",
+        "deptrac": [
+            "deptrac analyse --no-progress",
+            "deptrac analyse --no-progress --config-file=deptrac.core.yaml --cache-file=.deptrac.core.cache"
+        ],
         "dependencies": "sh tools/dependencies/check.sh",
         "versions": "@php tools/release/version.php check",
         "bc": [
@@ -145,7 +148,7 @@
         "cs": "Checks the coding style",
         "cs-fix": "Fixes the coding style",
         "phpstan": "Static analysis at the maximum level",
-        "deptrac": "Checks the dependency rules between packages",
+        "deptrac": "Checks the dependency rules between packages, and between core's namespaces",
         "dependencies": "Checks that each package requires what it uses, and uses what it requires",
         "bc": "Checks the compatibility promise against the last release: every break of @api code is in the changelog",
         "test": "Runs the tests",

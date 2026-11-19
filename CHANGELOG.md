@@ -20,7 +20,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `AuditFailed::SECURITY_NOTICE`: a security notification that couldn't be sent. `SecurityNotifications` takes an event dispatcher for it.
 - `ProvesActors` and `StoredSessions`: every decision proves its actor first, a session by reading it from its store ([actors](docs/concepts/operations-and-events.md#actors)). In Symfony, a service tagged `yorvoid.actor_prover` proves an actor class of your own.
 - `yorvoid.api.paths`: path prefixes whose requests have the `api` origin, as do those with an `Authorization: Bearer` header.
-- `@experimental`: `ActsUnderGrant`, `Request::$execution` and `Request::$purpose`, the shapes of M3's delegation.
+- `@experimental`: `ActsUnderDelegation`, `Request::$execution` and `Request::$purpose`, the shapes of M3's delegation.
 
 ### Breaking
 

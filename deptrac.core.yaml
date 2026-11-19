@@ -1,0 +1,142 @@
+# The dependency rules between core's namespaces (D-47, AR-10, TOOLING-02). deptrac.yaml keeps the
+# packages apart; this keeps core's parts from growing new edges. The list is today's edges
+# (2026-11-19): a new one fails until it's added here, in review. The evaluator is a layer of its own,
+# since the decision point (Operation) is to stop depending on it before M3-2 (AR-06's port; ROADMAP's
+# M3-2 exit). Root is core's top-level classes (Realm, Duration, Secret, Text, Time).
+deptrac:
+  paths:
+    - ./packages/core/src
+  exclude_files:
+    - '#.*/vendor/.*#'
+  layers:
+    - name: Authorization
+      collectors:
+        - type: bool
+          must:
+            - type: classLike
+              value: ^YorvoID\\Core\\Authorization\\.*
+          must_not:
+            - type: classLike
+              value: ^YorvoID\\Core\\Authorization\\Evaluator$
+    - name: Evaluator
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Authorization\\Evaluator$
+    - name: Clock
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Clock\\.*
+    - name: Crypto
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Crypto\\.*
+    - name: Event
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Event\\.*
+    - name: Exception
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Exception\\.*
+    - name: Id
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Id\\.*
+    - name: Key
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Key\\.*
+    - name: Log
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Log\\.*
+    - name: Migrations
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Migrations\\.*
+    - name: Operation
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Operation\\.*
+    - name: Principal
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Principal\\.*
+    - name: Storage
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\Storage\\.*
+    - name: Root
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Core\\[A-Za-z]+$
+  ruleset:
+    Authorization:
+      - Clock
+      - Crypto
+      - Event
+      - Exception
+      - Id
+      - Log
+      - Operation
+      - Principal
+      - Root
+      - Storage
+    Clock: ~
+    Crypto:
+      - Exception
+    Evaluator:
+      - Authorization
+      - Event
+      - Exception
+      - Id
+      - Operation
+      - Root
+      - Storage
+    Event:
+      - Exception
+      - Root
+    Exception: ~
+    Id: ~
+    Key:
+      - Exception
+      - Root
+    Log:
+      - Crypto
+      - Event
+      - Exception
+      - Id
+      - Key
+      - Operation
+      - Principal
+      - Root
+      - Storage
+    Migrations:
+      - Authorization
+      - Log
+      - Principal
+      - Storage
+    Operation:
+      - Authorization
+      - Evaluator  # Until M3-2: Operations::run() asks through a port (AR-06)
+      - Event
+      - Exception
+      - Id
+      - Log
+      - Principal
+      - Root
+    Principal:
+      - Event
+      - Exception
+      - Id
+      - Log
+      - Operation
+      - Root
+      - Storage
+    Root:
+      - Exception
+    Storage:
+      - Event
+      - Exception
+      - Log
+      - Root
