@@ -222,6 +222,8 @@ final class AuthorizationDecoratorTest extends TestCase
         // A refusal may be, e.g. for a page's sample.
         self::assertSame('d-1', Decision::deny('No.')->identified('d-1', new \DateTimeImmutable(), [])->recorded('h')->id);
 
+        self::assertFalse(new \ReflectionClass(Decision::class)->isCloneable(), 'A copy would be a second decision no permit was issued on.');
+
         $this->expectException(\LogicException::class);
         $this->expectExceptionMessage('A Decision isn\'t unserialized');
         unserialize(serialize($permit));

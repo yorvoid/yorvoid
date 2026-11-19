@@ -134,6 +134,13 @@ final readonly class Decision
     }
 
     /**
+     * A copy would be a second decision with the same binding, that no permit was issued on yet.
+     */
+    private function __clone()
+    {
+    }
+
+    /**
      * @param array<string, int> $versions
      */
     private function withIdentity(string $id, \DateTimeImmutable $at, array $versions): self
