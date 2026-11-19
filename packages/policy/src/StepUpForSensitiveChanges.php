@@ -4,23 +4,20 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy;
 
+use YorvoID\Core\Authorization\ChangesAuthority;
+use YorvoID\Core\Authorization\ChecksCatalogue;
+use YorvoID\Core\Authorization\DeclaredEffects;
+use YorvoID\Core\Authorization\Effect;
 use YorvoID\Core\Authorization\ForbidElement;
+use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\StepUpCheck;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Duration;
+use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\Operator;
-use YorvoID\Policy\Attribute\SetAttribute;
-use YorvoID\Policy\Change\AddGroupMember;
-use YorvoID\Policy\Change\AssignGroupRole;
-use YorvoID\Policy\Change\AssignRole;
-use YorvoID\Policy\Change\CreateRole;
-use YorvoID\Policy\Change\GrantAbilities;
-use YorvoID\Policy\Change\ResetAbilities;
-use YorvoID\Policy\Change\SetAbilities;
-use YorvoID\Relations\Change\AddRelation;
 
 /**
  * Giving anyone a super role or a strict ability, directly or through what follows from it (Effects),
@@ -31,21 +28,34 @@ use YorvoID\Relations\Change\AddRelation;
  *
  * @api
  */
-final readonly class StepUpForSensitiveChanges implements ForbidElement
+final readonly class StepUpForSensitiveChanges implements ForbidElement, ChecksCatalogue
 {
     public const string NAME = 'yorvoid.policy.step_up';
 
     private Duration $window;
 
+    private DeclaredEffects $effects;
+
     /**
-     * @param Duration|null $window How recent the proof must be: 5 minutes if not given
+     * @param Duration|null        $window  How recent the proof must be: 5 minutes if not given
+     * @param DeclaredEffects|null $effects What the changes give and take: the policy's own if not given
      */
     public function __construct(
         private Roles $roles,
         private ?StepUpCheck $stepUp = null,
         ?Duration $window = null,
+        ?DeclaredEffects $effects = null,
     ) {
         $this->window = $window ?? Duration::minutes(5);
+        $this->effects = $effects ?? PolicyEffects::shared($roles);
+    }
+
+    /**
+     * Every change of authority it may meet has its effect declared.
+     */
+    public function checkCatalogue(OperationCatalogue $catalogue): void
+    {
+        $this->effects->check($catalogue);
     }
 
     public function name(): string
@@ -54,20 +64,30 @@ final readonly class StepUpForSensitiveChanges implements ForbidElement
     }
 
     /**
-     * The changes that can give, by their command alone: one that only takes reads nothing.
+     * A change of authority that can give, or whose effect isn't declared: one that only takes needs no
+     * proof.
      */
     public function matches(Request $request): bool
     {
-        $command = $request->command;
-
         return !$request->actor instanceof Operator
-            && ($command instanceof AssignRole || $command instanceof AssignGroupRole || $command instanceof AddGroupMember || ($command instanceof CreateRole && null !== $command->from)
-                || $command instanceof GrantAbilities || $command instanceof SetAbilities || $command instanceof ResetAbilities || $command instanceof AddRelation || $command instanceof SetAttribute);
+            && $request->command instanceof ChangesAuthority
+            && (!($effect = $this->effects->effectOf($request)) instanceof Effect || $effect->gives());
     }
 
     public function evaluate(Request $request): Truth
     {
-        $sensitive = $this->sensitive($request);
+        if (!$request->command instanceof ChangesAuthority) {
+            return Truth::fails('It changes no authority.');
+        }
+
+        $effect = $this->effects->effectOf($request);
+
+        // A change of authority whose effect nothing declares is never taken for one that gives nothing (D-51).
+        if (null === $effect) {
+            return Truth::unknown(IndeterminateReason::EvaluationError, \sprintf('Nothing declares what %s gives.', $request->name()));
+        }
+
+        $sensitive = $this->sensitive($request, $effect);
 
         if (null === $sensitive) {
             return Truth::fails('It gives no super role and no strict ability.');
@@ -90,15 +110,13 @@ final readonly class StepUpForSensitiveChanges implements ForbidElement
      * What makes the change sensitive, if it is: a security attribute set or removed, a super role given,
      * or a strict ability given, by a role or directly.
      */
-    private function sensitive(Request $request): ?string
+    private function sensitive(Request $request, Effect $effect): ?string
     {
-        $command = $request->command;
-
-        if ($command instanceof SetAttribute) {
-            return \sprintf('%s the security attribute "%s"', null === $command->value ? 'Removing' : 'Setting', $command->name);
+        if (null !== $effect->attribute) {
+            return \sprintf('%s the security attribute "%s"', $effect->attribute->removes ? 'Removing' : 'Setting', $effect->attribute->name);
         }
 
-        foreach (Effects::of($this->roles)->on($request)->gives as $part) {
+        foreach ($effect->gives as $part) {
             $abilities = $part->abilities;
 
             foreach ($part->roles as $role) {

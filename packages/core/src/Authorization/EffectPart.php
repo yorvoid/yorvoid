@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Policy;
-
-use YorvoID\Core\Authorization\ResourceRef;
+namespace YorvoID\Core\Authorization;
 
 /**
  * Roles and abilities a change gives or takes, on a resource or where the request is about.
  *
- * @internal
+ * @api
+ *
+ * @experimental Outside the 1.0 promise while delegation (M3) shapes it: it may change in a minor
+ *               release ([compatibility](docs/compatibility.md)).
  */
 final readonly class EffectPart
 {

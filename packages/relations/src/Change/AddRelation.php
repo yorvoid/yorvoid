@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace YorvoID\Relations\Change;
 
+use YorvoID\Core\Authorization\ChangesAuthority;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Operation\AuthorizedBy;
-use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\ConcernsResource;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Realm;
@@ -16,12 +16,12 @@ use YorvoID\Relations\Subject;
 /**
  * Gives a subject a relation to a resource, e.g. makes someone an editor of a page; giving it again changes nothing.
  *
- * @implements Command<null>
+ * @implements ChangesAuthority<null>
  *
  * @api
  */
 #[Operation('yorvoid.relation.add', 'Relate a subject to a resource', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: RelationChanges::ABILITY, inverse: 'yorvoid.relation.remove')]
-final readonly class AddRelation implements Command, ConcernsResource
+final readonly class AddRelation implements ChangesAuthority, ConcernsResource
 {
     public function __construct(
         public Realm $realm,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy;
 
+use YorvoID\Core\Authorization\HoldsAuthority;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -19,7 +20,7 @@ use YorvoID\Core\Realm;
  *
  * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
-interface PolicyStore
+interface PolicyStore extends HoldsAuthority
 {
     /**
      * @return array<string, string> The roles created in the realm, name => label, sorted by name

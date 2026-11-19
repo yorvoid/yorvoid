@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy\Change;
 
+use YorvoID\Core\Authorization\ChangesAuthority;
 use YorvoID\Core\Operation\AuthorizedBy;
-use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Realm;
 use YorvoID\Policy\AbilityChanges;
@@ -14,12 +14,12 @@ use YorvoID\Policy\YorvoIDDeclarations;
 /**
  * Back to the declared defaults: for these abilities, or for all of them.
  *
- * @implements Command<AbilityChanges> The realm's changes now
+ * @implements ChangesAuthority<AbilityChanges> The realm's changes now
  *
  * @api
  */
 #[Operation('yorvoid.ability.reset', 'Restore the default abilities', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: YorvoIDDeclarations::PERMISSIONS_MANAGE)]
-final readonly class ResetAbilities implements Command
+final readonly class ResetAbilities implements ChangesAuthority
 {
     /**
      * @param list<string>|null $abilities Null for all

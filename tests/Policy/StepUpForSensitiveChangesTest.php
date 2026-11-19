@@ -52,7 +52,6 @@ use YorvoID\Policy\Change\ResetAbilities;
 use YorvoID\Policy\Change\RevokeAbilities;
 use YorvoID\Policy\Change\SetAbilities;
 use YorvoID\Policy\Change\UnassignRole;
-use YorvoID\Policy\Effects;
 use YorvoID\Policy\GroupChanges;
 use YorvoID\Policy\GroupRelations;
 use YorvoID\Policy\GroupRoleAssignment;
@@ -60,6 +59,7 @@ use YorvoID\Policy\NoEscalation;
 use YorvoID\Policy\PolicyCatalogue;
 use YorvoID\Policy\PolicyChanges;
 use YorvoID\Policy\PolicyDeclarations;
+use YorvoID\Policy\PolicyEffects;
 use YorvoID\Policy\Role;
 use YorvoID\Policy\RoleAssignment;
 use YorvoID\Policy\RolePermit;
@@ -430,12 +430,19 @@ final class StepUpForSensitiveChangesTest extends TestCase
     public function testBothForbidsWeighOneEffectPerRequest(): void
     {
         $request = $this->request($this->actor('manager'), new AssignRole($this->realm, $this->id(), 'recoverer'));
-        $effects = Effects::of($this->roles);
+        $effects = PolicyEffects::shared($this->roles);
 
-        self::assertSame($effects, Effects::of($this->roles));
-        self::assertNotSame($effects, Effects::of(new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), new InMemoryPolicyStore())));
-        self::assertSame($effects->on($request), $effects->on($request));
-        self::assertNotSame($effects->on($request), $effects->on($this->request($this->actor('manager'), new AssignRole($this->realm, $this->id(), 'recoverer'))));
+        self::assertSame($effects, PolicyEffects::shared($this->roles));
+        self::assertNotSame($effects, PolicyEffects::shared(new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), new InMemoryPolicyStore())));
+        $first = $effects->effectOf($request);
+        self::assertNotNull($first);
+        self::assertSame($first, $effects->effectOf($request));
+        self::assertNotSame($first, $effects->effectOf($this->request($this->actor('manager'), new AssignRole($this->realm, $this->id(), 'recoverer'))));
+
+        // Decided again, e.g. by the guard once what it read has changed, it's computed again.
+        $effects->forget($request);
+        self::assertNotSame($first, $effects->effectOf($request));
+        self::assertEquals($first, $effects->effectOf($request));
     }
 
     /**
