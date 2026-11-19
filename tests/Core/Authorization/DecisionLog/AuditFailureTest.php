@@ -43,6 +43,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\RecordingLogger;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * The response to audit failure (AUD-006, AU-5): in the Refuse mode, nothing is permitted without its
@@ -239,7 +240,7 @@ final class AuditFailureTest extends TestCase
 
     public function testABatchIsWrittenInOneWrite(): void
     {
-        $evaluator = Evaluator::builtIn(new ValidAuthority(), clock: $this->clock, decisions: $this->log(AuditFailure::Refuse, PermitRecording::All));
+        $evaluator = Evaluator::builtIn(new ValidAuthority(), clock: $this->clock, decisions: $this->log(AuditFailure::Refuse, PermitRecording::All), actors: [new TrustedActors()]);
         $member = new Member($this->realm, new PrincipalId(new UuidV7()));
 
         $decisions = $evaluator->decideAbilities($member, 'acme.pages.edit', $this->realm, [[new ResourceRef('page', '1'), null], [new ResourceRef('page', '2'), null], [new ResourceRef('page', '3'), null]], new Origin(OriginKind::Web));
@@ -348,7 +349,7 @@ final class AuditFailureTest extends TestCase
     {
         $log = new SecurityLog($entries, new InMemoryTransactions(), clock: $this->clock);
         $badges = new LoggingBadges($log);
-        $evaluator = Evaluator::builtIn(new ValidAuthority(), selfService: new SelfService(), clock: $this->clock, decisions: $this->log($mode));
+        $evaluator = Evaluator::builtIn(new ValidAuthority(), selfService: new SelfService(), clock: $this->clock, decisions: $this->log($mode), actors: [new TrustedActors()]);
 
         return [new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), $evaluator, $log, [$badges]), $badges];
     }

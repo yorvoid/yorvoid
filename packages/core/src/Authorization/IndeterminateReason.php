@@ -32,4 +32,7 @@ enum IndeterminateReason: string
 
     /** The decision would have permitted, but its record couldn't be written, and it mustn't permit without one (AUD-006) */
     case AuditUnavailable = 'audit_unavailable';
+
+    /** The actor is of a kind nothing proves (ProvesActors), so it can't be taken at its word (D-45) */
+    case UnprovenActor = 'unproven_actor';
 }

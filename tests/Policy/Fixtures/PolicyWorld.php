@@ -13,7 +13,6 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\SecurityLog;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Decision;
@@ -59,6 +58,8 @@ use YorvoID\Relations\Storage\CachedRelationStore;
 use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Tests\Relations\Fixtures\AcmeRelations;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\TestPrincipal;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * YorvoID with the policy, in memory or on a stack's stores, cached if given a cache: operations run as
@@ -131,7 +132,7 @@ final class PolicyWorld
         }
 
         $authority = new PrincipalAuthority($principals);
-        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)]);
+        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)], actors: [new TrustedActors()]);
         $handlers = [
             new Principals($principals, $identifiers, $log, $transactions, clock: $this->clock),
             new PolicyChanges($catalogue, $this->policyStore, $principals, $log, $transactions, $this->clock),
@@ -187,7 +188,7 @@ final class PolicyWorld
     /**
      * A new, active principal of the realm, with these roles in the whole realm.
      */
-    public function principal(string ...$roles): ActingPrincipal
+    public function principal(string ...$roles): TestPrincipal
     {
         $principal = $this->asOperator(new CreatePrincipal($this->realm, PrincipalKind::Human));
 
@@ -195,7 +196,7 @@ final class PolicyWorld
             $this->asOperator(new AssignRole($this->realm, $principal->id, $role));
         }
 
-        return new ActingPrincipal($this->realm, $principal->id);
+        return new TestPrincipal($this->realm, $principal->id);
     }
 
     public function decide(Actor $actor, string $ability, ?ResourceRef $resource = null): Decision

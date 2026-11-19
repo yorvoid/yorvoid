@@ -6,7 +6,6 @@ namespace YorvoID\Authn\Attempt;
 
 use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Principal\PrincipalId;
@@ -110,7 +109,7 @@ final readonly class Attempts
         }
 
         $this->throttle->hit($marker, $once);
-        $this->log?->attempt($realm, 'yorvoid.attempt.throttled', Outcome::Denied, new Origin(OriginKind::System, 'throttle'), details: ['form' => $form, 'key' => Digest::sha256($key)]);
+        $this->log?->attempt($realm, 'yorvoid.attempt.throttled', Outcome::Denied, Origin::system('throttle'), details: ['form' => $form, 'key' => Digest::sha256($key)]);
     }
 
     private static function account(string $form, Realm $realm, PrincipalId|string $account): string

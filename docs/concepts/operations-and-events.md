@@ -45,9 +45,20 @@ use YorvoID\Core\Principal\SuspendPrincipal;
 $principal = $operations->run(new SuspendPrincipal($realm, $principalId), $session, $origin);
 ```
 
-- **The actor** is a signed-in `Session`; `Anonymous` for what someone not signed in does, e.g. signing in or accepting an invitation; or the host's `Operator`. The operator acts from a console command or a job only when PHP runs from the command line, so a web request that says it's the console is refused; YorvoID itself (`OriginKind::System`) acts from anywhere. Your code says who the actor is: never take it from the request.
+- **The actor** is a signed-in `Session`; `Anonymous` for what someone not signed in does, e.g. signing in or accepting an invitation; or the host's `Operator` ([actors](#actors)). Your code says who the actor is: never take it from the request.
 - **The decision** is the evaluator's ([authorization](authorization.md)): Permit, Deny or Indeterminate. Only Permit runs anything; otherwise `run()` throws `NotPermitted`, with the decision: its reasons, and on a Deny what could change it, e.g. a step-up. Indeterminate means something the decision needs couldn't be established, and never permits.
 - **Abilities** are decided by roles ([roles](authorization.md#roles)): give the evaluator the role permit (`RolePermit`); the Symfony bundle does. An `AbilityPolicy` of your own can decide them too. Without either, no ability permits anything.
+
+## Actors
+
+Every decision proves its actor before it reads it (D-45):
+
+- **A `Session`** is read from its store, for every decision: the decision reads the session as recorded, its authentication factors included, never the object it was given. A session that isn't on record, has ended or has expired, or is another principal's, is refused. The Symfony bridge does this. In plain PHP, give the evaluator `actors: [new StoredSessions($sessionStore)]`.
+- **The host's `Operator`** acts from a console command or a job only when PHP runs from the command line, so a web request that says it's the console is refused. Give it a realm (`new Operator(realm: $realm)`) when the work is about one; without, it acts in every realm. Only YorvoID's own work is `OriginKind::System`, e.g. a notification's token: `new Origin(OriginKind::System)` throws, so give your background work the `Job` or `Console` origin.
+- **An `ActingPrincipal`** is a principal YorvoID just verified, e.g. through an invitation, a recovery or a setup code, acting in that operation's consequences only. `Operations::run()` refuses it. In a decision of your own, e.g. a policy test, it answers "would this principal be permitted", and proves nothing.
+- **An actor class of your own** needs a `ProvesActors` that reads it from where it's recorded, given to the evaluator in `actors:` (in Symfony, a service tagged `yorvoid.actor_prover`). Without one, its decisions are Indeterminate (`unproven_actor`), and the first is logged as a warning.
+
+The origin's kind says where a request came from. The Symfony bridge marks a request `api` when it carries an `Authorization: Bearer` header or its path starts with one of `yorvoid.api.paths`, and `web` otherwise. The request says this itself, so use `origin.kind` in a rule only to narrow what's permitted (refuse, or require a step-up), never to permit.
 
 ## Permits
 

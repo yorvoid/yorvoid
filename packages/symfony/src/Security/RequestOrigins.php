@@ -25,8 +25,12 @@ final class RequestOrigins
     /** @var \WeakMap<Request, string> */
     private \WeakMap $ids;
 
+    /**
+     * @param list<string> $apiPaths Path prefixes whose requests are an API's (yorvoid.api.paths)
+     */
     public function __construct(
         private readonly RequestStack $requests,
+        private readonly array $apiPaths = [],
     ) {
         $this->ids = new \WeakMap();
     }
@@ -44,6 +48,25 @@ final class RequestOrigins
 
         $this->ids[$request] ??= (new Origin(OriginKind::Web))->correlationId;
 
-        return new Origin(OriginKind::Web, $detail, $this->ids[$request]);
+        return new Origin($this->kind($request), $detail, $this->ids[$request]);
+    }
+
+    /**
+     * An API's request carries a bearer token or is on an API path; a proxy's Basic auth doesn't make a
+     * page an API. The request says it itself, so a rule may only narrow by it (D-45).
+     */
+    private function kind(Request $request): OriginKind
+    {
+        if (str_starts_with(strtolower((string) $request->headers->get('Authorization')), 'bearer ')) {
+            return OriginKind::Api;
+        }
+
+        foreach ($this->apiPaths as $prefix) {
+            if (str_starts_with($request->getPathInfo(), $prefix)) {
+                return OriginKind::Api;
+            }
+        }
+
+        return OriginKind::Web;
     }
 }

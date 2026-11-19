@@ -98,15 +98,15 @@ final class Permit
      *
      * @template T
      *
-     * @param Command<T> $command
-     * @param Actor|null $actingAs Who the consequence acts as, for authentication only: the principal it
-     *                             authenticated, e.g. the invitee accepting; by default this permit's actor
+     * @param Command<T>       $command
+     * @param PrincipalId|null $actingAs Who the consequence acts as, for authentication only: the principal it
+     *                                   authenticated, e.g. the invitee accepting; by default this permit's actor
      *
      * @throws IntegratorError When this permit wasn't used yet, its operation doesn't say it causes the
      *                         command's, the command is in another realm, or another actor is named outside
      *                         authentication
      */
-    public function consequence(Command $command, ?Actor $actingAs = null): self
+    public function consequence(Command $command, ?PrincipalId $actingAs = null): self
     {
         if (!$this->used) {
             throw new IntegratorError(\sprintf('A consequence was asked of the permit for "%s" before it was used.', $this->operation), 'Call use() with the command first: only an operation that runs has consequences.', 'concepts/operations-and-events.md#permits');
@@ -145,7 +145,7 @@ final class Permit
 
         $this->caused[$consequence] = $caused + 1;
 
-        return new self($consequence, $actingAs ?? $this->actor, AuthorizedBy::Consequence, $this->decisionId, $command, $this, $this->offline);
+        return new self($consequence, null === $actingAs ? $this->actor : new ActingPrincipal($this->realm, $actingAs), AuthorizedBy::Consequence, $this->decisionId, $command, $this, $this->offline);
     }
 
     /**
@@ -163,7 +163,7 @@ final class Permit
      *
      * @return T
      */
-    public function cause(\Closure $handler, Command $command, Origin $origin, ?Actor $actingAs = null): mixed
+    public function cause(\Closure $handler, Command $command, Origin $origin, ?PrincipalId $actingAs = null): mixed
     {
         return $handler($command, $this->consequence($command, $actingAs), $origin);
     }

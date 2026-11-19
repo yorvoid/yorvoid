@@ -19,7 +19,6 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\Principal;
@@ -157,7 +156,7 @@ final readonly class SetupCodes implements OperationHandler
 
             $this->log->record($realm, 'yorvoid.setup.claim', Outcome::Success, $origin, $principal->id, 'principal', (string) $principal->id);
 
-            return $permit->cause($this->sessions->start(...), new StartSession($realm, $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now())), $command->device, $command->address, $command->deviceCookie), $origin, new ActingPrincipal($realm, $principal->id));
+            return $permit->cause($this->sessions->start(...), new StartSession($realm, $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, $this->clock->now())), $command->device, $command->address, $command->deviceCookie), $origin, $principal->id);
         });
     }
 

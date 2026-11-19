@@ -316,7 +316,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $suspect = CredentialId::fromString((string) new UuidV7());
 
         self::assertSame([ReportNotMe::class, IssueNotMeLink::class], array_keys($this->notMe->operations()));
-        $issued = Permits::call($this->notMe->issue(...), new IssueNotMeLink(new Realm('acme'), $ana->id, $suspect, Duration::days(1)), new Origin(OriginKind::System));
+        $issued = Permits::call($this->notMe->issue(...), new IssueNotMeLink(new Realm('acme'), $ana->id, $suspect, Duration::days(1)), Origin::system('test'));
         self::assertSame(SecurityNotifications::notMePurpose($suspect), $issued->token->purpose);
     }
 

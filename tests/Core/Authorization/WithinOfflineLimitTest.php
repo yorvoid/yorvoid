@@ -29,6 +29,7 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubOfflineDecider;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Core\Operation\Fixtures\Doors\OpenDoor;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * An offline limit (XP-03, XP-14): measured by elapsed time, so the wall clock can't stretch it, and only
@@ -119,7 +120,7 @@ final class WithinOfflineLimitTest extends TestCase
 
     private static function evaluator(WithinOfflineLimit $offline, MockClock $clock): Evaluator
     {
-        return new Evaluator([new StubPermit('door', new StoreUnreachable('The link home is down.'))], new StubAuthority(Truth::holds('valid')), $clock, offline: $offline);
+        return new Evaluator([new StubPermit('door', new StoreUnreachable('The link home is down.'))], new StubAuthority(Truth::holds('valid')), $clock, offline: $offline, actors: [new TrustedActors()]);
     }
 
     private static function decide(Evaluator $evaluator): \YorvoID\Core\Operation\Decision

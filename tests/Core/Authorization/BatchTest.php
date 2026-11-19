@@ -24,6 +24,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Tests\Core\Authorization\Fixtures\PreloadingPermit;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * A batch of ability decisions (AUZ-030, AUZ-032): each decided as on its own, at one moment, with the
@@ -49,7 +50,7 @@ final class BatchTest extends TestCase
         };
         $store = new InMemoryDecisionLogStore();
         $log = new DecisionLog($store);
-        $evaluator = new Evaluator([$permit], new StubAuthority(Truth::holds('valid')), new MockClock('2026-11-08 20:00:00'), versions: [$versions], decisions: $log);
+        $evaluator = new Evaluator([$permit], new StubAuthority(Truth::holds('valid')), new MockClock('2026-11-08 20:00:00'), versions: [$versions], decisions: $log, actors: [new TrustedActors()]);
         $pages = [new ResourceRef('page', '1'), new ResourceRef('page', 'other'), new ResourceRef('page', '1'), null];
 
         $decisions = $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), array_map(static fn (?ResourceRef $page): array => [$page, null], $pages), new Origin(OriginKind::Web));
@@ -72,7 +73,7 @@ final class BatchTest extends TestCase
     public function testTheAuthorityCheckPreloadsTheWholeBatch(): void
     {
         $authority = new PreloadingPermit();
-        $evaluator = new Evaluator([new PreloadingPermit('permit')], $authority);
+        $evaluator = new Evaluator([new PreloadingPermit('permit')], $authority, actors: [new TrustedActors()]);
 
         $decisions = $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [[new ResourceRef('page', 'other'), null], [new ResourceRef('page', '1'), null]], new Origin(OriginKind::Web));
 
@@ -87,7 +88,7 @@ final class BatchTest extends TestCase
         $failing = new PreloadingPermit('failing', new \RuntimeException('The store is down.'));
         $matching = new PreloadingPermit('matching', matchFailure: new \RuntimeException('Can\'t tell.'));
         $other = new PreloadingPermit('other', basis: AuthorizedBy::Operator);
-        $evaluator = new Evaluator([$failing, $matching, $other], new PreloadingPermit('authority', new \RuntimeException('Down too.')));
+        $evaluator = new Evaluator([$failing, $matching, $other], new PreloadingPermit('authority', new \RuntimeException('Down too.')), actors: [new TrustedActors()]);
 
         $decisions = $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [[new ResourceRef('page', '1'), null]], new Origin(OriginKind::Web));
 
@@ -97,7 +98,7 @@ final class BatchTest extends TestCase
         self::assertSame([], $matching->batches);
         self::assertSame([], $other->batches, 'A permit that doesn\'t speak for abilities isn\'t asked.');
 
-        $integrator = new Evaluator([new PreloadingPermit('wrong', new IntegratorError('Set up wrong.', 'Fix it.', 'concepts/authorization.md'))], new StubAuthority(Truth::holds('valid')));
+        $integrator = new Evaluator([new PreloadingPermit('wrong', new IntegratorError('Set up wrong.', 'Fix it.', 'concepts/authorization.md'))], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]);
 
         try {
             $integrator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [[new ResourceRef('page', '1'), null]], new Origin(OriginKind::Web));
@@ -106,7 +107,7 @@ final class BatchTest extends TestCase
             self::assertStringStartsWith('Set up wrong.', $error->getMessage());
         }
 
-        $authority = new Evaluator([], new PreloadingPermit('wrong', new IntegratorError('Set up wrong.', 'Fix it.', 'concepts/authorization.md')));
+        $authority = new Evaluator([], new PreloadingPermit('wrong', new IntegratorError('Set up wrong.', 'Fix it.', 'concepts/authorization.md')), actors: [new TrustedActors()]);
         $this->expectException(IntegratorError::class);
         $authority->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [[new ResourceRef('page', '1'), null]], new Origin(OriginKind::Web));
     }

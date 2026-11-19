@@ -32,6 +32,7 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
 use YorvoID\Tests\Core\Authorization\Fixtures\UpdateSite;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * An ability asked about outside YorvoID's operations, e.g. an application's "edit this page": the same
@@ -45,7 +46,7 @@ final class AbilityRequestTest extends TestCase
         $operator = new StubPermit('operator', Truth::holds('the host'), AuthorizedBy::Operator);
         $self = new StubPermit('self', Truth::holds('own'), AuthorizedBy::Self);
         $authentication = new StubPermit('authentication', Truth::holds('a secret'), AuthorizedBy::Authentication);
-        $evaluator = new Evaluator([$operator, $self, $authentication], new StubAuthority(Truth::holds('valid')));
+        $evaluator = new Evaluator([$operator, $self, $authentication], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]);
 
         $decision = $evaluator->decideAbility(new Operator(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Console));
 
@@ -53,7 +54,7 @@ final class AbilityRequestTest extends TestCase
         self::assertSame('No permit applies to "acme.pages.edit".', $decision->reason);
         self::assertSame(0, $operator->evaluated + $self->evaluated + $authentication->evaluated);
 
-        $permitted = new Evaluator([$ability, $operator], new StubAuthority(Truth::holds('valid')))->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
+        $permitted = new Evaluator([$ability, $operator], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()])->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
 
         self::assertSame(Verdict::Permit, $permitted->verdict);
         self::assertSame(AuthorizedBy::Ability, $permitted->basis);
@@ -68,7 +69,7 @@ final class AbilityRequestTest extends TestCase
                 return true;
             }
         };
-        $evaluator = Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $policy, commandLine: false);
+        $evaluator = Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $policy, commandLine: false, actors: [new TrustedActors()]);
 
         $decision = $evaluator->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
 
@@ -107,7 +108,7 @@ final class AbilityRequestTest extends TestCase
         $page = new ResourceRef('page', '42');
         $actor = self::member();
 
-        new Evaluator([$seen], new StubAuthority(Truth::holds('valid')), $clock)->decideAbility($actor, 'acme.pages.edit', new Realm('acme'), $page, new Origin(OriginKind::Web));
+        new Evaluator([$seen], new StubAuthority(Truth::holds('valid')), $clock, actors: [new TrustedActors()])->decideAbility($actor, 'acme.pages.edit', new Realm('acme'), $page, new Origin(OriginKind::Web));
 
         $request = $seen->request;
         self::assertNotNull($request);
@@ -149,7 +150,7 @@ final class AbilityRequestTest extends TestCase
             }
         };
         $offline = new StubOfflineDecider(Truth::holds('the door may open'));
-        $evaluator = new Evaluator([new StubPermit('ability', Truth::holds('has it'))], new StubAuthority(Truth::unknown(IndeterminateReason::StoreUnreachable, 'down')), logger: $logger, offline: $offline);
+        $evaluator = new Evaluator([new StubPermit('ability', Truth::holds('has it'))], new StubAuthority(Truth::unknown(IndeterminateReason::StoreUnreachable, 'down')), logger: $logger, offline: $offline, actors: [new TrustedActors()]);
 
         $decision = $evaluator->decideAbility(self::member(), 'acme.doors.open', new Realm('acme'), null, new Origin(OriginKind::Web));
 

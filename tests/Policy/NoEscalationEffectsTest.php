@@ -12,7 +12,6 @@ use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -38,6 +37,7 @@ use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
 use YorvoID\Relations\TooDeep;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
+use YorvoID\Tests\Support\TestPrincipal;
 
 /**
  * M2-13: what no-escalation weighs a link and a deleted group by, on a schema with more to follow than
@@ -205,7 +205,7 @@ final class NoEscalationEffectsTest extends TestCase
      */
     private function evaluate(array $roles, Command $command): Truth
     {
-        $actor = new ActingPrincipal($this->realm, $id = $this->principal());
+        $actor = new TestPrincipal($this->realm, $id = $this->principal());
 
         foreach ($roles as $role) {
             $this->policy->assign(new RoleAssignment($this->realm, $id, $role, new \DateTimeImmutable()));

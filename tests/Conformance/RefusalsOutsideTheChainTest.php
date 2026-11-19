@@ -31,6 +31,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * A refusal or a failed attempt changes nothing, so it's no entry of the chain: it's a record of the
@@ -135,6 +136,6 @@ final class RefusalsOutsideTheChainTest extends DatabaseTestCase
     {
         $decisions = new DecisionLog($decisionsOn->decisions, transactions: $stack->transactions);
 
-        return new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new ValidAuthority(), new Policy(false), new SelfService(), decisions: $decisions), new SecurityLog($stack->log, $stack->transactions, attempts: $decisions), [new Badges()]);
+        return new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new ValidAuthority(), new Policy(false), new SelfService(), decisions: $decisions, actors: [new TrustedActors()]), new SecurityLog($stack->log, $stack->transactions, attempts: $decisions), [new Badges()]);
     }
 }

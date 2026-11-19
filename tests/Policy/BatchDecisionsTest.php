@@ -7,7 +7,6 @@ namespace YorvoID\Tests\Policy;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
@@ -20,6 +19,7 @@ use YorvoID\Relations\Subject;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\StatementLog;
+use YorvoID\Tests\Support\TestPrincipal;
 
 /**
  * Batch decisions (AUZ-030, AUZ-032) and what a request reads (G2): a batch decides each resource as
@@ -130,7 +130,7 @@ final class BatchDecisionsTest extends DatabaseTestCase
      * Ada, a member who edits site "a" by a scoped role, and pages alternately on sites "a" and "b",
      * both on server "s"; she's an editor of page 5 by a relation.
      *
-     * @return array{ActingPrincipal, list<ResourceRef>}
+     * @return array{TestPrincipal, list<ResourceRef>}
      */
     private function site(PolicyWorld $world, int $count): array
     {
@@ -152,7 +152,7 @@ final class BatchDecisionsTest extends DatabaseTestCase
         return [$ada, $pages];
     }
 
-    private static function id(ActingPrincipal $principal): PrincipalId
+    private static function id(TestPrincipal $principal): PrincipalId
     {
         \assert(null !== $principal->principalId);
 

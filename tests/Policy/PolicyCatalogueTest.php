@@ -27,6 +27,7 @@ use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
+use YorvoID\Tests\Support\TrustedActors;
 
 final class PolicyCatalogueTest extends TestCase
 {
@@ -74,7 +75,7 @@ final class PolicyCatalogueTest extends TestCase
 
         try {
             $roles = new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), new InMemoryPolicyStore());
-            new Operations($operations, new Evaluator([new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles)], new StubAuthority(Truth::holds('valid'))), new SecurityLog(new InMemorySecurityLogStore(), new InMemoryTransactions()), []);
+            new Operations($operations, new Evaluator([new RolePermit($roles), new NoEscalation($roles), new StepUpForSensitiveChanges($roles)], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]), new SecurityLog(new InMemorySecurityLogStore(), new InMemoryTransactions()), []);
             self::fail('An undeclared ability was taken.');
         } catch (IntegratorError $error) {
             self::assertStringStartsWith('The operation "acme.badge.issue" needs the ability "acme.badges.issue", which isn\'t declared.', $error->getMessage());

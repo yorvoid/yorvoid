@@ -132,6 +132,8 @@ final class WritesWithoutPermit
         'YorvoID\\Notifications\\SecurityNotifications::events' => ['read', 'reads'],
         'YorvoID\\Notifications\\SecurityNotifications::identifierChanged' => ['event', 'a listener: YorvoID makes the event, inside the operation that causes it', 'YorvoID\\Core\\Principal\\Event\\IdentifierChanged'],
         'YorvoID\\Notifications\\SecurityNotifications::newDevice' => ['event', 'a listener: YorvoID makes the event, inside the operation that causes it', 'YorvoID\\Authn\\Session\\Event\\NewDeviceSignedIn'],
+        'YorvoID\\Authn\\Session\\StoredSessions::prove' => ['read', 'reads the session an actor claims, for a decision (D-45)'],
+        'YorvoID\\Authn\\Session\\StoredSessions::proves' => ['read', 'reads nothing: whether it proves this kind of actor'],
         'YorvoID\\Notifications\\SecurityNotifications::notMePurpose' => ['read', 'reads'],
         'YorvoID\\Notifications\\SecurityNotifications::recoveryCodeUsed' => ['event', 'a listener: YorvoID makes the event, inside the operation that causes it', 'YorvoID\\Authn\\Recovery\\Event\\RecoveryCodeUsed'],
         'YorvoID\\Notifications\\SecurityNotifications::recoveryCodesGenerated' => ['event', 'a listener: YorvoID makes the event, inside the operation that causes it', 'YorvoID\\Authn\\Recovery\\Event\\RecoveryCodesGenerated'],

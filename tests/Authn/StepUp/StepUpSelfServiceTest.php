@@ -30,7 +30,6 @@ use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\Operations;
@@ -46,6 +45,8 @@ use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\TestPrincipal;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * Someone changing their own account through Operations, as StepUpSelfService decides: a session, a
@@ -140,7 +141,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
     public function testAnApplicationsRequirementsReplaceYorvoIDs(string $implementation): void
     {
         $this->identifiers($implementation);
-        $identifiers = new Operations(OperationCatalogue::of([$this->principals]), Evaluator::builtIn(new PrincipalAuthority($this->stack->principals), selfService: new StepUpSelfService($this->stepUp, ['yorvoid.identifier.set' => null])), $this->log, [$this->principals]);
+        $identifiers = new Operations(OperationCatalogue::of([$this->principals]), Evaluator::builtIn(new PrincipalAuthority($this->stack->principals), selfService: new StepUpSelfService($this->stepUp, ['yorvoid.identifier.set' => null]), actors: [new TrustedActors()]), $this->log, [$this->principals]);
         $session = $this->session();
         // Long past the window: only YorvoID's requirement would ask for a proof now.
         $this->clock->sleep(3600);
@@ -201,7 +202,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
         $session = $this->session();
 
         try {
-            $identifiers->run(new SetIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email, 'ana@example.org'), new ActingPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Api));
+            $identifiers->run(new SetIdentifier(new Realm('acme'), $session->principalId, IdentifierKind::Email, 'ana@example.org'), new TestPrincipal(new Realm('acme'), $session->principalId), new Origin(OriginKind::Api));
             self::fail('Someone changed their own address without a session.');
         } catch (NotPermitted $refused) {
             // Not on its own account: no session. Nor as an administrator: without an ability policy, no
@@ -256,7 +257,7 @@ final class StepUpSelfServiceTest extends DatabaseTestCase
 
     private function operations(?Duration $window = null): Operations
     {
-        return new Operations(OperationCatalogue::of([$this->principals]), Evaluator::builtIn(new PrincipalAuthority($this->stack->principals), selfService: new StepUpSelfService($this->stepUp, window: $window)), $this->log, [$this->principals]);
+        return new Operations(OperationCatalogue::of([$this->principals]), Evaluator::builtIn(new PrincipalAuthority($this->stack->principals), selfService: new StepUpSelfService($this->stepUp, window: $window), actors: [new TrustedActors()]), $this->log, [$this->principals]);
     }
 
     private function session(): Session

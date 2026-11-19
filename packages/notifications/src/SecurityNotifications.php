@@ -21,7 +21,6 @@ use YorvoID\Authn\Session\Event\NewDeviceSignedIn;
 use YorvoID\Authn\Session\UserAgent;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\AuditAlarm;
 use YorvoID\Core\Log\Event\AuditFailed;
 use YorvoID\Core\Operation\Operations;
@@ -258,7 +257,7 @@ final readonly class SecurityNotifications
         $locale = $this->settings->localeOf($realm, $principalId);
         $application = ['application' => $this->settings->applicationName];
         // YorvoID's own doing, as the host's operator: whatever caused the notice already happened.
-        $issued = $this->operations->run(new IssueNotMeLink($realm, $principalId, $suspect?->id, $this->settings->notMeLifetime, $current ? $email->value : null), new Operator(), new Origin(OriginKind::System, 'security notification'));
+        $issued = $this->operations->run(new IssueNotMeLink($realm, $principalId, $suspect?->id, $this->settings->notMeLifetime, $current ? $email->value : null), new Operator(), Origin::system('security notification'));
         $url = strtr($this->settings->notMeUrl, ['{token}' => rawurlencode($issued->secret->reveal()), '{credential}' => null === $suspect ? '' : $suspect->id->uuid->toRfc4122()]);
         $labelled = [];
 

@@ -146,12 +146,12 @@ final class LogEntryTest extends TestCase
     {
         $this->expectException(IntegratorError::class);
 
-        LogEntry::create(Realm::default(), 1, Uuid::v7(), new \DateTimeImmutable(), $action, Outcome::Success, new Origin(OriginKind::System), null, $subjectType, $subjectId, [], 'previous');
+        LogEntry::create(Realm::default(), 1, Uuid::v7(), new \DateTimeImmutable(), $action, Outcome::Success, Origin::system('test'), null, $subjectType, $subjectId, [], 'previous');
     }
 
     public function testAcceptsTheLongestSubject(): void
     {
-        $entry = LogEntry::create(Realm::default(), 1, Uuid::v7(), new \DateTimeImmutable(), 'yorvoid.principal.create', Outcome::Success, new Origin(OriginKind::System), null, str_repeat('a', 63), str_repeat('b', 191), [], 'previous');
+        $entry = LogEntry::create(Realm::default(), 1, Uuid::v7(), new \DateTimeImmutable(), 'yorvoid.principal.create', Outcome::Success, Origin::system('test'), null, str_repeat('a', 63), str_repeat('b', 191), [], 'previous');
 
         self::assertSame(191, \strlen((string) $entry->subjectId));
     }

@@ -107,6 +107,8 @@ final class YorvoIDBundle extends AbstractBundle
             ->enumNode('on_failure')->values(['continue', 'refuse'])->defaultValue('continue')->info('What a decision whose record can\'t be written does: continue, or refuse, so that nothing is permitted without its record (AUD-006). The alert is raised either way')->end();
         $children->arrayNode('cache')->addDefaultsIfNotSet()->children()
             ->scalarNode('pool')->defaultValue(self::CACHE_POOL)->info('The PSR-6 pool that servers share for what decisions read: roles, assignments, relations. yorvoid.cache is on cache.app; null keeps them for the request only')->end();
+        $children->arrayNode('api')->addDefaultsIfNotSet()->children()
+            ->arrayNode('paths')->scalarPrototype()->end()->defaultValue([])->info('Path prefixes whose requests are an API\'s (origin kind api), as are those with an Authorization: Bearer header. A request says this itself: rules may only narrow by it')->end();
         $children->arrayNode('cookies')->addDefaultsIfNotSet()->children()
             ->scalarNode('device')->defaultValue('__Host-yorvoid_device')->info('The cookie that recognises devices')->end();
         $children->arrayNode('storage')->addDefaultsIfNotSet()->children()

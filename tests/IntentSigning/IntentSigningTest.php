@@ -101,7 +101,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $verified = $verifier->verify($prepared->intent->nonce, $authenticator->signIn($prepared->options));
         $this->events->dispatched = [];
 
-        $signing->ran($session, $verified->intent, $verified->key->id(), new Origin(OriginKind::System, 'verifier'));
+        $signing->ran($session, $verified->intent, $verified->key->id(), Origin::system('verifier'));
 
         $entries = array_values(array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => str_starts_with($entry->action, 'yorvoid.intent.')));
         self::assertSame(['yorvoid.intent.request', 'yorvoid.intent.run'], array_map(static fn (LogEntry $entry): string => $entry->action, $entries));
@@ -133,7 +133,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $session = $this->session();
         $intent = self::intent('acme.site.remove', ['site' => 'jane']);
 
-        $signing->refused($session, $intent, Refusal::UserNotVerified, new Origin(OriginKind::System));
+        $signing->refused($session, $intent, Refusal::UserNotVerified, Origin::system('test'));
 
         $entries = iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false);
         $entry = $entries[\count($entries) - 1];

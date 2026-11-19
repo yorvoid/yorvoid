@@ -23,7 +23,6 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Operation\AbilityPolicy;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\Authorization;
 use YorvoID\Core\Operation\AuthorizedBy;
@@ -87,6 +86,8 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Policy\Fixtures\StubStepUpCheck;
+use YorvoID\Tests\Support\TestPrincipal;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * M2-13 fix 2: giving a super role or a strict ability takes a recent proof, whatever permits it (M-1,
@@ -347,7 +348,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
         foreach ($changing as $handler) {
             foreach ([[], [new NoEscalation($this->roles)], [new StepUpForSensitiveChanges($this->roles)]] as $elements) {
                 try {
-                    new Operations(OperationCatalogue::of([$handler]), Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $everyone, elements: $elements), $log, [$handler]);
+                    new Operations(OperationCatalogue::of([$handler]), Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $everyone, elements: $elements, actors: [new TrustedActors()]), $log, [$handler]);
                     self::fail(\sprintf('%s ran without its forbids.', $handler::class));
                 } catch (IntegratorError $error) {
                     self::assertStringStartsWith(\sprintf('The handler %s needs the forbid "yorvoid.policy.', $handler::class), $error->getMessage());
@@ -355,7 +356,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
             }
 
             $catalogue = OperationCatalogue::of([$handler]);
-            new Operations($catalogue, Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $everyone, elements: [new NoEscalation($this->roles), new StepUpForSensitiveChanges($this->roles)]), $log, [$handler]);
+            new Operations($catalogue, Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), $everyone, elements: [new NoEscalation($this->roles), new StepUpForSensitiveChanges($this->roles)], actors: [new TrustedActors()]), $log, [$handler]);
 
             try {
                 new Operations($catalogue, new class implements Authorization {
@@ -494,7 +495,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
             new StepUpForSensitiveChanges($this->roles, $stepUp ?? $this->stepUp),
             new RelationPermit($this->roles->relations() ?? throw new \LogicException()),
             ...$elements,
-        ]);
+        ], actors: [new TrustedActors()]);
 
         return $evaluator->decide($this->world->catalogue->forCommand($command::class), $command, $actor, new Origin(OriginKind::Web));
     }
@@ -507,7 +508,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
         return Request::forOperation($this->world->catalogue->forCommand($command::class), $command, $actor, new Origin(OriginKind::Web), new \DateTimeImmutable());
     }
 
-    private function actor(string ...$roles): ActingPrincipal
+    private function actor(string ...$roles): TestPrincipal
     {
         $id = $this->id();
 
@@ -515,7 +516,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
             $this->policy->assign(new RoleAssignment($this->realm, $id, $role, new \DateTimeImmutable()));
         }
 
-        return new ActingPrincipal($this->realm, $id);
+        return new TestPrincipal($this->realm, $id);
     }
 
     private function id(): PrincipalId

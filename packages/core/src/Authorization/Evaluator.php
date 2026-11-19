@@ -19,7 +19,9 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Operation\AbilityPolicy;
+use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Operation\Authorization;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
@@ -27,6 +29,7 @@ use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\NoSelfService;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationDescription;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\SelfServicePolicy;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Operation\ViewingAs;
@@ -66,12 +69,22 @@ final readonly class Evaluator implements Authorization
     /** @var \WeakMap<Request, non-empty-list<Request>> The sides of a batch's view-as requests, as preloaded */
     private \WeakMap $sides;
 
+    /** @var list<ProvesActors> */
+    private array $actors;
+
+    /** @var \WeakMap<Request, Truth> Requests by an actor that isn't what it claims, and why */
+    private \WeakMap $unproven;
+
+    /** @var \ArrayObject<string, true> The actor classes warned about, once each */
+    private \ArrayObject $warned;
+
     /**
      * @param iterable<PolicyElement> $elements  The policy: permits and forbids
      * @param OfflineDecider|null     $offline   Asked while a store is unreachable, for the operations that accept it
      * @param iterable<VersionSource> $versions  What each decision records the version of (AUZ-009)
      * @param IdGenerator             $ids       Each decision's ID
      * @param DecisionLog|null        $decisions Where decisions are recorded (AUZ-040); without it, nowhere
+     * @param iterable<ProvesActors>  $actors    What proves actors beyond core's own, e.g. sessions (StoredSessions, D-45)
      *
      * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, a
      *                         permit authorizes by Consequence, which only another operation's permit gives,
@@ -86,7 +99,19 @@ final readonly class Evaluator implements Authorization
         iterable $versions = [],
         private IdGenerator $ids = new UuidV7Generator(),
         private ?DecisionLog $decisions = null,
+        iterable $actors = [],
     ) {
+        $provers = [];
+
+        foreach ($actors as $prover) {
+            $provers[] = $prover;
+        }
+
+        $this->actors = $provers;
+        $this->unproven = new \WeakMap();
+        /** @var \ArrayObject<string, true> $warned */
+        $warned = new \ArrayObject();
+        $this->warned = $warned;
         $sources = [];
 
         foreach ($versions as $source) {
@@ -178,6 +203,7 @@ final readonly class Evaluator implements Authorization
      * @param OfflineDecider|null     $offline     Asked while a store is unreachable, for the operations that accept it
      * @param iterable<VersionSource> $versions    What each decision records the version of
      * @param DecisionLog|null        $decisions   Where decisions are recorded
+     * @param iterable<ProvesActors>  $actors      What proves actors beyond core's own, e.g. sessions (StoredSessions)
      */
     public static function builtIn(
         AuthorityCheck $authority,
@@ -191,6 +217,7 @@ final readonly class Evaluator implements Authorization
         iterable $versions = [],
         IdGenerator $ids = new UuidV7Generator(),
         ?DecisionLog $decisions = null,
+        iterable $actors = [],
     ): self {
         $builtIn = [
             new AuthenticationPermit(),
@@ -202,7 +229,7 @@ final readonly class Evaluator implements Authorization
             $builtIn[] = new AbilityPermit($abilities);
         }
 
-        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions);
+        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors);
     }
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
@@ -238,7 +265,9 @@ final readonly class Evaluator implements Authorization
     public function decideAbilities(Actor $actor, string $ability, Realm $realm, array $asked, Origin $origin): array
     {
         $at = $this->clock->now();
-        $requests = array_map(static fn (array $one): Request => Request::forAbility($ability, $realm, $one[0], $actor, $origin, $at, $one[1]), $asked);
+        // One actor, proven once for the batch.
+        $proven = $this->proveActor($actor);
+        $requests = array_map(fn (array $one): Request => $this->provenAs(Request::forAbility($ability, $realm, $one[0], $actor, $origin, $at, $one[1]), $proven), $asked);
 
         if ([] === $requests) {
             return [];
@@ -308,9 +337,63 @@ final readonly class Evaluator implements Authorization
      */
     private function evaluate(Request $request): Decision
     {
+        $request = $this->provenAs($request, $this->proveActor($request->actor));
         $decision = $this->identify($request);
 
         return null === $this->decisions ? $decision : $this->decisions->record($request, $decision);
+    }
+
+    /**
+     * The actor as recorded, or why it isn't one (D-45): core proves its own actors, a ProvesActors the
+     * others; one nothing proves is unknown. A view-as is proven by its viewer.
+     */
+    private function proveActor(Actor $actor): Actor|Truth
+    {
+        if ($actor instanceof ViewingAs) {
+            $viewer = $this->proveActor($actor->viewer);
+
+            return $viewer instanceof Truth ? $viewer : new ViewingAs($viewer, $actor->target);
+        }
+
+        // The host's operator is proven by its origin (OperatorPermit); no one, by nothing; a principal a
+        // permit acts as, by the permit (Permit::cause()), and in a decision it proves nothing (L-4).
+        if ($actor instanceof Operator || $actor instanceof Anonymous || $actor instanceof ActingPrincipal) {
+            return $actor;
+        }
+
+        foreach ($this->actors as $prover) {
+            if ($prover->proves($actor)) {
+                try {
+                    return $prover->prove($actor);
+                } catch (\Throwable $exception) {
+                    // A store that's down, as for any element: unknown, not refused; a mistake in the
+                    // setup is thrown on (safely()).
+                    return self::safely(static fn (): never => throw $exception);
+                }
+            }
+        }
+
+        if (true !== ($this->warned[$actor::class] ?? null)) {
+            $this->warned[$actor::class] = true;
+
+            $this->logger->warning('YorvoID can\'t prove actors of {class}: their decisions are Indeterminate (unproven_actor).', ['class' => $actor::class]);
+        }
+
+        return Truth::unknown(IndeterminateReason::UnprovenActor, \sprintf('Nothing proves actors of %s.', $actor::class))->grounded(Ground::authority('unproven'));
+    }
+
+    /**
+     * The request by the proven actor, or the request as asked, remembered as unproven.
+     */
+    private function provenAs(Request $request, Actor|Truth $proven): Request
+    {
+        if ($proven instanceof Actor) {
+            return $proven === $request->actor ? $request : $request->withActor($proven);
+        }
+
+        $this->unproven[$request] = $proven;
+
+        return $request;
     }
 
     /**
@@ -402,7 +485,8 @@ final readonly class Evaluator implements Authorization
             }
         }
 
-        $authority = self::safely(fn (): Truth => $this->authority->check($request));
+        // An actor that isn't what it claims has no authority to check (D-45).
+        $authority = $this->unproven[$request] ?? self::safely(fn (): Truth => $this->authority->check($request));
         $reasons[] = new Reason('authority', 'authority', $authority);
         $decision = $this->precedence($request, $forbids, $authority, $permits, $reasons);
 
@@ -435,6 +519,13 @@ final readonly class Evaluator implements Authorization
 
         // A Request is the key elements keep what they preloaded by: the same sides, if it was a batch.
         [$viewerSide, $targetSide] = $this->sides[$request] ?? self::sides($request);
+
+        // A viewer that isn't proven views nothing: each side is judged by why it isn't (D-45).
+        if (null !== ($unproven = $this->unproven[$request] ?? null)) {
+            $this->unproven[$viewerSide] = $unproven;
+            $this->unproven[$targetSide] = $unproven;
+        }
+
         $viewer = $this->judge($viewerSide);
         $target = $this->judge($targetSide);
 

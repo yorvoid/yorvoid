@@ -510,7 +510,7 @@ final class BundleTest extends TestCase
         $ana = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human, email: 'ana@example.com', emailVerified: true), new Origin(OriginKind::Console));
         $intent = new Intent(OperationPolicy::REMOVE_KEY, ['credential_id' => 'x'], 'acme', 'n', new \DateTimeImmutable('@0'), new \DateTimeImmutable('@1'));
 
-        $dispatcher->dispatch(new SignedOperationRan(Realm::default(), $ana->id, $intent, 'k', new \DateTimeImmutable(), new Origin(OriginKind::System)));
+        $dispatcher->dispatch(new SignedOperationRan(Realm::default(), $ana->id, $intent, 'k', new \DateTimeImmutable(), Origin::system('test')));
 
         $logger = $container->get('mailer.message_logger_listener');
         \assert($logger instanceof MessageLoggerListener);

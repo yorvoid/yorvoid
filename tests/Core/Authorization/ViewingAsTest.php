@@ -36,6 +36,7 @@ use YorvoID\Tests\Core\Authorization\Fixtures\PreloadingPermit;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * View-as (AUZ-023): every decision made for the viewer and the target and intersected, so it never
@@ -125,7 +126,7 @@ final class ViewingAsTest extends TestCase
     public function testRunsNoOperation(): void
     {
         $permit = new PerActor([], AuthorizedBy::Self);
-        $evaluator = new Evaluator([$permit], new StubAuthority(Truth::holds('valid')));
+        $evaluator = new Evaluator([$permit], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]);
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Self], null, null, IssueBadge::class, []);
         $decision = $evaluator->decide($operation, new IssueBadge($this->realm, $this->target->principalId ?? throw new \LogicException()), new ViewingAs($this->viewer, $this->target), new Origin(OriginKind::Web));
 
@@ -141,7 +142,7 @@ final class ViewingAsTest extends TestCase
     public function testABatchPreloadsBothSides(): void
     {
         $preloading = new PreloadingPermit();
-        $evaluator = new Evaluator([$preloading], $preloading);
+        $evaluator = new Evaluator([$preloading], $preloading, actors: [new TrustedActors()]);
         $view = new ViewingAs($this->viewer, $this->target);
         $decisions = $evaluator->decideAbilities($view, 'acme.pages.edit', $this->realm, [[new ResourceRef('page', '1'), null], [new ResourceRef('page', '2'), null]], new Origin(OriginKind::Web));
 
@@ -155,7 +156,7 @@ final class ViewingAsTest extends TestCase
     {
         $store = new InMemoryDecisionLogStore();
         $log = new DecisionLog($store, PermitRecording::All);
-        $evaluator = new Evaluator([new PerActor([(string) $this->viewer->principalId => Truth::holds('It may.'), (string) $this->target->principalId => Truth::holds('It may.')])], new StubAuthority(Truth::holds('valid')), decisions: $log);
+        $evaluator = new Evaluator([new PerActor([(string) $this->viewer->principalId => Truth::holds('It may.'), (string) $this->target->principalId => Truth::holds('It may.')])], new StubAuthority(Truth::holds('valid')), decisions: $log, actors: [new TrustedActors()]);
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Self], null, null, IssueBadge::class, []);
         $view = new ViewingAs($this->viewer, $this->target);
         $decision = $evaluator->decideAbility($view, 'acme.pages.edit', $this->realm, null, new Origin(OriginKind::Web));
@@ -188,6 +189,6 @@ final class ViewingAsTest extends TestCase
      */
     private function decide(array $elements): Decision
     {
-        return new Evaluator($elements, new StubAuthority(Truth::holds('valid')))->decideAbility(new ViewingAs($this->viewer, $this->target), 'acme.pages.edit', $this->realm, null, new Origin(OriginKind::Web));
+        return new Evaluator($elements, new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()])->decideAbility(new ViewingAs($this->viewer, $this->target), 'acme.pages.edit', $this->realm, null, new Origin(OriginKind::Web));
     }
 }

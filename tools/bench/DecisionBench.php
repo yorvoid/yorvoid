@@ -7,12 +7,12 @@ namespace YorvoID\Bench;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Storage\VersionedCache;
 use YorvoID\Policy\Change\AssignRole;
 use YorvoID\Relations\Change\AddRelation;
 use YorvoID\Relations\Subject;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
+use YorvoID\Tests\Support\TestPrincipal;
 
 /**
  * Decisions (OPS-042): an editor of a server publishes one of its sites' pages, the role found three
@@ -23,12 +23,12 @@ final class DecisionBench
 {
     private const int PAGES = 100;
 
-    /** @var array<string, array{PolicyWorld, ActingPrincipal, list<ResourceRef>}> By whether it's cached */
+    /** @var array<string, array{PolicyWorld, TestPrincipal, list<ResourceRef>}> By whether it's cached */
     private static array $worlds = [];
 
     private PolicyWorld $world;
 
-    private ActingPrincipal $ada;
+    private TestPrincipal $ada;
 
     /** @var list<ResourceRef> */
     private array $pages;
@@ -56,7 +56,7 @@ final class DecisionBench
     }
 
     /**
-     * @return array{PolicyWorld, ActingPrincipal, list<ResourceRef>}
+     * @return array{PolicyWorld, TestPrincipal, list<ResourceRef>}
      */
     private static function world(bool $cached): array
     {

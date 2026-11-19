@@ -47,6 +47,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\ScanBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Doors\Doors;
 use YorvoID\Tests\Core\Operation\Fixtures\Doors\LogDoor;
 use YorvoID\Tests\Core\Operation\Fixtures\Doors\OpenDoor;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * Permit-offline (XP-03, P1′): only from an Indeterminate whose every reason is store_unreachable, only
@@ -80,7 +81,7 @@ final class OfflineTest extends TestCase
 
         foreach ([[AuthorizedBy::Ability, AuthorizedBy::Self], [AuthorizedBy::Self, AuthorizedBy::Ability]] as $authorizedBy) {
             $operation = new OperationDescription('acme.door.open', 'Open a door', $authorizedBy, 'acme.doors.open', null, OpenDoor::class, [], [], true);
-            $decision = new Evaluator($elements, new StubAuthority(Truth::holds('valid')), offline: self::decider(Truth::holds('yes')))->decide($operation, new OpenDoor(new Realm('acme')), self::actor(), new Origin(OriginKind::Web));
+            $decision = new Evaluator($elements, new StubAuthority(Truth::holds('valid')), offline: self::decider(Truth::holds('yes')), actors: [new TrustedActors()])->decide($operation, new OpenDoor(new Realm('acme')), self::actor(), new Origin(OriginKind::Web));
 
             self::assertSame($authorizedBy[0], $decision->basis);
         }
@@ -127,7 +128,7 @@ final class OfflineTest extends TestCase
                 $this->messages[] = $level.': '.strtr((string) $message, ['{operation}' => $context['operation'], '{reason}' => $context['reason']]);
             }
         };
-        $evaluator = new Evaluator([new StubPermit('door', new StoreUnreachable('down'))], new StubAuthority(Truth::holds('valid')), logger: $logger, offline: self::decider(Truth::holds('budget left')));
+        $evaluator = new Evaluator([new StubPermit('door', new StoreUnreachable('down'))], new StubAuthority(Truth::holds('valid')), logger: $logger, offline: self::decider(Truth::holds('budget left')), actors: [new TrustedActors()]);
 
         $evaluator->decide(self::operation(), new OpenDoor(new Realm('acme')), self::actor(), new Origin(OriginKind::Web));
 
@@ -141,7 +142,7 @@ final class OfflineTest extends TestCase
     {
         $doors = new Doors();
         $log = new InMemorySecurityLogStore();
-        $evaluator = new Evaluator([new StubPermit('door', new StoreUnreachable('down'))], new StubAuthority(Truth::holds('valid')), offline: self::decider(Truth::holds('budget left')));
+        $evaluator = new Evaluator([new StubPermit('door', new StoreUnreachable('down'))], new StubAuthority(Truth::holds('valid')), offline: self::decider(Truth::holds('budget left')), actors: [new TrustedActors()]);
         $operations = new Operations(new OperationCatalogue([OpenDoor::class, LogDoor::class]), $evaluator, new SecurityLog($log, new InMemoryTransactions()), [$doors]);
         $actor = self::actor();
 
@@ -175,7 +176,7 @@ final class OfflineTest extends TestCase
         }
 
         $scanner = new Badges();
-        $evaluated = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new StubAuthority(Truth::holds('valid'))), new SecurityLog(new InMemorySecurityLogStore(), new InMemoryTransactions()), [$scanner]);
+        $evaluated = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), Evaluator::builtIn(new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]), new SecurityLog(new InMemorySecurityLogStore(), new InMemoryTransactions()), [$scanner]);
         self::assertSame('scanned', $evaluated->run(new ScanBadge(new Realm('acme'), 'K7'), $actor, new Origin(OriginKind::Web)));
         self::assertFalse($scanner->permits[0]->offline, 'A Permit\'s permit isn\'t offline.');
     }
@@ -185,14 +186,14 @@ final class OfflineTest extends TestCase
         $log = new SecurityLog(new InMemorySecurityLogStore(), new InMemoryTransactions());
 
         try {
-            new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), new Evaluator([], new StubAuthority(Truth::holds('valid')), offline: self::decider(Truth::holds('yes'))), $log, [new Badges()]);
+            new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), new Evaluator([], new StubAuthority(Truth::holds('valid')), offline: self::decider(Truth::holds('yes')), actors: [new TrustedActors()]), $log, [new Badges()]);
             self::fail('A decider was registered with no operation to decide for.');
         } catch (IntegratorError $error) {
             self::assertSame('An OfflineDecider is registered, but no operation accepts Permit-offline.', $error->problem);
         }
 
         try {
-            new Operations(new OperationCatalogue([OpenDoor::class, LogDoor::class]), new Evaluator([], new StubAuthority(Truth::holds('valid'))), $log, [new Doors()]);
+            new Operations(new OperationCatalogue([OpenDoor::class, LogDoor::class]), new Evaluator([], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]), $log, [new Doors()]);
             self::fail('An operation accepts Permit-offline that nothing decides.');
         } catch (IntegratorError $error) {
             self::assertSame('"acme.door.open" accepts Permit-offline, but nothing decides offline.', $error->problem);
@@ -216,7 +217,7 @@ final class OfflineTest extends TestCase
      */
     private static function decide(array $elements, ?OfflineDecider $offline = null, ?Truth $authority = null, bool $acceptsOffline = true): Decision
     {
-        $evaluator = new Evaluator($elements, new StubAuthority($authority ?? Truth::holds('valid')), offline: $offline);
+        $evaluator = new Evaluator($elements, new StubAuthority($authority ?? Truth::holds('valid')), offline: $offline, actors: [new TrustedActors()]);
 
         return $evaluator->decide(self::operation($acceptsOffline), new OpenDoor(new Realm('acme')), self::actor(), new Origin(OriginKind::Web));
     }

@@ -10,7 +10,6 @@ use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Storage\Installation;
@@ -25,6 +24,7 @@ use YorvoID\Tests\Policy\Fixtures\Page;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\SubjectShapes;
+use YorvoID\Tests\Support\TestPrincipal;
 
 /**
  * The request's subject (G1) with the policy: rules and resolvers read it, roles count for the
@@ -153,12 +153,12 @@ final class SubjectTest extends DatabaseTestCase
         return new PolicyWorld(resolvers: [new Classifications()], rulesOf: static fn ($attributes): array => [new AuthorsPublishTheirOwn($attributes)], cache: $cache);
     }
 
-    private function decide(PolicyWorld $world, ActingPrincipal $actor, ?ResourceRef $resource, ?object $subject): Decision
+    private function decide(PolicyWorld $world, TestPrincipal $actor, ?ResourceRef $resource, ?object $subject): Decision
     {
         return $world->policy->decide($actor, 'acme.pages.publish', $world->realm, $resource, new Origin(OriginKind::Web), $subject);
     }
 
-    private function allows(PolicyWorld $world, ActingPrincipal $actor, ?ResourceRef $resource, ?object $subject): bool
+    private function allows(PolicyWorld $world, TestPrincipal $actor, ?ResourceRef $resource, ?object $subject): bool
     {
         $allows = $world->policy->allows($actor, 'acme.pages.publish', $world->realm, $resource, new Origin(OriginKind::Web), $subject);
         self::assertSame($allows, $this->decide($world, $actor, $resource, $subject)->permits());
@@ -166,7 +166,7 @@ final class SubjectTest extends DatabaseTestCase
         return $allows;
     }
 
-    private static function id(ActingPrincipal $principal): PrincipalId
+    private static function id(TestPrincipal $principal): PrincipalId
     {
         \assert(null !== $principal->principalId);
 

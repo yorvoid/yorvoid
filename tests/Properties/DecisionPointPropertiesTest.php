@@ -41,6 +41,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\RecordBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ScanBadge;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * The decision point (D-38): only a Permit runs anything, and the built-in decisions permit exactly what
@@ -83,7 +84,7 @@ final class DecisionPointPropertiesTest extends TestCase
             $permits = Verdict::Permit === $verdict && null !== $basis;
 
             try {
-                $operations->run(new ScanBadge($realm, 'K7'), new Anonymous(), new Origin($kind));
+                $operations->run(new ScanBadge($realm, 'K7'), new Anonymous(), OriginKind::System === $kind ? Origin::system('property') : new Origin($kind));
                 self::assertTrue($permits, 'It ran without a Permit.');
                 self::assertCount(1, $badges->permits);
                 self::assertSame($basis, $badges->permits[0]->basis);
@@ -121,9 +122,9 @@ final class DecisionPointPropertiesTest extends TestCase
             $rules = array_values(array_unique($rules, \SORT_REGULAR));
             \assert([] !== $rules);
             $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', $rules, \in_array(AuthorizedBy::Ability, $rules, true) ? 'acme.badges.issue' : null, null, IssueBadge::class, []);
-            $authorization = Evaluator::builtIn(self::validAuthority(), self::abilities($holds), self::selfService($selfService), commandLine: $commandLine);
+            $authorization = Evaluator::builtIn(self::validAuthority(), self::abilities($holds), self::selfService($selfService), commandLine: $commandLine, actors: [new TrustedActors()]);
 
-            $decision = $authorization->decide($operation, new IssueBadge($realm, $ana), $actor, new Origin($kind));
+            $decision = $authorization->decide($operation, new IssueBadge($realm, $ana), $actor, OriginKind::System === $kind ? Origin::system('property') : new Origin($kind));
 
             $inRealm = \in_array($who, ['own', 'other'], true);
             $allowed = [

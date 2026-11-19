@@ -25,7 +25,6 @@ use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\Principal;
@@ -118,15 +117,14 @@ final readonly class RecoveryLinks implements OperationHandler
             }
 
             $permit->about($used->principalId);
-            $recovered = new ActingPrincipal($realm, $used->principalId);
-            $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Recovered), $origin, $recovered);
+            $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Recovered), $origin, $used->principalId);
             $permit->cause($this->stepUp->startCoolDown(...), new StartCoolDown($realm, $used->principalId), $origin);
 
             $this->transactions->afterCommit(function () use ($realm, $used, $origin): void {
                 $this->events->dispatch(new RecoveryLinkUsed($realm, $used->principalId, $origin));
             });
 
-            return $permit->cause($this->sessions->start(...), new StartSession($realm, $used->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryLink, $this->clock->now())), $command->device, $command->address, $command->deviceCookie), $origin, $recovered);
+            return $permit->cause($this->sessions->start(...), new StartSession($realm, $used->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryLink, $this->clock->now())), $command->device, $command->address, $command->deviceCookie), $origin, $used->principalId);
         });
     }
 }

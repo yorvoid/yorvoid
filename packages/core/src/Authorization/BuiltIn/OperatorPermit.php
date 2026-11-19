@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Authorization\BuiltIn;
 
+use YorvoID\Core\Authorization\Ground;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\Truth;
@@ -42,6 +43,11 @@ final readonly class OperatorPermit implements PermitElement
 
     public function evaluate(Request $request): Truth
     {
+        // An origin read back from a record says where something came from then, not now (D-45).
+        if ($request->origin->isRestored()) {
+            return Truth::fails('The origin was read back from a record: it proves nothing about this request.')->grounded(Ground::authority('restored_origin'));
+        }
+
         $fromTheHost = match ($request->origin->kind) {
             OriginKind::Console, OriginKind::Job => $this->commandLine,
             OriginKind::System => true,

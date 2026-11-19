@@ -39,6 +39,7 @@ use YorvoID\Tests\Core\Authorization\Fixtures\StubForbid;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
+use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * The evaluator decides by 06 §3's table, first row that applies (the model's fixtures check every
@@ -287,7 +288,7 @@ final class EvaluatorTest extends TestCase
         // A permit of that name isn't one.
         foreach ([[$permit], [$permit, new StubForbid('guard', Truth::fails('no'))], [new StubForbid('other', Truth::fails('no')), $permit], [$permit, new StubPermit('guard', Truth::fails('no')), new StubForbid('other', Truth::fails('no'))]] as $elements) {
             try {
-                new Evaluator($elements, new StubAuthority(Truth::holds('valid')));
+                new Evaluator($elements, new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]);
                 self::fail('Built without what the permit requires.');
             } catch (IntegratorError $error) {
                 self::assertMatchesRegularExpression('/^The policy element "p" needs the forbid "(guard|other)", which isn\'t in the policy\.\n\nHow to fix it: Add the (guard|other)\./', $error->getMessage());
@@ -318,11 +319,11 @@ final class EvaluatorTest extends TestCase
                 $this->logs[] = [$level, (string) $message, $context];
             }
         };
-        $evaluator = new Evaluator([new StubPermit('p', Truth::unknown(IndeterminateReason::MissingData, 'no data'))], new StubAuthority(Truth::holds('valid')), logger: $logger);
+        $evaluator = new Evaluator([new StubPermit('p', Truth::unknown(IndeterminateReason::MissingData, 'no data'))], new StubAuthority(Truth::holds('valid')), logger: $logger, actors: [new TrustedActors()]);
 
         $evaluator->decide(self::operation(), self::command(), self::actor(), new Origin(OriginKind::Web));
-        new Evaluator([new StubPermit('p', Truth::fails('no'))], new StubAuthority(Truth::holds('valid')), logger: $logger)->decide(self::operation(), self::command(), self::actor(), new Origin(OriginKind::Web));
-        Evaluator::builtIn(new StubAuthority(Truth::unknown(IndeterminateReason::StoreUnreachable, 'down')), logger: $logger)->decide(self::operation(), self::command(), self::actor(), new Origin(OriginKind::Web));
+        new Evaluator([new StubPermit('p', Truth::fails('no'))], new StubAuthority(Truth::holds('valid')), logger: $logger, actors: [new TrustedActors()])->decide(self::operation(), self::command(), self::actor(), new Origin(OriginKind::Web));
+        Evaluator::builtIn(new StubAuthority(Truth::unknown(IndeterminateReason::StoreUnreachable, 'down')), logger: $logger, actors: [new TrustedActors()])->decide(self::operation(), self::command(), self::actor(), new Origin(OriginKind::Web));
 
         self::assertSame([
             ['warning', 'YorvoID couldn\'t decide whether to run "{operation}": {reason}', ['operation' => 'acme.badge.issue', 'reason' => 'A permit couldn\'t be evaluated: no data', 'indeterminate' => ['missing_data']]],
@@ -366,7 +367,7 @@ final class EvaluatorTest extends TestCase
             }
         };
 
-        new Evaluator([$element], new StubAuthority(Truth::holds('valid')), $clock)->decide(self::operation(), self::command(), self::actor(), new Origin(OriginKind::Web));
+        new Evaluator([$element], new StubAuthority(Truth::holds('valid')), $clock, actors: [new TrustedActors()])->decide(self::operation(), self::command(), self::actor(), new Origin(OriginKind::Web));
 
         self::assertEquals([new \DateTimeImmutable('2026-11-07 18:00:00 UTC'), new \DateTimeImmutable('2026-11-07 18:00:00 UTC')], $seen->getArrayCopy());
     }
@@ -418,7 +419,7 @@ final class EvaluatorTest extends TestCase
             'The permit "consequence" authorizes by Consequence.' => [new StubPermit('consequence', Truth::holds('yes'), AuthorizedBy::Consequence)],
         ] as $message => $elements) {
             try {
-                new Evaluator($elements, new StubAuthority(Truth::holds('valid')));
+                new Evaluator($elements, new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]);
                 self::fail(\sprintf('A policy was built that %s', $message));
             } catch (IntegratorError $error) {
                 self::assertStringContainsString($message, $error->getMessage());
@@ -442,7 +443,7 @@ final class EvaluatorTest extends TestCase
      */
     private function decide(array $elements, Truth|\Throwable|null $authority = null, array $authorizedBy = [AuthorizedBy::Ability]): Decision
     {
-        $evaluator = new Evaluator($elements, new StubAuthority($authority ?? Truth::holds('valid')));
+        $evaluator = new Evaluator($elements, new StubAuthority($authority ?? Truth::holds('valid')), actors: [new TrustedActors()]);
 
         return $evaluator->decide(self::operation($authorizedBy), self::command(), self::actor(), new Origin(OriginKind::Web));
     }

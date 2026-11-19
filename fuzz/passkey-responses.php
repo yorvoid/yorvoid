@@ -50,11 +50,11 @@ $principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifie
 $sessions = new Sessions(new InMemorySessionStore(), $principals, $log, $transactions);
 $credentials = new Credentials(new InMemoryCredentialStore(), $sessions, new StepUp($sessions, new InMemoryCoolDownStore(), $log), $log, $transactions);
 $passkeys = new Passkeys(new InMemoryPasskeyStore(), new InMemoryCeremonyStore(), $credentials, $sessions, $principals, $log, $transactions, new PasskeyPolicy('example.com', ['https://example.com']), new Attempts(new Throttle(new InMemoryThrottleStore())));
-$principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), new Origin(OriginKind::System));
-$session = Permits::call($sessions->start(...), new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, new DateTimeImmutable()))), new Origin(OriginKind::System))->session;
+$principal = Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Human), Origin::system('fuzz'));
+$session = Permits::call($sessions->start(...), new StartSession(Realm::default(), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::SetupCode, new DateTimeImmutable()))), Origin::system('fuzz'))->session;
 $authenticator = new VirtualAuthenticator();
 $registration = $passkeys->beginRegistration($session);
-Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Fuzz'), new Origin(OriginKind::System), $session);
+Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $registration->id, $authenticator->register($registration->options), 'Fuzz'), Origin::system('fuzz'), $session);
 
 if (is_dir('corpus')) {
     file_put_contents('corpus/genuine-answer.json', $authenticator->signIn($passkeys->beginSignIn(Realm::default())->options));

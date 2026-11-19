@@ -98,6 +98,11 @@ final readonly class Operations
      */
     public function run(Command $command, Actor $actor, Origin $origin): mixed
     {
+        // A principal YorvoID verified acts only in the consequences of what verified it (D-45, L-4).
+        if ($actor instanceof ActingPrincipal) {
+            throw new IntegratorError(\sprintf('"%s" was run as an ActingPrincipal.', $command::class), 'An ActingPrincipal acts only in a permit\'s consequences: run the operation with the signed-in Session, or as the Operator.', 'concepts/operations-and-events.md#actors');
+        }
+
         $operation = $this->catalogue->forCommand($command::class);
         $handler = $this->handlers[$command::class] ?? throw new IntegratorError(\sprintf('Nothing runs the operation "%s".', $operation->name), 'Register the service that handles it as an OperationHandler.', 'concepts/operations-and-events.md#operations');
         $decision = $this->authorization->decide($operation, $command, $actor, $origin);

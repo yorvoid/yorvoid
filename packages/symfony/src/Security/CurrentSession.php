@@ -93,7 +93,9 @@ final class CurrentSession implements ResetInterface
         $held = null === $previous ? null : $this->sessions->validate($this->realm, $token);
         $same = null !== $previous && null !== $held && $previous->id->equals($held->id);
 
-        if (null !== $previous && !$same) {
+        // Unless what signed in ended it already, e.g. a recovery, which ends every session: an ended session
+        // is no actor any more (D-45).
+        if (null !== $previous && !$same && null !== $this->sessions->active($previous->realm, $previous->id)) {
             $this->operations->run(new EndSession($previous->realm, $previous->id, SessionEndReason::Replaced), $previous, $origin);
         }
 
@@ -152,7 +154,7 @@ final class CurrentSession implements ResetInterface
     {
         $session = $this->get();
 
-        if (null !== $session) {
+        if (null !== $session && null !== $this->sessions->active($session->realm, $session->id)) {
             $this->operations->run(new EndSession($session->realm, $session->id, SessionEndReason::SignedOut), $session, $origin);
         }
     }

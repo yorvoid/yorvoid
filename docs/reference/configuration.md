@@ -58,6 +58,10 @@ yorvoid:
 
         # The PSR-6 pool that servers share for what decisions read: roles, assignments, relations. yorvoid.cache is on cache.app; null keeps them for the request only
         pool:                 yorvoid.cache
+    api:
+
+        # Path prefixes whose requests are an API's (origin kind api), as are those with an Authorization: Bearer header. A request says this itself: rules may only narrow by it
+        paths:                []
     cookies:
 
         # The cookie that recognises devices
