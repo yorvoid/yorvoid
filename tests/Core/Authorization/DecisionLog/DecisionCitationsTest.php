@@ -71,13 +71,13 @@ final class DecisionCitationsTest extends TestCase
         $ana = new PrincipalId(new UuidV7());
         $this->operations($log, new DecisionLog($decisions))->run(new IssueBadge($realm, $ana), new Member($realm, $ana), new Origin(OriginKind::Web));
         $id = $this->citedIds($this->entries, $realm)[0];
-        $permit = Decisions::permit(AuthorizedBy::Self, 'Cited.')->identified($id, new \DateTimeImmutable(), []);
+        $permit = Decisions::identified(Decisions::permit(AuthorizedBy::Self, 'Cited.'), $id, new \DateTimeImmutable());
 
         // The ID alone, of a recorded permit, is a citation that holds.
         $log->citing($permit, static fn (): LogEntry => $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web)));
         self::assertSame([], $digests->citations($realm));
 
-        $log->citing($permit->recorded('0000'), static fn (): LogEntry => $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web)));
+        $log->citing(Decisions::recorded($permit, '0000'), static fn (): LogEntry => $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web)));
         self::assertSame([\sprintf('Entry 4 (acme.badge.note) cites the decision %s with another hash than its record\'s.', $id)], $digests->citations($realm));
     }
 

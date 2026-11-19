@@ -28,6 +28,9 @@ final readonly class Operations
     /** @var array<class-string, \Closure> */
     private array $handlers;
 
+    /** @var \WeakMap<Decision, true> The decisions it issued a permit on: each once */
+    private \WeakMap $issued;
+
     /**
      * @param iterable<OperationHandler> $handlers
      *
@@ -61,6 +64,7 @@ final readonly class Operations
         }
 
         $this->handlers = $map;
+        $this->issued = new \WeakMap();
 
         $authorization->checkCatalogue($catalogue);
 
@@ -114,11 +118,26 @@ final readonly class Operations
             throw new IntegratorError(\sprintf('The authorization permitted "%s" to a view as someone else.', $operation->name), 'A view-as is read-only: decide with the Evaluator, or refuse every operation to a ViewingAs actor.', 'concepts/authorization.md#view-as');
         }
 
+        $this->accept($decision, $command, $actor, $operation->name);
         $basis = $decision->basis;
         // Only here: Permit's constructor is private to everything else.
         $issue = \Closure::bind(static fn (string $name, Actor $actor, AuthorizedBy $basis, Decision $decision, string $id, Command $command, bool $offline, \Closure $consequences): Permit => new Permit($name, $actor, $basis, $id, $command, offline: $offline, decision: $decision, consequences: $consequences), null, Permit::class);
         // Its consequences are decided by the same path, from the same origin (D-50).
-        $consequences = fn (Decision $parent, Command $caused, Actor $by): Decision => $this->authorization->decideConsequence($parent, $this->describe($caused), $caused, $by, $origin);
+        $consequences = function (Decision $parent, Command $caused, Actor $by) use ($origin): Decision {
+            $operation = $this->describe($caused);
+            $decision = $this->authorization->decideConsequence($parent, $operation, $caused, $by, $origin);
+
+            $permits = match ($decision->verdict) {
+                Verdict::Permit, Verdict::PermitOffline => true,
+                Verdict::Deny, Verdict::Indeterminate => false,
+            };
+
+            if ($permits) {
+                $this->accept($decision, $caused, $by, $operation->name);
+            }
+
+            return $decision;
+        };
 
         return $this->log->citing($decision, function () use ($command, $actor, $origin, $operation, $handler, $issue, $basis, $decision, $offline, $consequences): mixed {
             if ($offline) {
@@ -127,6 +146,28 @@ final readonly class Operations
 
             return $handler($command, $issue($operation->name, $actor, $basis, $decision, $decision->id ?? (string) $this->ids->next(), $command, $offline, $consequences), $origin);
         });
+    }
+
+    /**
+     * A decision that permits is issued on once, and only for the command and the actor it was made
+     * for (D-50): an Authorization that gives back a permit it was given for another request, e.g. one
+     * that caches decisions, would run one actor's operation on another's permit.
+     *
+     * @param Command<mixed> $command
+     *
+     * @throws IntegratorError When it was made for another request, or issued on already
+     */
+    private function accept(Decision $decision, Command $command, Actor $actor, string $name): void
+    {
+        if (!$decision->isFor($command, $actor)) {
+            throw new IntegratorError(\sprintf('The authorization permitted "%s" with a decision made for another command or actor.', $name), 'Decide every request: never give back a decision made for another one, e.g. from a cache.', 'concepts/operations-and-events.md#the-decision-point');
+        }
+
+        if (true === ($this->issued[$decision] ?? null)) {
+            throw new IntegratorError(\sprintf('The authorization permitted "%s" with a decision a permit was issued on already.', $name), 'Decide every request: a decision permits once.', 'concepts/operations-and-events.md#the-decision-point');
+        }
+
+        $this->issued[$decision] = true;
     }
 
     /**

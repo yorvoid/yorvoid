@@ -121,7 +121,7 @@ final class DecisionRecordTest extends TestCase
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Operator], null, null, IssueBadge::class, []);
         $request = Request::forOperation($operation, new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7())), new Operator(), new Origin(OriginKind::Console, correlationId: 'job-1'), new \DateTimeImmutable('2026-11-08 18:00:00 UTC'));
         $unknown = Decision::indeterminate([IndeterminateReason::StoreUnreachable], 'Can\'t tell.')->identified('d-2', $request->at, []);
-        $permit = \YorvoID\Tests\Support\Decisions::permit(AuthorizedBy::Operator, 'The operator.')->identified('d-3', $request->at, []);
+        $permit = \YorvoID\Tests\Support\Decisions::identified(\YorvoID\Tests\Support\Decisions::permit(AuthorizedBy::Operator, 'The operator.'), 'd-3', $request->at);
 
         self::assertSame(['operation', 'acme.badge.issue', null, null, 'indeterminate', ['store_unreachable'], []], [($r = DecisionRecord::of($request, $unknown))->kind, $r->name, $r->actor, $r->resource, $r->verdict, $r->indeterminate, $r->versions]);
         self::assertSame(['permit', 'operator'], [($r = DecisionRecord::of($request, $permit))->verdict, $r->basis]);

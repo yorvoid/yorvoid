@@ -369,7 +369,7 @@ final class AuditFailureTest extends TestCase
 
     private function decided(Decision $decision): Decision
     {
-        return $decision->identified((string) new UuidV7(), $this->clock->now(), ['policy' => 1]);
+        return \YorvoID\Tests\Support\Decisions::identified($decision, (string) new UuidV7(), $this->clock->now(), ['policy' => 1]);
     }
 
     private static function permit(): Decision

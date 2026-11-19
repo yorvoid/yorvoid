@@ -234,7 +234,8 @@ final readonly class Evaluator implements Authorization
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
     {
-        return $this->evaluate(Request::forOperation($operation, $command, $actor, $origin, $this->clock->now()));
+        // For this command and this actor only: Operations issues on it once (D-50).
+        return self::bound($this->evaluate(Request::forOperation($operation, $command, $actor, $origin, $this->clock->now())), $command, $actor);
     }
 
     /**
@@ -258,9 +259,9 @@ final readonly class Evaluator implements Authorization
 
         $request = Request::forOperation($operation, $command, $actor, $origin, $this->clock->now());
         $request = $this->provenAs($request, $this->proveActor($request->actor));
-        $decision = $this->consequence($request, $parent)->identified((string) $this->ids->next(), $request->at, $this->versionsOf($request));
+        $decision = self::identified($this->consequence($request, $parent), (string) $this->ids->next(), $request->at, $this->versionsOf($request));
 
-        return null === $this->decisions ? $decision : $this->decisions->record($request, $decision, $parent->id);
+        return self::bound(null === $this->decisions ? $decision : $this->decisions->record($request, $decision, $parent->id), $command, $actor);
     }
 
     /**
@@ -429,7 +430,7 @@ final readonly class Evaluator implements Authorization
      */
     private function identify(Request $request, ?array $versions = null): Decision
     {
-        return $this->judge($request)->identified((string) $this->ids->next(), $request->at, $versions ?? $this->versionsOf($request));
+        return self::identified($this->judge($request), (string) $this->ids->next(), $request->at, $versions ?? $this->versionsOf($request));
     }
 
     /**
@@ -820,6 +821,31 @@ final readonly class Evaluator implements Authorization
         $make = \Closure::bind(static fn (): Decision => new Decision($verdict, $basis, $reason, $reasons, $remedies, $indeterminate, $id, $at, $versions, $hash, $precedence, $viewer), null, Decision::class);
 
         return $make();
+    }
+
+    /**
+     * The decision with its ID, its time and the versions it read: only here and in the decision log,
+     * for a decision that permits.
+     *
+     * @param array<string, int> $versions
+     */
+    private static function identified(Decision $decision, string $id, \DateTimeImmutable $at, array $versions): Decision
+    {
+        $identify = \Closure::bind(static fn (): Decision => $decision->withIdentity($id, $at, $versions), null, Decision::class);
+
+        return $identify();
+    }
+
+    /**
+     * The decision, for this command and this actor, the very objects.
+     *
+     * @param Command<mixed> $command
+     */
+    private static function bound(Decision $decision, Command $command, Actor $actor): Decision
+    {
+        $bind = \Closure::bind(static fn (): Decision => $decision->boundTo($command, $actor), null, Decision::class);
+
+        return $bind();
     }
 
     /**

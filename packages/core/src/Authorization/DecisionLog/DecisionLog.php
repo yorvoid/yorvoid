@@ -175,7 +175,7 @@ final class DecisionLog implements AttemptLog
                 null === $record => $one[1],
                 isset($unwritten[$i]) => $one[1],
                 $lost => self::unrecorded($one[1]),
-                default => $one[1]->recorded($record->hash()),
+                default => self::recorded($one[1], $record->hash()),
             };
         }, array_keys($decided), $decided);
     }
@@ -335,5 +335,15 @@ final class DecisionLog implements AttemptLog
             // The same for every decision of a request.
             PermitRecording::Sampled => hexdec(substr(hash('sha256', $request->origin->correlationId), 0, 8)) < $this->sampleRate * 0x100000000,
         };
+    }
+
+    /**
+     * The decision with its record's hash: only here, for a decision that permits.
+     */
+    private static function recorded(Decision $decision, string $hash): Decision
+    {
+        $record = \Closure::bind(static fn (): Decision => $decision->withHash($hash), null, Decision::class);
+
+        return $record();
     }
 }

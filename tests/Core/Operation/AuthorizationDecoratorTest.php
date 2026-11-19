@@ -161,6 +161,72 @@ final class AuthorizationDecoratorTest extends TestCase
         $make();
     }
 
+    /**
+     * A decorator that caches decisions gives back a permit made for another request: refused, for
+     * another command, another actor, or the same decision a second time.
+     */
+    public function testAPermitMadeForAnotherRequestIsRefused(): void
+    {
+        $caching = new Caching($this->evaluator());
+        $operations = $this->operations($caching);
+        $ana = $this->ana();
+
+        self::assertSame('recorded', $operations->run(new IssueBadge($this->realm, $this->ana), $ana, self::web()));
+        self::assertNotNull($caching->command);
+        self::assertNotNull($caching->actor);
+
+        $replays = [
+            'another command' => [new IssueBadge($this->realm, $this->ana), $ana, 'made for another command or actor'],
+            'another actor' => [$caching->command, new Member($this->realm, $this->ana), 'made for another command or actor'],
+            'the same request again' => [$caching->command, $caching->actor, 'a permit was issued on already'],
+        ];
+
+        foreach ($replays as $what => [$command, $actor, $problem]) {
+            try {
+                $operations->run($command, $actor, self::web());
+                self::fail(\sprintf('A cached permit ran for %s.', $what));
+            } catch (IntegratorError $error) {
+                self::assertStringContainsString($problem, $error->problem, $what);
+            }
+        }
+    }
+
+    public function testAConsequenceAnsweredWithItsParentsPermitIsRefused(): void
+    {
+        $this->expectException(IntegratorError::class);
+        $this->expectExceptionMessage('The authorization permitted "acme.badge.record" with a decision made for another command or actor.');
+
+        $this->operations(new ParentForConsequences($this->evaluator()))->run(new IssueBadge($this->realm, $this->ana), $this->ana(), self::web());
+    }
+
+    /**
+     * Only YorvoID identifies a permit and gives it its record's hash: something else putting another
+     * decision's ID or hash on one would replay it.
+     */
+    public function testNothingButYorvoIDIdentifiesOrRecordsAPermit(): void
+    {
+        $passing = new Passing($this->evaluator());
+        $this->operations($passing)->run(new IssueBadge($this->realm, $this->ana), $this->ana(), self::web());
+        $permit = $passing->last;
+        self::assertNotNull($permit);
+
+        foreach (['identified' => static fn (): Decision => $permit->identified('another', new \DateTimeImmutable(), []), 'recorded' => static fn (): Decision => $permit->recorded('another')] as $what => $replay) {
+            try {
+                $replay();
+                self::fail(\sprintf('A permit was %s.', $what));
+            } catch (IntegratorError $error) {
+                self::assertSame(\sprintf('A decision that permits was %s by something other than YorvoID.', $what), $error->problem);
+            }
+        }
+
+        // A refusal may be, e.g. for a page's sample.
+        self::assertSame('d-1', Decision::deny('No.')->identified('d-1', new \DateTimeImmutable(), [])->recorded('h')->id);
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('A Decision isn\'t unserialized');
+        unserialize(serialize($permit));
+    }
+
     public function testAForbidAppliesToConsequencesOnlyWhenItSaysSo(): void
     {
         // A forbid of its own: evaluated only when the operation is asked for.
@@ -197,7 +263,7 @@ final class AuthorizationDecoratorTest extends TestCase
 
             public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
             {
-                return \YorvoID\Tests\Support\Decisions::of(Verdict::PermitOffline, \YorvoID\Core\Operation\AuthorizedBy::Ability, 'Offline.', id: (string) new UuidV7());
+                return \YorvoID\Tests\Support\Decisions::bound(\YorvoID\Tests\Support\Decisions::of(Verdict::PermitOffline, \YorvoID\Core\Operation\AuthorizedBy::Ability, 'Offline.', id: (string) new UuidV7()), $command, $actor);
             }
 
             public function decidesOffline(): bool
@@ -285,11 +351,13 @@ final class Passing extends AuthorizationDecorator
     /** @var list<string> */
     public array $consequences = [];
 
+    public ?Decision $last = null;
+
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
     {
         $this->decided[] = $operation->name;
 
-        return parent::decide($operation, $command, $actor, $origin);
+        return $this->last = parent::decide($operation, $command, $actor, $origin);
     }
 
     public function decideConsequence(Decision $parent, OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
@@ -297,6 +365,39 @@ final class Passing extends AuthorizationDecorator
         $this->consequences[] = $operation->name;
 
         return parent::decideConsequence($parent, $operation, $command, $actor, $origin);
+    }
+}
+
+/**
+ * Caches the first decision it's given, and gives it back for everything after.
+ */
+final class Caching extends AuthorizationDecorator
+{
+    public ?Decision $cached = null;
+
+    /** @var Command<mixed>|null */
+    public ?Command $command = null;
+
+    public ?Actor $actor = null;
+
+    public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
+    {
+        if (null === $this->cached) {
+            [$this->command, $this->actor] = [$command, $actor];
+        }
+
+        return $this->cached ??= parent::decide($operation, $command, $actor, $origin);
+    }
+}
+
+/**
+ * Answers a consequence with the permit of the operation that caused it.
+ */
+final class ParentForConsequences extends AuthorizationDecorator
+{
+    public function decideConsequence(Decision $parent, OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
+    {
+        return $parent;
     }
 }
 

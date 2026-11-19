@@ -76,7 +76,7 @@ final class DecisionPointPropertiesTest extends TestCase
 
                 public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
                 {
-                    return $this->decision;
+                    return \YorvoID\Tests\Support\Decisions::bound($this->decision, $command, $actor);
                 }
             };
             $realm = new Realm('acme');
@@ -93,7 +93,7 @@ final class DecisionPointPropertiesTest extends TestCase
             } catch (NotPermitted $refused) {
                 self::assertFalse($permits, 'A Permit was refused.');
                 self::assertSame([], $badges->permits, 'A handler ran without a Permit.');
-                self::assertSame($decision, $refused->decision);
+                self::assertSame([$decision->verdict, $decision->reason], [$refused->decision->verdict, $refused->decision->reason], 'The decision, as it was given, for this request.');
                 self::assertSame([], iterator_to_array($store->entries($realm, 1), false), 'A refusal changes nothing: the chain has no entry (D-42).');
             }
         });

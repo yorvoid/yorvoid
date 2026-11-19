@@ -35,6 +35,8 @@ final readonly class Decision
      * @param Precedence|null           $precedence    The row of the precedence that decided, from the evaluator (experimental)
      * @param Decision|null             $viewer        Viewing as someone else, the viewer's own decision: this one is both
      *                                                 intersected, with the reasons of the side that decided (experimental)
+     * @param Command<mixed>|null       $for           The command it was made for, the very object (D-50)
+     * @param Actor|null                $by            The actor it was made for
      *
      * @throws IntegratorError When the parts don't fit the verdict
      */
@@ -51,6 +53,8 @@ final readonly class Decision
         public ?string $hash = null,
         public ?Precedence $precedence = null,
         public ?self $viewer = null,
+        private ?Command $for = null,
+        private ?Actor $by = null,
     ) {
         $fits = match ($verdict) {
             Verdict::Permit, Verdict::PermitOffline => null !== $basis && [] === $remedies && [] === $indeterminate,
@@ -82,21 +86,91 @@ final readonly class Decision
     }
 
     /**
-     * The same decision, with its ID, its time and the versions it read.
+     * The same refusal, with its ID, its time and the versions it read. Only the Evaluator identifies a
+     * decision that permits (D-50).
      *
      * @param array<string, int> $versions
+     *
+     * @throws IntegratorError For a decision that permits
      */
     public function identified(string $id, \DateTimeImmutable $at, array $versions): self
     {
-        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $id, $at, $versions, $this->hash, $this->precedence, $this->viewer);
+        return $this->refusal('identified')->withIdentity($id, $at, $versions);
     }
 
     /**
-     * The same decision, with the hash of its record in the decision log.
+     * The same refusal, with the hash of its record in the decision log. Only the decision log records
+     * the hash of a decision that permits.
+     *
+     * @throws IntegratorError For a decision that permits
      */
     public function recorded(string $hash): self
     {
-        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $hash, $this->precedence, $this->viewer);
+        return $this->refusal('recorded')->withHash($hash);
+    }
+
+    /**
+     * Whether it was made for this command and this actor, the very objects: a decision that permits
+     * is issued on once, for what it was asked about (D-50).
+     *
+     * @param Command<mixed> $command
+     *
+     * @internal Operations asks it
+     */
+    public function isFor(Command $command, Actor $actor): bool
+    {
+        return $this->for === $command && $this->by === $actor;
+    }
+
+    /**
+     * A decision is made for one request, and never comes back from storage as one: its record is what's
+     * kept.
+     *
+     * @param array<mixed> $data
+     */
+    public function __unserialize(array $data): never
+    {
+        throw new \LogicException('A Decision isn\'t unserialized: read its record from the decision log.');
+    }
+
+    /**
+     * @param array<string, int> $versions
+     */
+    private function withIdentity(string $id, \DateTimeImmutable $at, array $versions): self
+    {
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $id, $at, $versions, $this->hash, $this->precedence, $this->viewer, $this->for, $this->by);
+    }
+
+    private function withHash(string $hash): self
+    {
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $hash, $this->precedence, $this->viewer, $this->for, $this->by);
+    }
+
+    /**
+     * The same decision, for this command and this actor: only the Evaluator binds one (through
+     * Closure::bind, as it makes one).
+     *
+     * @param Command<mixed> $command
+     *
+     * @phpstan-ignore method.unused
+     */
+    private function boundTo(Command $command, Actor $actor): self
+    {
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $this->hash, $this->precedence, $this->viewer, $command, $actor);
+    }
+
+    private function refusal(string $what): self
+    {
+        $permits = match ($this->verdict) {
+            Verdict::Permit, Verdict::PermitOffline => true,
+            Verdict::Deny, Verdict::Indeterminate => false,
+        };
+
+        if ($permits) {
+            throw new IntegratorError(\sprintf('A decision that permits was %s by something other than YorvoID.', $what), 'Return the Evaluator\'s decision as it is, or refuse with Decision::deny() or Decision::indeterminate().', 'concepts/operations-and-events.md#the-decision-point');
+        }
+
+        return $this;
     }
 
     /**

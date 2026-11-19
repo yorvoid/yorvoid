@@ -178,7 +178,7 @@ final class DecisionLogTest extends TestCase
 
     public function testAnEntryKeepsADecisionItNamesItself(): void
     {
-        $decision = \YorvoID\Tests\Support\Decisions::permit(\YorvoID\Core\Operation\AuthorizedBy::Operator, 'Ran.')->identified('d-1', $this->clock->now(), []);
+        $decision = \YorvoID\Tests\Support\Decisions::identified(\YorvoID\Tests\Support\Decisions::permit(\YorvoID\Core\Operation\AuthorizedBy::Operator, 'Ran.'), 'd-1', $this->clock->now());
 
         $this->log->citing($decision, fn (): LogEntry => $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console), details: ['decision' => 'its own']));
         $this->log->citing($decision, function (): void {
@@ -285,7 +285,7 @@ final class DecisionLogTest extends TestCase
         self::assertTrue($recorded(new DecisionLog($this->store, PermitRecording::Sampled, 1.0)));
 
         $offline = new DecisionLog($this->store);
-        $decision = $offline->record($this->ability(), \YorvoID\Tests\Support\Decisions::of(\YorvoID\Core\Operation\Verdict::PermitOffline, \YorvoID\Core\Operation\AuthorizedBy::Ability, 'Offline.')->identified((string) new UuidV7(), $this->clock->now(), []));
+        $decision = $offline->record($this->ability(), \YorvoID\Tests\Support\Decisions::identified(\YorvoID\Tests\Support\Decisions::of(\YorvoID\Core\Operation\Verdict::PermitOffline, \YorvoID\Core\Operation\AuthorizedBy::Ability, 'Offline.'), (string) new UuidV7(), $this->clock->now(), []));
         self::assertNotNull($decision->hash, 'Permit-offline is always recorded.');
 
         $byDefault = new DecisionLog($this->store, PermitRecording::Sampled);
@@ -361,7 +361,7 @@ final class DecisionLogTest extends TestCase
 
     private function decided(Decision $decision): Decision
     {
-        return $decision->identified((string) new UuidV7(), $this->clock->now(), ['policy' => 1]);
+        return \YorvoID\Tests\Support\Decisions::identified($decision, (string) new UuidV7(), $this->clock->now(), ['policy' => 1]);
     }
 
     /**
