@@ -61,7 +61,7 @@ So each package directory carries what its repository needs on its own: a README
 
 ## Making changes
 
-1. Create a branch from `main`, named after what it does, e.g. `fix-token-expiry-boundary`.
+1. Create a branch from `main`, named `<kind>/<slug>` after what it does, e.g. `fix/token-expiry-boundary` ([names](#branches-pull-requests-and-releases)).
 2. Make your change, with tests.
 3. Run all checks:
 
@@ -106,7 +106,7 @@ So each package directory carries what its repository needs on its own: a README
    `site/package.json` pins Vite to a release with the dev server's security fixes, which VitePress 1 doesn't depend on yet: drop the override when VitePress does. The reference pages are written from the code: `composer docs-reference` after changing the configuration or a command.
 
    CI runs the same checks, and a pull request can only be merged when they pass: its **CI** check sums them up. `composer cs-fix` fixes the coding style for you. Mutation testing has to stay above its thresholds too. On a pull request, CI mutates only the lines it changes, as `composer infection -- --git-diff-lines --git-diff-base=origin/main` does locally. The full run (`composer infection`), and fuzzing ten times as long, run on `main` and every night; the browser client's mutation testing runs when the client changes.
-4. Open a pull request against `main`.
+4. Open a pull request against `main`, titled and described as [below](#pull-requests).
 
 ### What a change needs
 
@@ -124,6 +124,36 @@ So each package directory carries what its repository needs on its own: a README
 - Errors aimed at developers say what went wrong, how to fix it, and link to the docs (`IntegratorError`).
 - No cryptography of our own: libsodium, OpenSSL and proven libraries only.
 
+## Branches, pull requests and releases
+
+The same conventions hold across YorvoLabs' repositories.
+
+### Pull requests
+
+Pull requests are squashed: the title becomes the commit's subject on `main`, followed by `(#N)`, and the description its body.
+
+- **The title** is one imperative sentence of at most 72 characters, without a final period, e.g. "Refuse a release whose tag isn't signed". References go at the end, in parentheses, and only to what anyone can open: an issue or pull request, e.g. "Write refusals outside the caller's transaction (#123)". Titles and descriptions say what the code changes and why, for a reader outside the project: no internal tracking codes or decision numbers, and no account of who reviewed or approved it. No `feat:`-style prefixes: only Dependabot's `chore:` stays, so dependency updates can be filtered.
+- **The description** follows the template: **Why**, **What changes** (as behavior, not files), **Tested** (what ran, and what didn't, with why), **Refs** (issues, pull requests, advisories, RFCs or upstream docs, or none).
+- A release's pull request is titled `Release X.Y.Z`, and the one that moves `main` on to the next minor `Start X.Y`.
+- **Commits on a branch** are free-form, since they're squashed away. `Co-authored-by` is the only trailer, for a human co-author.
+
+### Branches
+
+- `<kind>/<slug>`, where the kind is `feat`, `fix`, `docs`, `chore`, `ci` or `security`, and the slug is lowercase with hyphens. It may carry a work item: `feat/m3-1-delegation`, `fix/arc-0061-host-patching`.
+- A release is prepared on `chore/release-X.Y.Z`. `release/` is kept for maintenance branches (below).
+- **A fix of an embargoed vulnerability** is developed in the repository's private security advisory fork, never on a public branch. Until the advisory is published, its title, description and branch describe the change neutrally: no advisory ID, and no description of the exploit. The changelog's Security entry and the advisory ID are added at the release.
+
+### Tags and versions
+
+- **A release tag** is `vX.Y.Z` or `vX.Y.Z-rc.N`, and nothing else: no other pre-release labels. It's annotated, signed with SSH, with the message `YorvoID X.Y.Z`, on a commit of `main` that passed CI. The release workflows refuse any other tag, and one that isn't signed by a key in [`.github/release-signers`](.github/release-signers). Changes to that file and to the workflows need the maintainer's review ([`CODEOWNERS`](.github/CODEOWNERS)).
+- **Other tags** live under a namespace and never start with `v`, e.g. `fips-run/0.4.0`.
+- **Before 1.0,** a minor may break covered code, and a patch only fixes. The changelog's Breaking section says what to change.
+- **Releases come from `main`.** Only when an older minor needs a fix after `main` has moved on is a `release/X.Y` branch created, from `vX.Y.0`'s line: the fix lands on `main` first, then is cherry-picked (`git cherry-pick -x`), and the patch is tagged there.
+
+### The changelog
+
+[`CHANGELOG.md`](CHANGELOG.md) follows [Keep a Changelog 1.1](https://keepachangelog.com/en/1.1.0/): `## [Unreleased]`, then `## [X.Y.Z] - YYYY-MM-DD` for each release, newest first. The GitHub release is titled `YorvoID X.Y.Z`, with the version's section as its notes, and is marked a pre-release for an `-rc.N`.
+
 ## Before a release
 
 **Measure the quickstart with someone new to YorvoID** (PLT-080): a developer who knows Symfony and hasn't used YorvoID follows [the quickstart](docs/tutorials/symfony-quickstart.md) on their own machine, from the published packages, while you watch without helping.
@@ -139,7 +169,7 @@ So each package directory carries what its repository needs on its own: a README
 
 A release whose measured time is above 15 minutes doesn't go out until the quickstart is shorter or clearer. Once the release is on Packagist, run `QUICKSTART_PACKAGIST=1 php tools/quickstart/follow.php`, to check the published packages install as the page says.
 
-**Releasing:** main always says which minor it's heading for: each package's branch alias (`0.4.x-dev`) and what the packages require of each other (`^0.4`), which `composer versions` checks. Move the [changelog](CHANGELOG.md)'s "Unreleased" under the new version, with the date, in a pull request. Then push a signed version tag (`git tag -s v0.2.0`) on a commit of main that passed CI: the release workflows refuse a tag that isn't signed by a key in [`.github/release-signers`](.github/release-signers). Tags are signed with SSH keys (`git config gpg.format ssh`, and `git config user.signingkey` with the public key's path); add a key to that file in a pull request of its own. The Release workflow publishes a GitHub release with each package's source, SBOM and build provenance, and the changelog's section for the version; the Split workflow copies the PHP packages to their repositories, which Packagist installs from; the npm workflow publishes the browser client as `@yorvoid/browser` with the tag's version, through npm's trusted publishing (no token), and a pre-release such as `v0.1.0-rc.1` under `next`. Each of them refuses a tag of another minor than the packages require, or one with a package Packagist doesn't have (`php tools/release/version.php check v0.4.0`: run it before you tag, and submit a new package's repository to Packagist first). Once Split has pushed the tag, it installs every package at the tag's version from Packagist into an empty project, trying again for up to 30 minutes while Packagist catches up; to check a release again, run the Split workflow by hand with the tag (it only installs then). Right after tagging a minor, open a pull request that moves main on to the next one: `php tools/release/version.php set 0.5`, then `composer update 'yorvoid/*'`.
+**Releasing:** main always says which minor it's heading for: each package's branch alias (`0.4.x-dev`) and what the packages require of each other (`^0.4`), which `composer versions` checks. In a pull request titled `Release X.Y.Z`, move the [changelog](CHANGELOG.md)'s `[Unreleased]` under the new version: `## [0.2.0] - 2026-11-05`. Then push a signed version tag (`git tag -s v0.2.0 -m "YorvoID 0.2.0"`) on a commit of main that passed CI: the release workflows refuse a tag that isn't signed by a key in [`.github/release-signers`](.github/release-signers). Tags are signed with SSH keys (`git config gpg.format ssh`, and `git config user.signingkey` with the public key's path); add a key to that file in a pull request of its own. The Release workflow publishes a GitHub release with each package's source, SBOM and build provenance, and the changelog's section for the version; the Split workflow copies the PHP packages to their repositories, which Packagist installs from; the npm workflow publishes the browser client as `@yorvoid/browser` with the tag's version, through npm's trusted publishing (no token), and a pre-release such as `v0.1.0-rc.1` under `next`. Each of them refuses a tag of another minor than the packages require, or one with a package Packagist doesn't have (`php tools/release/version.php check v0.4.0`: run it before you tag, and submit a new package's repository to Packagist first). Once Split has pushed the tag, it installs every package at the tag's version from Packagist into an empty project, trying again for up to 30 minutes while Packagist catches up; to check a release again, run the Split workflow by hand with the tag (it only installs then). Right after tagging a minor, open a pull request that moves main on to the next one, titled `Start 0.3`: `php tools/release/version.php set 0.5`, then `composer update 'yorvoid/*'`.
 
 ## License
 

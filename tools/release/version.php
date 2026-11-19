@@ -62,8 +62,8 @@ $relative = static fn (string $path): string => substr($path, strlen($root) + 1)
 $text = static fn (mixed $value): string => is_scalar($value) ? (string) $value : json_encode($value, \JSON_THROW_ON_ERROR);
 
 if ('check' === $action && null !== $argument) {
-    if (1 !== preg_match('/^v(\d+\.\d+)\.\d+(?:-[0-9A-Za-z.-]+)?$/D', $argument, $tag)) {
-        $problems[] = sprintf('"%s" isn\'t a version tag like v0.4.0.', $argument);
+    if (1 !== preg_match('/^v(\d+\.\d+)\.\d+(?:-rc\.\d+)?$/D', $argument, $tag)) {
+        $problems[] = sprintf('"%s" isn\'t a version tag like v0.4.0 or v0.4.0-rc.1.', $argument);
     } elseif ($tag[1] !== $minor) {
         $problems[] = sprintf('The tag %s is of %s, but the packages require each other at %s: run "php tools/release/version.php set %s" in a pull request first.', $argument, $tag[1], $constraint, $tag[1]);
     }

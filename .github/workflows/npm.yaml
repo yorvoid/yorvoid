@@ -8,7 +8,8 @@ name: npm
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
 
 permissions:
   contents: read
@@ -19,9 +20,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Whether the tag may be released, in a job of its own with read permissions only: no step that
+  # can publish starts before it passes.
+  check:
+    name: Check the tag
+    if: github.repository == 'yorvoid/yorvoid'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      commit: ${{ steps.checked.outputs.commit }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the tag is signed, on main, and passed CI
+        id: checked
+        env:
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          .github/release-check.sh "$GITHUB_REF_NAME"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish the browser client
-    if: github.repository == 'yorvoid/yorvoid'
+    needs: check
     # npm's trusted publisher names this environment; only version tags can use it.
     environment: npm
     runs-on: ubuntu-latest
@@ -36,11 +64,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check the tag is signed, on main, and passed CI
+      # The tag or branch could have moved since it was checked.
+      - name: Check it's still the commit checked
         env:
-          REPOSITORY: ${{ github.repository }}
-          GH_TOKEN: ${{ github.token }}
-        run: .github/release-check.sh "$GITHUB_REF_NAME"
+          REF: ${{ github.ref }}
+          CHECKED: ${{ needs.check.outputs.commit }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$CHECKED" ] || [ "$(git rev-parse "$REF^{commit}")" != "$CHECKED" ]; then
+            echo "::error::$REF has moved since $CHECKED was checked: a newer run releases it, if it may be."
+            exit 1
+          fi
       - name: Build the toolchain's image
         run: docker compose --profile node build node
       - name: Install dependencies and build

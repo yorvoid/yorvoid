@@ -1,12 +1,23 @@
-<!-- Thanks for contributing! For a bigger change, please link the issue where the approach was agreed. -->
+<!-- Thanks for contributing! For a bigger change, please link the issue where the approach was agreed.
+The title is the squashed commit's subject: imperative, at most 72 characters, with references at the
+end in parentheses, e.g. "Refuse a release whose tag isn't signed (#123)". This description is its
+body: what the code changes and why, for a reader outside the project. -->
 
-## What and why
+## Why
 
-<!-- What changes, and why. Link the issue or the requirement, e.g. "Fixes #123" or "ATN-030". -->
+<!-- The problem, and why this is the way to solve it. -->
 
-## How it was tested
+## What changes
 
-<!-- The tests you added, and anything you checked by hand. -->
+<!-- What behaves differently, as bullets, rather than which files changed. -->
+
+## Tested
+
+<!-- What ran: the tests you added, the checks, anything you checked by hand. And what didn't, with why. -->
+
+## Refs
+
+<!-- What anyone can open: an issue or pull request ("Fixes #123"), an advisory, an RFC, upstream docs. Or leave it out. -->
 
 ## Checklist
 
