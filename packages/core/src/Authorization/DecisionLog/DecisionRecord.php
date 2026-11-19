@@ -27,8 +27,8 @@ use YorvoID\Core\Text;
  */
 final readonly class DecisionRecord
 {
-    /** Format 2 (0.5, D-42): attempts, with their details, and the read set */
-    public const int FORMAT = 2;
+    /** Format 3 (0.5, D-50): a consequence's parent. Format 2 (D-42): attempts, with their details, and the read set */
+    public const int FORMAT = 3;
 
     public const string ALGORITHM = 'sha256';
 
@@ -45,6 +45,7 @@ final readonly class DecisionRecord
      *                                                                                                                           someone else: the viewer, and its own decision if one was made
      *                                                                                                                           (none for an operation, which is refused); the actor is then the target
      * @param array<string, mixed>                                                                                $details       An attempt's facts, as its log entry had them (format 2)
+     * @param string|null                                                                                         $parent        A consequence's: the decision of the operation that caused it (format 3)
      * @param int                                                                                                 $format        The canonical form it's hashed over: 1 for records written before 0.5
      */
     public function __construct(
@@ -65,6 +66,7 @@ final readonly class DecisionRecord
         public array $origin,
         public ?array $viewer = null,
         public array $details = [],
+        public ?string $parent = null,
         public int $format = self::FORMAT,
     ) {
     }
@@ -72,7 +74,7 @@ final readonly class DecisionRecord
     /**
      * @throws IntegratorError When the decision has no ID or time: only an identified decision is recorded
      */
-    public static function of(Request $request, Decision $decision): self
+    public static function of(Request $request, Decision $decision, ?string $parent = null): self
     {
         if (null === $decision->id || null === $decision->at) {
             throw new IntegratorError('Only a decision with an ID and a time can be recorded.', 'Record the decisions the evaluator makes: it identifies them.', 'concepts/security-log.md#the-decision-log');
@@ -95,6 +97,7 @@ final readonly class DecisionRecord
             $decision->versions,
             [$request->origin->kind->value, $request->origin->correlationId],
             self::viewer($request, $decision),
+            parent: $parent,
         );
     }
 
@@ -173,6 +176,10 @@ final readonly class DecisionRecord
             $form['read'] = ['sources' => $versions];
         }
 
+        if ($this->format >= 3) {
+            $form['parent'] = $this->parent;
+        }
+
         return $form;
     }
 
@@ -199,7 +206,7 @@ final readonly class DecisionRecord
             throw new \UnexpectedValueException('A stored decision isn\'t valid JSON.', previous: $e);
         }
 
-        if (!\is_array($data) || !\in_array($data['format'] ?? null, [1, 2], true)) {
+        if (!\is_array($data) || !\in_array($data['format'] ?? null, [1, 2, 3], true)) {
             throw new \UnexpectedValueException('A stored decision has an unknown format.');
         }
 
@@ -209,7 +216,7 @@ final readonly class DecisionRecord
 
         $format = $data['format'];
 
-        if (false === $at || !\in_array($kind, 2 === $format ? ['operation', 'ability', 'attempt'] : ['operation', 'ability'], true)) {
+        if (false === $at || !\in_array($kind, $format >= 2 ? ['operation', 'ability', 'attempt'] : ['operation', 'ability'], true)) {
             throw new \UnexpectedValueException('A stored decision is malformed.');
         }
 
@@ -230,7 +237,8 @@ final readonly class DecisionRecord
             self::versions($data),
             self::origin($data),
             self::viewerOf($data),
-            2 === $format ? self::detailsOf($data) : [],
+            $format >= 2 ? self::detailsOf($data) : [],
+            $format >= 3 ? self::nullableString($data, 'parent') : null,
             $format,
         );
     }

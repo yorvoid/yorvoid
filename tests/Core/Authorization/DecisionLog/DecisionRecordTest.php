@@ -44,7 +44,7 @@ final class DecisionRecordTest extends TestCase
         $record = DecisionRecord::of($request, $decision);
 
         self::assertSame([
-            'format' => 2,
+            'format' => 3,
             'id' => 'd-1',
             'realm' => 'acme',
             'decided_at' => '2026-11-08T18:00:00.500000Z',
@@ -63,9 +63,30 @@ final class DecisionRecordTest extends TestCase
             'viewer' => null,
             'details' => [],
             'read' => ['sources' => ['policy' => 7, 'relations' => 2]],
+            'parent' => null,
         ], $record->toArray(), 'The elements\' texts aren\'t kept.');
         self::assertSame(hash('sha256', $record->json()), $record->hash());
         self::assertSame($record->json(), DecisionRecord::fromJson($record->json())->json());
+
+        // A consequence names the decision of the operation that caused it (D-50).
+        $caused = DecisionRecord::of($request, $decision, 'd-0');
+        self::assertSame('d-0', $caused->toArray()['parent']);
+        self::assertSame('d-0', DecisionRecord::fromJson($caused->json())->parent);
+        self::assertNotSame($record->hash(), $caused->hash(), 'The parent is hashed.');
+    }
+
+    /**
+     * A record written before format 3 reads, and hashes as it was written: without a parent.
+     */
+    public function testAFormatTwoRecordStillReadsAndHashesAsWritten(): void
+    {
+        $two = new DecisionRecord('d-2', new Realm('acme'), new \DateTimeImmutable('2026-11-18 18:00:00', new \DateTimeZone('UTC')), 'attempt', 'yorvoid.code.check', null, null, 'failed', null, '', [], [], [], [], ['web', 'r'], null, ['tries' => 1], format: 2);
+        $json = $two->json();
+
+        self::assertArrayNotHasKey('parent', $two->toArray());
+        $read = DecisionRecord::fromJson($json);
+        self::assertSame([2, null, ['tries' => 1]], [$read->format, $read->parent, $read->details]);
+        self::assertSame($two->hash(), $read->hash());
     }
 
     /**
@@ -100,7 +121,7 @@ final class DecisionRecordTest extends TestCase
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Operator], null, null, IssueBadge::class, []);
         $request = Request::forOperation($operation, new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7())), new Operator(), new Origin(OriginKind::Console, correlationId: 'job-1'), new \DateTimeImmutable('2026-11-08 18:00:00 UTC'));
         $unknown = Decision::indeterminate([IndeterminateReason::StoreUnreachable], 'Can\'t tell.')->identified('d-2', $request->at, []);
-        $permit = Decision::permit(AuthorizedBy::Operator, 'The operator.')->identified('d-3', $request->at, []);
+        $permit = \YorvoID\Tests\Support\Decisions::identified(\YorvoID\Tests\Support\Decisions::permit(AuthorizedBy::Operator, 'The operator.'), 'd-3', $request->at);
 
         self::assertSame(['operation', 'acme.badge.issue', null, null, 'indeterminate', ['store_unreachable'], []], [($r = DecisionRecord::of($request, $unknown))->kind, $r->name, $r->actor, $r->resource, $r->verdict, $r->indeterminate, $r->versions]);
         self::assertSame(['permit', 'operator'], [($r = DecisionRecord::of($request, $permit))->verdict, $r->basis]);
@@ -117,7 +138,7 @@ final class DecisionRecordTest extends TestCase
 
         yield 'not JSON' => ['{', 'A stored decision isn\'t valid JSON.'];
         yield 'not a map' => ['"text"', 'A stored decision has an unknown format.'];
-        yield 'another format' => [$with(['format' => 3]), 'A stored decision has an unknown format.'];
+        yield 'another format' => [$with(['format' => 4]), 'A stored decision has an unknown format.'];
         yield 'an attempt in format 1' => [$with(['kind' => 'attempt']), 'A stored decision is malformed.'];
         yield 'details that are no object' => [$with(['format' => 2, 'details' => 'a']), 'A stored decision\'s details are malformed.'];
         yield 'details that are a list' => [$with(['format' => 2, 'details' => ['a']]), 'A stored decision\'s details are malformed.'];
@@ -175,6 +196,6 @@ final class DecisionRecordTest extends TestCase
 
         $this->expectException(\YorvoID\Core\Exception\IntegratorError::class);
 
-        DecisionRecord::of($request, new Decision(\YorvoID\Core\Operation\Verdict::Deny, null, 'No.', id: 'd-1'));
+        DecisionRecord::of($request, \YorvoID\Tests\Support\Decisions::of(\YorvoID\Core\Operation\Verdict::Deny, null, 'No.', id: 'd-1'));
     }
 }

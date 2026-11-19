@@ -200,7 +200,7 @@ final class OperationsTest extends TestCase
         self::assertSame('acme.badge.record', $consequence->operation);
         self::assertSame(AuthorizedBy::Consequence, $consequence->basis);
         self::assertSame($permit, $consequence->parent);
-        self::assertSame($permit->decisionId, $consequence->decisionId);
+        self::assertNotSame($permit->decisionId, $consequence->decisionId, 'A consequence has a decision of its own, under its parent\'s (D-50).');
         self::assertSame($operator, $consequence->actor);
     }
 
@@ -314,9 +314,11 @@ final class OperationsTest extends TestCase
     public function testAnAuthorizationThatPermitsAViewAsIsAMistake(): void
     {
         $permitting = new readonly class implements Authorization {
+            use \YorvoID\Tests\Support\DecidesAlone;
+
             public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
             {
-                return Decision::permit(AuthorizedBy::Ability, 'Anything goes.');
+                return \YorvoID\Tests\Support\Decisions::permit(AuthorizedBy::Ability, 'Anything goes.');
             }
         };
         $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), $permitting, new SecurityLog($this->log, new InMemoryTransactions()), [$this->badges]);

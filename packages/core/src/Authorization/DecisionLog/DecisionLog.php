@@ -90,14 +90,16 @@ final class DecisionLog implements AttemptLog
     /**
      * Records the decision if it's to be recorded.
      *
+     * @param string|null $parent A consequence's: the decision of the operation that caused it
+     *
      * @return Decision The decision, with its record's hash when it's recorded; in the Refuse mode, an
      *                  Indeterminate instead of a Permit whose record couldn't be written
      *
      * @throws \Throwable In the Continue mode, when an operation's decision can't be written
      */
-    public function record(Request $request, Decision $decision): Decision
+    public function record(Request $request, Decision $decision, ?string $parent = null): Decision
     {
-        return $this->recordAll([[$request, $decision]])[0];
+        return $this->recordAll([[$request, $decision]], $parent)[0];
     }
 
     /**
@@ -105,10 +107,11 @@ final class DecisionLog implements AttemptLog
      * write.
      *
      * @param list<array{Request, Decision}> $decided
+     * @param string|null                    $parent  Theirs, when they're consequences
      *
      * @return list<Decision> The decisions, in the same order, as record() returns them
      */
-    public function recordAll(array $decided): array
+    public function recordAll(array $decided, ?string $parent = null): array
     {
         /** @var array<int, DecisionRecord> $records The records of those to be recorded, by their place */
         $records = [];
@@ -123,7 +126,7 @@ final class DecisionLog implements AttemptLog
                 continue;
             }
 
-            $records[$i] = DecisionRecord::of($request, $decision);
+            $records[$i] = DecisionRecord::of($request, $decision, $parent);
 
             if (!self::permits($decision) && ($operation || AuditFailure::Refuse === $this->onFailure)) {
                 // A refusal changes nothing: it's written outside the caller's transaction, and its
@@ -172,7 +175,7 @@ final class DecisionLog implements AttemptLog
                 null === $record => $one[1],
                 isset($unwritten[$i]) => $one[1],
                 $lost => self::unrecorded($one[1]),
-                default => $one[1]->recorded($record->hash()),
+                default => self::recorded($one[1], $record->hash()),
             };
         }, array_keys($decided), $decided);
     }
@@ -332,5 +335,15 @@ final class DecisionLog implements AttemptLog
             // The same for every decision of a request.
             PermitRecording::Sampled => hexdec(substr(hash('sha256', $request->origin->correlationId), 0, 8)) < $this->sampleRate * 0x100000000,
         };
+    }
+
+    /**
+     * The decision with its record's hash: only here, for a decision that permits.
+     */
+    private static function recorded(Decision $decision, string $hash): Decision
+    {
+        $record = \Closure::bind(static fn (): Decision => $decision->withHash($hash), null, Decision::class);
+
+        return $record();
     }
 }

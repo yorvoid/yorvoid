@@ -59,7 +59,7 @@ final class DecisionPointPropertiesTest extends TestCase
             Set::of(...OriginKind::cases()),
         )->then(static function (Verdict $verdict, ?AuthorizedBy $basis, OriginKind $kind): void {
             try {
-                $decision = new Decision($verdict, $basis, 'decided', indeterminate: Verdict::Indeterminate === $verdict ? [IndeterminateReason::MissingData] : []);
+                $decision = \YorvoID\Tests\Support\Decisions::of($verdict, $basis, 'decided', indeterminate: Verdict::Indeterminate === $verdict ? [IndeterminateReason::MissingData] : []);
             } catch (IntegratorError) {
                 // A permit without a basis, or a refusal with one: no Authorization can give it.
                 self::assertSame(null === $basis, \in_array($verdict, [Verdict::Permit, Verdict::PermitOffline], true));
@@ -68,13 +68,15 @@ final class DecisionPointPropertiesTest extends TestCase
             }
 
             $authorization = new readonly class($decision) implements Authorization {
+                use \YorvoID\Tests\Support\DecidesAlone;
+
                 public function __construct(private Decision $decision)
                 {
                 }
 
                 public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
                 {
-                    return $this->decision;
+                    return \YorvoID\Tests\Support\Decisions::bound($this->decision, $command, $actor);
                 }
             };
             $realm = new Realm('acme');
@@ -91,7 +93,7 @@ final class DecisionPointPropertiesTest extends TestCase
             } catch (NotPermitted $refused) {
                 self::assertFalse($permits, 'A Permit was refused.');
                 self::assertSame([], $badges->permits, 'A handler ran without a Permit.');
-                self::assertSame($decision, $refused->decision);
+                self::assertSame([$decision->verdict, $decision->reason], [$refused->decision->verdict, $refused->decision->reason], 'The decision, as it was given, for this request.');
                 self::assertSame([], iterator_to_array($store->entries($realm, 1), false), 'A refusal changes nothing: the chain has no entry (D-42).');
             }
         });

@@ -77,7 +77,7 @@ php bin/console yorvoid:log:verify [options]
 | Argument or option | | Default |
 |---|---|---|
 | `--realm` | The realm | `default` |
-| `--decisions` | Also check the decision records against the digests in the chain |  |
+| `--decisions` | Also check the decision records against the digests in the chain, and that every entry citing a decision cites a recorded permit |  |
 
 ## `yorvoid:migrate`
 

@@ -234,7 +234,34 @@ final readonly class Evaluator implements Authorization
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
     {
-        return $this->evaluate(Request::forOperation($operation, $command, $actor, $origin, $this->clock->now()));
+        // For this command and this actor only: Operations issues on it once (D-50).
+        return self::bound($this->evaluate(Request::forOperation($operation, $command, $actor, $origin, $this->clock->now())), $command, $actor);
+    }
+
+    /**
+     * A consequence of a permitted operation (D-50): the parent's decision holds, so its permits and
+     * the authority check aren't asked again, and neither are the forbids, except those that apply to
+     * consequences (AppliesToConsequences). The actor is proven again, its versions are read, and it's
+     * recorded under the parent.
+     *
+     * @throws IntegratorError When the parent isn't a Permit this evaluator made
+     */
+    public function decideConsequence(Decision $parent, OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
+    {
+        $permitted = match ($parent->verdict) {
+            Verdict::Permit, Verdict::PermitOffline => null !== $parent->id,
+            Verdict::Deny, Verdict::Indeterminate => false,
+        };
+
+        if (!$permitted) {
+            throw new IntegratorError(\sprintf('"%s" was asked as a consequence of a decision that isn\'t a permit.', $operation->name), 'Only a permitted operation has consequences: run them on its permit (Permit::cause()).', 'concepts/operations-and-events.md#permits');
+        }
+
+        $request = Request::forOperation($operation, $command, $actor, $origin, $this->clock->now());
+        $request = $this->provenAs($request, $this->proveActor($request->actor));
+        $decision = self::identified($this->consequence($request, $parent), (string) $this->ids->next(), $request->at, $this->versionsOf($request));
+
+        return self::bound(null === $this->decisions ? $decision : $this->decisions->record($request, $decision, $parent->id), $command, $actor);
     }
 
     /**
@@ -403,7 +430,7 @@ final readonly class Evaluator implements Authorization
      */
     private function identify(Request $request, ?array $versions = null): Decision
     {
-        return $this->judge($request)->identified((string) $this->ids->next(), $request->at, $versions ?? $this->versionsOf($request));
+        return self::identified($this->judge($request), (string) $this->ids->next(), $request->at, $versions ?? $this->versionsOf($request));
     }
 
     /**
@@ -520,6 +547,44 @@ final readonly class Evaluator implements Authorization
     }
 
     /**
+     * What a consequence is refused by: an actor no longer proven, or a forbid that applies to
+     * consequences; otherwise it's permitted, by its parent.
+     */
+    private function consequence(Request $request, Decision $parent): Decision
+    {
+        if (null !== ($unproven = $this->unproven[$request] ?? null)) {
+            return Decision::indeterminate(self::why([], [$unproven]), \sprintf('The actor\'s authority couldn\'t be established: %s', $unproven->detail), [new Reason('authority', 'authority', $unproven)], Precedence::AuthorityUnknown);
+        }
+
+        $reasons = [];
+        $forbids = ['holds' => [], 'unknown' => []];
+
+        foreach ($this->elements as $element) {
+            if (!$element instanceof AppliesToConsequences) {
+                continue;
+            }
+
+            $truth = self::safely(static fn (): ?Truth => $element->matches($request) ? null : Truth::fails('Not about this request.'));
+            $truth ??= self::safely(static fn (): Truth => $element->evaluate($request));
+
+            if (TruthValue::Fails !== $truth->value) {
+                $forbids[TruthValue::Holds === $truth->value ? 'holds' : 'unknown'][] = $truth;
+                $reasons[] = new Reason($element->name(), 'forbid', $truth);
+            }
+        }
+
+        if ([] !== $forbids['holds']) {
+            return Decision::deny(\sprintf('A forbid applies: %s', $forbids['holds'][0]->detail), $reasons, precedence: Precedence::ForbidHolds);
+        }
+
+        if ([] !== $forbids['unknown']) {
+            return Decision::indeterminate(self::why([IndeterminateReason::UnknownForbid], $forbids['unknown']), \sprintf('A forbid couldn\'t be ruled out: %s', $forbids['unknown'][0]->detail), $reasons, Precedence::ForbidUnknown);
+        }
+
+        return self::permitted(AuthorizedBy::Consequence, \sprintf('A consequence of a permitted operation (%s).', $parent->id), $reasons, Precedence::PermitHolds);
+    }
+
+    /**
      * Read-only, and never more than the viewer may: see the class.
      */
     private function viewingAs(Request $request, ViewingAs $actor): Decision
@@ -544,13 +609,13 @@ final readonly class Evaluator implements Authorization
         // The target may, or the viewer couldn't be decided: the viewer's side decides, with the
         // viewer's own remedies and none of the target's.
         return [] !== $viewer->indeterminate
-            ? self::seen(new Decision(Verdict::Indeterminate, null, \sprintf('Viewing as someone else, the viewer\'s own access couldn\'t be decided: %s', $viewer->reason), $viewer->reasons, indeterminate: $viewer->indeterminate, precedence: $viewer->precedence), $viewer)
+            ? self::seen(self::decision(Verdict::Indeterminate, null, \sprintf('Viewing as someone else, the viewer\'s own access couldn\'t be decided: %s', $viewer->reason), $viewer->reasons, indeterminate: $viewer->indeterminate, precedence: $viewer->precedence), $viewer)
             : self::seen(Decision::deny(\sprintf('Viewing as someone else, the viewer may not: %s', $viewer->reason), $viewer->reasons, $viewer->remedies, $viewer->precedence), $viewer);
     }
 
     private static function seen(Decision $decided, Decision $viewer): Decision
     {
-        return new Decision($decided->verdict, $decided->basis, $decided->reason, $decided->reasons, $decided->remedies, $decided->indeterminate, precedence: $decided->precedence, viewer: $viewer);
+        return self::decision($decided->verdict, $decided->basis, $decided->reason, $decided->reasons, $decided->remedies, $decided->indeterminate, precedence: $decided->precedence, viewer: $viewer);
     }
 
     /**
@@ -608,7 +673,7 @@ final readonly class Evaluator implements Authorization
             return null;
         }
 
-        return new Decision(Verdict::PermitOffline, $basis, \sprintf('Permitted offline: %s', $truth->detail), [...$decision->reasons, new Reason('offline', 'offline', $truth)], precedence: Precedence::Offline);
+        return self::decision(Verdict::PermitOffline, $basis, \sprintf('Permitted offline: %s', $truth->detail), [...$decision->reasons, new Reason('offline', 'offline', $truth)], precedence: Precedence::Offline);
     }
 
     /**
@@ -673,7 +738,7 @@ final readonly class Evaluator implements Authorization
 
             \assert(null !== $chosen);
 
-            return Decision::permit($chosen[0]->basis(), $chosen[1]->detail, $reasons, Precedence::PermitHolds);
+            return self::permitted($chosen[0]->basis(), $chosen[1]->detail, $reasons, Precedence::PermitHolds);
         }
 
         // 6.
@@ -740,6 +805,55 @@ final readonly class Evaluator implements Authorization
         \assert([] !== $why);
 
         return $why;
+    }
+
+    /**
+     * A decision of any verdict: only here, since Decision's constructor is private to everything else,
+     * so that nothing but the evaluator permits (D-50).
+     *
+     * @param list<Reason>              $reasons
+     * @param list<Remedy>              $remedies
+     * @param list<IndeterminateReason> $indeterminate
+     * @param array<string, int>        $versions
+     */
+    private static function decision(Verdict $verdict, ?AuthorizedBy $basis, string $reason, array $reasons = [], array $remedies = [], array $indeterminate = [], ?string $id = null, ?\DateTimeImmutable $at = null, array $versions = [], ?string $hash = null, ?Precedence $precedence = null, ?Decision $viewer = null): Decision
+    {
+        $make = \Closure::bind(static fn (): Decision => new Decision($verdict, $basis, $reason, $reasons, $remedies, $indeterminate, $id, $at, $versions, $hash, $precedence, $viewer), null, Decision::class);
+
+        return $make();
+    }
+
+    /**
+     * The decision with its ID, its time and the versions it read: only here and in the decision log,
+     * for a decision that permits.
+     *
+     * @param array<string, int> $versions
+     */
+    private static function identified(Decision $decision, string $id, \DateTimeImmutable $at, array $versions): Decision
+    {
+        $identify = \Closure::bind(static fn (): Decision => $decision->withIdentity($id, $at, $versions), null, Decision::class);
+
+        return $identify();
+    }
+
+    /**
+     * The decision, for this command and this actor, the very objects.
+     *
+     * @param Command<mixed> $command
+     */
+    private static function bound(Decision $decision, Command $command, Actor $actor): Decision
+    {
+        $bind = \Closure::bind(static fn (): Decision => $decision->boundTo($command, $actor), null, Decision::class);
+
+        return $bind();
+    }
+
+    /**
+     * @param list<Reason> $reasons
+     */
+    private static function permitted(AuthorizedBy $basis, string $reason, array $reasons, Precedence $precedence): Decision
+    {
+        return self::decision(Verdict::Permit, $basis, $reason, $reasons, precedence: $precedence);
     }
 
     /**

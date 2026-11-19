@@ -34,7 +34,7 @@ final class LogVerifyCommand extends Command
     protected function configure(): void
     {
         $this->addOption('realm', null, InputOption::VALUE_REQUIRED, 'The realm', Realm::default()->name);
-        $this->addOption('decisions', null, InputOption::VALUE_NONE, 'Also check the decision records against the digests in the chain');
+        $this->addOption('decisions', null, InputOption::VALUE_NONE, 'Also check the decision records against the digests in the chain, and that every entry citing a decision cites a recorded permit');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -68,6 +68,15 @@ final class LogVerifyCommand extends Command
             }
 
             $io->success(\sprintf('The decision records of %d digest(s) match them.', $digests->windows - $digests->pruned));
+            $citations = $this->digests->citations($realm);
+
+            if ([] !== $citations) {
+                $io->error(['Entries cite decisions the decision log doesn\'t hold as permits:', ...$citations]);
+
+                return Command::FAILURE;
+            }
+
+            $io->success('Every entry that cites a decision cites a recorded permit.');
 
             if ($digests->pruned > 0) {
                 $io->note(\sprintf('%d digest(s) cover records since pruned: they keep only their digest.', $digests->pruned));

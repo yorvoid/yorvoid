@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
-use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
@@ -29,6 +28,9 @@ final readonly class Operations
     /** @var array<class-string, \Closure> */
     private array $handlers;
 
+    /** @var \WeakMap<Decision, true> The decisions it issued a permit on: each once */
+    private \WeakMap $issued;
+
     /**
      * @param iterable<OperationHandler> $handlers
      *
@@ -49,13 +51,7 @@ final readonly class Operations
             // The changes that only the policy's forbids keep safe, e.g. giving roles, need them whatever permits
             // them (M2-13).
             if ($handler instanceof RequiresForbids) {
-                $what = \sprintf('The handler %s', $handler::class);
-
-                if (!$authorization instanceof Evaluator) {
-                    throw new IntegratorError(\sprintf('%s needs forbids that only the Evaluator is checked for.', $what), 'Decide with the Evaluator, given the forbids they need.', 'concepts/authorization.md#policy-elements');
-                }
-
-                $authorization->requireForbids($what, $handler);
+                $authorization->requireForbids(\sprintf('The handler %s', $handler::class), $handler);
             }
 
             foreach ($handler->operations() as $command => $method) {
@@ -68,13 +64,12 @@ final readonly class Operations
         }
 
         $this->handlers = $map;
+        $this->issued = new \WeakMap();
 
-        if ($authorization instanceof Evaluator) {
-            $authorization->checkCatalogue($catalogue);
-        }
+        $authorization->checkCatalogue($catalogue);
 
         $accepting = array_keys(array_filter($catalogue->all(), static fn (OperationDescription $operation): bool => $operation->acceptsOffline));
-        $decidesOffline = $authorization instanceof Evaluator && $authorization->decidesOffline();
+        $decidesOffline = $authorization->decidesOffline();
 
         // Offline is decided when YorvoID is built, never switched on by accident (PLT-004).
         if ($decidesOffline && [] === $accepting) {
@@ -123,16 +118,66 @@ final readonly class Operations
             throw new IntegratorError(\sprintf('The authorization permitted "%s" to a view as someone else.', $operation->name), 'A view-as is read-only: decide with the Evaluator, or refuse every operation to a ViewingAs actor.', 'concepts/authorization.md#view-as');
         }
 
+        $this->accept($decision, $command, $actor, $operation->name);
         $basis = $decision->basis;
         // Only here: Permit's constructor is private to everything else.
-        $issue = \Closure::bind(static fn (string $name, Actor $actor, AuthorizedBy $basis, string $id, Command $command, bool $offline): Permit => new Permit($name, $actor, $basis, $id, $command, offline: $offline), null, Permit::class);
+        $issue = \Closure::bind(static fn (string $name, Actor $actor, AuthorizedBy $basis, Decision $decision, string $id, Command $command, bool $offline, \Closure $consequences): Permit => new Permit($name, $actor, $basis, $id, $command, offline: $offline, decision: $decision, consequences: $consequences), null, Permit::class);
+        // Its consequences are decided by the same path, from the same origin (D-50).
+        $consequences = function (Decision $parent, Command $caused, Actor $by) use ($origin): Decision {
+            $operation = $this->describe($caused);
+            $decision = $this->authorization->decideConsequence($parent, $operation, $caused, $by, $origin);
 
-        return $this->log->citing($decision, function () use ($command, $actor, $origin, $operation, $handler, $issue, $basis, $decision, $offline): mixed {
+            $permits = match ($decision->verdict) {
+                Verdict::Permit, Verdict::PermitOffline => true,
+                Verdict::Deny, Verdict::Indeterminate => false,
+            };
+
+            if ($permits) {
+                $this->accept($decision, $caused, $by, $operation->name);
+            }
+
+            return $decision;
+        };
+
+        return $this->log->citing($decision, function () use ($command, $actor, $origin, $operation, $handler, $issue, $basis, $decision, $offline, $consequences): mixed {
             if ($offline) {
                 $this->log->record($command->realm, 'yorvoid.decision.offline', Outcome::Success, $origin, $actor->principalId, 'operation', $operation->name, ['reason' => $decision->reason]);
             }
 
-            return $handler($command, $issue($operation->name, $actor, $basis, $decision->id ?? (string) $this->ids->next(), $command, $offline), $origin);
+            return $handler($command, $issue($operation->name, $actor, $basis, $decision, $decision->id ?? (string) $this->ids->next(), $command, $offline, $consequences), $origin);
         });
+    }
+
+    /**
+     * A decision that permits is issued on once, and only for the command and the actor it was made
+     * for (D-50): an Authorization that gives back a permit it was given for another request, e.g. one
+     * that caches decisions, would run one actor's operation on another's permit.
+     *
+     * @param Command<mixed> $command
+     *
+     * @throws IntegratorError When it was made for another request, or issued on already
+     */
+    private function accept(Decision $decision, Command $command, Actor $actor, string $name): void
+    {
+        if (!$decision->isFor($command, $actor)) {
+            throw new IntegratorError(\sprintf('The authorization permitted "%s" with a decision made for another command or actor.', $name), 'Decide every request: never give back a decision made for another one, e.g. from a cache.', 'concepts/operations-and-events.md#the-decision-point');
+        }
+
+        if (true === ($this->issued[$decision] ?? null)) {
+            throw new IntegratorError(\sprintf('The authorization permitted "%s" with a decision a permit was issued on already.', $name), 'Decide every request: a decision permits once.', 'concepts/operations-and-events.md#the-decision-point');
+        }
+
+        $this->issued[$decision] = true;
+    }
+
+    /**
+     * A consequence's operation: from the catalogue, or from its command, since a consequence-only
+     * operation may have no handler of its own here.
+     *
+     * @param Command<mixed> $command
+     */
+    private function describe(Command $command): OperationDescription
+    {
+        return $this->catalogue->has(Operation::of($command::class)->name) ? $this->catalogue->forCommand($command::class) : OperationCatalogue::describe($command::class);
     }
 }
