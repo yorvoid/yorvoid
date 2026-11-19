@@ -1,7 +1,7 @@
 <!-- Thanks for contributing! For a bigger change, please link the issue where the approach was agreed.
 The title is the squashed commit's subject: imperative, at most 72 characters, with references at the
-end in parentheses, e.g. "Refuse a release whose tag isn't signed (ATN-030)". This description is its
-body. -->
+end in parentheses, e.g. "Refuse a release whose tag isn't signed (#123)". This description is its
+body: what the code changes and why, for a reader outside the project. -->
 
 ## Why
 
@@ -17,7 +17,7 @@ body. -->
 
 ## Refs
 
-<!-- The issue or the requirement, e.g. "Fixes #123" or "ATN-030". -->
+<!-- What anyone can open: an issue or pull request ("Fixes #123"), an advisory, an RFC, upstream docs. Or leave it out. -->
 
 ## Checklist
 

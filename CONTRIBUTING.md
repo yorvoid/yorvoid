@@ -126,14 +126,14 @@ So each package directory carries what its repository needs on its own: a README
 
 ## Branches, pull requests and releases
 
-The same conventions hold across YorvoLabs' repositories (ADR-0010).
+The same conventions hold across YorvoLabs' repositories.
 
 ### Pull requests
 
 Pull requests are squashed: the title becomes the commit's subject on `main`, followed by `(#N)`, and the description its body.
 
-- **The title** is one imperative sentence of at most 72 characters, without a final period, e.g. "Refuse a release whose tag isn't signed". References go at the end, in parentheses: a roadmap item, a finding, a requirement, e.g. "Write refusals outside the caller's transaction (G-4)". No `feat:`-style prefixes: only Dependabot's `chore:` stays, so dependency updates can be filtered.
-- **The description** follows the template: **Why**, **What changes** (as behavior, not files), **Tested** (what ran, and what didn't, with why), **Refs**.
+- **The title** is one imperative sentence of at most 72 characters, without a final period, e.g. "Refuse a release whose tag isn't signed". References go at the end, in parentheses, and only to what anyone can open: an issue or pull request, e.g. "Write refusals outside the caller's transaction (#123)". Titles and descriptions say what the code changes and why, for a reader outside the project: no internal tracking codes or decision numbers, and no account of who reviewed or approved it. No `feat:`-style prefixes: only Dependabot's `chore:` stays, so dependency updates can be filtered.
+- **The description** follows the template: **Why**, **What changes** (as behavior, not files), **Tested** (what ran, and what didn't, with why), **Refs** (issues, pull requests, advisories, RFCs or upstream docs, or none).
 - A release's pull request is titled `Release X.Y.Z`, and the one that moves `main` on to the next minor `Start X.Y`.
 - **Commits on a branch** are free-form, since they're squashed away. `Co-authored-by` is the only trailer, for a human co-author.
 
