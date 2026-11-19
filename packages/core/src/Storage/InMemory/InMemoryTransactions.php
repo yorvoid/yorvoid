@@ -15,7 +15,7 @@ use YorvoID\Core\Storage\Transactions;
  * Transactions for in-memory storage, used by tests and by applications without a database. A failed
  * unit of work puts the registered stores back as they were when it began and drops the callbacks it
  * added, like a database transaction or, when nested, a savepoint. Callbacks run when the outermost
- * transaction succeeds.
+ * transaction succeeds; a failing one is logged at error, not thrown (D-43).
  *
  * @api
  */
@@ -36,9 +36,9 @@ final class InMemoryTransactions implements Transactions
 
     /**
      * @param EventDispatcherInterface $events Where an afterEnd() callback's failure is announced (AuditFailed)
-     * @param LoggerInterface          $logger Where it's logged, at critical
+     * @param LoggerInterface          $logger Where it's logged, at critical, and an afterCommit() callback's at error
      */
-    public function __construct(EventDispatcherInterface $events = new NoEventListeners(), LoggerInterface $logger = new NullLogger())
+    public function __construct(EventDispatcherInterface $events = new NoEventListeners(), private readonly LoggerInterface $logger = new NullLogger())
     {
         $this->alarm = new AuditAlarm($events, $logger);
     }
@@ -87,8 +87,7 @@ final class InMemoryTransactions implements Transactions
         }
 
         while ($outermost && [] !== $this->afterCommit) {
-            $callback = array_shift($this->afterCommit);
-            $callback();
+            $this->reported(array_shift($this->afterCommit));
         }
 
         return $result;
@@ -97,7 +96,7 @@ final class InMemoryTransactions implements Transactions
     public function afterCommit(\Closure $callback): void
     {
         if (0 === $this->depth) {
-            $callback();
+            $this->reported($callback);
 
             return;
         }
@@ -116,5 +115,17 @@ final class InMemoryTransactions implements Transactions
         }
 
         $this->afterEnd[] = $callback;
+    }
+
+    /**
+     * @param \Closure(): void $callback
+     */
+    private function reported(\Closure $callback): void
+    {
+        try {
+            $callback();
+        } catch (\Throwable $e) {
+            $this->logger->error('What YorvoID ran after a commit failed: {message}', ['message' => $e->getMessage(), 'exception' => $e]);
+        }
     }
 }

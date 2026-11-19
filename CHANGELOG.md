@@ -15,6 +15,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `StepUpWithPasskey` (`yorvoid.passkey.step_up`): a passkey step-up is an operation, decided and recorded like a sign-in.
 - `yorvoid/phpstan-rules`, PHPStan rules for an application: `yorvoid.storeCall` flags a call to one of YorvoID's stores, `yorvoid.internalUse` a use of what YorvoID marks `@internal` ([how-to](docs/how-to/phpstan-rules.md)).
 - `@spi` marks the interfaces you implement and don't call: YorvoID's stores ([interfaces you implement](docs/compatibility.md#interfaces-you-implement)).
+- `AuditFailed::SECURITY_NOTICE`: a security notification that couldn't be sent. `SecurityNotifications` takes an event dispatcher for it.
 
 ### Breaking
 
@@ -22,7 +23,9 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `DecisionRecord` is format 2 (attempts with their details; the read set's slot); format-1 records still read and verify. `DecisionLogStore::add()` takes whether the records are written apart from any caller's transaction, and the store adds `now()`, `written()`, `digestedUntil()`, `digested()` and `prunedBefore()`; a migration adds `written_us` and two tables.
 - `Transactions` adds `afterEnd()`: a `Transactions` of your own implements it, and a callback's failure goes no further than raising your alert. `DbalTransactions` and `InMemoryTransactions` take an event dispatcher and a logger for it (`AuditFailed::AFTER_END`).
 - `yorvoid.audit.on_failure: refuse` needs `yorvoid.decision_log.connection`: the bundle refuses to start without it.
-- The passkey sign-in and step-up name `yorvoid.credential.disable` twice in `causes`.
+- The passkey sign-in and step-up name `yorvoid.credential.disable` in `causes`.
+- An after-commit callback, e.g. a listener of an "-ed" event, that fails is logged at error and no longer thrown, from `Transactions::run()` or from the application's commit: the work it waited for is committed (D-43). The remaining callbacks still run. A `Transactions` of your own reports such a failure the same way.
+- A security notification that can't be sent raises the audit alert (`AuditFailed::SECURITY_NOTICE`, logged at critical), not an error log entry: a missed security notice is an audit fact.
 - The constructors of the events YorvoID's listeners act on are `@internal`: `PrincipalCreated`, `PrincipalStatusChanging`, `IdentifierChanged`, `CredentialAdded`, `CredentialRemoving`, `CredentialRemoved`, `NewDeviceSignedIn`, `RecoveryCodeUsed`, `RecoveryCodesGenerated`, `RecoveryLinkUsed` and `SignedOperationRan`. Listen to them as before; YorvoID makes them.
 - `ForgetCredentialsOfDeletedPrincipals` takes only `Credentials`: give `Credentials` the `RecoveryCodeStore` (`recoveryCodes:`), and forgetting a deleted principal's credentials removes its recovery codes too.
 - `SecurityNotifications::signedOperation()` and `Database::deleteInBatches()` are `@internal`.
@@ -36,7 +39,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 ### Security
 
 - A refusal survives the application's rollback and takes no realm lock, and a decision log that can't be written gives `NotPermitted` and the audit alert, not a storage error (AR-03).
-- A copied passkey stays disabled when the application's transaction rolls back with the refusal (ARC-0058).
+- A copied passkey stays disabled when the application's transaction rolls back with the refusal (ARC-0058). It's disabled once that transaction has ended, committed or rolled back, in a transaction of its own; if that fails, the audit alert says which passkey is still active.
 - A deletion's listeners run on its permit and only for the principal it deletes, and the events YorvoID's listeners act on can't be made by an application: a made-up event no longer removes someone's roles, relations, attributes or passkey, or sends them a security notification.
 - What only an operation may cause takes its permit (D-41, AR-01): a session's step-up, a recovery's cool-down, disabling and forgetting credentials. A step-up is about the principal who proved who they are, and can't step up anyone else's session.
 - Cache freshness after a policy change no longer depends on callers: every `PolicyStore` change increments the version itself (SS-05).
@@ -47,6 +50,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 ### Fixed
 
 - YorvoID's `TransactionMiddleware` rolls back before it runs what waits for the end of the transaction.
+- After a commit the application started (`$connection->commit()`, `transactional()`, Doctrine's `wrapInTransaction()`, Messenger's `doctrine_transaction`), YorvoID's after-commit callbacks can open transactions: each runs in one of its own (ARC-0059, D-43). Before, they failed while DBAL still counted the committed transaction (PostgreSQL 25P01): a security notification after such a sign-in wasn't sent, and the application's `commit()` threw after its data had committed (`NoActiveTransaction`). A callback that leaves a transaction open is rolled back and reported, and the connection stays usable.
 - The stores convert values through the connection (`Connection::convertToPHPValue()`), not `Type::getType()`, which Doctrine DBAL 4.6 deprecates: no deprecations with DBAL 4.6.
 - `yorvoid/policy-testing` suggests `symfony/config` with the other packages its Symfony bundle needs: Symfony's `Bundle` doesn't load without it.
 

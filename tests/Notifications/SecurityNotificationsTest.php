@@ -34,6 +34,7 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\UuidV7Generator;
+use YorvoID\Core\Log\Event\AuditFailed;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\IdentifierKind;
@@ -121,8 +122,28 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         self::assertStringContainsString('security of your Acme account', $footnote->text);
     }
 
+    /**
+     * The sign-in in the application's own transaction: the notice, whose link's token is issued in a
+     * transaction after the commit, is still sent (ARC-0059, D-43).
+     */
+    #[DataProvider('platforms')]
+    public function testASignInInTheApplicationsTransactionIsAnnounced(string $platform): void
+    {
+        $this->notifications($platform);
+        $ana = $this->principal('ana@example.com');
+        $this->signIn($ana);
+        $database = $this->stack->database;
+        \assert(null !== $database);
+
+        $database->connection->transactional(fn () => $this->signIn($ana, 'Firefox on Linux', '192.0.2.10'));
+
+        $email = $this->only();
+        self::assertSame('ana@example.com', $email->to);
+        self::assertSame([], $this->events->of(AuditFailed::class));
+    }
+
     #[DataProvider('implementations')]
-    public function testAMailOutageIsLoggedAndFailsNothing(string $implementation): void
+    public function testAMailOutageRaisesTheAuditAlertAndFailsNothing(string $implementation): void
     {
         $logger = new class extends AbstractLogger {
             /** @var list<array{mixed, string, array<mixed>}> */
@@ -146,7 +167,10 @@ final class SecurityNotificationsTest extends DatabaseTestCase
 
         self::assertNotNull($this->sessions->validate(new Realm('acme'), $started->token), 'The sign-in failed with the email.');
         self::assertCount(1, $logger->logged);
-        self::assertSame([LogLevel::ERROR, 'new_device', 'acme', (string) $ana->id, 'The mail server is down.'], [$logger->logged[0][0], $logger->logged[0][2]['notice'], $logger->logged[0][2]['realm'], $logger->logged[0][2]['principal'], $logger->logged[0][2]['message']]);
+        self::assertSame([LogLevel::CRITICAL, 'YorvoID couldn\'t send {records} security notice(s){refused}: {message}', 'new_device', 'acme', (string) $ana->id, 'The mail server is down.'], [$logger->logged[0][0], $logger->logged[0][1], $logger->logged[0][2]['notice'], $logger->logged[0][2]['realm'], $logger->logged[0][2]['principal'], $logger->logged[0][2]['message']]);
+        $failed = $this->events->of(AuditFailed::class);
+        self::assertCount(1, $failed, 'A missed security notice is an audit fact (D-43).');
+        self::assertSame([AuditFailed::SECURITY_NOTICE, 'acme', 1, false], [$failed[0]->log, $failed[0]->realm?->name, $failed[0]->records, $failed[0]->refused]);
     }
 
     #[DataProvider('implementations')]
@@ -399,7 +423,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $this->mailer = new InMemoryMailer();
         $settings = new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}&credential={credential}', fn (Realm $realm, PrincipalId $principal): string => $this->locales[(string) $principal] ?? 'en');
         $this->notMe = new NotMe($tokens, $this->sessions, $this->credentials, $log, $this->stack->transactions, $this->events);
-        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, $this->stack->principals, null, $tokens, $this->notMe), $mailer ?? $this->mailer, new Translator([Translations::DIRECTORY]), $settings, $this->clock, $logger);
+        $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, $this->stack->principals, null, $tokens, $this->notMe), $mailer ?? $this->mailer, new Translator([Translations::DIRECTORY]), $settings, $this->clock, $logger, $this->events);
 
         foreach (SecurityNotifications::events() as $event => $method) {
             $listener = [$notifications, $method];

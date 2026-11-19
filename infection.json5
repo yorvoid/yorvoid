@@ -45,7 +45,11 @@
                 // Equivalent unless the driver's rollback throws, which no test can make it do: the callbacks are cleared either way.
                 "YorvoID\\Core\\Storage\\Dbal\\WatchedConnection::rollBack",
                 // Equivalent: the finally only wipes the expanded private key (see FunctionCallRemoval).
-                "YorvoID\\Core\\Key\\SigningKey::sign"
+                "YorvoID\\Core\\Key\\SigningKey::sign",
+                // Equivalent: every path that skips the driver's rollback goes through the catch, which
+                // closes the connection; the database then rolls back the session's transaction and
+                // releases its locks. The finally states the intent without relying on that (G-4b, B2).
+                "YorvoID\\Core\\Storage\\Dbal\\CommitHooks::unwind"
             ]
         },
         "FunctionCallRemoval": {

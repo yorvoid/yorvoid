@@ -57,6 +57,7 @@ use YorvoID\Passkeys\SignInWithPasskey;
 use YorvoID\Passkeys\StepUpWithPasskey;
 use YorvoID\Passkeys\UserVerification;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\FailingDisable;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\ReadThenRun;
 use YorvoID\Tests\Support\RecordingDispatcher;
@@ -686,6 +687,47 @@ final class PasskeysTest extends DatabaseTestCase
         self::assertSame(CredentialStatus::Disabled, $this->credentials->get(new Realm('acme'), $credential->id)?->status);
         self::assertCount(1, array_filter(iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.credential.disable' === $entry->action));
         self::assertSame([], $alerts->of(\YorvoID\Core\Log\Event\AuditFailed::class), 'Disabling it again failed after the commit.');
+    }
+
+    /**
+     * The copied passkey's disable fails once the caller's transaction has ended, committed by the
+     * application or rolled back by YorvoID's own unit: the audit alert is raised, and the passkey stays
+     * active until an operator acts (D-43, Q4).
+     */
+    #[DataProvider('platforms')]
+    public function testAFailingDisableOfACopiedPasskeyRaisesTheAuditAlert(string $platform): void
+    {
+        $alerts = new RecordingDispatcher();
+        $this->stack = $this->stack($platform, events: $alerts);
+        $database = $this->stack->database;
+        \assert(null !== $database);
+        $passkeys = $this->passkeys($platform, clonePolicy: ClonePolicy::DisablePasskey, store: $this->stack->passkeys, credentialStore: new FailingDisable($this->stack->credentials));
+        $session = $this->session();
+        $authenticator = new VirtualAuthenticator();
+        $ceremony = $passkeys->beginRegistration($session);
+        $credential = Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $authenticator->register($ceremony->options), 'Key'), new Origin(OriginKind::Web), $session);
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($signIn->options, counter: 5)), new Origin(OriginKind::Web));
+
+        foreach ([true, false] as $inTheApplicationsTransaction) {
+            $signIn = $passkeys->beginSignIn(new Realm('acme'));
+            $copy = $authenticator->signIn($signIn->options, counter: 5);
+
+            if ($inTheApplicationsTransaction) {
+                $database->connection->beginTransaction();
+            }
+
+            $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web)));
+
+            if ($inTheApplicationsTransaction) {
+                $database->connection->commit();
+            }
+        }
+
+        $failed = $alerts->of(\YorvoID\Core\Log\Event\AuditFailed::class);
+        self::assertSame([[\YorvoID\Core\Log\Event\AuditFailed::AFTER_END, 'The database went away.'], [\YorvoID\Core\Log\Event\AuditFailed::AFTER_END, 'The database went away.']], array_map(static fn (\YorvoID\Core\Log\Event\AuditFailed $alert): array => [$alert->log, $alert->error->getMessage()], $failed));
+        self::assertSame(CredentialStatus::Active, $this->credentials->get(new Realm('acme'), $credential->id)?->status, 'Until an operator acts.');
+        self::assertSame(0, $database->connection->getTransactionNestingLevel());
     }
 
     /**

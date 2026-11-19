@@ -471,20 +471,17 @@ final readonly class Passkeys implements OperationHandler
         if ($counter->suspected && ClonePolicy::Allow !== $this->policy->clonePolicy) {
             if (ClonePolicy::DisablePasskey === $this->policy->clonePolicy) {
                 // A consequence of the sign-in or step-up that found it out, about the passkey's principal.
-                // Now, in the caller's transaction, so its commit keeps it; and, if the caller rolls back
-                // with the refusal below, again once that has ended (ARC-0058, D-42): the operation names
-                // the disable twice for that. If the second fails, the audit alert is raised, and it heals
-                // itself: the counter wasn't recorded, so the copy's next answer is suspected again.
+                // Once the caller's transaction has ended, committed or rolled back with the refusal below,
+                // in a transaction of its own, so neither undoes it (ARC-0058, D-42, D-43). If it fails, the
+                // audit alert is raised and the passkey stays active until an operator acts.
                 $permit->about($passkey->principalId);
                 $disable = new DisableCredential($passkey->realm, $credential->id, $passkey->principalId, 'signature counter didn\'t go up: the passkey may have been copied');
-                $permit->cause($this->credentials->disable(...), $disable, $origin);
                 $this->transactions->afterEnd(function () use ($permit, $disable, $origin): void {
-                    // Kept by a commit, or removed meanwhile: nothing to do again.
+                    // Removed or disabled meanwhile: nothing to do.
                     if (true !== $this->credentials->get($disable->realm, $disable->credentialId)?->isActive()) {
                         return;
                     }
 
-                    // A failure raises the audit alert (Transactions::afterEnd()); see above for why it heals.
                     $permit->cause($this->credentials->disable(...), $disable, $origin);
                 });
             }

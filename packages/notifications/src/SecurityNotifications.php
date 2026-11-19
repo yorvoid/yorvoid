@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Notifications;
 
 use Psr\Clock\ClockInterface;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Clock\NativeClock;
@@ -18,8 +19,11 @@ use YorvoID\Authn\Recovery\Event\RecoveryCodeUsed;
 use YorvoID\Authn\Recovery\Event\RecoveryLinkUsed;
 use YorvoID\Authn\Session\Event\NewDeviceSignedIn;
 use YorvoID\Authn\Session\UserAgent;
+use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Log\AuditAlarm;
+use YorvoID\Core\Log\Event\AuditFailed;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\Event\IdentifierChanged;
@@ -44,8 +48,9 @@ use YorvoID\Mail\Mailer;
  * recovery (NotMe).
  *
  * They go to the principal's email address if it's verified, in the principal's language. Register the
- * listeners for the events in events(), which come after the commit. An email that can't be sent is
- * logged as an error, and doesn't fail what it's about.
+ * listeners for the events in events(), which come after the commit. A notice that can't be sent
+ * doesn't fail what it's about: it raises the audit alert (AuditFailed, security_notice), since a
+ * missed security notice is an audit fact (D-43).
  *
  * @api
  */
@@ -62,6 +67,12 @@ final readonly class SecurityNotifications
         return null === $credential ? self::NOT_ME : self::NOT_ME.'.c'.str_replace('-', '', $credential->uuid->toRfc4122());
     }
 
+    private AuditAlarm $alarm;
+
+    /**
+     * @param LoggerInterface          $logger Where a notice that couldn't be sent is logged, at critical
+     * @param EventDispatcherInterface $events Where it's announced (AuditFailed)
+     */
     public function __construct(
         private Principals $principals,
         private Operations $operations,
@@ -69,8 +80,10 @@ final readonly class SecurityNotifications
         private TranslatorInterface $translator,
         private NotificationSettings $settings,
         private ClockInterface $clock = new NativeClock(),
-        private LoggerInterface $logger = new NullLogger(),
+        LoggerInterface $logger = new NullLogger(),
+        EventDispatcherInterface $events = new NoEventListeners(),
     ) {
+        $this->alarm = new AuditAlarm($events, $logger);
     }
 
     /**
@@ -202,7 +215,13 @@ final readonly class SecurityNotifications
      */
     private function send(Realm $realm, PrincipalId $principalId, string $notice, array $parameters, \Closure $facts, ?Credential $suspect = null): void
     {
-        $email = $this->principals->identifiers($realm, $principalId)[IdentifierKind::Email->value] ?? null;
+        try {
+            $email = $this->principals->identifiers($realm, $principalId)[IdentifierKind::Email->value] ?? null;
+        } catch (\Throwable $e) {
+            $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_NOTICE, $realm, 1, false, $e), ['notice' => $notice, 'principal' => (string) $principalId]);
+
+            return;
+        }
 
         if (null !== $email) {
             $this->sendTo($email, $notice, $parameters, $facts, $suspect);
@@ -220,6 +239,20 @@ final readonly class SecurityNotifications
             return;
         }
 
+        try {
+            $this->deliver($email, $notice, $parameters, $facts, $suspect, $current);
+        } catch (\Throwable $e) {
+            // What happened stays done: an outage doesn't fail the sign-in or the change it's about.
+            $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_NOTICE, $email->realm, 1, false, $e), ['notice' => $notice, 'principal' => (string) $email->principalId]);
+        }
+    }
+
+    /**
+     * @param array<string, int|string>               $parameters
+     * @param \Closure(string): array<string, string> $facts
+     */
+    private function deliver(Identifier $email, string $notice, array $parameters, \Closure $facts, ?Credential $suspect, bool $current): void
+    {
         $realm = $email->realm;
         $principalId = $email->principalId;
         $locale = $this->settings->localeOf($realm, $principalId);
@@ -241,12 +274,7 @@ final readonly class SecurityNotifications
             new Footnote($this->text('footnote', $locale, $application)),
         ], $locale);
 
-        try {
-            $this->mailer->send($sending);
-        } catch (\Exception $exception) {
-            // What happened stays done: a mail outage doesn't fail the sign-in or the change it's about.
-            $this->logger->error('YorvoID couldn\'t send the "{notice}" notification: {message}', ['notice' => $notice, 'realm' => $realm->name, 'principal' => (string) $principalId, 'message' => $exception->getMessage(), 'exception' => $exception]);
-        }
+        $this->mailer->send($sending);
     }
 
     /**

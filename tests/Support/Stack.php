@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Support;
 
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Authn\Credential\Storage\DbalCredentialStore;
 use YorvoID\Authn\Migrations\AuthnMigrations;
@@ -87,15 +89,16 @@ final readonly class Stack
      *
      * @param TransactionMiddleware    $middleware The one on the database's connection
      * @param EventDispatcherInterface $events     Where the transactions raise the audit alert
+     * @param LoggerInterface          $logger     Where they log a callback's failure
      * @param bool                     $migrate    False when the database is a copy of a migrated one already
      */
-    public static function onDatabase(string $implementation, Database $database, TransactionMiddleware $middleware, EventDispatcherInterface $events = new NoEventListeners(), bool $migrate = true): self
+    public static function onDatabase(string $implementation, Database $database, TransactionMiddleware $middleware, EventDispatcherInterface $events = new NoEventListeners(), LoggerInterface $logger = new NullLogger(), bool $migrate = true): self
     {
         if ($migrate) {
             self::migrate($database);
         }
 
-        return new self($implementation, new DbalTransactions($database->connection, $middleware, $events), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database), new DbalRelationStore($database), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database));
+        return new self($implementation, new DbalTransactions($database->connection, $middleware, $events, $logger), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database), new DbalRelationStore($database), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database));
     }
 
     /**
