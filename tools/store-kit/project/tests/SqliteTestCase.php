@@ -9,6 +9,7 @@ use Acme\Storage\PdoPrincipalStore;
 use Acme\Storage\PdoThrottleStore;
 use Acme\Storage\PdoTransactions;
 use PHPUnit\Framework\TestCase;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * The project's own base: a new SQLite database with its tables for each test, and its transactions.
@@ -34,5 +35,13 @@ abstract class SqliteTestCase extends TestCase
         PdoThrottleStore::createTable($this->pdo);
         PdoFlowStore::createTable($this->pdo);
         $this->transactions = new PdoTransactions($this->pdo);
+    }
+
+    /**
+     * The transactions the project's stores take part in: the contracts run them inside these.
+     */
+    protected function transactions(string $implementation): Transactions
+    {
+        return $this->transactions;
     }
 }

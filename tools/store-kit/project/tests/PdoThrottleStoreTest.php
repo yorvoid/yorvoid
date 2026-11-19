@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Acme\Storage\Tests;
 
 use Acme\Storage\PdoThrottleStore;
+use YorvoID\Testing\Contract\ConcurrencyTestedIn;
 use YorvoID\Testing\Contract\ThrottleStoreContract;
 use YorvoID\Throttle\ThrottleStore;
 
+#[ConcurrencyTestedIn(PdoStoreConcurrencyTest::class)]
 final class PdoThrottleStoreTest extends SqliteTestCase
 {
     use ThrottleStoreContract;

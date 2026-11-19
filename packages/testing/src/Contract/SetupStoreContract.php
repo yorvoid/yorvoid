@@ -10,6 +10,7 @@ use YorvoID\Authn\Setup\SetupState;
 use YorvoID\Authn\Setup\SetupStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every SetupStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -40,6 +41,32 @@ trait SetupStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function setupStore(string $implementation): SetupStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    public function testSetupStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, SetupStoreConcurrencyContract::class));
+    }
+
+    #[DataProvider('implementations')]
+    public function testSetupStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->setupStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $created = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
+        $expires = new \DateTimeImmutable('2026-10-28 18:40:00 UTC');
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn (): bool => $store->replaceCode(new Realm('acme'), str_repeat('a', 64), $created, $expires), static fn (): bool => null === $store->get(new Realm('acme')));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn (): bool => $store->replaceCode(new Realm('globex'), str_repeat('b', 64), $created, $expires), static fn (): bool => null !== $store->get(new Realm('globex')));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn (): bool => $store->claim(new Realm('initech'), str_repeat('c', 64), new PrincipalId(new UuidV7()), $created),
+            static fn (): bool => $store->claim(new Realm('globex'), str_repeat('c', 64), new PrincipalId(new UuidV7()), $created),
+        ], static fn (): bool => $store->replaceCode(new Realm('initech'), str_repeat('c', 64), $created, $expires), static fn (): bool => null !== $store->get(new Realm('initech')));
+    }
 
     #[DataProvider('implementations')]
     public function testReplacesTheCodeUntilTheRealmIsClaimedOnce(string $implementation): void

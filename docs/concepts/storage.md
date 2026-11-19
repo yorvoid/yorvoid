@@ -82,26 +82,48 @@ A store built on its own and not registered with `InMemoryTransactions::register
 Each kind of record is kept by a store behind an interface: `PrincipalStore`, `SessionStore`, `SecurityLogStore` and the others. YorvoID has one on DBAL and one in memory; you can write your own, e.g. for another database, as long as it keeps the same promises. `yorvoid/testing` has them as tests, one trait for each store, which YorvoID's own stores pass. A store of your own must pass its store's tests: run them in your test suite, and keep them passing. They're traits, so your test case keeps the base class it has:
 
 ```php
-use App\Storage\RedisSessionStore;
+use App\Storage\PdoSessionStore;
+use App\Storage\PdoTransactions;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Authn\Session\SessionStore;
+use YorvoID\Core\Storage\Transactions;
 use YorvoID\Testing\Contract\SessionStoreContract;
 
-final class RedisSessionStoreTest extends TestCase
+final class PdoSessionStoreTest extends TestCase
 {
     use SessionStoreContract;
 
+    private \PDO $pdo;
+
     public static function implementations(): iterable
     {
-        yield 'Redis' => ['redis'];
+        yield 'PDO' => ['pdo'];
+    }
+
+    protected function setUp(): void
+    {
+        $this->pdo = new \PDO('sqlite::memory:');      // empty, new for each test
+        PdoSessionStore::createTable($this->pdo);
     }
 
     protected function sessionStore(string $implementation): SessionStore
     {
-        return new RedisSessionStore(new \Redis(), prefix: uniqid('test-'));  // empty, new for each test
+        return new PdoSessionStore($this->pdo);
+    }
+
+    protected function transactions(string $implementation): Transactions
+    {
+        return new PdoTransactions($this->pdo);       // the ones the store takes part in
     }
 }
 ```
+
+Every contract but the flow store's runs the store inside the transactions you give it as well:
+- a write in a transaction that fails is gone, versions included;
+- a write is seen inside its own transaction;
+- a write that changes nothing or is refused (a duplicate, a remove of nothing, a conditional write that loses) leaves the transaction usable. On PostgreSQL, a failed statement aborts the whole transaction, so a store must not let one fail on its way to "nothing to do": `INSERT … ON CONFLICT DO NOTHING` on the key it expects, for example.
+
+The throttle's counts are the exception: they outlive a rollback, or the store refuses to count inside a transaction. So are decision records, which a store with a connection of its own writes apart: a digest lists them.
 
 In Symfony, each store is a service under an ID of its own, `yorvoid.store.<name>`: `yorvoid.store.principal`, `yorvoid.store.identifier`, `yorvoid.store.security_log`, `yorvoid.store.session`, `yorvoid.store.known_device`, `yorvoid.store.one_time_token`, `yorvoid.store.setup`, `yorvoid.store.credential`, `yorvoid.store.recovery_code`, `yorvoid.store.cool_down`, `yorvoid.store.passkey`, `yorvoid.store.ceremony`, `yorvoid.store.throttle`, `yorvoid.store.policy`, `yorvoid.store.relation`, `yorvoid.store.attribute`, `yorvoid.store.decision_log` and `yorvoid.store.flow`. Use yours by aliasing its ID:
 
@@ -114,11 +136,53 @@ services:
 
 Stores are for YorvoID's services, not yours ([interfaces you implement](../compatibility.md#interfaces-you-implement)): a service of yours that asks for `SessionStore` doesn't get one. `#[Autowire(service: 'yorvoid.store.session')]` would still reach it, which is why [YorvoID's PHPStan rules](../how-to/phpstan-rules.md) flag a call to a store.
 
-There's one for each store (`AttributeStoreContract`, `CeremonyStoreContract`, `CoolDownStoreContract`, `CredentialStoreContract`, `DecisionLogStoreContract`, `FlowStoreContract`, `IdentifierStoreContract`, `KnownDeviceStoreContract`, `OneTimeTokenStoreContract`, `PasskeyStoreContract`, `PolicyStoreContract`, `RelationStoreContract`, `PrincipalStoreContract`, `RecoveryCodeStoreContract`, `SecurityLogStoreContract`, `SessionStoreContract`, `SetupStoreContract`, `ThrottleStoreContract`), and `TransactionsContract` for your own `Transactions`. `SecurityLogStoreContract` and `TransactionsContract` also ask for what the store takes part in: the same instances within a test. A `CredentialStore` writes only what each change is about, so that a credential disabled since someone read it stays disabled: `CredentialStoreContract` checks it with a second instance (`sameCredentialStore()`). A `PolicyStore` or `RelationStore` reads its `version()` from what it stores, never a counter of the process's own, and every change to relations increments the realm's relations version: `PolicyStoreContract` and `RelationStoreContract` check it with a second instance over the same data (`samePolicyStore()`, `sameRelationStore()`). Each of these helpers gives the same instance unless you override it; override it for a store processes share. Use one in each test case: their helpers have the same names. A store that doesn't pass them isn't one YorvoID can rely on: what YorvoID promises, e.g. one use of a token among requests at the same moment, rests on what the store does.
+There's one for each store (`AttributeStoreContract`, `CeremonyStoreContract`, `CoolDownStoreContract`, `CredentialStoreContract`, `DecisionLogStoreContract`, `FlowStoreContract`, `IdentifierStoreContract`, `KnownDeviceStoreContract`, `OneTimeTokenStoreContract`, `PasskeyStoreContract`, `PolicyStoreContract`, `RelationStoreContract`, `PrincipalStoreContract`, `RecoveryCodeStoreContract`, `SecurityLogStoreContract`, `SessionStoreContract`, `SetupStoreContract`, `ThrottleStoreContract`), and `TransactionsContract` for your own `Transactions`. Each asks for the transactions the store takes part in (`transactions()`): the same instance within a test. A `CredentialStore` writes only what each change is about, so that a credential disabled since someone read it stays disabled: `CredentialStoreContract` checks it with a second instance (`sameCredentialStore()`). A `PolicyStore` or `RelationStore` reads its `version()` from what it stores, never a counter of the process's own, and every change to relations increments the realm's relations version: `PolicyStoreContract` and `RelationStoreContract` check it with a second instance over the same data (`samePolicyStore()`, `sameRelationStore()`). Each of these helpers gives the same instance unless you override it; override it for a store processes share. Use one in each test case: their helpers have the same names. A store that doesn't pass them isn't one YorvoID can rely on: what YorvoID promises, e.g. one use of a token among requests at the same moment, rests on what the store does.
 
 When your store can't reach what it keeps its records in (the connection is refused or lost, a request times out, a failover is in progress), it throws `YorvoID\Core\Storage\StoreUnreachable`, so a decision that needed it is Indeterminate for that reason, and not for an error ([authorization](authorization.md#when-a-store-cant-be-reached)). The contracts can't make your store unreachable, so this one is yours to keep.
 
-The tests check what one connection can show. That a store holds when many requests use it at once (a lock waits for another, one of two claims wins) needs your database's own concurrency tests: YorvoID's are in its repository, for PostgreSQL and SQLite.
+### Requests at the same moment
+
+What a store keeps among many requests at once (one use of a token, one claim of a realm, a log that never forks) has a contract of its own, run in several processes: `OneTimeTokenStoreConcurrencyContract`, `RecoveryCodeStoreConcurrencyContract`, `SetupStoreConcurrencyContract`, `CeremonyStoreConcurrencyContract`, `ThrottleStoreConcurrencyContract`, `PrincipalStoreConcurrencyContract`, `SessionStoreConcurrencyContract`, `SecurityLogStoreConcurrencyContract`, and `VerifierStoreConcurrencyContract` for the [verifier](signed-intents.md). A store of your own that has one must pass it too. Its store contract fails until the test case uses it, names the test case that does with `#[ConcurrencyTestedIn(...)]`, or says its stores are in memory (`#[InMemoryStores]`): those are one process's alone.
+
+The processes get their stores from a factory file of yours, which `YorvoID\Testing\Race` runs in each:
+
+```php
+// tests/race-stores.php
+use App\Storage\PdoSessionStore;
+use YorvoID\Authn\Session\SessionStore;
+
+return static function (string $type, string $implementation, string $test): object {
+    // The same $test reaches the same records, in every process; a new one starts empty.
+    $pdo = new \PDO('pgsql:host=db;dbname=test_'.$test);
+
+    return match ($type) {
+        SessionStore::class => new PdoSessionStore($pdo),
+        // ... and Transactions::class: the transactions the stores take part in, on the same connection
+    };
+};
+```
+
+```php
+use PHPUnit\Framework\TestCase;
+use YorvoID\Testing\Contract\SessionStoreConcurrencyContract;
+
+final class PdoStoreConcurrencyTest extends TestCase
+{
+    use SessionStoreConcurrencyContract;
+
+    public static function implementations(): iterable
+    {
+        yield 'PDO on PostgreSQL' => ['pgsql'];
+    }
+
+    protected function storeFactory(): string
+    {
+        return __DIR__.'/race-stores.php';
+    }
+}
+```
+
+Each race runs 20 rounds. In each round, every process first does what comes before the race (e.g. finds the token), then all act at once. A race of two calls is forced that way: a store that finds and then deletes, without the delete being the check, fails every round. A race of one call (use a code, claim a realm) is decided by the database, so a store that checks and then acts fails it often, not always. Making that act one atomic statement is the store's duty.
 
 ## Migrations
 

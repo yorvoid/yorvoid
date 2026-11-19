@@ -14,6 +14,7 @@ use YorvoID\Authn\Credential\CredentialStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every CredentialStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -44,6 +45,28 @@ trait CredentialStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function credentialStore(string $implementation): CredentialStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    #[DataProvider('implementations')]
+    public function testCredentialStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->credentialStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        [$failed, $seen, $kept] = [self::credential($acme, new PrincipalId(new UuidV7())), self::credential($acme, new PrincipalId(new UuidV7())), self::credential($acme, new PrincipalId(new UuidV7()))];
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add($failed), static fn (): bool => null === $store->get($acme, $failed->id));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add($seen), static fn (): bool => null !== $store->get($acme, $seen->id));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn () => $store->add($seen),
+            static fn (): bool => $store->rename($acme, $failed->id, 'Renamed'),
+            static fn (): bool => $store->disable($acme, $failed->id),
+        ], static fn () => $store->add($kept), static fn (): bool => null !== $store->get($acme, $kept->id));
+    }
 
     #[DataProvider('implementations')]
     public function testKeepsEveryFieldAndListsTheOldestFirst(string $implementation): void

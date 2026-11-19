@@ -16,6 +16,7 @@ use YorvoID\Authn\Session\SessionStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every SessionStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -46,6 +47,33 @@ trait SessionStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function sessionStore(string $implementation): SessionStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    public function testSessionStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, SessionStoreConcurrencyContract::class));
+    }
+
+    #[DataProvider('implementations')]
+    public function testSessionStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->sessionStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        [$failed, $seen, $kept] = [self::session($acme, new PrincipalId(new UuidV7())), self::session($acme, new PrincipalId(new UuidV7())), self::session($acme, new PrincipalId(new UuidV7()))];
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add($failed, self::hash('failed')), static fn (): bool => null === $store->get($acme, $failed->id));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add($seen, self::hash('seen')), static fn (): bool => null !== $store->get($acme, $seen->id));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn () => $store->add($seen, self::hash('another')),
+            static fn (): bool => $store->end($acme, $failed->id, new \DateTimeImmutable('2026-10-27 19:00:00 UTC'), SessionEndReason::SignedOut),
+            static fn (): bool => $store->replaceTokenHash($acme, $failed->id, self::hash('replaced')),
+        ], static fn () => $store->add($kept, self::hash('kept')), static fn (): bool => null !== $store->get($acme, $kept->id));
+    }
 
     #[DataProvider('implementations')]
     public function testKeepsEveryField(string $implementation): void

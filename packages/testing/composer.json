@@ -43,6 +43,7 @@
     },
     "suggest": {
         "symfony/framework-bundle": "To sign in to Symfony functional tests with BrowserSignIn",
+        "yorvoid/intent-verifier": "To check a verifier store or log of your own with VerifierStoreContract and VerifierLogContract",
         "yorvoid/symfony": "To sign in to Symfony functional tests with BrowserSignIn"
     },
     "autoload": {

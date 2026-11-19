@@ -11,6 +11,7 @@ use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every OneTimeTokenStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -41,6 +42,32 @@ trait OneTimeTokenStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function oneTimeTokenStore(string $implementation): OneTimeTokenStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    public function testOneTimeTokenStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, OneTimeTokenStoreConcurrencyContract::class));
+    }
+
+    #[DataProvider('implementations')]
+    public function testOneTimeTokenStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->oneTimeTokenStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        [$failed, $seen, $kept] = [self::token($acme, self::id()), self::token($acme, self::id()), self::token($acme, self::id())];
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add($failed, str_repeat('a', 64)), static fn (): bool => null === $store->find($acme, $failed->selector, 'acme.test'));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add($seen, str_repeat('b', 64)), static fn (): bool => null !== $store->find($acme, $seen->selector, 'acme.test'));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn () => $store->add(self::token($acme, self::id(), selector: $seen->selector), str_repeat('c', 64)),
+            static fn (): bool => $store->delete($acme, $failed->selector),
+        ], static fn () => $store->add($kept, str_repeat('d', 64)), static fn (): bool => null !== $store->find($acme, $kept->selector, 'acme.test'));
+    }
 
     #[DataProvider('implementations')]
     public function testKeepsEveryFieldAndFindsByRealmSelectorAndPurpose(string $implementation): void

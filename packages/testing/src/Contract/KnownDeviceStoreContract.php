@@ -9,6 +9,7 @@ use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Session\KnownDeviceStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every KnownDeviceStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -39,6 +40,26 @@ trait KnownDeviceStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function knownDeviceStore(string $implementation): KnownDeviceStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    #[DataProvider('implementations')]
+    public function testKnownDeviceStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->knownDeviceStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        $ana = new PrincipalId(new UuidV7());
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn (): bool => $store->recordUse($acme, $ana, self::hash('failed'), self::at('18:00')), static fn (): bool => !$store->isKnown($acme, $ana, self::hash('failed')));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn (): bool => $store->recordUse($acme, $ana, self::hash('seen'), self::at('18:00')), static fn (): bool => $store->isKnown($acme, $ana, self::hash('seen')));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn (): int => $store->purge(new \DateTimeImmutable('2000-01-01 00:00:00 UTC')),
+        ], static fn (): bool => $store->recordUse($acme, $ana, self::hash('kept'), self::at('18:00')), static fn (): bool => $store->isKnown($acme, $ana, self::hash('kept')));
+    }
 
     #[DataProvider('implementations')]
     public function testADeviceIsKnownToThePrincipalsThatUsedIt(string $implementation): void

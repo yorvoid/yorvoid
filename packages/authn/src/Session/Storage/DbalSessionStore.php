@@ -45,7 +45,7 @@ final readonly class DbalSessionStore implements SessionStore
     public function add(Session $session, string $tokenHash): void
     {
         try {
-            $this->database->connection->insert($this->database->table(self::TABLE), [
+            $added = $this->database->insertUnlessExists(self::TABLE, [
                 'id' => $session->id->uuid->toRfc4122(),
                 'realm' => $session->realm->name,
                 'principal_id' => $session->principalId->uuid->toRfc4122(),
@@ -60,9 +60,15 @@ final readonly class DbalSessionStore implements SessionStore
                 'address' => $session->address,
                 'ended_at' => $session->endedAt,
                 'end_reason' => $session->endReason?->value,
-            ], self::TYPES);
+            ], ['id'], self::TYPES);
         } catch (UniqueConstraintViolationException $exception) {
-            throw new StorageException(\sprintf('A session with the ID %s or the same token exists.', $session->id), previous: $exception);
+            // Its token is another key: a conflict there aborts a PostgreSQL transaction, but a token is 256
+            // random bits, so only a bug repeats one.
+            throw new StorageException('A session with the same token exists.', previous: $exception);
+        }
+
+        if (!$added) {
+            throw new StorageException(\sprintf('A session with the ID %s exists.', $session->id));
         }
     }
 

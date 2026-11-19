@@ -55,6 +55,11 @@ trait SecurityLogStoreContract
      */
     abstract protected function transactions(string $implementation): Transactions;
 
+    public function testSecurityLogStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, SecurityLogStoreConcurrencyContract::class));
+    }
+
     #[DataProvider('implementations')]
     public function testNumbersAndLinksEntries(string $implementation): void
     {

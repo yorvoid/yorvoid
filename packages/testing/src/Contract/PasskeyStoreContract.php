@@ -10,6 +10,7 @@ use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 use YorvoID\Passkeys\Passkey;
 use YorvoID\Passkeys\PasskeyStore;
 
@@ -42,6 +43,28 @@ trait PasskeyStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function passkeyStore(string $implementation): PasskeyStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    #[DataProvider('implementations')]
+    public function testPasskeyStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->passkeyStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        [$failed, $seen, $kept] = [random_bytes(16), random_bytes(16), random_bytes(16)];
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(new UuidV7()), $failed)), static fn (): bool => null === $store->find($acme, $failed));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(new UuidV7()), $seen)), static fn (): bool => null !== $store->find($acme, $seen));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(new UuidV7()), $seen)),
+            static fn (): bool => $store->update(self::passkey($acme, new PrincipalId(new UuidV7()), $failed)),
+            static fn () => $store->remove($acme, new CredentialId(new UuidV7())),
+        ], static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(new UuidV7()), $kept)), static fn (): bool => null !== $store->find($acme, $kept));
+    }
 
     #[DataProvider('implementations')]
     public function testAnAuthenticatorsIdIsRegisteredOncePerRealm(string $implementation): void

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\Credential\Storage;
 
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Authn\Credential\Credential;
 use YorvoID\Authn\Credential\CredentialId;
@@ -35,19 +34,17 @@ final readonly class DbalCredentialStore implements CredentialStore
 
     public function add(Credential $credential): void
     {
-        try {
-            $this->database->connection->insert($this->database->table(self::TABLE), [
-                'id' => $credential->id->uuid->toRfc4122(),
-                'realm' => $credential->realm->name,
-                'principal_id' => $credential->principalId->uuid->toRfc4122(),
-                'kind' => $credential->kind->value,
-                'label' => $credential->label,
-                'created_at' => $credential->createdAt,
-                'last_used_at' => $credential->lastUsedAt,
-                'status' => $credential->status->value,
-            ], self::TIMES);
-        } catch (UniqueConstraintViolationException $exception) {
-            throw new StorageException(\sprintf('A credential with the ID %s exists.', $credential->id), previous: $exception);
+        if (!$this->database->insertUnlessExists(self::TABLE, [
+            'id' => $credential->id->uuid->toRfc4122(),
+            'realm' => $credential->realm->name,
+            'principal_id' => $credential->principalId->uuid->toRfc4122(),
+            'kind' => $credential->kind->value,
+            'label' => $credential->label,
+            'created_at' => $credential->createdAt,
+            'last_used_at' => $credential->lastUsedAt,
+            'status' => $credential->status->value,
+        ], ['id'], self::TIMES)) {
+            throw new StorageException(\sprintf('A credential with the ID %s exists.', $credential->id));
         }
     }
 

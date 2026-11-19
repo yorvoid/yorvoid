@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Storage;
 
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Types;
 use Symfony\Component\Uid\Uuid;
@@ -37,24 +36,22 @@ final readonly class DbalPasskeyStore implements PasskeyStore
 
     public function add(Passkey $passkey): bool
     {
-        try {
-            $this->database->connection->insert($this->database->table(self::TABLE), [
-                'credential_id' => $passkey->credentialId->uuid->toRfc4122(),
-                'realm' => $passkey->realm->name,
-                'principal_id' => $passkey->principalId->uuid->toRfc4122(),
-                'webauthn_id_hash' => Digest::sha256($passkey->webauthnId),
-                'webauthn_id' => self::encode($passkey->webauthnId),
-                'public_key' => self::encode($passkey->publicKey),
-                'user_handle' => self::encode($passkey->userHandle),
-                'sign_count' => $passkey->signCount,
-                'transports' => $passkey->transports,
-                'aaguid' => $passkey->aaguid->toRfc4122(),
-                'backup_eligible' => $passkey->backupEligible,
-                'backed_up' => $passkey->backedUp,
-                'user_verification_initialized' => $passkey->userVerificationInitialized,
-                'attestation_type' => $passkey->attestationType,
-            ], ['transports' => Types::JSON, 'backup_eligible' => ParameterType::BOOLEAN, 'backed_up' => ParameterType::BOOLEAN, 'user_verification_initialized' => ParameterType::BOOLEAN]);
-        } catch (UniqueConstraintViolationException) {
+        if (!$this->database->insertUnlessExists(self::TABLE, [
+            'credential_id' => $passkey->credentialId->uuid->toRfc4122(),
+            'realm' => $passkey->realm->name,
+            'principal_id' => $passkey->principalId->uuid->toRfc4122(),
+            'webauthn_id_hash' => Digest::sha256($passkey->webauthnId),
+            'webauthn_id' => self::encode($passkey->webauthnId),
+            'public_key' => self::encode($passkey->publicKey),
+            'user_handle' => self::encode($passkey->userHandle),
+            'sign_count' => $passkey->signCount,
+            'transports' => $passkey->transports,
+            'aaguid' => $passkey->aaguid->toRfc4122(),
+            'backup_eligible' => $passkey->backupEligible,
+            'backed_up' => $passkey->backedUp,
+            'user_verification_initialized' => $passkey->userVerificationInitialized,
+            'attestation_type' => $passkey->attestationType,
+        ], ['realm', 'webauthn_id_hash'], ['transports' => Types::JSON, 'backup_eligible' => ParameterType::BOOLEAN, 'backed_up' => ParameterType::BOOLEAN, 'user_verification_initialized' => ParameterType::BOOLEAN])) {
             return false;
         }
 

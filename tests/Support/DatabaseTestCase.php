@@ -17,6 +17,7 @@ use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
 use YorvoID\Core\Storage\StorageLocation;
+use YorvoID\Core\Storage\Transactions;
 use YorvoID\Testing\InMemoryStorage;
 
 /**
@@ -103,6 +104,14 @@ abstract class DatabaseTestCase extends TestCase
     protected function stackOf(string $implementation): Stack
     {
         return $this->stacks[$implementation] ??= $this->stack($implementation);
+    }
+
+    /**
+     * The transactions the stores of stackOf() take part in, as the store contracts ask.
+     */
+    protected function transactions(string $implementation): Transactions
+    {
+        return $this->stackOf($implementation)->transactions;
     }
 
     protected function tearDown(): void

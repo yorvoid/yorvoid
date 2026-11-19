@@ -6,8 +6,10 @@ namespace Acme\Storage\Tests;
 
 use Acme\Storage\PdoPrincipalStore;
 use YorvoID\Core\Principal\PrincipalStore;
+use YorvoID\Testing\Contract\ConcurrencyTestedIn;
 use YorvoID\Testing\Contract\PrincipalStoreContract;
 
+#[ConcurrencyTestedIn(PdoStoreConcurrencyTest::class)]
 final class PdoPrincipalStoreTest extends SqliteTestCase
 {
     use PrincipalStoreContract;

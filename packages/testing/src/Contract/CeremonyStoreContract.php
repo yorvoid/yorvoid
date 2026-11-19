@@ -9,6 +9,7 @@ use Symfony\Component\Uid\Uuid;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Session\SessionId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Transactions;
 use YorvoID\Passkeys\Ceremony;
 use YorvoID\Passkeys\CeremonyKind;
 use YorvoID\Passkeys\CeremonyStore;
@@ -42,6 +43,32 @@ trait CeremonyStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function ceremonyStore(string $implementation): CeremonyStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    public function testCeremonyStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, CeremonyStoreConcurrencyContract::class));
+    }
+
+    #[DataProvider('implementations')]
+    public function testCeremonyStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->ceremonyStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        $expires = new \DateTimeImmutable('2026-10-27 18:50:00 UTC');
+        [$failed, $seen, $kept] = [new Ceremony(Uuid::v7(), $acme, CeremonyKind::SignIn, '{}', $expires), new Ceremony(Uuid::v7(), $acme, CeremonyKind::SignIn, '{}', $expires), new Ceremony(Uuid::v7(), $acme, CeremonyKind::SignIn, '{}', $expires)];
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add($failed), static fn (): bool => null === $store->take($acme, $failed->id));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add($seen), static fn (): bool => null !== $store->take($acme, $seen->id));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn (): ?Ceremony => $store->take($acme, $seen->id),
+        ], static fn () => $store->add($kept), static fn (): bool => null !== $store->take($acme, $kept->id));
+    }
 
     #[DataProvider('implementations')]
     public function testACeremonyIsTakenOnce(string $implementation): void

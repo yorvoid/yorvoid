@@ -11,12 +11,14 @@ use YorvoID\Authn\Session\Storage\DbalSessionStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
+use YorvoID\Testing\Contract\ConcurrencyTestedIn;
 use YorvoID\Testing\Contract\SessionStoreContract;
 use YorvoID\Tests\Support\DatabaseTestCase;
 
 /**
  * Every SessionStore keeps the same promises (PLT-025).
  */
+#[ConcurrencyTestedIn(StoreConcurrencyTest::class)]
 final class SessionStoreTest extends DatabaseTestCase
 {
     use SessionStoreContract;

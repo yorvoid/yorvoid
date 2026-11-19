@@ -13,6 +13,7 @@ use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every PrincipalStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -43,6 +44,32 @@ trait PrincipalStoreContract
      * The store to check, empty: a new one for each test.
      */
     abstract protected function principalStore(string $implementation): PrincipalStore;
+
+    /**
+     * The transactions the store takes part in: the same instance within a test.
+     */
+    abstract protected function transactions(string $implementation): Transactions;
+
+    public function testPrincipalStoreRunsItsConcurrencyContract(): void
+    {
+        self::assertNull(Races::untested(static::class, PrincipalStoreConcurrencyContract::class));
+    }
+
+    #[DataProvider('implementations')]
+    public function testPrincipalStoreTakesPartInTheTransactions(string $implementation): void
+    {
+        $store = $this->principalStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $acme = new Realm('acme');
+        [$failed, $seen, $kept] = [self::principal($acme), self::principal($acme), self::principal($acme)];
+
+        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add($failed), static fn (): bool => null === $store->get($acme, $failed->id));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add($seen), static fn (): bool => null !== $store->get($acme, $seen->id));
+        InTransaction::assertTheTransactionGoesOn($transactions, [
+            static fn () => $store->add($seen),
+            static fn (): bool => $store->changeStatus($failed, $failed->withStatus(PrincipalStatus::Suspended, new \DateTimeImmutable('2026-10-28 08:00:00 UTC'))),
+        ], static fn () => $store->add($kept), static fn (): bool => null !== $store->get($acme, $kept->id));
+    }
 
     #[DataProvider('implementations')]
     public function testKeepsEveryField(string $implementation): void
