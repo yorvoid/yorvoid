@@ -1,2 +1,2 @@
 # PostgreSQL 17 for the tests, pinned by digest: Dependabot proposes its next minor version and digest.
-FROM postgres:17.11-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+FROM postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
