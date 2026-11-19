@@ -94,9 +94,13 @@ final readonly class OperationCatalogue
     }
 
     /**
+     * A command's operation, as its #[Operation] describes it.
+     *
      * @param class-string $command
+     *
+     * @internal For Operations: a consequence's operation, which may not be in the catalogue
      */
-    private static function describe(string $command): OperationDescription
+    public static function describe(string $command): OperationDescription
     {
         $class = new \ReflectionClass($command);
         $operation = Operation::of($command);

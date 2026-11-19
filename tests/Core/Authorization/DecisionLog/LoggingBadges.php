@@ -63,6 +63,7 @@ final class LoggingBadges implements OperationHandler
     public function record(RecordBadge $command, Permit $permit, Origin $origin): string
     {
         $permit->use($command);
+        $this->permits[] = $permit;
         $this->log->record($command->realm, 'acme.badge.record', Outcome::Success, $origin, details: ['badge' => 'recorded']);
 
         return 'recorded';

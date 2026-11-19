@@ -9,3 +9,6 @@ services:
     -
         class: YorvoID\PhpstanRules\InternalUseRule
         tags: [phpstan.rules.rule]
+    -
+        class: YorvoID\PhpstanRules\DecisionPointRule
+        tags: [phpstan.rules.rule]

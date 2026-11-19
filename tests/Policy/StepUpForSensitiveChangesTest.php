@@ -360,6 +360,8 @@ final class StepUpForSensitiveChangesTest extends TestCase
 
             try {
                 new Operations($catalogue, new class implements Authorization {
+                    use \YorvoID\Tests\Support\DecidesAlone;
+
                     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
                     {
                         return Decision::deny('Never.');
@@ -367,7 +369,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
                 }, $log, [$handler]);
                 self::fail('Another authorization can\'t be checked for them.');
             } catch (IntegratorError $error) {
-                self::assertSame(\sprintf('The handler %s needs forbids that only the Evaluator is checked for.', $handler::class), strtok($error->getMessage(), "\n"));
+                self::assertSame(\sprintf('The handler %s needs forbids this can\'t check.', $handler::class), strtok($error->getMessage(), "\n"));
             }
         }
     }

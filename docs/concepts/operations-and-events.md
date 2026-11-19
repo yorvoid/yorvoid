@@ -49,6 +49,33 @@ $principal = $operations->run(new SuspendPrincipal($realm, $principalId), $sessi
 - **The decision** is the evaluator's ([authorization](authorization.md)): Permit, Deny or Indeterminate. Only Permit runs anything; otherwise `run()` throws `NotPermitted`, with the decision: its reasons, and on a Deny what could change it, e.g. a step-up. Indeterminate means something the decision needs couldn't be established, and never permits.
 - **Abilities** are decided by roles ([roles](authorization.md#roles)): give the evaluator the role permit (`RolePermit`); the Symfony bundle does. An `AbilityPolicy` of your own can decide them too. Without either, no ability permits anything.
 
+## The decision point
+
+`Operations` asks the `Authorization` it's given everything it needs, and nothing else: `decide()` for an operation, `decideConsequence()` for each of its consequences, and, when it's built, whether the policy has the forbids a handler needs (`requireForbids()`), whether it can decide every operation in the catalogue (`checkCatalogue()`), and whether it decides offline (`decidesOffline()`). So the Evaluator can be decorated, to trace decisions or to refuse more, and keep every check. Extend `AuthorizationDecorator`, and override what you add to:
+
+```php
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Operation\AuthorizationDecorator;
+use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\OperationDescription;
+
+final class OnlyOnWeekdays extends AuthorizationDecorator
+{
+    public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
+    {
+        $decision = parent::decide($operation, $command, $actor, $origin);
+
+        return $this->weekend() ? Decision::deny('Not on weekends.') : $decision;
+    }
+}
+```
+
+- **A decorator can narrow a decision, never permit.** Only the Evaluator makes a Decision that permits: a decorator returns the Evaluator's decision, or a `Decision::deny()` or `Decision::indeterminate()` of its own. A permit always has a decision the decision log recorded.
+- **An `Authorization` of your own** that doesn't decorate the Evaluator implements all five: `requireForbids()` throws, since it can't check forbids, and `decidesOffline()` is false. It can't permit either, so it refuses everything or wraps an Evaluator.
+- **One decision point per application.** The bundle builds `Operations`; an application without it builds it once, in its composition root. A second one, over an evaluator that records nothing, would issue permits the decision log never saw: `yorvoid:log:verify --decisions` reports every entry that cites a decision the log doesn't hold as a permit, and the PHPStan rule `yorvoid.decisionPoint` flags `new Operations(...)` in your code ([PHPStan rules](../how-to/phpstan-rules.md)).
+
 ## Actors
 
 Every decision proves its actor before it reads it (D-45):
@@ -64,7 +91,9 @@ The origin's kind says where a request came from. The Symfony bridge marks a req
 
 A handler takes a `Permit` instead of an actor. Only `Operations::run()` issues one, after a Permit decision, for one command and one run: the handler calls `$permit->use($command)` before it changes anything, which fails for another command or a second use. So a handler can't be called around the decision.
 
-What an operation causes runs on a consequence of its permit, e.g. a recovery ending every session: `$permit->consequence($command)` gives a permit for that command, in the same realm, recorded under the same decision rather than decided again. Only for what the operation declares it causes, `#[Operation(..., causes: ['yorvoid.session.end_all'])]`, and each as many times as it's named there: once, unless it's named twice. A consequence about a principal (a command implementing `ConcernsPrincipal`, e.g. `IssueToken` or `EndSessions`) must be about the operation's own principal: its command's, if that's about one, or the one its handler names with `$permit->about($principalId)` once it knows it, e.g. the principal it created, or whose token it used. Until then, nothing about anyone runs on the permit.
+What an operation causes runs on a consequence of its permit, e.g. a recovery ending every session: `$permit->consequence($command)` gives a permit for that command, in the same realm. The `Authorization` that issued the operation's permit decides the consequence: the operation's decision holds, so its permits aren't asked again, but the actor is proven again, and a forbid that implements `AppliesToConsequences` is evaluated for it. A consequence it refuses throws `NotPermitted`, and the operation fails with it. Each consequence's decision is recorded under the operation's (its record's `parent`). Only for what the operation declares it causes, `#[Operation(..., causes: ['yorvoid.session.end_all'])]`, and each as many times as it's named there: once, unless it's named twice. A consequence about a principal (a command implementing `ConcernsPrincipal`, e.g. `IssueToken` or `EndSessions`) must be about the operation's own principal: its command's, if that's about one, or the one its handler names with `$permit->about($principalId)` once it knows it, e.g. the principal it created, or whose token it used. Until then, nothing about anyone runs on the permit.
+
+A permit holds the decision point that issued it, for its consequences: it's for the request it was issued in, and is never serialized.
 
 Principals' events carry their operation's permit, so a listener can run with it what the operation causes, about the same principal, and only what the operation hasn't run already. Whatever runs a consequence first uses it up: a second try fails with an `IntegratorError` naming it. Your listeners run your own operations through `Operations::run()`.
 

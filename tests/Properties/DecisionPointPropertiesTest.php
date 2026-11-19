@@ -59,7 +59,7 @@ final class DecisionPointPropertiesTest extends TestCase
             Set::of(...OriginKind::cases()),
         )->then(static function (Verdict $verdict, ?AuthorizedBy $basis, OriginKind $kind): void {
             try {
-                $decision = new Decision($verdict, $basis, 'decided', indeterminate: Verdict::Indeterminate === $verdict ? [IndeterminateReason::MissingData] : []);
+                $decision = \YorvoID\Tests\Support\Decisions::of($verdict, $basis, 'decided', indeterminate: Verdict::Indeterminate === $verdict ? [IndeterminateReason::MissingData] : []);
             } catch (IntegratorError) {
                 // A permit without a basis, or a refusal with one: no Authorization can give it.
                 self::assertSame(null === $basis, \in_array($verdict, [Verdict::Permit, Verdict::PermitOffline], true));
@@ -68,6 +68,8 @@ final class DecisionPointPropertiesTest extends TestCase
             }
 
             $authorization = new readonly class($decision) implements Authorization {
+                use \YorvoID\Tests\Support\DecidesAlone;
+
                 public function __construct(private Decision $decision)
                 {
                 }

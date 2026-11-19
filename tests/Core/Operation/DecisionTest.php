@@ -16,8 +16,8 @@ final class DecisionTest extends TestCase
 {
     public function testOnlyAPermitPermits(): void
     {
-        self::assertTrue(Decision::permit(AuthorizedBy::Self, 'yes')->permits());
-        self::assertFalse(new Decision(Verdict::PermitOffline, AuthorizedBy::Self, 'offline')->permits(), 'Permit-offline isn\'t a Permit (P1′).');
+        self::assertTrue(\YorvoID\Tests\Support\Decisions::permit(AuthorizedBy::Self, 'yes')->permits());
+        self::assertFalse(\YorvoID\Tests\Support\Decisions::of(Verdict::PermitOffline, AuthorizedBy::Self, 'offline')->permits(), 'Permit-offline isn\'t a Permit (P1′).');
         self::assertFalse(Decision::deny('no')->permits());
         self::assertFalse(Decision::indeterminate([IndeterminateReason::MissingData], 'can\'t tell')->permits());
     }
@@ -38,7 +38,7 @@ final class DecisionTest extends TestCase
             'Indeterminate with remedies' => [Verdict::Indeterminate, null, [$remedy], [IndeterminateReason::MissingData]],
         ] as $what => [$verdict, $basis, $remedies, $indeterminate]) {
             try {
-                new Decision($verdict, $basis, 'decided', [], $remedies, $indeterminate);
+                \YorvoID\Tests\Support\Decisions::of($verdict, $basis, 'decided', [], $remedies, $indeterminate);
                 self::fail(\sprintf('A decision was made of %s.', $what));
             } catch (IntegratorError $error) {
                 self::assertSame(\sprintf('A %s decision can\'t have these parts.', $verdict->value), $error->problem);

@@ -15,7 +15,9 @@ use YorvoID\Core\Realm;
  * changes anything, so a handler can't be called around the decision point (D-38).
  *
  * What an operation causes, e.g. a recovery ending every session, runs on a consequence() of the
- * handler's permit: decided as part of the operation, not again. Only what the operation declares it
+ * handler's permit, which the Authorization that issued it decides as a consequence (D-50): the
+ * operation's decision holds unless it refuses, and each consequence has its own decision, recorded
+ * under the operation's. Only what the operation declares it
  * causes (#[Operation(causes: [...])]), so a listener handed the permit can't run anything else with it,
  * and each as many times as it's declared: once, unless it's named twice.
  *
@@ -26,6 +28,9 @@ use YorvoID\Core\Realm;
  *
  * A permit issued on Permit-offline, while a store was unreachable, says so ($offline), and so do its
  * consequences: only operations that declare acceptsOffline get one (P1′).
+ *
+ * A permit holds the decision point that issued it, to decide its consequences: it's for this request
+ * only, and never serialized.
  *
  * @api
  */
@@ -54,6 +59,8 @@ final class Permit
         private readonly Command $command,
         public readonly ?self $parent = null,
         public readonly bool $offline = false,
+        private readonly ?Decision $decision = null,
+        private readonly ?\Closure $consequences = null,
     ) {
         $this->principal = $command instanceof ConcernsPrincipal ? $command->principal() : null;
     }
@@ -143,9 +150,29 @@ final class Permit
             }
         }
 
+        $actor = null === $actingAs ? $this->actor : new ActingPrincipal($this->realm, $actingAs);
+        $decision = null;
+
+        if (null !== $this->consequences) {
+            // Operations gives a permit both, or neither.
+            \assert(null !== $this->decision);
+            /** @var Decision $decision */
+            $decision = ($this->consequences)($this->decision, $command, $actor);
+            $runs = match ($decision->verdict) {
+                Verdict::Permit => true,
+                Verdict::PermitOffline => $this->offline,
+                Verdict::Deny, Verdict::Indeterminate => false,
+            };
+
+            if (!$runs) {
+                // The operation fails with it, and its transaction rolls back.
+                throw new NotPermitted($consequence, $decision);
+            }
+        }
+
         $this->caused[$consequence] = $caused + 1;
 
-        return new self($consequence, null === $actingAs ? $this->actor : new ActingPrincipal($this->realm, $actingAs), AuthorizedBy::Consequence, $this->decisionId, $command, $this, $this->offline);
+        return new self($consequence, $actor, AuthorizedBy::Consequence, $decision->id ?? $this->decisionId, $command, $this, $this->offline, $decision, $this->consequences);
     }
 
     /**

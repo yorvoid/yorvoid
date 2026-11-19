@@ -159,9 +159,11 @@ final class OfflineTest extends TestCase
     {
         $badges = new Badges();
         $offline = new readonly class implements Authorization {
+            use \YorvoID\Tests\Support\DecidesAlone;
+
             public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
             {
-                return new Decision(Verdict::PermitOffline, AuthorizedBy::Self, 'Permitted offline: whatever it is');
+                return \YorvoID\Tests\Support\Decisions::of(Verdict::PermitOffline, AuthorizedBy::Self, 'Permitted offline: whatever it is');
             }
         };
         $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), $offline, new SecurityLog(new InMemorySecurityLogStore(), new InMemoryTransactions()), [$badges]);
@@ -201,6 +203,8 @@ final class OfflineTest extends TestCase
 
         try {
             new Operations(new OperationCatalogue([OpenDoor::class, LogDoor::class]), new readonly class implements Authorization {
+                use \YorvoID\Tests\Support\DecidesAlone;
+
                 public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
                 {
                     return Decision::deny('no');

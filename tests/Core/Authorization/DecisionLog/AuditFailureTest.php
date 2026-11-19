@@ -109,7 +109,7 @@ final class AuditFailureTest extends TestCase
     public function testRefusingAPermitOfflineWhoseRecordCantBeWrittenMakesItIndeterminate(): void
     {
         $this->store->failing = true;
-        $offline = new Decision(Verdict::PermitOffline, AuthorizedBy::Ability, 'offline', [], [], [], (string) new UuidV7(), $this->clock->now());
+        $offline = \YorvoID\Tests\Support\Decisions::of(Verdict::PermitOffline, AuthorizedBy::Ability, 'offline', [], [], [], (string) new UuidV7(), $this->clock->now());
 
         self::assertSame(Verdict::Indeterminate, $this->log(AuditFailure::Refuse)->record($this->ability(), $offline)->verdict, 'Permit-offline is always recorded.');
     }
@@ -166,8 +166,9 @@ final class AuditFailureTest extends TestCase
         $operations->run(new IssueBadge($this->realm, $ana), new Member($this->realm, $ana), new Origin(OriginKind::Web));
 
         $recorded = $this->events->of(DecisionRecorded::class);
-        self::assertCount(1, $recorded);
-        self::assertSame(['operation', 'permit'], [$recorded[0]->record->kind, $recorded[0]->record->verdict]);
+        self::assertCount(2, $recorded, 'The operation\'s decision, and its consequence\'s.');
+        self::assertSame(['operation', 'permit', null], [$recorded[0]->record->kind, $recorded[0]->record->verdict, $recorded[0]->record->parent]);
+        self::assertSame($recorded[0]->record->id, $recorded[1]->record->parent);
 
         $this->store->failing = true;
 
@@ -176,7 +177,7 @@ final class AuditFailureTest extends TestCase
         } catch (NotPermitted) {
         }
 
-        self::assertCount(1, $this->events->of(DecisionRecorded::class), 'A record that wasn\'t written was announced.');
+        self::assertCount(2, $this->events->of(DecisionRecorded::class), 'A record that wasn\'t written was announced.');
     }
 
     /**
@@ -258,7 +259,7 @@ final class AuditFailureTest extends TestCase
     {
         $verdicts = [
             fn (): Decision => $this->decided(self::permit()),
-            fn (): Decision => new Decision(Verdict::PermitOffline, AuthorizedBy::Ability, 'offline', [], [], [], (string) new UuidV7(), $this->clock->now()),
+            fn (): Decision => \YorvoID\Tests\Support\Decisions::of(Verdict::PermitOffline, AuthorizedBy::Ability, 'offline', [], [], [], (string) new UuidV7(), $this->clock->now()),
             fn (): Decision => $this->decided(Decision::deny('No.')),
             fn (): Decision => $this->decided(Decision::indeterminate([IndeterminateReason::StoreUnreachable], 'Down.')),
         ];
@@ -373,6 +374,6 @@ final class AuditFailureTest extends TestCase
 
     private static function permit(): Decision
     {
-        return Decision::permit(AuthorizedBy::Ability, 'A permit applies.');
+        return \YorvoID\Tests\Support\Decisions::permit(AuthorizedBy::Ability, 'A permit applies.');
     }
 }

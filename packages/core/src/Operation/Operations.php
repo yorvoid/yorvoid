@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
-use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
@@ -49,13 +48,7 @@ final readonly class Operations
             // The changes that only the policy's forbids keep safe, e.g. giving roles, need them whatever permits
             // them (M2-13).
             if ($handler instanceof RequiresForbids) {
-                $what = \sprintf('The handler %s', $handler::class);
-
-                if (!$authorization instanceof Evaluator) {
-                    throw new IntegratorError(\sprintf('%s needs forbids that only the Evaluator is checked for.', $what), 'Decide with the Evaluator, given the forbids they need.', 'concepts/authorization.md#policy-elements');
-                }
-
-                $authorization->requireForbids($what, $handler);
+                $authorization->requireForbids(\sprintf('The handler %s', $handler::class), $handler);
             }
 
             foreach ($handler->operations() as $command => $method) {
@@ -69,12 +62,10 @@ final readonly class Operations
 
         $this->handlers = $map;
 
-        if ($authorization instanceof Evaluator) {
-            $authorization->checkCatalogue($catalogue);
-        }
+        $authorization->checkCatalogue($catalogue);
 
         $accepting = array_keys(array_filter($catalogue->all(), static fn (OperationDescription $operation): bool => $operation->acceptsOffline));
-        $decidesOffline = $authorization instanceof Evaluator && $authorization->decidesOffline();
+        $decidesOffline = $authorization->decidesOffline();
 
         // Offline is decided when YorvoID is built, never switched on by accident (PLT-004).
         if ($decidesOffline && [] === $accepting) {
@@ -125,14 +116,27 @@ final readonly class Operations
 
         $basis = $decision->basis;
         // Only here: Permit's constructor is private to everything else.
-        $issue = \Closure::bind(static fn (string $name, Actor $actor, AuthorizedBy $basis, string $id, Command $command, bool $offline): Permit => new Permit($name, $actor, $basis, $id, $command, offline: $offline), null, Permit::class);
+        $issue = \Closure::bind(static fn (string $name, Actor $actor, AuthorizedBy $basis, Decision $decision, string $id, Command $command, bool $offline, \Closure $consequences): Permit => new Permit($name, $actor, $basis, $id, $command, offline: $offline, decision: $decision, consequences: $consequences), null, Permit::class);
+        // Its consequences are decided by the same path, from the same origin (D-50).
+        $consequences = fn (Decision $parent, Command $caused, Actor $by): Decision => $this->authorization->decideConsequence($parent, $this->describe($caused), $caused, $by, $origin);
 
-        return $this->log->citing($decision, function () use ($command, $actor, $origin, $operation, $handler, $issue, $basis, $decision, $offline): mixed {
+        return $this->log->citing($decision, function () use ($command, $actor, $origin, $operation, $handler, $issue, $basis, $decision, $offline, $consequences): mixed {
             if ($offline) {
                 $this->log->record($command->realm, 'yorvoid.decision.offline', Outcome::Success, $origin, $actor->principalId, 'operation', $operation->name, ['reason' => $decision->reason]);
             }
 
-            return $handler($command, $issue($operation->name, $actor, $basis, $decision->id ?? (string) $this->ids->next(), $command, $offline), $origin);
+            return $handler($command, $issue($operation->name, $actor, $basis, $decision, $decision->id ?? (string) $this->ids->next(), $command, $offline, $consequences), $origin);
         });
+    }
+
+    /**
+     * A consequence's operation: from the catalogue, or from its command, since a consequence-only
+     * operation may have no handler of its own here.
+     *
+     * @param Command<mixed> $command
+     */
+    private function describe(Command $command): OperationDescription
+    {
+        return $this->catalogue->has(Operation::of($command::class)->name) ? $this->catalogue->forCommand($command::class) : OperationCatalogue::describe($command::class);
     }
 }

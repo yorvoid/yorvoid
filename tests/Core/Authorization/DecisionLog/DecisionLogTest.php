@@ -115,7 +115,12 @@ final class DecisionLogTest extends TestCase
         $record = $this->store->find($this->realm, $permit->decisionId);
         self::assertNotNull($record);
         self::assertSame(['operation', 'acme.badge.issue', (string) $ana, 'permit', 'self', ['web', 'request-1'], ['policy' => 3]], [$record->kind, $record->name, $record->actor, $record->verdict, $record->basis, $record->origin, $record->versions]);
-        self::assertSame(1, $this->store->writes, 'One write; the consequence is no decision of its own.');
+        // The consequence is decided by the same path, and recorded under the operation's decision (D-50).
+        $caused = $this->store->find($this->realm, $badges->permits[1]->decisionId);
+        self::assertNotNull($caused);
+        self::assertSame(['operation', 'acme.badge.record', 'permit', 'consequence', $permit->decisionId], [$caused->kind, $caused->name, $caused->verdict, $caused->basis, $caused->parent]);
+        self::assertNotSame($permit->decisionId, $badges->permits[1]->decisionId);
+        self::assertSame(2, $this->store->writes, 'The operation\'s decision, then its consequence\'s.');
     }
 
     public function testWhatAnOperationRecordsCitesItsDecision(): void
@@ -173,14 +178,14 @@ final class DecisionLogTest extends TestCase
 
     public function testAnEntryKeepsADecisionItNamesItself(): void
     {
-        $decision = Decision::permit(\YorvoID\Core\Operation\AuthorizedBy::Operator, 'Ran.')->identified('d-1', $this->clock->now(), []);
+        $decision = \YorvoID\Tests\Support\Decisions::permit(\YorvoID\Core\Operation\AuthorizedBy::Operator, 'Ran.')->identified('d-1', $this->clock->now(), []);
 
         $this->log->citing($decision, fn (): LogEntry => $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console), details: ['decision' => 'its own']));
         $this->log->citing($decision, function (): void {
             $this->log->reset();
             $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console));
         });
-        $this->log->citing(Decision::permit(\YorvoID\Core\Operation\AuthorizedBy::Operator, 'Ran.'), fn (): LogEntry => $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console)));
+        $this->log->citing(\YorvoID\Tests\Support\Decisions::permit(\YorvoID\Core\Operation\AuthorizedBy::Operator, 'Ran.'), fn (): LogEntry => $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console)));
 
         self::assertSame([['decision' => 'its own'], [], []], array_map(static fn (LogEntry $entry): array => $entry->details, $this->entries()), 'A reset, or a decision without an ID, cites nothing.');
         self::assertSame(['decision' => ['id' => 'd-1']], $this->log->citing($decision, fn (): array => $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console))->details), 'Without a decision log, only its ID.');
@@ -266,7 +271,7 @@ final class DecisionLogTest extends TestCase
     public function testWhichPermitsOfAbilitiesAreRecorded(): void
     {
         $recorded = function (DecisionLog $log, string $ability = 'acme.pages.edit', string $correlation = 'request-1'): bool {
-            $decision = $log->record($this->ability($ability, $correlation), $this->decided(Decision::permit(\YorvoID\Core\Operation\AuthorizedBy::Ability, 'Holds it.')));
+            $decision = $log->record($this->ability($ability, $correlation), $this->decided(\YorvoID\Tests\Support\Decisions::permit(\YorvoID\Core\Operation\AuthorizedBy::Ability, 'Holds it.')));
             $log->flush();
 
             return null !== $decision->hash && null !== $this->store->find($this->realm, (string) $decision->id);
@@ -280,7 +285,7 @@ final class DecisionLogTest extends TestCase
         self::assertTrue($recorded(new DecisionLog($this->store, PermitRecording::Sampled, 1.0)));
 
         $offline = new DecisionLog($this->store);
-        $decision = $offline->record($this->ability(), new Decision(\YorvoID\Core\Operation\Verdict::PermitOffline, \YorvoID\Core\Operation\AuthorizedBy::Ability, 'Offline.')->identified((string) new UuidV7(), $this->clock->now(), []));
+        $decision = $offline->record($this->ability(), \YorvoID\Tests\Support\Decisions::of(\YorvoID\Core\Operation\Verdict::PermitOffline, \YorvoID\Core\Operation\AuthorizedBy::Ability, 'Offline.')->identified((string) new UuidV7(), $this->clock->now(), []));
         self::assertNotNull($decision->hash, 'Permit-offline is always recorded.');
 
         $byDefault = new DecisionLog($this->store, PermitRecording::Sampled);

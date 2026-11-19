@@ -124,6 +124,56 @@ final readonly class DecisionDigests
     }
 
     /**
+     * Whether each entry of the realm's chain that cites a decision cites one the decision log has: a
+     * Permit, with the hash cited (D-50). An entry citing a decision that isn't there was permitted by
+     * a decision point that records nothing, e.g. a second Operations; one written before the records
+     * were pruned is passed over.
+     *
+     * @return list<string> Each entry whose citation doesn't hold
+     *
+     * @phpstan-impure
+     */
+    public function citations(Realm $realm): array
+    {
+        $prunedBefore = $this->store->prunedBefore();
+        $problems = [];
+
+        foreach ($this->entries->entries($realm, 1) as $entry) {
+            $cited = $entry->details['decision'] ?? null;
+
+            if (!\is_array($cited) || !\is_string($cited['id'] ?? null)) {
+                continue;
+            }
+
+            $record = $this->store->find($realm, $cited['id']);
+
+            if (null === $record) {
+                if (self::microseconds($entry->recordedAt) >= $prunedBefore) {
+                    $problems[] = \sprintf('Entry %d (%s) cites the decision %s, which the decision log doesn\'t have.', $entry->sequence, $entry->action, $cited['id']);
+                }
+
+                continue;
+            }
+
+            if (!\in_array($record->verdict, ['permit', 'permit_offline'], true)) {
+                $problems[] = \sprintf('Entry %d (%s) cites the decision %s, which is a %s.', $entry->sequence, $entry->action, $cited['id'], $record->verdict);
+            } elseif (\is_string($cited['hash'] ?? null) && !hash_equals($cited['hash'], $record->hash())) {
+                $problems[] = \sprintf('Entry %d (%s) cites the decision %s with another hash than its record\'s.', $entry->sequence, $entry->action, $cited['id']);
+            }
+        }
+
+        return $problems;
+    }
+
+    /**
+     * An entry's time as the decision log counts it: microseconds since the epoch.
+     */
+    private static function microseconds(\DateTimeImmutable $at): int
+    {
+        return (int) $at->format('Uu');
+    }
+
+    /**
      * @param list<array{string, string}> $records Each one's ID and hash, in the order written
      */
     private static function root(array $records): string

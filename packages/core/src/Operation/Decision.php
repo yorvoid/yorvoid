@@ -14,6 +14,10 @@ use YorvoID\Core\Exception\IntegratorError;
  * What the {@see Authorization} decided about one actor running one operation: the verdict, why, and
  * what could change a refusal.
  *
+ * Only the Evaluator makes one that permits (D-50): an Authorization of your own, or a decorator, can
+ * refuse with deny() or indeterminate(), or return what the Evaluator decided, but can't permit, since
+ * Operations::run() would turn that into a permit nothing recorded.
+ *
  * @api
  */
 final readonly class Decision
@@ -34,7 +38,7 @@ final readonly class Decision
      *
      * @throws IntegratorError When the parts don't fit the verdict
      */
-    public function __construct(
+    private function __construct(
         public Verdict $verdict,
         public ?AuthorizedBy $basis,
         public string $reason,
@@ -57,14 +61,6 @@ final readonly class Decision
         if (!$fits) {
             throw new IntegratorError(\sprintf('A %s decision can\'t have these parts.', $verdict->value), 'A permit has a basis and nothing else; a refusal has no basis; only a Deny has remedies, and only Indeterminate has reasons it couldn\'t decide.', 'concepts/authorization.md');
         }
-    }
-
-    /**
-     * @param list<Reason> $reasons
-     */
-    public static function permit(AuthorizedBy $basis, string $reason, array $reasons = [], ?Precedence $precedence = null): self
-    {
-        return new self(Verdict::Permit, $basis, $reason, $reasons, precedence: $precedence);
     }
 
     /**
