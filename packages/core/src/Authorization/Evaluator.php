@@ -276,7 +276,7 @@ final readonly class Evaluator implements Authorization
         $sides = [];
 
         foreach ($requests as $request) {
-            $both = self::sides($request);
+            $both = $this->sides($request);
             array_push($sides, ...$both);
 
             if ($request->actor instanceof ViewingAs) {
@@ -428,15 +428,28 @@ final readonly class Evaluator implements Authorization
     }
 
     /**
-     * Who the elements decide for: the actor, or both sides of a view-as.
+     * Who the elements decide for: the actor, or both sides of a view-as. A viewer that isn't proven views
+     * nothing: each side is judged by why it isn't (D-45).
      *
      * @return non-empty-list<Request>
      */
-    private static function sides(Request $request): array
+    private function sides(Request $request): array
     {
         $actor = $request->actor;
 
-        return $actor instanceof ViewingAs ? [$request->by($actor->viewer), $request->by($actor->target)] : [$request];
+        if (!$actor instanceof ViewingAs) {
+            return [$request];
+        }
+
+        $sides = [$request->by($actor->viewer), $request->by($actor->target)];
+
+        if (null !== ($unproven = $this->unproven[$request] ?? null)) {
+            foreach ($sides as $side) {
+                $this->unproven[$side] = $unproven;
+            }
+        }
+
+        return $sides;
     }
 
     private function judge(Request $request): Decision
@@ -518,13 +531,7 @@ final readonly class Evaluator implements Authorization
         }
 
         // A Request is the key elements keep what they preloaded by: the same sides, if it was a batch.
-        [$viewerSide, $targetSide] = $this->sides[$request] ?? self::sides($request);
-
-        // A viewer that isn't proven views nothing: each side is judged by why it isn't (D-45).
-        if (null !== ($unproven = $this->unproven[$request] ?? null)) {
-            $this->unproven[$viewerSide] = $unproven;
-            $this->unproven[$targetSide] = $unproven;
-        }
+        [$viewerSide, $targetSide] = $this->sides[$request] ?? $this->sides($request);
 
         $viewer = $this->judge($viewerSide);
         $target = $this->judge($targetSide);
