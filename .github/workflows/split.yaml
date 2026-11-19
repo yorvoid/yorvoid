@@ -15,7 +15,8 @@ on:
       - main
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
   # Only the install check, again, for a release that's already split: with this branch's script.
   workflow_dispatch:
     inputs:
@@ -34,16 +35,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  split:
-    name: Split packages
+  # Whether to split, in a job of its own with read permissions only: the job holding the app's
+  # credentials starts only once it has passed.
+  check:
+    name: Check the commit may be split
     if: >-
       github.repository == 'yorvoid/yorvoid'
       && (github.event_name == 'push'
       || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
-    # Holds the GitHub App's credentials, which only main and version tags can use. A job's "if" can't
-    # see the environment's variables, so their absence fails the job below rather than skipping it.
-    environment: split
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      split: ${{ steps.passed.outputs.split }}
+      ref: ${{ steps.passed.outputs.ref }}
+      commit: ${{ steps.passed.outputs.commit }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,9 +82,35 @@ jobs:
             echo "ref=$GITHUB_REF" >> "$GITHUB_OUTPUT"
           fi
 
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "split=true" >> "$GITHUB_OUTPUT"
+
+  split:
+    name: Split packages
+    needs: check
+    if: needs.check.outputs.split == 'true'
+    # Holds the GitHub App's credentials, which only main and version tags can use. A job's "if" can't
+    # see the environment's variables, so their absence fails the job below rather than skipping it.
+    environment: split
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || 'main' }}
+          fetch-depth: 0
+          persist-credentials: false
+      # The tag or branch could have moved since it was checked.
+      - name: Check it's still the commit checked
+        env:
+          REF: ${{ needs.check.outputs.ref }}
+          CHECKED: ${{ needs.check.outputs.commit }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$CHECKED" ] || [ "$(git rev-parse "$REF^{commit}")" != "$CHECKED" ]; then
+            echo "::error::$REF has moved since $CHECKED was checked: a newer run releases it, if it may be."
+            exit 1
+          fi
       - name: Check the split app is configured
-        if: steps.passed.outputs.split == 'true'
         env:
           CLIENT_ID: ${{ vars.SPLIT_APP_CLIENT_ID }}
           PRIVATE_KEY_SET: ${{ secrets.SPLIT_APP_PRIVATE_KEY != '' }}
@@ -89,13 +120,11 @@ jobs:
             exit 1
           fi
       - name: List the repositories
-        if: steps.passed.outputs.split == 'true'
         id: repositories
         run: echo "names=$(jq -r 'map(.repository | split("/")[1]) | join(",")' .github/split.json)" >> "$GITHUB_OUTPUT"
       # A GitHub App of the organisation, installed on those repositories, with permission to write
       # their contents and workflows. Its token lasts an hour and can't write anywhere else.
       - name: Get a token for the repositories
-        if: steps.passed.outputs.split == 'true'
         id: token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -106,10 +135,9 @@ jobs:
           permission-contents: write
           permission-workflows: write
       - name: Split and push
-        if: steps.passed.outputs.split == 'true'
         run: .github/split.sh "$REF" --push
         env:
-          REF: ${{ steps.passed.outputs.ref }}
+          REF: ${{ needs.check.outputs.ref }}
           GIT_TOKEN: ${{ steps.token.outputs.token }}
 
   # After a version tag is split, or when run by hand for a tag: whether its packages install together

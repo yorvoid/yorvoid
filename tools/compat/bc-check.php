@@ -79,7 +79,7 @@ foreach (orNone(glob("$work/to/packages/*/composer.json")) as $manifest) {
 }
 
 if ($unlisted > 0) {
-    echo "\n$unlisted break(s) of covered code aren't in the changelog: list each under \"### Breaking\" in \"## Unreleased\", naming its class, or keep the code compatible.\n";
+    echo "\n$unlisted break(s) of covered code aren't in the changelog: list each under \"### Breaking\" in \"## [Unreleased]\", naming its class, or keep the code compatible.\n";
     exit(1);
 }
 
@@ -183,7 +183,7 @@ function breakingSince(string $changelog, string $version): string
     $listed = '';
 
     foreach (orNone(preg_split('/^(?=## )/m', $changelog)) as $section) {
-        if (str_starts_with($section, '## '.$version.' ') || str_starts_with($section, '## '.$version."\n")) {
+        if (str_starts_with($section, '## ['.$version.']')) {
             break;
         }
 

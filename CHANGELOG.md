@@ -2,7 +2,7 @@
 
 All of YorvoID's packages are released together, with the same version ([compatibility](docs/compatibility.md)). Each release lists what changed, and what to do where a change breaks covered code.
 
-## Unreleased
+## [Unreleased]
 
 ### Added
 
@@ -65,7 +65,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - The stores convert values through the connection (`Connection::convertToPHPValue()`), not `Type::getType()`, which Doctrine DBAL 4.6 deprecates: no deprecations with DBAL 4.6.
 - `yorvoid/policy-testing` suggests `symfony/config` with the other packages its Symfony bundle needs: Symfony's `Bundle` doesn't load without it.
 
-## 0.4.0 (2026-11-13)
+## [0.4.0] - 2026-11-13
 
 Every operation runs through one decision point: `Operations::run()` asks the evaluator, and gives its handler a permit. Abilities, roles, relations, groups and attributes in `yorvoid/policy` and `yorvoid/relations`, with policy tests and mutation testing in `yorvoid/policy-testing`; the decision log; a FIPS mode and ES256 keys; refusals people can act on; and the fixes from the authorization audit (M2-13).
 
@@ -165,7 +165,7 @@ Every operation runs through one decision point: `Operations::run()` asks the ev
 - The recovery pages say they sign you out "on your other devices and browsers", not "everywhere else", and the emails after a recovery code or link say "your other devices and browsers were signed out", not "everyone else".
 - The packages require each other at the version they're released with (`^0.4` for 0.4), so a release installs as a set. 0.2.0 and 0.3.0 required `^0.1` of each other and don't install together from Packagist: stay on 0.1.0, or take 0.4.0. Every release now checks this before it's published, and installs from Packagist afterwards.
 
-## 0.3.0 (2026-11-06)
+## [0.3.0] - 2026-11-06
 
 A setup code claims a realm under the security log's lock, and CI holds the packages to the compatibility promise: no `@internal` type in the API, no break the changelog doesn't list.
 
@@ -182,7 +182,7 @@ A setup code claims a realm under the security log's lock, and CI holds the pack
 
 - A setup code claims a realm only if no principal became active before it, also one created at the same moment another way: the claim locks the realm's log before it checks.
 
-## 0.2.0 (2026-11-05)
+## [0.2.0] - 2026-11-05
 
 Stricter passkey and intent checks, signed checkpoints of the security log, Symfony 7.4 LTS next to 8.1, and two new packages: `yorvoid/notifications` and `yorvoid/intent-signing`.
 
@@ -228,6 +228,6 @@ Stricter passkey and intent checks, signed checkpoints of the security log, Symf
 - Flows end in a problem, not an error, when a proof lapses, an operation waits out a recovery's cool-down, or someone has no passkey to confirm with.
 - A failing mailer is logged, and fails neither a sign-in nor the change it's about.
 
-## 0.1.0 (2026-11-03)
+## [0.1.0] - 2026-11-03
 
 The first release: passkeys, recovery codes and links, sessions, step-up, flows with their pages, signed intents with their verifier, security notifications, the security log, and the Symfony bridge.
