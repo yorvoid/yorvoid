@@ -70,6 +70,41 @@ deptrac:
       collectors:
         - type: classLike
           value: ^YorvoID\\Core\\[A-Za-z]+$
+    # Whatever matches none of the layers above, e.g. a new namespace: it may depend on nothing, and
+    # nothing may depend on it, until it's listed.
+    - name: Unlisted
+      collectors:
+        - type: bool
+          must:
+            - type: classLike
+              value: ^YorvoID\\Core\\.*
+          must_not:
+            - type: classLike
+              value: ^YorvoID\\Core\\Authorization\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Clock\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Crypto\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Event\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Exception\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Id\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Key\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Log\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Migrations\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Operation\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Principal\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\Storage\\.*
+            - type: classLike
+              value: ^YorvoID\\Core\\[A-Za-z]+$
   ruleset:
     Authorization:
       - Clock
@@ -135,6 +170,7 @@ deptrac:
       - Storage
     Root:
       - Exception
+    Unlisted: ~
     Storage:
       - Event
       - Exception
