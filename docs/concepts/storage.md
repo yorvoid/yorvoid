@@ -62,6 +62,14 @@ Listeners of "-ed" events may write in transactions of their own, e.g. a [notifi
 
 A listener that fails after the commit doesn't fail the commit: your data is committed, and an exception would say otherwise and invite a retry. YorvoID logs the failure at error and runs the remaining listeners. What waits for the end of a transaction, e.g. disabling a copied passkey, raises the audit alert instead (`AuditFailed`, `after_end`), as does a [security notification](notifications.md) that couldn't be sent. A listener must end the transactions it begins: one it leaves open is rolled back and reported, and the connection stays usable. A listener that ends the transaction it runs in (a `commit()` or `rollBack()` with no transaction of its own open) ends only its own, and is reported too; the other listeners still run. If rolling back what a failed listener left fails as well, YorvoID closes the connection, and DBAL reconnects on its next use.
 
+### When transactions conflict
+
+Two transactions can get in each other's way: a deadlock, or a serialization failure under `REPEATABLE READ` or `SERIALIZABLE`. The database rolls one back, and YorvoID throws `RetryableConflict` (with the database's exception as its previous): nothing of that transaction is committed, and running the same work again usually succeeds.
+
+- **YorvoID retries its own operations.** `Operations::run()` runs an operation, its decision included, up to 3 times, a few tens of milliseconds apart, when its transaction conflicts: each attempt is decided again, on what's committed then, so a permission taken away in the meantime refuses it. What a conflicted attempt left for after its commit or its end goes with it, and what the request read from the caches is forgotten. Give `Operations` the `Transactions` (`transactions:`); the Symfony bundle does.
+- **Inside your transaction, you retry.** When YorvoID's work runs in a transaction you opened, `transactional()`, `wrapInTransaction()` or Messenger's `doctrine_transaction`, the conflict rolls back all of it, your own changes too, so it's yours to run again: YorvoID throws `RetryableConflict` at once. Messenger's retry does that for a message. In Symfony, a request that ends with one gets 503 with `Retry-After`.
+- **Work of your own** that should be retried the same way runs in `$transactions->retrying(fn () => ...)`. It does nothing outside the database except through `afterCommit()` and `afterEnd()`, or what's fine done twice: whatever else it does, it does again.
+
 ### Without a database
 
 In tests, or an application that keeps nothing between runs, YorvoID's stores can live in memory. A failed change must then undo what it did in every store, as a database's rollback does: YorvoID relies on it, e.g. the last way to sign in can't be removed. Build them all at once, registered, with `InMemoryStorage` from `yorvoid/testing`:

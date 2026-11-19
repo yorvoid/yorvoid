@@ -58,6 +58,14 @@ final class PdoTransactions implements Transactions
         return $result;
     }
 
+    /**
+     * An SQLite file serializes its writers, so its transactions don't deadlock: the work runs once.
+     */
+    public function retrying(\Closure $work): mixed
+    {
+        return $work();
+    }
+
     public function afterEnd(\Closure $callback): void
     {
         // A failure goes no further than its own callback: log it in a project of your own.

@@ -49,4 +49,27 @@ interface Transactions
      * @param \Closure(): void $callback
      */
     public function afterEnd(\Closure $callback): void;
+
+    /**
+     * Runs the work, and again, from the start, when a transaction of its conflicted with another (a
+     * deadlock, a serialization failure) and rolled back: up to 3 attempts in all, with a short random
+     * wait between them. It opens no transaction itself: the work's own do, so what the work does outside
+     * them, e.g. counting an attempt, stays done. What a transaction that conflicted left waiting with
+     * afterCommit() or afterEnd() goes with it, and what keeps what it read (ForgetsWhatItRead) forgets
+     * it. Inside a transaction that's already open, it runs once, and a conflict throws
+     * RetryableConflict, for whoever opened the transaction to retry: the work of an application's
+     * transaction isn't YorvoID's to run again (D-52).
+     *
+     * Only for work that does nothing outside the database except through afterCommit() and afterEnd(),
+     * or what's fine done again: whatever else it does, it does again.
+     *
+     * @template T
+     *
+     * @param \Closure(): T $work
+     *
+     * @return T
+     *
+     * @throws RetryableConflict After the third attempt, or at once inside an open transaction
+     */
+    public function retrying(\Closure $work): mixed;
 }

@@ -102,6 +102,16 @@ final class CommitHooks
     }
 
     /**
+     * Drops everything waiting, for the commit and for the end: the outermost transaction conflicted,
+     * and its work runs again from the start and leaves them again (D-52).
+     */
+    public function discard(): void
+    {
+        $this->callbacks = [];
+        $this->ended = [];
+    }
+
+    /**
      * Makes the next commit wait for runCommitted(): YorvoID's own unit of work runs the callbacks once
      * DBAL has finished committing.
      */

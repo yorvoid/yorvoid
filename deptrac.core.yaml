@@ -159,6 +159,8 @@ deptrac:
       - Log
       - Principal
       - Root
+      # Operations::run() runs an operation, its decision included, again when its transaction conflicts.
+      - Storage
     Principal:
       - Event
       - Exception

@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace YorvoID\Core\Storage\Dbal;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception\DeadlockException;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\AuditAlarm;
+use YorvoID\Core\Storage\ForgetsWhatItRead;
+use YorvoID\Core\Storage\RetryableConflict;
+use YorvoID\Core\Storage\RetryScope;
 use YorvoID\Core\Storage\Transactions;
 
 /**
@@ -22,20 +26,42 @@ use YorvoID\Core\Storage\Transactions;
  */
 final readonly class DbalTransactions implements Transactions
 {
+    /** How many times retrying() runs work that conflicts, in all */
+    public const int ATTEMPTS = 3;
+
     private AuditAlarm $alarm;
 
     private LoggerInterface $logger;
 
+    /** @var list<ForgetsWhatItRead> */
+    private array $reads;
+
+    private \Closure $wait;
+
+    private \Closure $random;
+
+    private RetryScope $retrying;
+
     /**
-     * @param EventDispatcherInterface $events Where an afterEnd() callback's failure is announced (AuditFailed)
-     * @param LoggerInterface          $logger Where it's logged, at critical, and an afterCommit() callback's at error
+     * @param EventDispatcherInterface       $events Where an afterEnd() callback's failure is announced (AuditFailed)
+     * @param LoggerInterface                $logger Where it's logged, at critical, and an afterCommit() callback's at error
+     * @param iterable<ForgetsWhatItRead>    $reads  What forgets what it read before work that conflicted runs again
+     * @param (\Closure(int): void)|null     $wait   How it waits before an attempt, in microseconds: usleep() if not given
+     * @param (\Closure(int, int): int)|null $random How long, between two bounds: random_int() if not given
      */
     public function __construct(
         private Connection $connection,
         private ?TransactionMiddleware $middleware = null,
         EventDispatcherInterface $events = new NoEventListeners(),
         LoggerInterface $logger = new NullLogger(),
+        iterable $reads = [],
+        ?\Closure $wait = null,
+        ?\Closure $random = null,
     ) {
+        $this->reads = array_values([...$reads]);
+        $this->wait = $wait ?? usleep(...);
+        $this->random = $random ?? random_int(...);
+        $this->retrying = new RetryScope();
         $this->alarm = new AuditAlarm($events, $logger);
         $this->logger = $logger;
         $middleware?->hooks()->attach($connection, $logger, $this->alarm);
@@ -46,23 +72,43 @@ final readonly class DbalTransactions implements Transactions
         $hooks = $this->middleware?->hooks();
 
         if (null === $hooks) {
-            return $this->connection->transactional($work);
+            try {
+                return $this->connection->transactional($work);
+            } catch (DeadlockException $conflict) {
+                throw new RetryableConflict($conflict);
+            }
         }
 
         $waiting = $hooks->count();
         $outermost = !$this->connection->isTransactionActive();
+        // Run again from the start, it leaves its callbacks again: this attempt's go, before the rollback runs them.
+        $discards = $outermost && $this->retrying->active;
 
         if ($outermost) {
             $hooks->defer(true);
         }
 
         try {
-            $result = $this->connection->transactional($work);
+            $result = $this->connection->transactional($discards ? static function () use ($work, $hooks): mixed {
+                try {
+                    return $work();
+                } catch (DeadlockException|RetryableConflict $conflict) {
+                    $hooks->discard();
+
+                    throw $conflict;
+                }
+            } : $work);
         } catch (\Throwable $exception) {
             // The outermost rollback drops every callback; a failed nested one only its own.
             $hooks->truncate($waiting);
 
-            throw $exception;
+            // A commit that failed ended the transaction without a rollback reaching the driver's hooks:
+            // what waits for the end runs now, or, run again from the start, goes with the attempt.
+            if ($outermost && 0 === $this->connection->getTransactionNestingLevel()) {
+                $discards ? $hooks->discard() : $hooks->rolledBack();
+            }
+
+            throw $exception instanceof DeadlockException ? new RetryableConflict($exception) : $exception;
         } finally {
             if ($outermost) {
                 $hooks->defer(false);
@@ -76,6 +122,45 @@ final readonly class DbalTransactions implements Transactions
         }
 
         return $result;
+    }
+
+    public function retrying(\Closure $work): mixed
+    {
+        // An application's transaction: its work isn't YorvoID's to run again. Nor is work already retried.
+        if ($this->connection->isTransactionActive() || $this->retrying->active) {
+            return $work();
+        }
+
+        $this->retrying->active = true;
+
+        try {
+            for ($attempt = 1;; ++$attempt) {
+                try {
+                    return $work();
+                } catch (RetryableConflict $conflict) {
+                    if ($attempt >= self::ATTEMPTS) {
+                        throw new RetryableConflict($conflict->getPrevious() ?? $conflict, $attempt);
+                    }
+
+                    foreach ($this->reads as $read) {
+                        $read->reset();
+                    }
+
+                    ($this->wait)($this->pause($attempt));
+                }
+            }
+        } finally {
+            $this->retrying->active = false;
+        }
+    }
+
+    /**
+     * How long to wait before the next attempt, in microseconds: 10 to 50 ms, then 50 to 150 ms, so that
+     * the two transactions that met don't meet again.
+     */
+    private function pause(int $attempt): int
+    {
+        return 1 === $attempt ? ($this->random)(10_000, 50_000) : ($this->random)(50_000, 150_000);
     }
 
     public function afterCommit(\Closure $callback): void
