@@ -4,8 +4,8 @@
 # Every supported PHP version is a stage; PHP_VERSION picks one (8.5 for development, 8.4 in CI's job
 # for the oldest versions YorvoID supports). Dependabot proposes each stage's next patch and digest.
 ARG PHP_VERSION=8.5
-FROM php:8.4.27-cli@sha256:ff91dd4b2730676b1673c4cb033b1c0702e1654798ab9bd264db05dab2927228 AS php-8.4
-FROM php:8.5.12-cli@sha256:9236fd373d3bcda0659cf94838a744bd79791419292958963f8c6b34a0071554 AS php-8.5
+FROM php:8.4.27-cli@sha256:d63e8b80cd4c6cfd01cfa7c910522e299cdc7ca1a2b6d6563db48df3c17e6c55 AS php-8.4
+FROM php:8.5.12-cli@sha256:50956f094e90a716d43bea28087d447555ad80510e386ab8c9c10d8c70d781a9 AS php-8.5
 FROM php-${PHP_VERSION}
 
 COPY --from=ghcr.io/mlocati/php-extension-installer:2@sha256:4fd45396c16685266d32bf147a24ecd5e81029d3820295895bf4a90131190ac9 /usr/bin/install-php-extensions /usr/local/bin/
