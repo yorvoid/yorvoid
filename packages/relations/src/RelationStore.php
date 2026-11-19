@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Relations;
 
+use YorvoID\Core\Authorization\HoldsAuthority;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Realm;
 
@@ -16,7 +17,7 @@ use YorvoID\Core\Realm;
  *
  * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
-interface RelationStore
+interface RelationStore extends HoldsAuthority
 {
     /** Adds it; adding it again changes nothing */
     public function add(RelationTuple $tuple): void;

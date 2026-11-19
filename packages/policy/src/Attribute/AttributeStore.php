@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy\Attribute;
 
+use YorvoID\Core\Authorization\HoldsAuthority;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 
@@ -14,7 +15,7 @@ use YorvoID\Core\Realm;
  *
  * @spi Implement it, don't call it: calling a store changes YorvoID's records without asking YorvoID
  */
-interface AttributeStore
+interface AttributeStore extends HoldsAuthority
 {
     /**
      * @return array<string, string|int|bool|list<string>> By name, sorted

@@ -4,14 +4,22 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy;
 
+use YorvoID\Core\Authorization\DeclaredEffects;
+use YorvoID\Core\Authorization\DeclaresEffects;
+use YorvoID\Core\Authorization\Effect;
+use YorvoID\Core\Authorization\EffectPart;
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Policy\Attribute\ForgetAttributes;
+use YorvoID\Policy\Attribute\SetAttribute;
 use YorvoID\Policy\Change\AddGroupMember;
 use YorvoID\Policy\Change\AssignGroupRole;
 use YorvoID\Policy\Change\AssignRole;
+use YorvoID\Policy\Change\CreateGroup;
 use YorvoID\Policy\Change\CreateRole;
 use YorvoID\Policy\Change\DeleteGroup;
 use YorvoID\Policy\Change\DeleteRole;
 use YorvoID\Policy\Change\GrantAbilities;
+use YorvoID\Policy\Change\RelabelRole;
 use YorvoID\Policy\Change\RemoveGroupMember;
 use YorvoID\Policy\Change\ResetAbilities;
 use YorvoID\Policy\Change\RevokeAbilities;
@@ -20,6 +28,7 @@ use YorvoID\Policy\Change\UnassignGroupRole;
 use YorvoID\Policy\Change\UnassignRole;
 use YorvoID\Relations\Change\AddRelation;
 use YorvoID\Relations\Change\RemoveRelation;
+use YorvoID\Relations\ForgetRelations;
 use YorvoID\Relations\RelationDefinition;
 use YorvoID\Relations\RelationSchema;
 use YorvoID\Relations\RelationTuple;
@@ -27,8 +36,10 @@ use YorvoID\Relations\Subject;
 use YorvoID\Relations\TooDeep;
 
 /**
- * What a change gives and takes (M2-13), computed once per request, so that no-escalation and the
- * step-up weigh the same snapshot.
+ * What the policy's and relations' changes give and take (M2-13, D-51): every command of PolicyChanges,
+ * GroupChanges, AttributeChanges and RelationChanges, and the consequences that forget a deleted
+ * principal's roles, relations and attributes. DeclaredEffects keeps each once per decision, so
+ * that no-escalation and the step-up weigh the same snapshot.
  *
  * - A role given or taken, and a role a new role starts from.
  * - Abilities given to a role or taken from it; setting or resetting them counts only what changes.
@@ -39,43 +50,55 @@ use YorvoID\Relations\TooDeep;
  *   and above it.
  * - Deleting a group or a role, as everything it takes away.
  *
- * Not readonly: it keeps one per Roles in a static map.
+ * @api
  *
- * @internal
+ * @experimental Outside the 1.0 promise while delegation (M3) shapes it: it may change in a minor
+ *               release ([compatibility](docs/compatibility.md)).
  */
-final class Effects
+final class PolicyEffects implements DeclaresEffects
 {
     /** The relation roles follow to what a resource is within (Roles::within()) */
     private const string PARENT = 'parent';
 
-    /** @var \WeakMap<Roles, self> */
-    private static \WeakMap $shared;
+    private const array COMMANDS = [
+        CreateRole::class, RelabelRole::class, DeleteRole::class, AssignRole::class, UnassignRole::class,
+        GrantAbilities::class, RevokeAbilities::class, SetAbilities::class, ResetAbilities::class,
+        CreateGroup::class, DeleteGroup::class, AddGroupMember::class, RemoveGroupMember::class, AssignGroupRole::class, UnassignGroupRole::class,
+        AddRelation::class, RemoveRelation::class,
+        SetAttribute::class,
+        ForgetRoles::class, ForgetRelations::class, ForgetAttributes::class,
+    ];
 
-    /** @var \WeakMap<Request, Effect> */
-    private readonly \WeakMap $effects;
+    /** @var \WeakMap<Roles, DeclaredEffects>|null */
+    private static ?\WeakMap $shared = null;
 
-    private function __construct(
+    public function __construct(
         private readonly Roles $roles,
     ) {
-        $this->effects = new \WeakMap();
     }
 
     /**
-     * The same for everything weighing changes with these roles.
+     * These effects alone, the same for everything weighing changes with these roles: what a forbid
+     * built with only the roles reads. The Symfony bundle gives them every package's.
      */
-    public static function of(Roles $roles): self
+    public static function shared(Roles $roles): DeclaredEffects
     {
         self::$shared ??= new \WeakMap();
 
-        return self::$shared[$roles] ??= new self($roles);
+        return self::$shared[$roles] ??= new DeclaredEffects([new self($roles)]);
+    }
+
+    public function declares(): array
+    {
+        return self::COMMANDS;
     }
 
     /**
      * @throws TooDeep When a relation's hierarchy is past the maximum depth, or has a cycle
      */
-    public function on(Request $request): Effect
+    public function effectOf(Request $request): Effect
     {
-        return $this->effects[$request] ??= $this->compute($request);
+        return $this->compute($request);
     }
 
     private function compute(Request $request): Effect
@@ -87,7 +110,7 @@ final class Effects
             $command instanceof AssignRole, $command instanceof AssignGroupRole => new Effect(gives: [new EffectPart([$command->role])]),
             $command instanceof UnassignRole, $command instanceof UnassignGroupRole => new Effect(takes: [new EffectPart([$command->role])]),
             $command instanceof DeleteRole => new Effect(takes: [new EffectPart([$command->name])]),
-            $command instanceof CreateRole => new Effect(gives: null === $command->from ? [] : [new EffectPart([$command->from])]),
+            $command instanceof CreateRole => null === $command->from ? Effect::none() : new Effect(gives: [new EffectPart([$command->from])]),
             $command instanceof GrantAbilities => new Effect(gives: [new EffectPart(abilities: $command->abilities)]),
             $command instanceof RevokeAbilities => new Effect(takes: [new EffectPart(abilities: $command->abilities)]),
             $command instanceof SetAbilities => $this->set($request, $command),
@@ -97,7 +120,14 @@ final class Effects
             $command instanceof DeleteGroup => new Effect(takes: $this->deleteGroup($request, $command->name)),
             $command instanceof AddRelation => new Effect(gives: $this->relation($request, new RelationTuple($command->realm, $command->object, $command->relation, $command->subject))),
             $command instanceof RemoveRelation => new Effect(takes: $this->relation($request, new RelationTuple($command->realm, $command->object, $command->relation, $command->subject))),
-            default => new Effect(),
+            $command instanceof SetAttribute => Effect::attribute($command->principalId, $command->name, null === $command->value),
+            $command instanceof CreateGroup, $command instanceof RelabelRole => Effect::none(),
+            // What a deleted principal held, forgotten: it can't act any more, and nobody else's authority
+            // changes. True while nobody's authority rests on another's: once delegations do, deleting a
+            // delegator takes from every delegate whose chain starts at them, and these give that effect.
+            $command instanceof ForgetRoles, $command instanceof ForgetRelations, $command instanceof ForgetAttributes => Effect::none(),
+            // Only what declares() lists is asked: anything else is a mistake, never "gives nothing".
+            default => throw new \LogicException(\sprintf('%s declares no effect for %s.', self::class, null === $command ? 'a request without a command' : $command::class)),
         };
     }
 

@@ -202,6 +202,8 @@ $evaluator = Evaluator::builtIn($authority, elements: [
 ]);
 ```
 
+**What a change gives and takes is declared,** not guessed. Each command that changes authority says so (it implements `ChangesAuthority`), and the package that has it declares its effect (a `DeclaresEffects`): the policy package declares those of roles, groups, attributes and relations (`PolicyEffects`). Both forbids weigh a change by its declared effect, computed once per decision. One whose effect nothing declares is never taken for one that gives nothing: both forbids are Indeterminate for it, and `Operations` refuses to be built with it in the catalogue. Built with only `$roles`, as above, they know the policy package's changes; the Symfony bundle gives them every installed package's.
+
 ## Relations
 
 Relations (`yorvoid/relations`) say how people and resources relate, e.g. Ada is an editor of page 42, or site 42's parent is server 1. Each resource type declares its relations, in a service implementing `RelationDeclarations`:

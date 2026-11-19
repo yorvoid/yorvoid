@@ -156,6 +156,28 @@ final class NoEscalationEffectsTest extends TestCase
         }
     }
 
+    /**
+     * What they'd give, held through a relation too deep to follow, is never taken for something they
+     * don't hold, nor for something they do: it can't be told, so nothing is permitted.
+     */
+    public function testAnAbilityHeldThroughARelationTooDeepToFollowCantBeTold(): void
+    {
+        $this->roles = $this->roles(2);
+        $actor = new TestPrincipal($this->realm, $id = $this->principal());
+
+        for ($i = 0; $i < 3; ++$i) {
+            $this->relations->add(new RelationTuple($this->realm, new ResourceRef('folder', 'g'.$i), 'parent', new Subject(new ResourceRef('folder', 'g'.($i + 1)))));
+        }
+
+        // They own the folder three parents up: past the depth relations are followed to.
+        $this->relations->add(new RelationTuple($this->realm, new ResourceRef('folder', 'g3'), 'owner', Subject::principal($id)));
+        $command = new AddRelation($this->realm, new ResourceRef('folder', 'g0'), 'member', Subject::principal($this->principal()));
+        $request = Request::forOperation($this->world->catalogue->get('yorvoid.relation.add'), $command, $actor, new Origin(OriginKind::Web), new \DateTimeImmutable());
+
+        $this->expectException(TooDeep::class);
+        new NoEscalation($this->roles)->evaluate($request);
+    }
+
     public function testDeletingAGroupWeighsEveryRelationOnItsOwnResource(): void
     {
         $group = GroupRelations::group('team');

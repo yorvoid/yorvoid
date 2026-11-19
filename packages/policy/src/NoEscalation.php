@@ -4,33 +4,23 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy;
 
+use YorvoID\Core\Authorization\ChangesAuthority;
+use YorvoID\Core\Authorization\ChecksCatalogue;
+use YorvoID\Core\Authorization\DeclaredEffects;
+use YorvoID\Core\Authorization\Effect;
 use YorvoID\Core\Authorization\ForbidElement;
+use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\TruthValue;
+use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\Operator;
-use YorvoID\Policy\Attribute\SetAttribute;
-use YorvoID\Policy\Change\AddGroupMember;
-use YorvoID\Policy\Change\AssignGroupRole;
-use YorvoID\Policy\Change\AssignRole;
-use YorvoID\Policy\Change\CreateRole;
-use YorvoID\Policy\Change\DeleteGroup;
-use YorvoID\Policy\Change\DeleteRole;
-use YorvoID\Policy\Change\GrantAbilities;
-use YorvoID\Policy\Change\RemoveGroupMember;
-use YorvoID\Policy\Change\ResetAbilities;
-use YorvoID\Policy\Change\RevokeAbilities;
-use YorvoID\Policy\Change\SetAbilities;
-use YorvoID\Policy\Change\UnassignGroupRole;
-use YorvoID\Policy\Change\UnassignRole;
-use YorvoID\Relations\Change\AddRelation;
-use YorvoID\Relations\Change\RemoveRelation;
 use YorvoID\Relations\Subject;
 use YorvoID\Relations\TooDeep;
 
 /**
  * Nobody gives or takes what they don't hold themselves (M2-13): each change is weighed by what it
- * gives and takes, to anyone, directly or through what follows from it (Effects), and refused when they
+ * gives and takes, to anyone, directly or through what follows from it (its declared effect), and refused when they
  * couldn't give or take that directly: a role whose abilities they don't all have, a super role unless
  * they have one, an ability they lack. Nobody sets their own security attributes either: what they
  * decide is the application's rules'.
@@ -40,13 +30,28 @@ use YorvoID\Relations\TooDeep;
  *
  * @api
  */
-final readonly class NoEscalation implements ForbidElement
+final readonly class NoEscalation implements ForbidElement, ChecksCatalogue
 {
     public const string NAME = 'yorvoid.policy.no_escalation';
 
+    private DeclaredEffects $effects;
+
+    /**
+     * @param DeclaredEffects|null $effects What the changes give and take: the policy's own if not given
+     */
     public function __construct(
         private Roles $roles,
+        ?DeclaredEffects $effects = null,
     ) {
+        $this->effects = $effects ?? PolicyEffects::shared($roles);
+    }
+
+    /**
+     * Every change of authority it may meet has its effect declared.
+     */
+    public function checkCatalogue(OperationCatalogue $catalogue): void
+    {
+        $this->effects->check($catalogue);
     }
 
     public function name(): string
@@ -54,28 +59,34 @@ final readonly class NoEscalation implements ForbidElement
         return self::NAME;
     }
 
+    /**
+     * A change of authority that gives or takes anything, or whose effect isn't declared.
+     */
     public function matches(Request $request): bool
     {
-        $command = $request->command;
-
         return !$request->actor instanceof Operator
-            && ($command instanceof AssignRole || $command instanceof UnassignRole || ($command instanceof CreateRole && null !== $command->from) || $command instanceof DeleteRole
-                || $command instanceof GrantAbilities || $command instanceof RevokeAbilities || $command instanceof SetAbilities || $command instanceof ResetAbilities
-                || $command instanceof AssignGroupRole || $command instanceof UnassignGroupRole || $command instanceof AddGroupMember || $command instanceof RemoveGroupMember || $command instanceof DeleteGroup
-                || $command instanceof AddRelation || $command instanceof RemoveRelation || $command instanceof SetAttribute);
+            && $request->command instanceof ChangesAuthority
+            && (!($effect = $this->effects->effectOf($request)) instanceof Effect || $effect->changes());
     }
 
     public function evaluate(Request $request): Truth
     {
-        $command = $request->command;
+        if (!$request->command instanceof ChangesAuthority) {
+            return Truth::fails('It changes no authority.');
+        }
 
-        if ($command instanceof SetAttribute) {
-            return null !== $request->actor->principalId && $request->actor->principalId->equals($command->principalId)
+        $effect = $this->effects->effectOf($request);
+
+        // A change of authority whose effect nothing declares is never taken for one that gives nothing (D-51).
+        if (null === $effect) {
+            return Truth::unknown(IndeterminateReason::EvaluationError, \sprintf('Nothing declares what %s gives and takes.', $request->name()));
+        }
+
+        if (null !== $effect->attribute) {
+            return null !== $request->actor->principalId && $request->actor->principalId->equals($effect->attribute->principal)
                 ? Truth::holds('Nobody sets their own security attributes.')
                 : Truth::fails('They set someone else\'s.');
         }
-
-        $effect = Effects::of($this->roles)->on($request);
 
         foreach ([...$effect->gives, ...$effect->takes] as $part) {
             $truth = $this->roles(null === $part->on ? $request : $request->on($part->on), $part->roles, $part->abilities, $part->byRelation);

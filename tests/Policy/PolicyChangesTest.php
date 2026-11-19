@@ -232,7 +232,7 @@ final class PolicyChangesTest extends TestCase
         $escalation = new NoEscalation($world->roles);
         $unrelated = Request::forOperation($world->catalogue->get('yorvoid.principal.create'), new CreatePrincipal($world->realm, PrincipalKind::Human), $manager, new Origin(OriginKind::Web), new \DateTimeImmutable());
         self::assertFalse($escalation->matches($unrelated));
-        self::assertSame('They hold everything they change.', $escalation->evaluate($unrelated)->detail);
+        self::assertSame('It changes no authority.', $escalation->evaluate($unrelated)->detail);
         self::assertFalse($escalation->matches(Request::forOperation($world->catalogue->get('yorvoid.role.create'), new CreateRole($world->realm, 'x', 'X'), $manager, new Origin(OriginKind::Web), new \DateTimeImmutable())), 'A new role without abilities gives nothing.');
         self::assertFalse($escalation->matches(Request::forOperation($world->catalogue->get('yorvoid.role.assign'), new AssignRole($world->realm, self::id($manager), 'admin'), new Operator(), new Origin(OriginKind::Console), new \DateTimeImmutable())), 'The operator is the final authority.');
         self::assertSame('yorvoid.policy.no_escalation', $escalation->name());

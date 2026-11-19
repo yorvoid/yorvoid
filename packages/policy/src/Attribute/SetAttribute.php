@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy\Attribute;
 
+use YorvoID\Core\Authorization\ChangesAuthority;
 use YorvoID\Core\Operation\AuthorizedBy;
-use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -14,12 +14,12 @@ use YorvoID\Policy\YorvoIDDeclarations;
 /**
  * Sets a principal's security attribute, or removes it (null).
  *
- * @implements Command<null>
+ * @implements ChangesAuthority<null>
  *
  * @api
  */
 #[Operation('yorvoid.attribute.set', 'Set a security attribute of a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: YorvoIDDeclarations::ATTRIBUTES_MANAGE)]
-final readonly class SetAttribute implements Command
+final readonly class SetAttribute implements ChangesAuthority
 {
     /**
      * @param string|int|bool|list<string>|null $value Of the attribute's type; null removes it

@@ -6,6 +6,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Added
 
+- `ChangesAuthority`, `DeclaresEffects`, `DeclaredEffects`, `Effect`, `EffectPart`, `AttributeChange` and `HoldsAuthority` (`@experimental`): a command that changes authority says so, and its package declares what it gives and takes. `PolicyEffects` declares those of roles, groups, attributes and relations ([authorization](docs/concepts/authorization.md)).
 - `AuthorizationDecorator`: an `Authorization` around another, which forwards everything and keeps every check `Operations` makes when it's built; override `decide()` or `decideConsequence()` to trace or to refuse more ([the decision point](docs/concepts/operations-and-events.md#the-decision-point)).
 - `AppliesToConsequences`: a forbid that's also evaluated when its operation runs as another's consequence.
 - `yorvoid:log:verify --decisions` also checks that every entry citing a decision cites a permit the decision log holds, with that hash: a permit from a second decision point that records nothing is reported.
@@ -28,6 +29,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Breaking
 
+- `NoEscalation` and `StepUpForSensitiveChanges` weigh a change by its declared effect: a command that changes authority but whose effect nothing declares makes them Indeterminate, and `Operations` refuses to be built with one in its catalogue. Each takes the effects to read (`$effects`), the policy package's if not given. `PolicyStore`, `RelationStore` and `AttributeStore` extend `HoldsAuthority`, which has no methods.
 - `Operation\Authorization` adds `decideConsequence()`, `requireForbids()`, `checkCatalogue()` and `decidesOffline()`: `Operations` asks them of any `Authorization`, and no longer checks for the Evaluator. An `Authorization` of your own implements them, or extends `AuthorizationDecorator`.
 - Only the Evaluator makes a `Decision` that permits: its constructor is private, and `Decision::permit()` is gone. A decision that permits is for the command and actor it was made for, and `Operations` issues on it once: an `Authorization` that gives one back for another request, e.g. from a cache, throws an `IntegratorError`. `identified()` and `recorded()` throw for a decision that permits, and a `Decision` can't be unserialized. An `Authorization` of your own refuses with `Decision::deny()` or `Decision::indeterminate()`, or returns the Evaluator's decision.
 - Each consequence of an operation is decided by the `Authorization` that permitted the operation, and has a decision of its own, recorded under the operation's: a consequence's permit carries its own decision ID, and the decision log has one more record per consequence. `DecisionRecord` is format 3, with `parent`; format 1 and 2 records still read and verify.
