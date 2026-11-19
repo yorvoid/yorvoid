@@ -122,7 +122,9 @@ final class PolicyEffects implements DeclaresEffects
             $command instanceof RemoveRelation => new Effect(takes: $this->relation($request, new RelationTuple($command->realm, $command->object, $command->relation, $command->subject))),
             $command instanceof SetAttribute => Effect::attribute($command->principalId, $command->name, null === $command->value),
             $command instanceof CreateGroup, $command instanceof RelabelRole => Effect::none(),
-            // What a deleted principal held, forgotten: it can't act any more, and nobody else's authority changes.
+            // What a deleted principal held, forgotten: it can't act any more, and nobody else's authority
+            // changes. True while nobody's authority rests on another's: once delegations do, deleting a
+            // delegator takes from every delegate whose chain starts at them, and these give that effect.
             $command instanceof ForgetRoles, $command instanceof ForgetRelations, $command instanceof ForgetAttributes => Effect::none(),
             // Only what declares() lists is asked: anything else is a mistake, never "gives nothing".
             default => throw new \LogicException(\sprintf('%s declares no effect for %s.', self::class, null === $command ? 'a request without a command' : $command::class)),
