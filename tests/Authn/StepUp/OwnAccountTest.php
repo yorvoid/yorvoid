@@ -71,7 +71,7 @@ use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * M2-13 fix 5 (H-4): a change to one's own account asks what self-service asks of it, whatever permits
- * it: a principals manager is held as a plain principal is. The architect's grid: each own-account
+ * it: a principals manager is held as a plain principal is. It checks each own-account
  * operation, as a manager and as a plain principal, inside the recovery hold, with a stale session, and
  * fresh.
  */
