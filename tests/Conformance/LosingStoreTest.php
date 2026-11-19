@@ -11,7 +11,7 @@ use YorvoID\Testing\Contract\RecoveryCodeStoreConcurrencyContract;
 use YorvoID\Tests\Support\DatabaseTestCase;
 
 /**
- * The concurrency contracts catch stores that check and then act (TOOLING-03, the architect's R2):
+ * The concurrency contracts catch stores that check and then act (TOOLING-03):
  * - a token store that says it deleted what it found: a race of two calls, which the barrier forces;
  * - a recovery code store that looks for the code, then deletes it: a race of one call, which only
  *   the rounds catch, and not always.

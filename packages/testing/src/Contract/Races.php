@@ -159,7 +159,7 @@ final readonly class Races
     }
 
     /**
-     * Whether a store with a concurrency contract runs it (the architect's G-10 answer to Q2): in the
+     * Whether a store with a concurrency contract runs it: in the
      * test case itself, in the one its #[ConcurrencyTestedIn] names, or not at all only with
      * #[InMemoryStores].
      *

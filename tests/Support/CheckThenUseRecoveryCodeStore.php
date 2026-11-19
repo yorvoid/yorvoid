@@ -11,7 +11,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 
 /**
- * A recovery code store that loses races of one call (LosingStoreTest, the architect's R2): use() looks
+ * A recovery code store that loses races of one call (LosingStoreTest): use() looks
  * for the code, then deletes it, and says it was used if it was found. Two requests at once can both
  * find it.
  */
