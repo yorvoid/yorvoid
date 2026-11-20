@@ -261,7 +261,7 @@ final readonly class DbalTransactions implements Transactions
             return false;
         }
 
-        $hooks->addBeforeCommit($this->connection->getTransactionNestingLevel(), $callback);
+        $hooks->addBeforeCommit($callback);
 
         return true;
     }

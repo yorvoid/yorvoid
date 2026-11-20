@@ -18,8 +18,8 @@ Each entry has:
 
 | Field | What it is |
 |-------|------------|
-| sequence | 1, 2, 3, … per realm, without gaps |
-| id, recorded at | A UUIDv7, and the time to the second |
+| sequence | 1, 2, 3, … per realm, without gaps, in the order the changes committed |
+| id, recorded at | A UUIDv7, and the time to the second, when the change was recorded: a long transaction's entry can carry an earlier time than entries before it in the chain |
 | action | The operation, e.g. `yorvoid.principal.create` |
 | outcome | `success`, `denied` or `failed` |
 | origin | Web, API, console, job or system; what ran; the correlation ID |

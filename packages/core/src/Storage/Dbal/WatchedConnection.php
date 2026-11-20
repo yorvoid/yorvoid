@@ -56,11 +56,19 @@ final class WatchedConnection extends AbstractConnectionMiddleware
     {
         $affected = parent::exec($sql);
 
-        // DBAL rolls a nested transaction back to its savepoint, named after its level.
-        if (1 === preg_match('/^\s*ROLLBACK\s+TO\s+(?:SAVEPOINT\s+)?(\S+)\s*;?\s*$/i', $sql, $savepoint)) {
-            1 === preg_match('/^DOCTRINE_(\d+)$/i', trim($savepoint[1], '"`'), $level)
-                ? $this->hooks->rolledBackTo((int) $level[1])
-                : $this->hooks->rolledBackToUnknown($savepoint[1]);
+        // Savepoints, DBAL's for its nested transactions and the application's own: what waits for the
+        // commit follows them (D-52).
+        if (1 === preg_match('/^\s*(SAVEPOINT|RELEASE|ROLLBACK\s+TO)\b/i', $sql, $statement)) {
+            if (1 !== preg_match('/^\s*(?:SAVEPOINT|RELEASE(?:\s+SAVEPOINT)?|ROLLBACK\s+TO(?:\s+SAVEPOINT)?)\s+("[^"]+"|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)\s*;?\s*$/i', $sql, $named)) {
+                $this->hooks->unreadableSavepoint($sql);
+            } else {
+                $name = trim($named[1], '"`');
+                match (strtoupper(preg_replace('/\s+/', ' ', $statement[1]) ?? '')) {
+                    'SAVEPOINT' => $this->hooks->savepoint($name),
+                    'RELEASE' => $this->hooks->released($name),
+                    default => $this->hooks->rolledBackTo($name),
+                };
+            }
         }
 
         return $affected;

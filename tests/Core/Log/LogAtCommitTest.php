@@ -181,18 +181,85 @@ final class LogAtCommitTest extends TestCase
     }
 
     /**
-     * A rollback to a savepoint that isn't DBAL's can't be mapped to the entries waiting: they're kept,
-     * and the alert says so.
+     * A nested unit that committed keeps its entry when a later one, at the same level, rolls back:
+     * through YorvoID's units and through DBAL's transactional().
      */
-    public function testARollbackToAnUnknownSavepointRaisesTheAlert(): void
+    public function testAnEntryOfACommittedNestedUnitOutlivesALaterOneRolledBack(): void
+    {
+        $log = $this->log();
+        /** @var array<string, \Closure(\Closure(): void): void> $units */
+        $units = [
+            'run' => function (\Closure $work): void {
+                $this->transactions->run($work);
+            },
+            'transactional' => function (\Closure $work): void {
+                $this->connection->transactional(static function () use ($work): null {
+                    $work();
+
+                    return null;
+                });
+            },
+        ];
+
+        foreach ($units as $unit) {
+            $unit(function () use ($unit, $log): void {
+                $unit(function () use ($log): void {
+                    $this->connection->executeStatement('INSERT INTO change (v) VALUES (1)');
+                    $log->record($this->realm, 'acme.thing.kept', Outcome::Success, new Origin(OriginKind::Web));
+                });
+
+                try {
+                    $unit(function () use ($log): never {
+                        $log->record($this->realm, 'acme.thing.undone', Outcome::Success, new Origin(OriginKind::Web));
+
+                        throw new \RuntimeException('the second unit failed');
+                    });
+                } catch (\RuntimeException) {
+                }
+            });
+        }
+
+        self::assertEquals([1, 1], $this->connection->fetchFirstColumn('SELECT v FROM change'));
+        self::assertSame(['acme.thing.kept', 'acme.thing.kept'], array_map(static fn (LogEntry $entry): string => $entry->action, iterator_to_array($this->store->entries($this->realm, 1), false)), 'A change committed without its entry.');
+        self::assertTrue(new SecurityLog($this->store, $this->transactions)->verify($this->realm)->isIntact());
+    }
+
+    /**
+     * The application's own savepoints are followed by name, as the database keeps them: a rollback to
+     * one drops what was recorded since, and keeps the savepoint.
+     */
+    public function testTheApplicationsOwnSavepointsAreFollowed(): void
     {
         $log = $this->log();
 
         $this->connection->transactional(function () use ($log): void {
-            $log->record($this->realm, 'acme.thing.change', Outcome::Success, new Origin(OriginKind::Web));
+            $log->record($this->realm, 'acme.thing.before', Outcome::Success, new Origin(OriginKind::Web));
             $this->connection->executeStatement('SAVEPOINT mine');
+            $log->record($this->realm, 'acme.thing.undone', Outcome::Success, new Origin(OriginKind::Web));
             $this->connection->executeStatement('ROLLBACK TO SAVEPOINT mine');
+            $log->record($this->realm, 'acme.thing.after', Outcome::Success, new Origin(OriginKind::Web));
+            $this->connection->executeStatement('RELEASE SAVEPOINT mine');
         });
+
+        self::assertSame(['acme.thing.before', 'acme.thing.after'], array_map(static fn (LogEntry $entry): string => $entry->action, iterator_to_array($this->store->entries($this->realm, 1), false)));
+        self::assertSame([], $this->alerts->of(AuditFailed::class));
+    }
+
+    /**
+     * A rollback to a savepoint YorvoID never saw set can't be mapped to the entries waiting: they're
+     * kept, and the alert says so.
+     */
+    public function testARollbackToAnUnknownSavepointRaisesTheAlert(): void
+    {
+        $log = $this->log();
+        $this->connection->beginTransaction();
+        // Set on the native connection, past what YorvoID watches.
+        $native = $this->connection->getNativeConnection();
+        \assert($native instanceof \PDO);
+        $native->exec('SAVEPOINT unseen');
+        $log->record($this->realm, 'acme.thing.change', Outcome::Success, new Origin(OriginKind::Web));
+        $this->connection->executeStatement('ROLLBACK TO SAVEPOINT unseen');
+        $this->connection->commit();
 
         self::assertCount(1, $this->alerts->of(AuditFailed::class));
         self::assertSame(1, $this->store->head($this->realm)['sequence'] ?? null);

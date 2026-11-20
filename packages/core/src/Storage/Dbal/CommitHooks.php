@@ -29,8 +29,13 @@ final class CommitHooks
     /** @var list<\Closure(): void> Callbacks for the end, committed or rolled back */
     private array $ended = [];
 
-    /** @var list<array{int, \Closure(): void}> Callbacks just before the commit, each with DBAL's nesting level when it was added */
-    private array $beforeCommit = [];
+    /**
+     * Callbacks just before the commit, in savepoint frames: the transaction's own first, then one per
+     * savepoint open, by name, as the database keeps them.
+     *
+     * @var non-empty-list<array{?string, list<\Closure(): void>}>
+     */
+    private array $beforeCommit = [[null, []]];
 
     private bool $watching = false;
 
@@ -88,31 +93,91 @@ final class CommitHooks
     }
 
     /**
-     * @param int              $level    DBAL's nesting level when it's added: a rollback to that level's savepoint drops it
      * @param \Closure(): void $callback
      */
-    public function addBeforeCommit(int $level, \Closure $callback): void
+    public function addBeforeCommit(\Closure $callback): void
     {
-        $this->beforeCommit[] = [$level, $callback];
+        $this->beforeCommit[array_key_last($this->beforeCommit)][1][] = $callback;
     }
 
     /**
-     * DBAL rolled back to the savepoint of the given nesting level: what was added at it, or deeper,
-     * won't be committed.
+     * A savepoint was set: what's added from now on is undone with it.
      */
-    public function rolledBackTo(int $level): void
+    public function savepoint(string $name): void
     {
-        $this->beforeCommit = array_values(array_filter($this->beforeCommit, static fn (array $waiting): bool => $waiting[0] < $level));
+        $this->beforeCommit[] = [$name, []];
     }
 
     /**
-     * Rolled back to a savepoint that isn't DBAL's: which of what waits before the commit it undoes
+     * The savepoint was released: what waited in it, and in those set after it, now waits in the one
+     * it was set in.
+     */
+    public function released(string $name): void
+    {
+        $frame = $this->frame($name);
+
+        if (null === $frame) {
+            $this->unknown('released', $name);
+
+            return;
+        }
+
+        $merged = array_merge(...array_column(\array_slice($this->beforeCommit, $frame), 1));
+        $kept = \array_slice($this->beforeCommit, 0, $frame);
+        \assert([] !== $kept);
+        [$name, $waiting] = $kept[\count($kept) - 1];
+        $kept[\count($kept) - 1] = [$name, [...$waiting, ...$merged]];
+        $this->beforeCommit = $kept;
+    }
+
+    /**
+     * Rolled back to the savepoint: what was added since it was set won't be committed. The savepoint
+     * itself stays, as the database keeps it.
+     */
+    public function rolledBackTo(string $name): void
+    {
+        $frame = $this->frame($name);
+
+        if (null === $frame) {
+            $this->unknown('rolled back to', $name);
+
+            return;
+        }
+
+        $kept = \array_slice($this->beforeCommit, 0, $frame);
+        $kept[] = [$name, []];
+        $this->beforeCommit = $kept;
+    }
+
+    /**
+     * A savepoint statement that can't be read, e.g. a name with spaces: which of what waits it undoes
      * can't be told. It's kept, and the audit alert says so, rather than guessing (D-52).
      */
-    public function rolledBackToUnknown(string $savepoint): void
+    public function unreadableSavepoint(string $sql): void
     {
-        if ([] !== $this->beforeCommit) {
-            $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_LOG, null, \count($this->beforeCommit), false, new \LogicException(\sprintf('The transaction rolled back to the savepoint "%s", which isn\'t DBAL\'s: YorvoID kept the security log entries it waited to append at the commit, which may include some of the work undone.', $savepoint))));
+        $this->unknown('changed', $sql);
+    }
+
+    /**
+     * The latest open savepoint of the name, as the database finds it.
+     */
+    private function frame(string $name): ?int
+    {
+        for ($i = \count($this->beforeCommit) - 1; $i > 0; --$i) {
+            if ($this->beforeCommit[$i][0] === $name) {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    private function unknown(string $what, string $savepoint): void
+    {
+        $waiting = \count(array_merge(...array_column($this->beforeCommit, 1)));
+
+        if (0 < $waiting) {
+            $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_LOG, null, $waiting, false, new \LogicException(\sprintf('The transaction %s the savepoint "%s", which YorvoID didn\'t see set: it kept the security log entries it waited to append at the commit, which may include some of the work undone.', $what, $savepoint))));
         }
     }
 
@@ -122,10 +187,15 @@ final class CommitHooks
      */
     public function beforeCommit(): void
     {
-        while ([] !== $this->beforeCommit) {
-            [, $callback] = array_shift($this->beforeCommit);
-            $callback();
+        while ([] !== ($waiting = array_merge(...array_column($this->beforeCommit, 1)))) {
+            $this->beforeCommit = [[null, []]];
+
+            foreach ($waiting as $callback) {
+                $callback();
+            }
         }
+
+        $this->beforeCommit = [[null, []]];
     }
 
     /**
@@ -136,7 +206,7 @@ final class CommitHooks
     public function failedBeforeCommit(WatchedConnection $driver): void
     {
         $this->callbacks = [];
-        $this->beforeCommit = [];
+        $this->beforeCommit = [[null, []]];
         $connection = $this->connection;
         $this->runEnded(null === $connection ? null : fn (\Closure $callback) => $this->apart($connection, $driver, $callback));
     }
@@ -166,7 +236,7 @@ final class CommitHooks
     {
         $this->callbacks = [];
         $this->ended = [];
-        $this->beforeCommit = [];
+        $this->beforeCommit = [[null, []]];
     }
 
     /**
@@ -214,7 +284,7 @@ final class CommitHooks
     public function rolledBack(): void
     {
         $this->callbacks = [];
-        $this->beforeCommit = [];
+        $this->beforeCommit = [[null, []]];
         // DBAL counts no transaction once it rolls back, before the driver does: they can open one.
         $this->runEnded();
     }
@@ -294,7 +364,7 @@ final class CommitHooks
             // What it left for just before its commit, e.g. its security log entries: in its transaction.
             $this->beforeCommit();
         } catch (\Throwable $e) {
-            $this->beforeCommit = [];
+            $this->beforeCommit = [[null, []]];
             $this->unwind($connection, $driver, $e);
         }
 
