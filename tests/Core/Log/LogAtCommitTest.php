@@ -246,6 +246,28 @@ final class LogAtCommitTest extends TestCase
     }
 
     /**
+     * Savepoints sent as queries, and names in another case, are followed too: the undone work's entry
+     * isn't appended.
+     */
+    public function testSavepointsAsQueriesAndInAnyCaseAreFollowed(): void
+    {
+        $log = $this->log();
+
+        $this->connection->transactional(function () use ($log): void {
+            $this->connection->executeQuery('SAVEPOINT mine');
+            $this->connection->executeStatement('INSERT INTO change (v) VALUES (1)');
+            $log->record($this->realm, 'acme.thing.undone', Outcome::Success, new Origin(OriginKind::Web));
+            $this->connection->executeQuery('ROLLBACK TO SAVEPOINT MINE');
+            $this->connection->executeQuery('RELEASE Mine');
+        });
+
+        self::assertSame([], $this->connection->fetchFirstColumn('SELECT v FROM change'));
+        self::assertNull($this->store->head($this->realm), 'The entry of work undone was appended.');
+        self::assertSame([], $this->alerts->of(AuditFailed::class));
+        self::assertTrue(new SecurityLog($this->store, $this->transactions)->verify($this->realm)->isIntact());
+    }
+
+    /**
      * A rollback to a savepoint YorvoID never saw set can't be mapped to the entries waiting: they're
      * kept, and the alert says so.
      */

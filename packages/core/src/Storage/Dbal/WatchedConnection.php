@@ -6,6 +6,7 @@ namespace YorvoID\Core\Storage\Dbal;
 
 use Doctrine\DBAL\Driver\Connection;
 use Doctrine\DBAL\Driver\Middleware\AbstractConnectionMiddleware;
+use Doctrine\DBAL\Driver\Result;
 
 /**
  * The driver connection seen through TransactionMiddleware. DBAL calls the driver's commit() and
@@ -55,23 +56,41 @@ final class WatchedConnection extends AbstractConnectionMiddleware
     public function exec(string $sql): int|string
     {
         $affected = parent::exec($sql);
-
-        // Savepoints, DBAL's for its nested transactions and the application's own: what waits for the
-        // commit follows them (D-52).
-        if (1 === preg_match('/^\s*(SAVEPOINT|RELEASE|ROLLBACK\s+TO)\b/i', $sql, $statement)) {
-            if (1 !== preg_match('/^\s*(?:SAVEPOINT|RELEASE(?:\s+SAVEPOINT)?|ROLLBACK\s+TO(?:\s+SAVEPOINT)?)\s+("[^"]+"|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)\s*;?\s*$/i', $sql, $named)) {
-                $this->hooks->unreadableSavepoint($sql);
-            } else {
-                $name = trim($named[1], '"`');
-                match (strtoupper(preg_replace('/\s+/', ' ', $statement[1]) ?? '')) {
-                    'SAVEPOINT' => $this->hooks->savepoint($name),
-                    'RELEASE' => $this->hooks->released($name),
-                    default => $this->hooks->rolledBackTo($name),
-                };
-            }
-        }
+        $this->followSavepoints($sql);
 
         return $affected;
+    }
+
+    public function query(string $sql): Result
+    {
+        $result = parent::query($sql);
+        $this->followSavepoints($sql);
+
+        return $result;
+    }
+
+    /**
+     * Savepoints, DBAL's for its nested transactions and the application's own: what waits for the
+     * commit follows them (D-52). An unquoted name is folded to lowercase, as the databases do.
+     */
+    private function followSavepoints(string $sql): void
+    {
+        if (1 !== preg_match('/^\s*(SAVEPOINT|RELEASE|ROLLBACK\s+TO)\b/i', $sql, $statement)) {
+            return;
+        }
+
+        if (1 !== preg_match('/^\s*(?:SAVEPOINT|RELEASE(?:\s+SAVEPOINT)?|ROLLBACK\s+TO(?:\s+SAVEPOINT)?)\s+("[^"]+"|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)\s*;?\s*$/i', $sql, $named)) {
+            $this->hooks->unreadableSavepoint($sql);
+
+            return;
+        }
+
+        $name = \in_array($named[1][0], ['"', '`'], true) ? substr($named[1], 1, -1) : strtolower($named[1]);
+        match (strtoupper(preg_replace('/\s+/', ' ', $statement[1]) ?? '')) {
+            'SAVEPOINT' => $this->hooks->savepoint($name),
+            'RELEASE' => $this->hooks->released($name),
+            default => $this->hooks->rolledBackTo($name),
+        };
     }
 
     public function rollBack(): void
