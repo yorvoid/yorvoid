@@ -19,7 +19,9 @@ use YorvoID\Core\Storage\StorageLocation;
  * write version rows, and they take turns. That a transaction without it locks the rows of one
  * principal only is the rule too, which this doesn't check: the statements don't say whose rows they
  * are. Nor does it see what the database locks by itself, e.g. a parent row for a foreign key, or a
- * trigger's writes.
+ * trigger's writes. Only YorvoID's version tables are version rows: an application's own HoldsAuthority
+ * store's are ranked as other rows, so rule 2 doesn't cover them. A statement it doesn't know not to
+ * lock is ranked by its table, or throws.
  *
  * On with YORVOID_LOCK_ORDER=check, as the test suite sets; production doesn't check.
  *
@@ -105,32 +107,46 @@ final class LockOrder
     }
 
     /**
-     * What the statement locks: null for a read without a lock, or anything not a YorvoID table's.
+     * What the statement locks: null only for what's known not to lock a row, or for another
+     * application's table. Anything else is ranked by the table it writes or locks, or throws.
      *
-     * @throws \LogicException When it writes or locks and the table can't be told
+     * @throws \LogicException When it may lock and the table can't be told
      */
     private function rank(string $sql): ?string
     {
-        $statement = ltrim($sql);
+        // Leading comments and parentheses don't change what it does.
+        $statement = (string) preg_replace('/^(?:\s+|\(|--[^\n]*(?:\n|$)|\/\*.*?\*\/)+/s', '', $sql);
+        $keyword = strtoupper((string) strtok($statement, " \t\n\r("));
+        $table = '(?:"[^"]+"|`[^`]+`|[\w$]+)(?:\.(?:"[^"]+"|`[^`]+`|[\w$]+))?';
 
-        if (1 === preg_match('/^(?:SELECT|WITH)\b/i', $statement)) {
-            if (1 !== preg_match('/\bFOR\s+(?:NO\s+KEY\s+)?(?:UPDATE|SHARE|KEY\s+SHARE)\b/i', $statement)) {
-                return null;
-            }
-
-            $found = preg_match('/\bFROM\s+((?:"[^"]+"|`[^`]+`|[\w$]+)(?:\.(?:"[^"]+"|`[^`]+`|[\w$]+))?)/i', $statement, $table);
-        } elseif (1 === preg_match('/^(?:INSERT|UPDATE|DELETE)\b/i', $statement)) {
-            $found = preg_match('/^(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM)\s+((?:"[^"]+"|`[^`]+`|[\w$]+)(?:\.(?:"[^"]+"|`[^`]+`|[\w$]+))?)/i', $statement, $table);
-        } else {
-            // Savepoints, DDL, the transaction's own statements: no row is locked.
+        if (\in_array($keyword, ['SAVEPOINT', 'RELEASE', 'ROLLBACK', 'COMMIT', 'BEGIN', 'START', 'END', 'SET', 'SHOW', 'RESET', 'PRAGMA', 'CREATE', 'ALTER', 'DROP', 'COMMENT', 'GRANT', 'REVOKE', 'ANALYZE', 'VACUUM'], true)) {
             return null;
         }
 
-        if (1 !== $found) {
-            throw new \LogicException(\sprintf('A statement that locks, on a table the lock order can\'t tell (D-52): %s', $sql));
+        if ('SELECT' === $keyword || 'WITH' === $keyword) {
+            $locking = '/\bFOR\s+(?:NO\s+KEY\s+UPDATE|UPDATE|KEY\s+SHARE|SHARE)\b/i';
+
+            // A writable CTE: YorvoID writes none, and the table it writes can't be told reliably.
+            if (1 === preg_match('/\b(?:INSERT|UPDATE|DELETE|MERGE)\b/i', (string) preg_replace($locking, '', $statement))) {
+                throw new \LogicException(\sprintf('A statement that writes inside a query, which the lock order can\'t place (D-52): %s', $sql));
+            }
+
+            if (1 !== preg_match($locking, $statement)) {
+                return null;
+            }
+
+            $found = preg_match('/\bFROM\s+('.$table.')/i', $statement, $target);
+        } elseif (\in_array($keyword, ['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'TRUNCATE', 'LOCK'], true)) {
+            $found = preg_match('/^(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?|LOCK(?:\s+TABLE)?)\s+(?:ONLY\s+)?('.$table.')/i', $statement, $target);
+        } else {
+            $found = 0;
         }
 
-        $parts = explode('.', $table[1]);
+        if (1 !== $found) {
+            throw new \LogicException(\sprintf('A statement the lock order can\'t place, which may lock (D-52): %s', $sql));
+        }
+
+        $parts = explode('.', $target[1]);
         $name = trim(end($parts), '"`');
 
         if ('' !== $this->location->prefix && !str_starts_with($name, $this->location->prefix)) {
@@ -144,5 +160,13 @@ final class LockOrder
         }
 
         return self::RANKS[$name] ?? self::ROW;
+    }
+
+    /**
+     * A new connection has no transaction open: e.g. after a lost one was closed.
+     */
+    public function reset(): void
+    {
+        $this->transactions = [];
     }
 }

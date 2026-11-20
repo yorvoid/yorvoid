@@ -35,6 +35,11 @@ final class LockOrderTest extends TestCase
         yield 'a row after the head' => [['SELECT sequence, hash FROM "yorvoid_security_log_head" WHERE realm = ? FOR UPDATE'], 'DELETE FROM "yorvoid_passkey_ceremony" WHERE id = ?'];
         yield 'the realm\'s lock after the head' => [['UPDATE "yorvoid_security_log_head" SET sequence = ? WHERE realm = ?'], 'INSERT INTO "yorvoid_realm_lock" (realm, n) VALUES (?, 1) ON CONFLICT (realm) DO UPDATE SET n = n + 1'];
         yield 'a lock on a table it can\'t tell' => [[], 'UPDATE (SELECT 1) SET x = 1'];
+        yield 'a version row written in a query' => [[], 'WITH b AS (UPDATE "yorvoid_policy_version" SET version = version + 1 RETURNING version) SELECT version FROM b'];
+        yield 'a version row merged' => [[], 'MERGE INTO "yorvoid_policy_version" v USING (SELECT 1) s ON true WHEN MATCHED THEN UPDATE SET version = v.version + 1'];
+        yield 'a version row after a comment' => [[], '/* bump */ UPDATE "yorvoid_policy_version" SET version = version + 1'];
+        yield 'a version row read for update, in parentheses' => [[], '(SELECT version FROM "yorvoid_policy_version" WHERE realm = ? FOR UPDATE)'];
+        yield 'a statement it doesn\'t know' => [[], 'CALL bump_versions()'];
     }
 
     /**

@@ -25,6 +25,8 @@ final class WatchedConnection extends AbstractConnectionMiddleware
         private readonly CommitHooks $hooks,
     ) {
         parent::__construct($connection);
+        // A new connection, e.g. after a lost one was closed: no transaction of the old one is open.
+        $hooks->lockOrder?->reset();
     }
 
     public function commit(): void
