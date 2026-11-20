@@ -29,6 +29,11 @@ final class SchemaTest extends DatabaseTestCase
             'updated_at' => ['datetimetz', null, false],
             'status_changed_at' => ['datetimetz', null, false],
             'status_version' => ['integer', null, false],
+            'lock_count' => ['bigint', null, false],
+        ],
+        'realm_lock' => [
+            'realm' => ['string', 63, false],
+            'n' => ['bigint', null, false],
         ],
         'principal_identifier' => [
             'realm' => ['string', 63, false],
@@ -174,6 +179,9 @@ final class SchemaTest extends DatabaseTestCase
             'security_log_actor' => [['realm', 'actor'], false],
         ],
         'security_log_head' => [
+            'primary' => [['realm'], true],
+        ],
+        'realm_lock' => [
             'primary' => [['realm'], true],
         ],
         'authentication_session' => [

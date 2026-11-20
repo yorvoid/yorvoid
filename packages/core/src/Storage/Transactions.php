@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Storage;
 
+use YorvoID\Core\Realm;
+
 /**
  * Units of work over YorvoID's storage: a change, its security log entry and its "-ing" events happen
  * together or not at all, and "-ed" events run only once the change is committed (PLT-042).
@@ -49,6 +51,31 @@ interface Transactions
      * @param \Closure(): void $callback
      */
     public function afterEnd(\Closure $callback): void;
+
+    /**
+     * Locks the realm until the transaction ends, for a check over the realm as a whole and every change
+     * that can break one: e.g. that it keeps an administrator, which a change of status and a change of
+     * roles can both break, or that a setup claims it only while it has no active principal. It's the
+     * first lock of its unit of work, before version rows, a principal's or the security log's: taking
+     * it later risks a deadlock (D-52). Taking it again in the same transaction takes nothing more.
+     *
+     * It's a write, so that under REPEATABLE READ a transaction that waited for it fails as a conflict
+     * (RetryableConflict), rather than going on with an older snapshot. Inside a transaction only.
+     */
+    public function lockRealm(Realm $realm): void;
+
+    /**
+     * Runs the callback just before the outermost transaction commits, inside it, if the end of the
+     * transaction can be seen: then it returns true. A failed unit of work drops the callbacks it added,
+     * also a savepoint the application rolled back, and if a callback fails, the transaction rolls back
+     * and the commit throws: what the callbacks write is never missing from what's committed. Where the
+     * commit can't be seen (no transaction open, a connection without YorvoID's middleware), it returns
+     * false and runs nothing: do the work now instead. For writes that take a lock better held for as
+     * short a time as possible, e.g. the security log's (D-52).
+     *
+     * @param \Closure(): void $callback
+     */
+    public function beforeCommit(\Closure $callback): bool;
 
     /**
      * Runs the work, and again, from the start, when a transaction of its conflicted with another (a

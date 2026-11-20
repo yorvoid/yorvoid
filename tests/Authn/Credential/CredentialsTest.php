@@ -199,7 +199,7 @@ final class CredentialsTest extends DatabaseTestCase
     public function testForgettingWithoutRecoveryCodesRemovesTheCredentials(): void
     {
         $this->credentials('memory');
-        $credentials = new Credentials($this->stack->credentials, $this->sessions, $this->stepUp, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, clock: $this->clock);
+        $credentials = new Credentials($this->stack->credentials, $this->sessions, $this->principals, $this->stepUp, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, clock: $this->clock);
         $session = $this->session();
         Permits::call($credentials->add(...), new AddCredential(new Realm('acme'), CredentialKind::Passkey, 'Phone'), new Origin(OriginKind::Web), $session);
 
@@ -210,7 +210,7 @@ final class CredentialsTest extends DatabaseTestCase
     public function testTheWindowIsConfigurable(): void
     {
         $this->credentials('memory');
-        $credentials = new Credentials($this->stack->credentials, $this->sessions, $this->stepUp, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, clock: $this->clock, reauthenticationWindow: Duration::minutes(10));
+        $credentials = new Credentials($this->stack->credentials, $this->sessions, $this->principals, $this->stepUp, new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock), $this->stack->transactions, clock: $this->clock, reauthenticationWindow: Duration::minutes(10));
         $session = $this->session();
 
         $this->clock->sleep(599);
@@ -499,7 +499,7 @@ final class CredentialsTest extends DatabaseTestCase
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock, $coolDown);
 
         // The default window: 5 minutes.
-        return $this->credentials = new Credentials(null === $store ? $this->stack->credentials : $store($this->stack->credentials), $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock, recoveryCodes: $this->stack->recoveryCodes);
+        return $this->credentials = new Credentials(null === $store ? $this->stack->credentials : $store($this->stack->credentials), $this->sessions, $this->principals, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock, recoveryCodes: $this->stack->recoveryCodes);
     }
 
     /**

@@ -47,7 +47,7 @@ $configuration = new Configuration();
 $configuration->setMiddlewares([$middleware]);
 $connection = DriverManager::getConnection(new DsnParser()->parse($url), $configuration);
 $database = new Database($connection, new StorageLocation(StorageLocation::DEFAULT_PREFIX, $schema));
-$transactions = new DbalTransactions($connection, $middleware);
+$transactions = new DbalTransactions($connection, $middleware, location: $database->location);
 $store = new DbalPrincipalStore($database);
 
 $keepOneActive = new readonly class($store, array_map(PrincipalId::fromString(...), explode(',', $group))) implements GuardRule {

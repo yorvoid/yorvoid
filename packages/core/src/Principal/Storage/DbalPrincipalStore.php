@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Core\Principal\Storage;
 
 use Doctrine\DBAL\Types\Types;
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -74,6 +75,21 @@ final readonly class DbalPrincipalStore implements PrincipalStore
             \sprintf('SELECT 1 FROM %s WHERE realm = ? AND status = ? LIMIT 1', $this->database->table(self::TABLE)),
             [$realm->name, PrincipalStatus::Active->value],
         );
+    }
+
+    public function lock(Realm $realm, PrincipalId $id): void
+    {
+        $this->inTransaction();
+
+        // A write, not FOR UPDATE: under REPEATABLE READ, whoever waited for it then conflicts (D-52).
+        $this->database->connection->executeStatement(\sprintf('UPDATE %s SET lock_count = lock_count + 1 WHERE realm = ? AND id = ?', $this->database->table(self::TABLE)), [$realm->name, $id->uuid->toRfc4122()]);
+    }
+
+    private function inTransaction(): void
+    {
+        if (!$this->database->connection->isTransactionActive()) {
+            throw new IntegratorError('Principals were locked outside a transaction.', 'Lock them inside Transactions::run(), before reading what the change depends on.', 'concepts/storage.md#locks');
+        }
     }
 
     public function changeStatus(Principal $before, Principal $after): bool

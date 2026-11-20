@@ -103,6 +103,9 @@ final readonly class Sessions implements OperationHandler
         }
 
         return $this->transactions->run(function () use ($command, $origin): StartedSession {
+            // Before asking whether the principal is active: a suspension at the same moment waits, or
+            // is waited for (D-52).
+            $this->principals->lock($command->realm, $command->principalId);
             $principal = $this->principals->get($command->realm, $command->principalId) ?? throw new UnknownPrincipal($command->realm, $command->principalId);
 
             if (!$principal->isActive()) {

@@ -117,6 +117,8 @@ final readonly class RecoveryLinks implements OperationHandler
             }
 
             $permit->about($used->principalId);
+            // Once the link names its principal: two recoveries of one account at once take turns (D-52).
+            $this->principals->lock($realm, $used->principalId);
             $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $used->principalId, SessionEndReason::Recovered), $origin, $used->principalId);
             $permit->cause($this->stepUp->startCoolDown(...), new StartCoolDown($realm, $used->principalId), $origin);
 

@@ -418,7 +418,7 @@ final class SecurityNotificationsTest extends DatabaseTestCase
         $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, $this->events, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, events: $this->events, ids: $ids, clock: $this->clock, devices: $this->stack->devices);
-        $this->credentials = new Credentials($this->stack->credentials, $this->sessions, new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock), $log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        $this->credentials = new Credentials($this->stack->credentials, $this->sessions, $this->principals, new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock), $log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock);
         $this->mailer = new InMemoryMailer();
         $settings = new NotificationSettings('Acme', 'https://acme.example/not-me?token={token}&credential={credential}', fn (Realm $realm, PrincipalId $principal): string => $this->locales[(string) $principal] ?? 'en');

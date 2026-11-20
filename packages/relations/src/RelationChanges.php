@@ -56,6 +56,8 @@ final readonly class RelationChanges implements OperationHandler, RequiresForbid
         $tuple = $this->tuple($command->realm, $command->object, $command->relation, $command->subject);
 
         $this->transactions->run(function () use ($tuple, $permit, $origin): void {
+            // The realm first: a guard rule that reads relations waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($tuple->realm);
             $this->store->add($tuple);
             $this->record('yorvoid.relation.add', $tuple, $permit, $origin);
         });
@@ -73,6 +75,8 @@ final readonly class RelationChanges implements OperationHandler, RequiresForbid
         $tuple = new RelationTuple($command->realm, $command->object, $command->relation, $command->subject);
 
         return $this->transactions->run(function () use ($tuple, $permit, $origin): bool {
+            // The realm first: a guard rule that reads relations waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($tuple->realm);
             $had = $this->store->remove($tuple);
 
             if ($had) {

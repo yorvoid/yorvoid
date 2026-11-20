@@ -36,7 +36,7 @@ $configuration = new Configuration();
 $configuration->setMiddlewares([$middleware]);
 $connection = DriverManager::getConnection(new DsnParser()->parse($url), $configuration);
 $database = new Database($connection, new StorageLocation(StorageLocation::DEFAULT_PREFIX, $schema));
-$log = new SecurityLog(new DbalSecurityLogStore($database), new DbalTransactions($connection, $middleware));
+$log = new SecurityLog(new DbalSecurityLogStore($database), new DbalTransactions($connection, $middleware, location: $database->location));
 
 $deadline = microtime(true) + 10;
 

@@ -16,7 +16,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - Concurrency contracts in `yorvoid/testing`, run in several processes by `Race` from a factory file of yours: `OneTimeTokenStoreConcurrencyContract`, `RecoveryCodeStoreConcurrencyContract`, `SetupStoreConcurrencyContract`, `CeremonyStoreConcurrencyContract`, `ThrottleStoreConcurrencyContract`, `PrincipalStoreConcurrencyContract`, `SessionStoreConcurrencyContract`, `SecurityLogStoreConcurrencyContract` and `VerifierStoreConcurrencyContract`. `#[ConcurrencyTestedIn]` names the test case that runs one, and `#[InMemoryStores]` says a test case has none to run ([storage](docs/concepts/storage.md#requests-at-the-same-moment)).
 - `VerifierStoreContract` and `VerifierLogContract`, for the verifier's stores. `yorvoid/testing` suggests `yorvoid/intent-verifier` for them.
 - `Transactions::afterEnd()`: runs once the outermost transaction has ended, committed or rolled back. `TransactionsContract` checks it.
-- Decision digests: `yorvoid:log:checkpoint` first appends `yorvoid.decision.digest` with the decision records written since the last one (`DecisionDigests`), and `yorvoid:log:verify --decisions` checks them. `yorvoid.decision_log.digest_grace` (a minute) is how long a record may take to be written.
+- Decision digests: `yorvoid:log:checkpoint` first appends `yorvoid.decision.digest` with the decision records written since the last one (`DecisionDigests`), and `yorvoid:log:verify --decisions` checks them. `yorvoid.decision_log.digest_grace` (a minute) is how long a record may take to be written. `DecisionDigests::take()` returns how many records the digest covers.
 - `DecisionRecorded`: dispatched for each decision record written, refusals and failed attempts among them.
 - `SecurityLog::attempt()` and `AttemptLog`: failed attempts and refusals, kept apart from the chain.
 - `ForgetRoles`, `ForgetRelations` and `ForgetAttributes` (`yorvoid.role.forget_all`, `yorvoid.relation.forget_all`, `yorvoid.attribute.forget_all`): a deletion's consequences, run by `ForgetRolesOfDeletedPrincipals`, `ForgetRelationsOfDeletedPrincipals` and `ForgetAttributesOfDeletedPrincipals`, which are their handlers.
@@ -28,6 +28,8 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `ProvesActors` and `StoredSessions`: every decision proves its actor first, a session by reading it from its store ([actors](docs/concepts/operations-and-events.md#actors)). In Symfony, a service tagged `yorvoid.actor_prover` proves an actor class of your own.
 - `yorvoid.api.paths`: path prefixes whose requests have the `api` origin, as do those with an `Authorization: Bearer` header.
 - `@experimental`: `ActsUnderDelegation`, `Request::$execution` and `Request::$purpose`, the shapes of M3's delegation.
+- `Transactions::lockRealm()`: locks a realm until the transaction ends, for a check over the realm as a whole, e.g. that it keeps an administrator, and every change that can break one. Changes of status, claiming a setup, creating an active principal, and every change of roles, groups, abilities, relations and attributes take it first ([locks](docs/concepts/storage.md#locks)).
+- `Transactions::beforeCommit()`: runs a callback just before the outermost transaction commits, inside it; if it fails, nothing commits.
 
 ### Breaking
 
@@ -57,6 +59,13 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `CredentialStore::update()` is gone. A store writes only what each change is about: `rename()` the label, `markUsed()` the last use, of an active credential only, and `disable()` the status. Each says whether it changed anything. A store of your own implements the three; `CredentialStoreContract` checks them, with a second instance over the same data (`sameCredentialStore()`), which you override for a store processes share.
 - `Credentials::markUsed()` takes the realm and the credential's ID, returns whether the credential was still active, and is `@internal`: it's for the packages that check credentials.
 - In Symfony, YorvoID's stores are services under IDs of their own, `yorvoid.store.<name>` (e.g. `yorvoid.store.session`), and no longer under their interfaces or classes: your services don't get a store by autowiring. A store of your own replaces YorvoID's by aliasing its ID, not its interface ([stores of your own](docs/concepts/storage.md#stores-of-your-own)).
+- `SecurityLog::record()` returns nothing. Inside a transaction on a connection with `TransactionMiddleware`, the entry is appended just before the commit, so it has no sequence or hash until then; if appending fails, the commit throws and nothing of the transaction is committed. Read entries from `SecurityLogStore::entries()`.
+- `SecurityLog::lock()` is removed: lock with `Transactions::lockRealm()`, the first lock of the unit of work.
+- `Transactions` adds `lockRealm()` and `beforeCommit()`: a `Transactions` of your own implements them. `lockRealm()` must be a write that conflicts under REPEATABLE READ and can be taken again in the same transaction; doing nothing is right only for storage that runs one writer at a time. `beforeCommit()` returns false, and runs nothing, where it can't see the commit.
+- `PrincipalStore` adds `lock()`, a write that locks the principal's row until the transaction ends, e.g. an update of a counter column: a store of your own implements it. The migrations add `principal.lock_count` and the `realm_lock` table.
+- `Credentials` takes `Principals`, as its third argument.
+- `DbalTransactions` takes the `StorageLocation` (`location:`) when YorvoID's tables aren't in the default place; the Symfony bundle passes it.
+- Inside a transaction you opened through DBAL's `transactional()`, a failure appending the security log at your commit may reach you as `NoActiveTransaction`, with the cause as its previous. It isn't retried.
 
 ### Security
 
@@ -70,6 +79,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - YorvoID's stores are marked `@spi`: implement them, don't call them. A call changes YorvoID's records without a decision or a log entry, as writing the database does ([interfaces you implement](docs/compatibility.md#interfaces-you-implement)). The Symfony bridge doesn't give them to application code (AR-01).
 - `Sessions::refresh()` records each new token in the security log (`yorvoid.session.refresh`), as a sign-in and a step-up do: it issues a credential (AR-01).
 - A passkey or a set of recovery codes disabled during a sign-in that uses it, e.g. by a "This wasn't me" report, stays disabled. Before, the sign-in wrote back its own copy of the credential, active, and went on. Now the sign-in is refused and recorded, and a recovery code it would have used is kept (ARC-0057).
+- A change of status no longer runs its guard rules against a role, group, relation or attribute change made at the same moment, which could leave a realm without its last administrator: both take the realm's lock. Changes of one principal (tokens, recovery codes and links, adding, removing and disabling credentials, starting a session) take turns on the principal's lock, and a disable no longer slips in between a sign-in's read and its use of the credential. A realm's security log is locked only while its entries are appended at the commit, so changes in one realm no longer wait for each other's whole unit of work.
 
 ### Fixed
 

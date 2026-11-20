@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Acme\Storage;
 
+use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\RetryableConflict;
 use YorvoID\Core\Storage\Transactions;
 
@@ -99,6 +100,27 @@ final class PdoTransactions implements Transactions
         } finally {
             $this->retrying = $this->again = false;
         }
+    }
+
+    /**
+     * SQLite writes one transaction at a time, from its first write: nothing more to lock. On a database
+     * with row locks, write a row of the realm's here (INSERT ... ON CONFLICT DO UPDATE of a counter),
+     * the first lock of the unit of work.
+     */
+    public function lockRealm(Realm $realm): void
+    {
+        if (0 === $this->depth) {
+            throw new \LogicException('Lock a realm inside a transaction.');
+        }
+    }
+
+    /**
+     * Nothing waits for the commit here: the security log appends at once, and holds its lock for the
+     * rest of the transaction. Implement it, as afterCommit() but just before the commit, to shorten that.
+     */
+    public function beforeCommit(\Closure $callback): bool
+    {
+        return false;
     }
 
     public function afterEnd(\Closure $callback): void

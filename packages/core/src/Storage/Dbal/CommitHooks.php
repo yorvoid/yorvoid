@@ -29,6 +29,9 @@ final class CommitHooks
     /** @var list<\Closure(): void> Callbacks for the end, committed or rolled back */
     private array $ended = [];
 
+    /** @var list<array{int, \Closure(): void}> Callbacks just before the commit, each with DBAL's nesting level when it was added */
+    private array $beforeCommit = [];
+
     private bool $watching = false;
 
     /** Whether a commit should wait for runCommitted() rather than run the callbacks at once */
@@ -85,6 +88,60 @@ final class CommitHooks
     }
 
     /**
+     * @param int              $level    DBAL's nesting level when it's added: a rollback to that level's savepoint drops it
+     * @param \Closure(): void $callback
+     */
+    public function addBeforeCommit(int $level, \Closure $callback): void
+    {
+        $this->beforeCommit[] = [$level, $callback];
+    }
+
+    /**
+     * DBAL rolled back to the savepoint of the given nesting level: what was added at it, or deeper,
+     * won't be committed.
+     */
+    public function rolledBackTo(int $level): void
+    {
+        $this->beforeCommit = array_values(array_filter($this->beforeCommit, static fn (array $waiting): bool => $waiting[0] < $level));
+    }
+
+    /**
+     * Rolled back to a savepoint that isn't DBAL's: which of what waits before the commit it undoes
+     * can't be told. It's kept, and the audit alert says so, rather than guessing (D-52).
+     */
+    public function rolledBackToUnknown(string $savepoint): void
+    {
+        if ([] !== $this->beforeCommit) {
+            $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_LOG, null, \count($this->beforeCommit), false, new \LogicException(\sprintf('The transaction rolled back to the savepoint "%s", which isn\'t DBAL\'s: YorvoID kept the security log entries it waited to append at the commit, which may include some of the work undone.', $savepoint))));
+        }
+    }
+
+    /**
+     * The driver is about to commit: runs what waits for that, in the order it was added. A failure is
+     * thrown, for the commit to roll back.
+     */
+    public function beforeCommit(): void
+    {
+        while ([] !== $this->beforeCommit) {
+            [, $callback] = array_shift($this->beforeCommit);
+            $callback();
+        }
+    }
+
+    /**
+     * What waited before the commit failed, and the driver rolled back: nothing of the transaction is
+     * committed. DBAL still counts it as open until its commit() has thrown, so what waits for the end
+     * runs in a transaction of its own on the driver, as after a commit (D-43).
+     */
+    public function failedBeforeCommit(WatchedConnection $driver): void
+    {
+        $this->callbacks = [];
+        $this->beforeCommit = [];
+        $connection = $this->connection;
+        $this->runEnded(null === $connection ? null : fn (\Closure $callback) => $this->apart($connection, $driver, $callback));
+    }
+
+    /**
      * How many callbacks are waiting, to drop those a failed unit of work added (see truncate()).
      */
     public function count(): int
@@ -109,6 +166,7 @@ final class CommitHooks
     {
         $this->callbacks = [];
         $this->ended = [];
+        $this->beforeCommit = [];
     }
 
     /**
@@ -156,6 +214,7 @@ final class CommitHooks
     public function rolledBack(): void
     {
         $this->callbacks = [];
+        $this->beforeCommit = [];
         // DBAL counts no transaction once it rolls back, before the driver does: they can open one.
         $this->runEnded();
     }
@@ -231,7 +290,11 @@ final class CommitHooks
             if (!$driver->isApart()) {
                 throw new \LogicException('A callback after the commit ended the transaction it ran in.');
             }
+
+            // What it left for just before its commit, e.g. its security log entries: in its transaction.
+            $this->beforeCommit();
         } catch (\Throwable $e) {
+            $this->beforeCommit = [];
             $this->unwind($connection, $driver, $e);
         }
 

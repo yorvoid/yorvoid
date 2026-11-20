@@ -57,7 +57,7 @@ $configuration = new Configuration();
 $configuration->setMiddlewares([$middleware]);
 $connection = DriverManager::getConnection(new DsnParser()->parse($url), $configuration);
 $database = new Database($connection, new StorageLocation(StorageLocation::DEFAULT_PREFIX, $schema));
-$transactions = new DbalTransactions($connection, $middleware);
+$transactions = new DbalTransactions($connection, $middleware, location: $database->location);
 
 $slow = new readonly class(new DbalCredentialStore($database)) implements CredentialStore {
     public function __construct(
@@ -107,7 +107,7 @@ $log = new SecurityLog(new DbalSecurityLogStore($database), $transactions);
 $principals = new Principals(new DbalPrincipalStore($database), new DbalIdentifierStore($database), $log, $transactions);
 $sessions = new Sessions(new DbalSessionStore($database), $principals, $log, $transactions);
 $stepUp = new StepUp($sessions, new DbalCoolDownStore($database), $log);
-$codes = new RecoveryCodes(new DbalRecoveryCodeStore($database), new Credentials($slow, $sessions, $stepUp, $log, $transactions), $sessions, $stepUp, new Attempts(new Throttle(new DbalThrottleStore($database))), $log, $transactions, $principals);
+$codes = new RecoveryCodes(new DbalRecoveryCodeStore($database), new Credentials($slow, $sessions, $principals, $stepUp, $log, $transactions), $sessions, $stepUp, new Attempts(new Throttle(new DbalThrottleStore($database))), $log, $transactions, $principals);
 $deadline = microtime(true) + 10;
 
 while (!file_exists($start)) {

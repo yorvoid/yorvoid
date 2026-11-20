@@ -93,7 +93,8 @@ final readonly class StepUp implements OperationHandler
         }
 
         $until = $this->coolDown->after(Time::stored($this->clock->now()));
-        // Recording first takes the realm's log lock: two recoveries at once extend one after the other.
+        // The recovery that causes it locked the principal (Principals::lock()): two recoveries at once
+        // extend one after the other (D-52).
         $this->log->record($command->realm, 'yorvoid.recovery.cool_down', Outcome::Success, $origin, null, 'principal', (string) $command->principalId, ['until' => $until->format(\DATE_ATOM)]);
         $this->coolDowns->extend($command->realm, $command->principalId, $until);
     }

@@ -51,6 +51,13 @@ final class InMemoryPrincipalStore implements PrincipalStore, InMemoryStore
         return false;
     }
 
+    /**
+     * Memory has one process: nothing to wait for.
+     */
+    public function lock(Realm $realm, PrincipalId $id): void
+    {
+    }
+
     public function changeStatus(Principal $before, Principal $after): bool
     {
         $id = (string) $before->id;

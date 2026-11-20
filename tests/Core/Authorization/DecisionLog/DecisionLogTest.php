@@ -180,15 +180,22 @@ final class DecisionLogTest extends TestCase
     {
         $decision = \YorvoID\Tests\Support\Decisions::identified(\YorvoID\Tests\Support\Decisions::permit(\YorvoID\Core\Operation\AuthorizedBy::Operator, 'Ran.'), 'd-1', $this->clock->now());
 
-        $this->log->citing($decision, fn (): LogEntry => $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console), details: ['decision' => 'its own']));
+        $this->log->citing($decision, function (): void {
+            $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console), details: ['decision' => 'its own']);
+        });
         $this->log->citing($decision, function (): void {
             $this->log->reset();
             $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console));
         });
-        $this->log->citing(\YorvoID\Tests\Support\Decisions::permit(\YorvoID\Core\Operation\AuthorizedBy::Operator, 'Ran.'), fn (): LogEntry => $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console)));
+        $this->log->citing(\YorvoID\Tests\Support\Decisions::permit(\YorvoID\Core\Operation\AuthorizedBy::Operator, 'Ran.'), function (): void {
+            $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console));
+        });
 
         self::assertSame([['decision' => 'its own'], [], []], array_map(static fn (LogEntry $entry): array => $entry->details, $this->entries()), 'A reset, or a decision without an ID, cites nothing.');
-        self::assertSame(['decision' => ['id' => 'd-1']], $this->log->citing($decision, fn (): array => $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console))->details), 'Without a decision log, only its ID.');
+        $this->log->citing($decision, function (): void {
+            $this->log->record($this->realm, 'acme.badge.inspect', Outcome::Success, new Origin(OriginKind::Console));
+        });
+        self::assertSame(['decision' => ['id' => 'd-1']], $this->entries()[3]->details, 'Without a decision log, only its ID.');
     }
 
     public function testAnOperationDoesntRunWhenItsDecisionCantBeRecorded(): void

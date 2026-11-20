@@ -7,7 +7,6 @@ namespace YorvoID\Core\Authorization\DecisionLog;
 use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
-use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\SecurityLogStore;
@@ -52,31 +51,36 @@ final readonly class DecisionDigests
      * Appends the realm's digest of the records written since the last one, up to the grace before
      * now, and notes how far it got; nothing when there's nothing new.
      *
+     * @return int How many records the digest covers: 0 when nothing was appended
+     *
      * @phpstan-impure
      */
-    public function take(Realm $realm): ?LogEntry
+    public function take(Realm $realm): int
     {
         $until = $this->store->now() - $this->grace->seconds * 1_000_000;
         $after = $this->store->digestedUntil($realm);
 
         if ($until <= $after) {
-            return null;
+            return 0;
         }
 
         $records = $this->store->written($realm, $after, $until);
 
-        return $this->transactions->run(function () use ($realm, $after, $until, $records): ?LogEntry {
-            $entry = [] === $records ? null : $this->log->record($realm, self::ACTION, Outcome::Success, Origin::system('decision-digest'), null, null, null, [
-                'after' => $after,
-                'until' => $until,
-                'count' => \count($records),
-                'algorithm' => self::ALGORITHM,
-                'root' => self::root($records),
-            ]);
-            $this->store->digested($realm, $until);
+        $this->transactions->run(function () use ($realm, $after, $until, $records): void {
+            if ([] !== $records) {
+                $this->log->record($realm, self::ACTION, Outcome::Success, Origin::system('decision-digest'), null, null, null, [
+                    'after' => $after,
+                    'until' => $until,
+                    'count' => \count($records),
+                    'algorithm' => self::ALGORITHM,
+                    'root' => self::root($records),
+                ]);
+            }
 
-            return $entry;
+            $this->store->digested($realm, $until);
         });
+
+        return \count($records);
     }
 
     /**

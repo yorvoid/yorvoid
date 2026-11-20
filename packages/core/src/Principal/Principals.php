@@ -84,6 +84,11 @@ final readonly class Principals implements OperationHandler
         $actor = $permit->actor->principalId;
 
         return $this->transactions->run(function () use ($command, $permit, $origin, $actor): Principal {
+            // An active principal ends a setup that waits for the realm's first (SetupCodes::claimWith()).
+            if (PrincipalStatus::Active === $command->status) {
+                $this->transactions->lockRealm($command->realm);
+            }
+
             $now = Time::stored($this->clock->now());
             $principal = new Principal(new PrincipalId($this->ids->next()), $command->realm, $command->kind, $command->status, $now, $now, $now);
             // Before the events that carry the permit: what follows from it is about this principal only.
@@ -234,6 +239,18 @@ final readonly class Principals implements OperationHandler
         });
     }
 
+    /**
+     * Locks the principal until the transaction ends, before what a change of theirs reads: their
+     * changes happen one after the other (D-52). Take it at the top of the unit of work, after the
+     * realm's lock if the unit takes that.
+     *
+     * @internal For YorvoID's packages, whose changes of one principal depend on what they read
+     */
+    public function lock(Realm $realm, PrincipalId $id): void
+    {
+        $this->store->lock($realm, $id);
+    }
+
     public function get(Realm $realm, PrincipalId $id): ?Principal
     {
         return $this->store->get($realm, $id);
@@ -275,6 +292,10 @@ final readonly class Principals implements OperationHandler
         $actor = $permit->actor->principalId;
 
         return $this->transactions->run(function () use ($operation, $realm, $id, $status, $origin, $actor, $permit): Principal {
+            // The guard rules check the realm as a whole, and an active principal ends a setup: changes of
+            // status take turns over the realm, before anything they read.
+            $this->transactions->lockRealm($realm);
+            $this->store->lock($realm, $id);
             $before = $this->store->get($realm, $id) ?? throw new UnknownPrincipal($realm, $id);
             $after = $before->withStatus($status, $this->clock->now());
 
@@ -288,8 +309,6 @@ final readonly class Principals implements OperationHandler
                 $this->identifiers->removeAll($realm, $id);
             }
 
-            // Recording takes the realm's log lock, which every change waits for until this transaction
-            // ends; the guard rules run after it, so they see what concurrent changes committed.
             $this->log->record($realm, $operation, Outcome::Success, $origin, $actor, 'principal', (string) $id, [
                 'from' => $before->status->value,
                 'to' => $after->status->value,

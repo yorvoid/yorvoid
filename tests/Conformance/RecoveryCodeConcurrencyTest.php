@@ -46,7 +46,7 @@ final class RecoveryCodeConcurrencyTest extends DatabaseTestCase
         $principals = new Principals($stack->principals, $stack->identifiers, $log, $stack->transactions);
         $sessions = new Sessions($stack->sessions, $principals, $log, $stack->transactions);
         $stepUp = new StepUp($sessions, $stack->coolDowns, $log);
-        $codes = new RecoveryCodes($stack->recoveryCodes, new Credentials($stack->credentials, $sessions, $stepUp, $log, $stack->transactions), $sessions, $stepUp, new Attempts(new Throttle($stack->throttle)), $log, $stack->transactions, $principals);
+        $codes = new RecoveryCodes($stack->recoveryCodes, new Credentials($stack->credentials, $sessions, $principals, $stepUp, $log, $stack->transactions), $sessions, $stepUp, new Attempts(new Throttle($stack->throttle)), $log, $stack->transactions, $principals);
         $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
         $session = Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web))->session;
         $code = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session)[0];

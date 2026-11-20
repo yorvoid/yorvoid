@@ -45,7 +45,7 @@ $configuration = new Configuration();
 $configuration->setMiddlewares([$middleware]);
 $connection = DriverManager::getConnection(new DsnParser()->parse($url), $configuration);
 $database = new Database($connection, new StorageLocation(StorageLocation::DEFAULT_PREFIX, $schema));
-$transactions = new DbalTransactions($connection, $middleware);
+$transactions = new DbalTransactions($connection, $middleware, location: $database->location);
 
 $slow = new readonly class(new DbalPrincipalStore($database)) implements PrincipalStore {
     public function __construct(
@@ -68,6 +68,11 @@ $slow = new readonly class(new DbalPrincipalStore($database)) implements Princip
     public function hasActive(Realm $realm): bool
     {
         return $this->store->hasActive($realm);
+    }
+
+    public function lock(Realm $realm, PrincipalId $id): void
+    {
+        $this->store->lock($realm, $id);
     }
 
     public function changeStatus(Principal $before, Principal $after): bool

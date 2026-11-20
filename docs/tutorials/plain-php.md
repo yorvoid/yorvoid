@@ -73,7 +73,7 @@ $sessions = new Sessions($sessionStore, $principals, $log, $transactions, Sessio
 $attempts = new Attempts(new Throttle(new DbalThrottleStore($database)));
 $setupCodes = new SetupCodes(new DbalSetupStore($database), $principals, $log, $transactions, $attempts, $sessions);
 $stepUp = new StepUp($sessions, new DbalCoolDownStore($database), $log);
-$credentials = new Credentials(new DbalCredentialStore($database), $sessions, $stepUp, $log, $transactions);
+$credentials = new Credentials(new DbalCredentialStore($database), $sessions, $principals, $stepUp, $log, $transactions);
 $passkeys = new Passkeys(
     new DbalPasskeyStore($database),
     new DbalCeremonyStore($database),

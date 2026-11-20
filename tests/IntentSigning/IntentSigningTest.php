@@ -227,7 +227,7 @@ final class IntentSigningTest extends DatabaseTestCase
         $this->summaries = new IntentSummaries($translator, 'acme');
         $this->mailer = new InMemoryMailer();
         $tokens = new OneTimeTokens($this->stack->tokens, $this->principals, $log, $this->stack->transactions, clock: $this->clock);
-        $credentials = new Credentials($this->stack->credentials, $this->sessions, new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock), $log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        $credentials = new Credentials($this->stack->credentials, $this->sessions, $this->principals, new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock), $log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $notMe = new NotMe($tokens, $this->sessions, $credentials, $log, $this->stack->transactions, $this->events);
         $notifications = new SecurityNotifications($this->principals, TestOperations::of($log, $this->stack->principals, null, $tokens, $notMe), $this->mailer, $translator, new NotificationSettings('Acme', 'https://example.com/not-me?token={token}'), $this->clock);
         $this->events->listen(SignedOperationRan::class, new SignedOperationNotification($notifications, $this->summaries)(...));

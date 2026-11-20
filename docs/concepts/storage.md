@@ -70,6 +70,18 @@ Two transactions can get in each other's way: a deadlock, or a serialization fai
 - **Inside your transaction, you retry.** When YorvoID's work runs in a transaction you opened, `transactional()`, `wrapInTransaction()` or Messenger's `doctrine_transaction`, the conflict rolls back all of it, your own changes too, so it's yours to run again: YorvoID throws `RetryableConflict` at once. Messenger's retry does that for a message. In Symfony, a request that ends with one gets 503 with `Retry-After`.
 - **Work of your own** that should be retried the same way runs in `$transactions->retrying(fn () => ...)`. It does nothing outside the database except through `afterCommit()` and `afterEnd()`, or what's fine done twice: whatever else it does, it does again.
 
+### Locks
+
+YorvoID's units of work take their locks in one order, so two of them never wait for each other:
+
+1. **The realm's lock**, `$transactions->lockRealm($realm)`, first or not at all. A check over the realm as a whole takes it, and so does every change that can break such a check: a change of a principal's status (an administrator a guard rule keeps), claiming a setup (only while no principal is active), and every change of roles, groups, abilities, relations and attributes, since a guard rule may read them. Taking it again in the same transaction takes nothing more. A store of yours that holds authority (`HoldsAuthority`) takes it before it changes anything.
+2. **Version rows**, under the realm's lock only, and **the rows of one principal**: their changes, e.g. removing the last two passkeys from two sessions at once, take turns.
+3. **The security log**, at the commit. Inside a transaction whose commit YorvoID sees (a connection with `TransactionMiddleware`), `record()` keeps the entry and appends it just before the commit, so the realm's log is locked only for that moment; if appending fails, nothing of the transaction is committed. Elsewhere it appends at once, and the log stays locked until the transaction ends.
+
+Each lock is a write, not only `SELECT ... FOR UPDATE`. Under `REPEATABLE READ`, a transaction that waited for one then fails as a conflict (`RetryableConflict`) and runs again on what's committed, rather than going on with what it saw before. Under `READ COMMITTED`, it reads what was committed when it gets the lock. On SQLite, a second writer at the same moment gets `SQLITE_BUSY` once its busy timeout runs out, which YorvoID doesn't retry: fine for development and tests.
+
+Your own transaction can still meet YorvoID's in another order, e.g. one that changes your own authority rows and then suspends someone. PostgreSQL then ends one of them as a deadlock, a `RetryableConflict` for you to retry. A failure appending the log at your commit through DBAL's `transactional()` may reach you as `NoActiveTransaction`, with the cause as its previous; it isn't retried.
+
 ### Without a database
 
 In tests, or an application that keeps nothing between runs, YorvoID's stores can live in memory. A failed change must then undo what it did in every store, as a database's rollback does: YorvoID relies on it, e.g. the last way to sign in can't be removed. Build them all at once, registered, with `InMemoryStorage` from `yorvoid/testing`:

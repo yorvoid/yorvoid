@@ -656,7 +656,7 @@ final class PasskeysTest extends DatabaseTestCase
 
         $database->connection->beginTransaction();
         // An earlier change of the application's, in the same transaction: it holds the realm's log lock.
-        new SecurityLog($this->stack->log, $this->stack->transactions)->lock(new Realm('acme'));
+        $this->stack->log->lock(new Realm('acme'));
         $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web)));
         $database->connection->commit();
 
@@ -1181,7 +1181,7 @@ final class PasskeysTest extends DatabaseTestCase
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock);
-        $this->credentials = new Credentials($credentialStore ?? $this->stack->credentials, $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        $this->credentials = new Credentials($credentialStore ?? $this->stack->credentials, $this->sessions, $this->principals, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
 
         return new Passkeys($store ?? $this->stack->passkeys, $this->stack->ceremonies, $this->credentials, $this->sessions, $this->principals, $log, $this->stack->transactions, new PasskeyPolicy('example.com', ['https://example.com'], $userVerification, $clonePolicy, crypto: $crypto), new Attempts(new Throttle($this->stack->throttle, $this->clock), $limits), $ids, $this->clock);
     }

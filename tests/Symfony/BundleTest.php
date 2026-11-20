@@ -406,7 +406,7 @@ final class BundleTest extends TestCase
         $log->attempt(Realm::default(), 'yorvoid.setup.claim', Outcome::Failed, new Origin(OriginKind::Web));
         usleep(1_100_000);
         self::assertSame(0, $checkpoint->execute([]));
-        self::assertStringContainsString('Digested 1 decision record(s) of the realm "default" in entry 1.', $checkpoint->getDisplay());
+        self::assertStringContainsString('Digested 1 decision record(s) of the realm "default".', $checkpoint->getDisplay());
         self::assertSame(0, $verify->execute(['--decisions' => true]));
         self::assertStringContainsString('The decision records of 1 digest(s) match them.', (string) preg_replace('/\s+/', ' ', $verify->getDisplay()));
 

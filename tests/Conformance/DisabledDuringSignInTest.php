@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Conformance;
 
+use Doctrine\DBAL\Exception\DriverException;
 use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Authn\Credential\Credential;
 use YorvoID\Authn\Credential\CredentialKind;
@@ -22,8 +23,6 @@ use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
-use YorvoID\Core\Log\LogEntry;
-use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalId;
@@ -38,13 +37,13 @@ use YorvoID\Throttle\Throttle;
 
 /**
  * A sign-in reads the credential as active; on another connection, the owner's "not me" report
- * disables it and commits; then the sign-in goes on (ARC-0057). The credential stays disabled, and the
- * sign-in fails and is recorded. Writing the sign-in's copy of the credential back, as the whole
- * record, would make it active again, and let the sign-in through.
+ * disables it (ARC-0057). The sign-in locked its principal first (D-52), so the disable waits for it
+ * rather than slipping in between: it can't commit until the sign-in has ended, and then disables the
+ * set, which the next sign-in sees.
  */
 final class DisabledDuringSignInTest extends DatabaseTestCase
 {
-    public function testARecoveryCodeSignInFailsWhenItsSetIsDisabledMeanwhile(): void
+    public function testADisableWaitsForARecoveryCodeSignInInProgress(): void
     {
         $owner = $this->stack('postgresql');
         $signIn = $this->stack('postgresql');
@@ -56,22 +55,35 @@ final class DisabledDuringSignInTest extends DatabaseTestCase
         $set = $this->set($ownerCredentials, $principal->id);
 
         // What NotMe::confirm() does to the credential, on the owner's connection, once the sign-in has read it.
+        $ownerDatabase = $owner->database;
+        \assert(null !== $ownerDatabase);
+        $waited = null;
         $reading = new ReadThenRun($signIn->credentials);
-        $reading->arm(static function () use ($ownerCredentials, $set): void {
-            Permits::call($ownerCredentials->disable(...), new DisableCredential($set->realm, $set->id, $set->principalId, 'its principal said they didn\'t add it'), new Origin(OriginKind::Web));
+        $reading->arm(static function () use ($ownerCredentials, $ownerDatabase, $set, &$waited): void {
+            $ownerDatabase->connection->executeStatement("SET lock_timeout = '300ms'");
+
+            try {
+                Permits::call($ownerCredentials->disable(...), new DisableCredential($set->realm, $set->id, $set->principalId, 'its principal said they didn\'t add it'), new Origin(OriginKind::Web));
+            } catch (DriverException $timedOut) {
+                // lock_not_available: it waited for the sign-in's lock on the principal.
+                $waited = $timedOut->getSQLState();
+            } finally {
+                $ownerDatabase->connection->executeStatement('RESET lock_timeout');
+            }
         });
         $codes = $this->codes($signIn, $this->credentials($signIn, $reading));
 
         $started = Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $principal->id, $code), new Origin(OriginKind::Web));
 
         self::assertTrue($reading->ran, 'The sign-in never read the credential.');
-        self::assertNull($started, 'A sign-in with a set disabled meanwhile started a session.');
-        self::assertSame(CredentialStatus::Disabled, $ownerCredentials->get(new Realm('acme'), $set->id)?->status, 'The sign-in made the disabled set active again.');
-        self::assertSame(10, $codes->remaining(new Realm('acme'), $principal->id), 'The code was used up although the sign-in failed.');
-        $uses = array_values(array_filter(iterator_to_array($owner->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.recovery_code.use' === $entry->action));
-        self::assertCount(1, $uses);
-        self::assertSame(Outcome::Failed, $uses[0]->outcome, 'The failed sign-in wasn\'t recorded.');
-        self::assertSame(['credential', (string) $set->id, ['principal' => (string) $principal->id]], [$uses[0]->subjectType, $uses[0]->subjectId, $uses[0]->details]);
+        self::assertSame('55P03', $waited, 'The disable didn\'t wait for the sign-in in progress.');
+        self::assertNotNull($started, 'The sign-in failed on a disable that didn\'t happen.');
+        self::assertSame(CredentialStatus::Active, $ownerCredentials->get(new Realm('acme'), $set->id)?->status);
+
+        // Once the sign-in has ended, the disable goes through, and a sign-in after it fails.
+        Permits::call($ownerCredentials->disable(...), new DisableCredential($set->realm, $set->id, $set->principalId, 'its principal said they didn\'t add it'), new Origin(OriginKind::Web));
+        self::assertSame(CredentialStatus::Disabled, $ownerCredentials->get(new Realm('acme'), $set->id)->status);
+        self::assertNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $principal->id, $code), new Origin(OriginKind::Web)), 'A disabled set still signed in.');
     }
 
     private function set(Credentials $credentials, PrincipalId $principalId): Credential
@@ -99,9 +111,9 @@ final class DisabledDuringSignInTest extends DatabaseTestCase
 
     private function credentials(Stack $stack, CredentialStore $store): Credentials
     {
-        [, $sessions, $stepUp, $log] = $this->services($stack);
+        [$principals, $sessions, $stepUp, $log] = $this->services($stack);
 
-        return new Credentials($store, $sessions, $stepUp, $log, $stack->transactions);
+        return new Credentials($store, $sessions, $principals, $stepUp, $log, $stack->transactions);
     }
 
     private function codes(Stack $stack, Credentials $credentials): RecoveryCodes

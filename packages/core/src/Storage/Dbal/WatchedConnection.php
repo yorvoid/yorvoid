@@ -27,16 +27,43 @@ final class WatchedConnection extends AbstractConnectionMiddleware
 
     public function commit(): void
     {
-        parent::commit();
-
         // A callback's commit() at DBAL's level 1 ends its own transaction, not the application's: no hooks.
         if ($this->apart) {
             $this->apart = false;
+            parent::commit();
 
             return;
         }
 
+        // What must be in the transaction, written last: if it fails, nothing is committed (D-52).
+        try {
+            $this->hooks->beforeCommit();
+        } catch (\Throwable $failure) {
+            try {
+                parent::rollBack();
+            } finally {
+                $this->hooks->failedBeforeCommit($this);
+            }
+
+            throw $failure;
+        }
+
+        parent::commit();
         $this->hooks->committed($this);
+    }
+
+    public function exec(string $sql): int|string
+    {
+        $affected = parent::exec($sql);
+
+        // DBAL rolls a nested transaction back to its savepoint, named after its level.
+        if (1 === preg_match('/^\s*ROLLBACK\s+TO\s+(?:SAVEPOINT\s+)?(\S+)\s*;?\s*$/i', $sql, $savepoint)) {
+            1 === preg_match('/^DOCTRINE_(\d+)$/i', trim($savepoint[1], '"`'), $level)
+                ? $this->hooks->rolledBackTo((int) $level[1])
+                : $this->hooks->rolledBackToUnknown($savepoint[1]);
+        }
+
+        return $affected;
     }
 
     public function rollBack(): void

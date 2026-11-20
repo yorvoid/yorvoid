@@ -51,6 +51,9 @@ final readonly class AttributeChanges implements OperationHandler, RequiresForbi
         }
 
         $this->transactions->run(function () use ($command, $permit, $origin): void {
+            // The realm first: a guard rule that reads attributes waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
+
             if (null === $this->principals->get($command->realm, $command->principalId)) {
                 throw new UnknownPrincipal($command->realm, $command->principalId);
             }

@@ -14,6 +14,7 @@ use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\NotPermitted;
@@ -51,7 +52,7 @@ final class DecisionDigestsTest extends DatabaseTestCase
         $digests = $this->digests($stack);
         $realm = new Realm('acme');
 
-        self::assertNull($digests->take($realm), 'Nothing to digest appended an entry.');
+        self::assertSame(0, $digests->take($realm), 'Nothing to digest appended an entry.');
         [$changed, $kept, $removed] = [self::record(), self::record(), self::record()];
         $stack->decisions->add([$changed, $kept]);
         self::wait();
@@ -60,10 +61,9 @@ final class DecisionDigestsTest extends DatabaseTestCase
         self::wait();
         $second = $digests->take($realm);
 
-        self::assertNotNull($first);
-        self::assertNotNull($second);
-        self::assertSame([2, 1], [$first->details['count'] ?? null, $second->details['count'] ?? null]);
-        self::assertSame(DecisionDigests::ACTION, $first->action);
+        self::assertSame([2, 1], [$first, $second]);
+        $digestEntries = array_values(array_filter([...$stack->log->entries($realm, 1)], static fn (LogEntry $entry): bool => DecisionDigests::ACTION === $entry->action));
+        self::assertSame([2, 1], array_map(static fn (LogEntry $entry): mixed => $entry->details['count'] ?? null, $digestEntries));
         $verified = $digests->verify($realm);
         self::assertTrue($verified->isIntact(), implode(' ', $verified->problems));
         self::assertSame([2, 0, 0], [$verified->windows, $verified->pruned, $verified->undigested]);
@@ -149,7 +149,7 @@ final class DecisionDigestsTest extends DatabaseTestCase
         self::wait();
         $digest = $digests->take($realm);
 
-        self::assertSame(2, $digest?->details['count'] ?? null, 'What was written after the application\'s commit isn\'t digested.');
+        self::assertSame(2, $digest, 'What was written after the application\'s commit isn\'t digested.');
         self::assertTrue($digests->verify($realm)->isIntact());
         $database->connection->executeStatement(\sprintf('DELETE FROM %s WHERE realm = ?', $database->table(DbalDecisionLogStore::TABLE)), [$realm->name]);
         self::assertFalse($digests->verify($realm)->isIntact(), 'Deleting the attempt and the refusal went unnoticed.');
@@ -176,7 +176,7 @@ final class DecisionDigestsTest extends DatabaseTestCase
         $database->connection->beginTransaction();
         $log->attempt($realm, 'yorvoid.setup.claim', Outcome::Failed, new Origin(OriginKind::Web));
         self::wait();
-        self::assertSame(1, $this->digests($this->stack('postgresql'))->take($realm)?->details['count'] ?? null);
+        self::assertSame(1, $this->digests($this->stack('postgresql'))->take($realm));
         $database->connection->commit();
         self::wait();
         $digests->take($realm);
@@ -207,7 +207,7 @@ final class DecisionDigestsTest extends DatabaseTestCase
         self::assertNotFalse($written, 'It waited for the application\'s transaction to end.');
         self::assertNotNull($written, 'Written apart, but not as apart: no digest covers it.');
         self::wait();
-        self::assertSame(1, $this->digests($this->stack('postgresql'))->take($realm)?->details['count'] ?? null);
+        self::assertSame(1, $this->digests($this->stack('postgresql'))->take($realm));
         $database->connection->commit();
     }
 

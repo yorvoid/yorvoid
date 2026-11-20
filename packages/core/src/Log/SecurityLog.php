@@ -94,17 +94,6 @@ final readonly class SecurityLog
     }
 
     /**
-     * Locks the realm's log until the current transaction ends, as recording does, without recording:
-     * changes that depend on what the realm holds take turns. Lock first, then read, then change: e.g. a
-     * setup code claims a realm only while it has no active principal, and an invitation accepted at the
-     * same moment waits, or is waited for.
-     */
-    public function lock(Realm $realm): void
-    {
-        $this->store->lock($realm);
-    }
-
-    /**
      * Records a failed attempt or a refusal: something that changed nothing, e.g. a wrong code or a
      * throttled form (D-42). With an attempt log (the decision log, in Symfony), it's kept there, outside
      * the caller's transaction and without the realm's lock; without one, it's an entry of the chain, as
@@ -132,7 +121,10 @@ final readonly class SecurityLog
     }
 
     /**
-     * Records an entry, in the current transaction if one is open.
+     * Records an entry, in the current transaction if one is open. Where the transaction's commit can be
+     * seen, the entry is appended just before it, so the realm's log stays locked only for the append and
+     * the commit; a change and its entry still commit together, or neither does (D-52). Elsewhere, it's
+     * appended at once, and the realm's log stays locked until the transaction ends.
      *
      * @param string               $action  The operation, e.g. "yorvoid.principal.create"
      * @param array<string, mixed> $details Facts that help reconstruct what happened; never secrets
@@ -146,20 +138,23 @@ final readonly class SecurityLog
         ?string $subjectType = null,
         ?string $subjectId = null,
         array $details = [],
-    ): LogEntry {
+    ): void {
         $decision = $this->current->current();
 
         if (null !== $decision && !\array_key_exists('decision', $details)) {
             $details['decision'] = $decision;
         }
 
-        try {
-            return $this->transactions->run(function () use ($realm, $action, $outcome, $origin, $actor, $subjectType, $subjectId, $details): LogEntry {
-                $entry = $this->store->append($realm, fn (int $sequence, ?string $previousHash): LogEntry => LogEntry::create(
+        $id = $this->ids->next();
+        $at = $this->clock->now();
+        $recorded = null;
+        $append = function () use ($realm, $id, $at, $action, $outcome, $origin, $actor, $subjectType, $subjectId, $details, &$recorded): void {
+            try {
+                $recorded = $this->store->append($realm, static fn (int $sequence, ?string $previousHash): LogEntry => LogEntry::create(
                     $realm,
                     $sequence,
-                    $this->ids->next(),
-                    $this->clock->now(),
+                    $id,
+                    $at,
                     $action,
                     $outcome,
                     $origin,
@@ -169,18 +164,29 @@ final readonly class SecurityLog
                     $details,
                     $previousHash ?? self::genesis($realm),
                 ));
+            } catch (\Throwable $e) {
+                $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_LOG, $realm, 1, true, $e));
 
-                $this->transactions->afterCommit(function () use ($entry): void {
-                    $this->events->dispatch(new SecurityLogEntryRecorded($entry));
-                });
+                throw $e;
+            }
+        };
+        // Waits for the commit in the order of the record, before what the change itself dispatches then.
+        $dispatch = function () use (&$recorded): void {
+            if (null !== $recorded) {
+                $this->events->dispatch(new SecurityLogEntryRecorded($recorded));
+            }
+        };
 
-                return $entry;
-            });
-        } catch (\Throwable $e) {
-            $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_LOG, $realm, 1, true, $e));
+        if ($this->transactions->beforeCommit($append)) {
+            $this->transactions->afterCommit($dispatch);
 
-            throw $e;
+            return;
         }
+
+        $this->transactions->run(function () use ($append, $dispatch): void {
+            $append();
+            $this->transactions->afterCommit($dispatch);
+        });
     }
 
     /**

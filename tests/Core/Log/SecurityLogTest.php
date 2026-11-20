@@ -28,8 +28,9 @@ final class SecurityLogTest extends DatabaseTestCase
 
         self::assertTrue($log->verify($realm)->isIntact(), 'An empty log is intact.');
 
-        $first = $log->record($realm, 'yorvoid.principal.create', Outcome::Success, new Origin(OriginKind::Console), subjectType: 'principal', subjectId: 'p-1', details: ['kind' => 'human']);
-        $second = $log->record($realm, 'yorvoid.principal.suspend', Outcome::Denied, new Origin(OriginKind::Web, 'admin_users'));
+        $log->record($realm, 'yorvoid.principal.create', Outcome::Success, new Origin(OriginKind::Console), subjectType: 'principal', subjectId: 'p-1', details: ['kind' => 'human']);
+        $log->record($realm, 'yorvoid.principal.suspend', Outcome::Denied, new Origin(OriginKind::Web, 'admin_users'));
+        [$first, $second] = iterator_to_array($stack->log->entries($realm, 1), false);
 
         self::assertSame(1, $first->sequence);
         self::assertSame(SecurityLog::genesis($realm), $first->previousHash);

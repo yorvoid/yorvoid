@@ -387,6 +387,77 @@ trait TransactionsContract
         self::assertCount(1, $attempts);
     }
 
+    /**
+     * The realm's lock is for inside a transaction, and taking it again there takes nothing more (D-52).
+     */
+    #[DataProvider('implementations')]
+    public function testARealmLocksInsideATransactionAndAgain(string $implementation): void
+    {
+        $transactions = $this->transactions($implementation);
+        $realm = new Realm('acme');
+
+        $result = $transactions->run(static function () use ($transactions, $realm): string {
+            $transactions->lockRealm($realm);
+            $transactions->run(static fn () => $transactions->lockRealm($realm));
+            $transactions->lockRealm($realm);
+
+            return 'done';
+        });
+
+        self::assertSame('done', $result); // @phpstan-ignore staticMethod.alreadyNarrowedType (that it returned)
+        $this->expectException(\LogicException::class);
+        $transactions->lockRealm($realm);
+    }
+
+    /**
+     * What waits for the commit, where the implementation sees the commit, runs inside the transaction,
+     * before what waits for after it; a failed unit drops it, and its failure commits nothing.
+     */
+    #[DataProvider('implementations')]
+    public function testWhatWaitsForTheCommitRunsInIt(string $implementation): void
+    {
+        $transactions = $this->transactions($implementation);
+        $principals = $this->principalStore($implementation);
+        /** @var \ArrayObject<int, string> $ran */
+        $ran = new \ArrayObject();
+        self::assertFalse($transactions->beforeCommit(static fn () => $ran->append('outside')), 'Outside a transaction there\'s no commit to wait for.');
+
+        $seen = $transactions->run(static function () use ($transactions, $ran): bool {
+            $transactions->afterCommit(static fn () => $ran->append('after'));
+
+            try {
+                $transactions->run(static function () use ($transactions, $ran): never {
+                    $transactions->beforeCommit(static fn () => $ran->append('undone'));
+
+                    throw new \RuntimeException('failed');
+                });
+            } catch (\RuntimeException) {
+            }
+
+            return $transactions->beforeCommit(static fn () => $ran->append('before'));
+        });
+
+        self::assertSame($seen ? ['before', 'after'] : ['after'], $ran->getArrayCopy());
+
+        if (!$seen) {
+            return;
+        }
+
+        $principal = self::principal();
+
+        try {
+            $transactions->run(static function () use ($transactions, $principals, $principal): void {
+                $principals->add($principal);
+                $transactions->beforeCommit(static fn () => throw new \RuntimeException('the append failed'));
+            });
+            self::fail('The failure before the commit wasn\'t thrown.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('the append failed', $e->getMessage());
+        }
+
+        self::assertNull($principals->get($principal->realm, $principal->id), 'It committed although what waited for the commit failed.');
+    }
+
     private static function principal(): Principal
     {
         $now = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');

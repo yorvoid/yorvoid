@@ -40,10 +40,10 @@ final class LogCheckpointCommand extends Command
         $realm = new Realm(Options::string($input->getOption('realm')));
         $io = new SymfonyStyle($input, $output);
         // The decision records since the last checkpoint first: the checkpoint then covers their digest (D-42).
-        $digest = $this->digests->take($realm);
+        $digested = $this->digests->take($realm);
 
-        if (null !== $digest) {
-            $io->writeln(\sprintf('Digested %d decision record(s) of the realm "%s" in entry %d.', \is_int($digest->details['count'] ?? null) ? $digest->details['count'] : 0, $realm->name, $digest->sequence));
+        if (0 < $digested) {
+            $io->writeln(\sprintf('Digested %d decision record(s) of the realm "%s".', $digested, $realm->name));
         }
 
         $checkpoint = $this->checkpoints->checkpoints()->take($realm);
