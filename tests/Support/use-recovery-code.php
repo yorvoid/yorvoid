@@ -5,7 +5,7 @@ declare(strict_types=1);
 /*
  * A separate process for RecoveryCodeConcurrencyTest: recovers an account with a recovery code.
  *
- *   php use-recovery-code.php <database URL> <schema> <principal ID> <code> <start file>
+ *   php use-recovery-code.php <database URL> <schema> <principal ID> <code> <start file> [<cool-down in seconds>]
  *
  * Exits with 0 if the code worked, 3 if it didn't. Listing the principal's credentials, before using the
  * code, pauses, so that every process has found the set before any uses a code. Like consume-token.php,
@@ -28,6 +28,7 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\Storage\DbalSessionStore;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\Storage\DbalCoolDownStore;
+use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\SecurityLog;
@@ -49,8 +50,8 @@ use YorvoID\Throttle\Throttle;
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 
 $arguments = $_SERVER['argv'];
-assert(is_array($arguments) && 6 === count($arguments));
-[, $url, $schema, $principalId, $code, $start] = array_map(static fn (mixed $argument): string => is_string($argument) ? $argument : '', $arguments);
+assert(is_array($arguments) && in_array(count($arguments), [6, 7], true));
+[, $url, $schema, $principalId, $code, $start, $coolDown] = [...array_map(static fn (mixed $argument): string => is_string($argument) ? $argument : '', $arguments), ''];
 
 $middleware = new TransactionMiddleware();
 $configuration = new Configuration();
@@ -106,7 +107,7 @@ $slow = new readonly class(new DbalCredentialStore($database)) implements Creden
 $log = new SecurityLog(new DbalSecurityLogStore($database), $transactions);
 $principals = new Principals(new DbalPrincipalStore($database), new DbalIdentifierStore($database), $log, $transactions);
 $sessions = new Sessions(new DbalSessionStore($database), $principals, $log, $transactions);
-$stepUp = new StepUp($sessions, new DbalCoolDownStore($database), $log);
+$stepUp = new StepUp($sessions, new DbalCoolDownStore($database), $log, coolDown: '' === $coolDown ? null : Duration::seconds((int) $coolDown));
 $codes = new RecoveryCodes(new DbalRecoveryCodeStore($database), new Credentials($slow, $sessions, $principals, $stepUp, $log, $transactions), $sessions, $stepUp, new Attempts(new Throttle(new DbalThrottleStore($database))), $log, $transactions, $principals);
 $deadline = microtime(true) + 10;
 
