@@ -4,13 +4,21 @@
 // unexpired, the chain is no deeper than its root allowed, and the root is permitted the action now.
 // Revoking a delegation stops every delegation issued under it, at the next use.
 //
-// CACHED = false is YorvoID's way: each use reads the chain and the root's authority as they are now
-// (with versions, so a cache never answers for a revoked state). CACHED = true remembers each
-// delegation's validity from its issuance, as a cache without versions would, and must break SAFE.
+// MODE says how a use decides:
+// - "recompute": the chain and the root's authority read as they are now, every time: the reference,
+//   whose traces M3-2 replays;
+// - "versioned": YorvoID's cache (D-10: against version counters, never time alone). An entry holds the
+//   version of every link of the chain, the version of the root's authority, and the chain's earliest
+//   expiry; a use reuses it only if every version is current and now is before that expiry, and
+//   otherwise decides again and refreshes it. It must be SAFE: not by definition, since the entry
+//   answers;
+// - three broken caches, which must break SAFE: "unversioned" (an entry reused whatever changed),
+//   "noExpiry" (versions checked, the expiry not: time passes without a version bump), and "leafOnly"
+//   (only the leaf's version checked: an ancestor's revocation is missed).
 //
 // Bounds: 4 principals (a chain of 3 needs 4), 4 delegations, depth 3, time 0..4.
 module chains {
-  const CACHED: bool
+  const MODE: str
 
   val PRINCIPALS = Set("ana", "agent1", "agent2", "agent3")
   val IDS = Set(1, 2, 3, 4)
@@ -24,14 +32,22 @@ module chains {
   var now: int
   // Who the policy permits the delegated action now.
   var permitted: Set[str]
-  // A cache of each delegation's validity at its issuance: used only when CACHED.
-  var cached: int -> bool
+  type Entry = { ok: bool, versions: int -> int, rootVersion: int, expiry: int }
+
+  // Each delegation's version, bumped when it's revoked; and the version of the policy's authority,
+  // bumped when it changes.
+  var version: int -> int
+  var authorityVersion: int
+  // The decision cache, by delegation (unused in "recompute").
+  var cache: int -> Entry
   // Whether a use was ever accepted while its chain wasn't valid.
   var acceptedInvalid: bool
   // Uses accepted, for the traces.
   var accepted: int
   // The longest chain a use was accepted under: a witness that deep chains are reached.
   var longestUsed: int
+  // Uses a cache entry answered: a witness that the cache is used, so its SAFE isn't by definition.
+  var reused: int
 
   // The delegation's chain, itself first, up to the root (MAX_DEPTH + 1 links at most).
   def chainOf(d: int): Set[int] =
@@ -55,10 +71,13 @@ module chains {
     issued' = Map(),
     now' = 0,
     permitted' = Set("ana"),
-    cached' = Map(),
+    version' = Map(),
+    authorityVersion' = 0,
+    cache' = Map(),
     acceptedInvalid' = false,
     accepted' = 0,
     longestUsed' = 0,
+    reused' = 0,
   }
 
   // A principal delegates their own authority: the root of a chain (issuing it is itself authorized).
@@ -68,8 +87,9 @@ module chains {
     delegator != delegate,
     now < expires,
     issued' = issued.put(id, { delegator: delegator, delegate: delegate, parent: 0, depth: MAX_DEPTH - 1, expires: expires, revoked: false }),
-    cached' = cached.put(id, true),
-    now' = now, permitted' = permitted, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed,
+    version' = version.put(id, 0),
+    authorityVersion' = authorityVersion, cache' = cache,
+    now' = now, permitted' = permitted, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed, reused' = reused,
   }
 
   // A delegate passes part of it on, within the parent: only while the parent's chain is valid, with
@@ -83,20 +103,23 @@ module chains {
     chainOf(parent).forall(x => issued.get(x).delegator != delegate),
     issued.get(parent).delegate != delegate,
     issued' = issued.put(id, { delegator: issued.get(parent).delegate, delegate: delegate, parent: parent, depth: issued.get(parent).depth - 1, expires: expires, revoked: false }),
-    cached' = cached.put(id, true),
-    now' = now, permitted' = permitted, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed,
+    version' = version.put(id, 0),
+    authorityVersion' = authorityVersion, cache' = cache,
+    now' = now, permitted' = permitted, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed, reused' = reused,
   }
 
   action revoke(id: int): bool = all {
     issued.keys().contains(id),
     issued' = issued.set(id, { ...issued.get(id), revoked: true }),
-    now' = now, permitted' = permitted, cached' = cached, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed,
+    version' = version.set(id, version.get(id) + 1),
+    authorityVersion' = authorityVersion, cache' = cache,
+    now' = now, permitted' = permitted, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed, reused' = reused,
   }
 
   action tick: bool = all {
     now < MAX_TIME,
     now' = now + 1,
-    issued' = issued, permitted' = permitted, cached' = cached, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed,
+    issued' = issued, permitted' = permitted, version' = version, authorityVersion' = authorityVersion, cache' = cache, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed, reused' = reused,
   }
 
   // The policy changes: a principal stops, or starts, being permitted the action (e.g. Ana stops being
@@ -104,23 +127,46 @@ module chains {
   action losePermission(p: str): bool = all {
     permitted.contains(p),
     permitted' = permitted.exclude(Set(p)),
-    issued' = issued, now' = now, cached' = cached, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed,
+    authorityVersion' = authorityVersion + 1,
+    issued' = issued, now' = now, version' = version, cache' = cache, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed, reused' = reused,
   }
 
   action gainPermission(p: str): bool = all {
     not(permitted.contains(p)),
     permitted' = permitted.union(Set(p)),
-    issued' = issued, now' = now, cached' = cached, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed,
+    authorityVersion' = authorityVersion + 1,
+    issued' = issued, now' = now, version' = version, cache' = cache, acceptedInvalid' = acceptedInvalid, accepted' = accepted, longestUsed' = longestUsed, reused' = reused,
   }
 
-  // The delegate acts under the delegation: the decision checks the chain now (or, CACHED, remembers).
+  def earliestExpiry(d: int): int = chainOf(d).fold(MAX_TIME + 1, (m, x) => if (issued.get(x).expires < m) issued.get(x).expires else m)
+
+  def entryFor(d: int): Entry = { ok: validNow(d), versions: chainOf(d).mapBy(x => version.get(x)), rootVersion: authorityVersion, expiry: earliestExpiry(d) }
+
+  // Whether the cached entry may answer, as MODE checks it.
+  def fresh(d: int): bool =
+    cache.keys().contains(d) and {
+      val e = cache.get(d)
+      if (MODE == "unversioned") true
+      else if (MODE == "leafOnly") e.versions.get(d) == version.get(d) and e.rootVersion == authorityVersion and now < e.expiry
+      else if (MODE == "noExpiry") e.versions.keys().forall(x => e.versions.get(x) == version.get(x)) and e.rootVersion == authorityVersion
+      else e.versions.keys().forall(x => e.versions.get(x) == version.get(x)) and e.rootVersion == authorityVersion and now < e.expiry
+    }
+
+  // The delegate acts under the delegation: the decision recomputes, or answers from a fresh entry and
+  // otherwise recomputes and refreshes it.
   action actUnder(id: int): bool = all {
     issued.keys().contains(id),
-    if (CACHED) cached.get(id) else validNow(id),
+    val reuse = MODE != "recompute" and fresh(id)
+    val accepts = if (reuse) cache.get(id).ok else validNow(id)
+    all {
+      accepts,
+      cache' = if (MODE == "recompute" or reuse) cache else cache.put(id, entryFor(id)),
+      reused' = if (reuse) reused + 1 else reused,
+    },
     acceptedInvalid' = (acceptedInvalid or not(validNow(id))),
     accepted' = accepted + 1,
     longestUsed' = if (chainOf(id).size() > longestUsed) chainOf(id).size() else longestUsed,
-    issued' = issued, now' = now, permitted' = permitted, cached' = cached,
+    issued' = issued, now' = now, permitted' = permitted, version' = version, authorityVersion' = authorityVersion,
   }
 
   // The choices are drawn from what can apply: a new id for an issuance, an issued one for the rest.
@@ -163,12 +209,27 @@ module chains {
   // A witness, expected to be violated: a use accepted under a chain of three delegations is reachable,
   // so SAFE isn't vacuous.
   val NO_DEEP_USE = longestUsed < 3
+
+  // A witness, expected to be violated in "versioned": a cache entry answers a use.
+  val NO_REUSE = reused == 0
 }
 
 module checked {
-  import chains(CACHED = false).*
+  import chains(MODE = "recompute").*
 }
 
-module cachedWithoutVersions {
-  import chains(CACHED = true).*
+module versioned {
+  import chains(MODE = "versioned").*
+}
+
+module unversioned {
+  import chains(MODE = "unversioned").*
+}
+
+module noExpiry {
+  import chains(MODE = "noExpiry").*
+}
+
+module leafOnly {
+  import chains(MODE = "leafOnly").*
 }

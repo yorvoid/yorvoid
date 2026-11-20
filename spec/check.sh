@@ -49,14 +49,23 @@ holds "decisions/precedence.als (Alloy)" alloy decisions/precedence.als
 holds "delegation/attenuation.als (Alloy)" alloy delegation/attenuation.als
 
 # Delegation chains over time (M3-1), in Quint: no use is accepted while a link is revoked or expired or
-# the root lost the authority; a cache without versions breaks it. Apalache for 6 steps (a depth-3 use
-# takes 4), simulation for 25; NO_DEEP_USE is a witness that deep chains are reached.
+# the root lost the authority. "versioned" is YorvoID's cache (every link's version, the authority's
+# version, the chain's earliest expiry) and must be safe; NO_REUSE is a witness that its entries answer,
+# so that isn't by definition. Three broken caches must break it: no versions, no expiry check, the
+# leaf's version only (an ancestor's revocation missed). "checked" recomputes every time: the reference
+# M3-2 replays. Apalache for 5 steps (the leaf-only miss takes 5), simulation for 25.
 holds "delegation chains: typecheck (Quint)" quint typecheck delegation/chains.qnt
-holds "delegation chains: no use on an invalid chain (Quint, Apalache)" quint verify --main=checked --invariant=SAFETY --max-steps=6 delegation/chains.qnt
-violated "delegation chains: a cache without versions accepts a revoked chain (Quint, Apalache)" "\[violation\]" quint verify --main=cachedWithoutVersions --invariant=SAFE --max-steps=6 delegation/chains.qnt
-holds "delegation chains: no use on an invalid chain (Quint, simulation)" quint run --main=checked --invariant=SAFETY --max-samples=20000 --max-steps=25 --seed=42 delegation/chains.qnt
-violated "delegation chains: a use under a chain of three is reached (Quint, simulation)" "\[violation\]" quint run --main=checked --invariant=NO_DEEP_USE --max-samples=50000 --max-steps=25 --seed=42 delegation/chains.qnt
-violated "delegation chains: a cache without versions accepts a revoked chain (Quint, simulation)" "\[violation\]" quint run --main=cachedWithoutVersions --invariant=SAFE --max-samples=20000 --max-steps=25 --seed=42 delegation/chains.qnt
+holds "delegation chains: the versioned cache never accepts an invalid chain (Quint, Apalache)" quint verify --main=versioned --invariant=SAFETY --max-steps=5 delegation/chains.qnt
+violated "delegation chains: a cache without versions accepts a revoked chain (Quint, Apalache)" "\[violation\]" quint verify --main=unversioned --invariant=SAFE --max-steps=5 delegation/chains.qnt
+violated "delegation chains: versions without the expiry outlive it (Quint, Apalache)" "\[violation\]" quint verify --main=noExpiry --invariant=SAFE --max-steps=5 delegation/chains.qnt
+violated "delegation chains: the leaf's version alone misses an ancestor's revocation (Quint, Apalache)" "\[violation\]" quint verify --main=leafOnly --invariant=SAFE --max-steps=5 delegation/chains.qnt
+holds "delegation chains: the versioned cache never accepts an invalid chain (Quint, simulation)" quint run --main=versioned --invariant=SAFETY --max-samples=20000 --max-steps=25 --seed=42 delegation/chains.qnt
+violated "delegation chains: the versioned cache's entries answer uses (Quint, simulation)" "\[violation\]" quint run --main=versioned --invariant=NO_REUSE --max-samples=20000 --max-steps=25 --seed=42 delegation/chains.qnt
+violated "delegation chains: a use under a chain of three is reached (Quint, simulation)" "\[violation\]" quint run --main=versioned --invariant=NO_DEEP_USE --max-samples=50000 --max-steps=25 --seed=42 delegation/chains.qnt
+holds "delegation chains: recomputing every time is safe and well-formed (Quint, simulation)" quint run --main=checked --invariant=SAFETY --max-samples=20000 --max-steps=25 --seed=42 delegation/chains.qnt
+for broken in unversioned noExpiry leafOnly; do
+	violated "delegation chains: $broken breaks SAFE (Quint, simulation)" "\[violation\]" quint run --main=$broken --invariant=SAFE --max-samples=20000 --max-steps=25 --seed=42 delegation/chains.qnt
+done
 # The executions M3-2's PHP tests will replay: "node traces.mjs delegation/chains.qnt checked 100 14 0xc4a1d5 > delegation/traces.itf.json".
 TRACES_CHAINS='node traces.mjs delegation/chains.qnt checked 100 14 0xc4a1d5'
 holds "delegation chains: the executions to replay are the model's" sh -c "$TRACES_CHAINS | cmp -s - delegation/traces.itf.json"
