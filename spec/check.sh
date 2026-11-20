@@ -43,6 +43,10 @@ alloy() { java -jar /opt/alloy/alloy.jar exec -q -c '*' -o /tmp/alloy -f -t json
 
 # Decisions: the precedence table (Alloy; its own "expect" annotations are checked by exec).
 holds "decisions/precedence.als (Alloy)" alloy decisions/precedence.als
+# Delegation and attenuation (M3-1): I3 on every dimension, the root re-evaluated now, nothing
+# non-delegable passed on; its broken variants (no root check, id narrowing reversed) are expected
+# counterexamples within the file ("expect 1").
+holds "delegation/attenuation.als (Alloy)" alloy delegation/attenuation.als
 # The requests that tests/Core/Authorization/PrecedenceFixturesTest.php decides with the PHP evaluator
 # must be the model's: regenerate them with "node decisions/fixtures.mjs > decisions/fixtures.json".
 holds "decisions: the fixtures the PHP tests decide are the model's (default configuration)" sh -c 'node decisions/fixtures.mjs | cmp -s - decisions/fixtures.json'
