@@ -47,6 +47,19 @@ holds "decisions/precedence.als (Alloy)" alloy decisions/precedence.als
 # non-delegable passed on; its broken variants (no root check, id narrowing reversed) are expected
 # counterexamples within the file ("expect 1").
 holds "delegation/attenuation.als (Alloy)" alloy delegation/attenuation.als
+
+# Delegation chains over time (M3-1), in Quint: no use is accepted while a link is revoked or expired or
+# the root lost the authority; a cache without versions breaks it. Apalache for 6 steps (a depth-3 use
+# takes 4), simulation for 25; NO_DEEP_USE is a witness that deep chains are reached.
+holds "delegation chains: typecheck (Quint)" quint typecheck delegation/chains.qnt
+holds "delegation chains: no use on an invalid chain (Quint, Apalache)" quint verify --main=checked --invariant=SAFETY --max-steps=6 delegation/chains.qnt
+violated "delegation chains: a cache without versions accepts a revoked chain (Quint, Apalache)" "\[violation\]" quint verify --main=cachedWithoutVersions --invariant=SAFE --max-steps=6 delegation/chains.qnt
+holds "delegation chains: no use on an invalid chain (Quint, simulation)" quint run --main=checked --invariant=SAFETY --max-samples=20000 --max-steps=25 --seed=42 delegation/chains.qnt
+violated "delegation chains: a use under a chain of three is reached (Quint, simulation)" "\[violation\]" quint run --main=checked --invariant=NO_DEEP_USE --max-samples=50000 --max-steps=25 --seed=42 delegation/chains.qnt
+violated "delegation chains: a cache without versions accepts a revoked chain (Quint, simulation)" "\[violation\]" quint run --main=cachedWithoutVersions --invariant=SAFE --max-samples=20000 --max-steps=25 --seed=42 delegation/chains.qnt
+# The executions M3-2's PHP tests will replay: "node traces.mjs delegation/chains.qnt checked 100 14 0xc4a1d5 > delegation/traces.itf.json".
+TRACES_CHAINS='node traces.mjs delegation/chains.qnt checked 100 14 0xc4a1d5'
+holds "delegation chains: the executions to replay are the model's" sh -c "$TRACES_CHAINS | cmp -s - delegation/traces.itf.json"
 # The requests that tests/Core/Authorization/PrecedenceFixturesTest.php decides with the PHP evaluator
 # must be the model's: regenerate them with "node decisions/fixtures.mjs > decisions/fixtures.json".
 holds "decisions: the fixtures the PHP tests decide are the model's (default configuration)" sh -c 'node decisions/fixtures.mjs | cmp -s - decisions/fixtures.json'
