@@ -128,8 +128,8 @@ final readonly class Credentials implements OperationHandler
             throw new IntegratorError(\sprintf('YorvoID can\'t check %s credentials yet.', $command->kind->value), 'Add passkeys and recovery codes; passwords and authenticator apps come with their packages.', 'concepts/credentials.md');
         }
 
+        // The proof is the operation's that causes it, decided before it's permitted (G-8).
         return $this->transactions->run(function () use ($command, $session, $origin): Credential {
-            $this->requireStepUp($session, 'yorvoid.credential.add');
             $credential = new Credential(new CredentialId($this->ids->next()), $command->realm, $session->principalId, $command->kind, self::label($command->label, $command->kind), Time::stored($this->clock->now()));
             $this->store->add($credential);
             $this->record('yorvoid.credential.add', $credential, $origin);
@@ -156,7 +156,6 @@ final readonly class Credentials implements OperationHandler
         $this->transactions->run(function () use ($command, $session, $permit, $origin): void {
             $credential = $this->own($command->realm, $command->credentialId, $session);
             $permit->about($credential->principalId);
-            $this->requireStepUp($session, 'yorvoid.credential.remove', heldAfterRecovery: true, phishingResistant: true);
 
             $this->events->dispatch(new CredentialRemoving($credential, $origin));
             $this->store->remove($credential->realm, $credential->id);

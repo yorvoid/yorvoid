@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Authn\StepUp;
 
+use YorvoID\Authn\Credential\CredentialKind;
+use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Session\Session;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
@@ -23,8 +25,9 @@ use YorvoID\Core\Operation\SelfServicePolicy;
  * notifications and recovery go. So do suspending or deleting oneself, and issuing oneself a recovery link
  * or a token: what someone who recovered an account they don't own would do.
  *
- * Operations that check more than this themselves (a credential's removal needs a passkey's proof, a new
- * set of recovery codes replacing the old one does too) have no requirement here. A self-service operation
+ * Removing a credential and replacing the recovery codes take a phishing-resistant proof, e.g. a passkey's,
+ * and wait out a recovery; registering a passkey takes a recent proof. Every requirement is decided here,
+ * as a Deny with its remedy, before the operation is permitted and recorded (G-8). A self-service operation
  * it doesn't know (SelfOperation), e.g. an application's own, needs a proof within the re-authentication
  * window; any other command about one's own principal needs nothing unless it's given a requirement.
  *
@@ -32,6 +35,11 @@ use YorvoID\Core\Operation\SelfServicePolicy;
  */
 final readonly class StepUpSelfService implements SelfServicePolicy
 {
+    private const string GENERATE_CODES = 'yorvoid.recovery_codes.generate';
+
+    /** What changes how someone signs in: an operation that is one, or causes one */
+    private const array SIGN_IN_CHANGES = ['yorvoid.credential.add', 'yorvoid.credential.remove'];
+
     private Duration $window;
 
     /** @var array<string, AuthenticationRequirement|null> */
@@ -40,11 +48,14 @@ final readonly class StepUpSelfService implements SelfServicePolicy
     /**
      * @param array<string, AuthenticationRequirement|null> $requirements By operation, over YorvoID's own; null for none
      * @param Duration|null                                 $window       How recent a proof must be: 5 minutes if not given
+     * @param Credentials|null                              $credentials  To tell a first set of recovery codes, which asks a recent proof, from one
+     *                                                                    replacing the owner's, which asks a phishing-resistant one; without it, every set asks that
      */
     public function __construct(
         private StepUp $stepUp,
         array $requirements = [],
         ?Duration $window = null,
+        private ?Credentials $credentials = null,
     ) {
         $this->window = $window ?? Duration::minutes(5);
         $this->requirements = [
@@ -57,11 +68,13 @@ final readonly class StepUpSelfService implements SelfServicePolicy
             'yorvoid.token.issue' => new AuthenticationRequirement($this->window, operation: 'yorvoid.token.issue', heldAfterRecovery: true),
             'yorvoid.principal.activate' => null,
             'yorvoid.token.revoke' => null,
-            // Their handlers require the step-up themselves, as each needs.
-            'yorvoid.credential.remove' => null,
+            // Taking a way back in away, or replacing it, takes a phishing-resistant proof, which a stolen
+            // code isn't, and waits out a recovery (G-8: decided here, never thrown by the handler).
+            'yorvoid.credential.remove' => new AuthenticationRequirement($this->window, phishingResistant: true, operation: 'yorvoid.credential.remove', heldAfterRecovery: true),
+            'yorvoid.recovery_codes.generate' => new AuthenticationRequirement($this->window, phishingResistant: true, operation: 'yorvoid.recovery_codes.generate', heldAfterRecovery: true),
+            // A new passkey, as its ceremony's start asks (Passkeys::beginRegistration()).
+            'yorvoid.passkey.register' => new AuthenticationRequirement($this->window, operation: 'yorvoid.credential.add'),
             'yorvoid.credential.rename' => null,
-            'yorvoid.recovery_codes.generate' => null,
-            'yorvoid.passkey.register' => null,
             // Signing out, here or everywhere, never waits for a proof.
             'yorvoid.session.end' => null,
             'yorvoid.session.end_all' => null,
@@ -74,6 +87,9 @@ final readonly class StepUpSelfService implements SelfServicePolicy
         $self = $command instanceof SelfOperation;
         $requirement = match (true) {
             \array_key_exists($operation->name, $this->requirements) => $this->requirements[$operation->name],
+            // Changing how someone signs in, by an operation not in the table: the strictest proof, so a missing
+            // entry asks too much, never too little (G-8).
+            self::changesSignIn($operation) => new AuthenticationRequirement($this->window, phishingResistant: true, operation: $operation->name, heldAfterRecovery: true),
             // Self-service by declaration; anything else about one's own principal, only if asked (C2).
             $self => new AuthenticationRequirement($this->window, operation: $operation->name),
             default => null,
@@ -85,6 +101,12 @@ final readonly class StepUpSelfService implements SelfServicePolicy
 
         if (!$actor instanceof Session) {
             return Truth::fails(\sprintf('"%s" runs on one\'s own account from a session only.', $operation->name));
+        }
+
+        // A first set of recovery codes replaces nothing: it's a new credential, as a passkey is. Only a new set
+        // makes the owner's saved codes useless.
+        if (self::GENERATE_CODES === $operation->name && null !== $this->credentials && !$this->hasRecoveryCodes($actor)) {
+            $requirement = new AuthenticationRequirement($this->window, operation: 'yorvoid.credential.add');
         }
 
         if (null === $requirement) {
@@ -100,5 +122,23 @@ final readonly class StepUpSelfService implements SelfServicePolicy
         }
 
         return Truth::holds('The actor\'s own account, from its session, proved recently.');
+    }
+
+    private function hasRecoveryCodes(Session $session): bool
+    {
+        \assert(null !== $this->credentials);
+
+        foreach ($this->credentials->of($session->realm, $session->principalId) as $credential) {
+            if (CredentialKind::RecoveryCodes === $credential->kind) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function changesSignIn(OperationDescription $operation): bool
+    {
+        return \in_array($operation->name, self::SIGN_IN_CHANGES, true) || [] !== array_intersect($operation->causes, self::SIGN_IN_CHANGES);
     }
 }

@@ -61,7 +61,7 @@ A refused attempt throws `PasskeyRefused`. Show its message: it's the same for e
 
 ## Stepping up
 
-When an operation needs a recent proof of identity, `NotPermitted` carries a `StepUpRemedy` ([remedies](authorization.md#remedies)), or `StepUpRequired` its requirement where a service asks itself, e.g. adding a passkey (see [step-up](step-up.md)). The person confirms it's them with one of their passkeys:
+When an operation needs a recent proof of identity, `NotPermitted` carries a `StepUpRemedy` ([remedies](authorization.md#remedies)), or, before a ceremony begins (`beginRegistration()`), `StepUpRequired` its requirement (see [step-up](step-up.md)). The person confirms it's them with one of their passkeys:
 
 ```php
 use YorvoID\Passkeys\StepUpWithPasskey;

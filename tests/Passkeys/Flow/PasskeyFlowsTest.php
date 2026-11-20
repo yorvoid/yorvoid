@@ -25,11 +25,15 @@ use YorvoID\Authn\Setup\SetupCodes;
 use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\Token\OneTimeTokens;
+use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\NotPermitted;
+use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\Principal;
@@ -53,6 +57,7 @@ use YorvoID\Notifications\NotificationSettings;
 use YorvoID\Notifications\Translations;
 use YorvoID\Passkeys\Flow\InvitationStep;
 use YorvoID\Passkeys\Flow\PasskeyFlows;
+use YorvoID\Passkeys\Flow\PasskeyRegistrationStep;
 use YorvoID\Passkeys\Flow\RecoveryCodesStep;
 use YorvoID\Passkeys\Flow\RecoveryCodeStep;
 use YorvoID\Passkeys\Flow\RecoveryLinkStep;
@@ -410,6 +415,39 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         self::assertSame('passkey_registration', $again->step);
         self::assertSame(FlowStatus::Completed, $this->submit($flow, 'passkey_registration', ['response' => json_decode(new VirtualAuthenticator()->register($this->options($again, $context)), true)], $context->withSession($renewed))->status);
         self::assertCount(2, $this->passkeys->of($this->realm, $ana->id));
+    }
+
+    /**
+     * A refusal at the authenticator that isn't a lapsed proof, e.g. an application's forbid with a wait,
+     * isn't answered with a step-up: it's thrown, for the flow to end on.
+     */
+    public function testARefusalAtTheAuthenticatorThatIsntALapseIsThrown(): void
+    {
+        [$ana] = $this->account();
+        $context = $this->context->withSession($this->session($ana));
+        $flow = $this->flows->start(PasskeyFlows::ADD_PASSKEY, $this->realm, $context);
+        self::assertSame('passkey_registration', $flow->step);
+
+        $refusal = new NotPermitted('yorvoid.credential.add', Decision::deny('Not now.', remedies: [new WaitRemedy($this->clock->now()->modify('+1 hour'))]));
+        $refusing = new class($refusal) implements OperationHandler {
+            public function __construct(private NotPermitted $refusal)
+            {
+            }
+
+            public function operations(): array
+            {
+                return [RegisterPasskey::class => fn (): never => throw $this->refusal];
+            }
+        };
+        $log = new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock);
+        $step = new PasskeyRegistrationStep(TestOperations::of($log, $this->stack->principals, new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock), $refusing), $this->passkeys);
+
+        try {
+            $step->submit($flow->state, $context, new Input(['response' => '{}']));
+            self::fail('The refusal was answered with a step-up.');
+        } catch (NotPermitted $thrown) {
+            self::assertSame($refusal, $thrown);
+        }
     }
 
     public function testAStepUpWithoutAPasskeyEndsTheFlow(): void

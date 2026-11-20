@@ -123,11 +123,9 @@ final readonly class RecoveryCodes implements OperationHandler
 
             if (null === $credential) {
                 $credential = $permit->cause($this->credentials->add(...), new AddCredential($session->realm, CredentialKind::RecoveryCodes, ''), $origin);
-            } else {
-                // A new set makes the owner's saved codes useless: it waits out a recovery's cool-down, and
-                // needs a passkey's proof, not a code's.
-                $this->credentials->requireStepUp($session, self::GENERATE, heldAfterRecovery: true, phishingResistant: true);
             }
+            // A new set makes the owner's saved codes useless: it waits out a recovery's cool-down, and
+            // needs a passkey's proof, not a code's.
 
             $codes = [];
             $hashes = [];

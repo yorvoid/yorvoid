@@ -28,6 +28,7 @@ use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\StepUp;
 use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Crypto\CryptoProvider;
 use YorvoID\Core\Duration;
@@ -37,6 +38,7 @@ use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -62,6 +64,7 @@ use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\ReadThenRun;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\TestOperations;
 use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;
@@ -84,6 +87,8 @@ final class PasskeysTest extends DatabaseTestCase
     private Sessions $sessions;
 
     private Credentials $credentials;
+
+    private SecurityLog $log;
 
     private StepUp $stepUp;
 
@@ -191,10 +196,12 @@ final class PasskeysTest extends DatabaseTestCase
         // The ceremony still works for 200 seconds; the proof of identity is 5 minutes old.
         $this->clock->sleep(100);
 
+        // Refused as a decision, with the step-up that would satisfy it, before anything is permitted (G-8).
         try {
-            Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $response, 'Attacker\'s'), new Origin(OriginKind::Web), $session);
+            TestOperations::of($this->log, $this->stack->principals, $this->stepUp, $passkeys, $this->credentials, $this->sessions)->run(new RegisterPasskey($session->realm, $ceremony->id, $response, 'Attacker\'s'), $session, new Origin(OriginKind::Web));
             self::fail('A passkey was added from a session that proved nothing recently.');
-        } catch (StepUpRequired) {
+        } catch (NotPermitted $refused) {
+            self::assertEquals([new StepUpRemedy(Duration::minutes(5), operation: 'yorvoid.credential.add')], $refused->decision->remedies);
         }
 
         self::assertSame([], $passkeys->of(new Realm('acme'), $session->principalId));
@@ -1170,7 +1177,7 @@ final class PasskeysTest extends DatabaseTestCase
         $this->clock ??= new MockClock('2026-10-27 18:45:30 UTC');
         $this->events = new RecordingDispatcher();
         $ids = new UuidV7Generator($this->clock);
-        $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock, attempts: $attempts);
+        $log = $this->log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock, attempts: $attempts);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock);

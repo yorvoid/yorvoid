@@ -32,11 +32,12 @@ use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\Session\StepUpSession;
-use YorvoID\Authn\StepUp\AuthenticationRequirement;
-use YorvoID\Authn\StepUp\HeldAfterRecovery;
 use YorvoID\Authn\StepUp\StartCoolDown;
 use YorvoID\Authn\StepUp\StepUp;
-use YorvoID\Authn\StepUp\StepUpRequired;
+use YorvoID\Core\Authorization\Remedy;
+use YorvoID\Core\Authorization\StepUpRemedy;
+use YorvoID\Core\Authorization\WaitReason;
+use YorvoID\Core\Authorization\WaitRemedy;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -46,6 +47,7 @@ use YorvoID\Core\Log\Event\SecurityLogEntryRecorded;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Principal\ActivatePrincipal;
 use YorvoID\Core\Principal\CreatePrincipal;
@@ -62,6 +64,7 @@ use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 use YorvoID\Tests\Support\StatementLog;
+use YorvoID\Tests\Support\TestOperations;
 use YorvoID\Throttle\Throttle;
 use YorvoID\Throttle\Throttled;
 
@@ -85,6 +88,8 @@ final class RecoveryCodesTest extends DatabaseTestCase
     private StepUp $stepUp;
 
     private Attempts $attempts;
+
+    private SecurityLog $log;
 
     #[DataProvider('implementations')]
     public function testGeneratesTenCodesThatEachWorkOnce(string $implementation): void
@@ -191,26 +196,18 @@ final class RecoveryCodesTest extends DatabaseTestCase
         $session = $this->session();
         $this->clock->sleep(300);
 
-        try {
-            Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
-            self::fail('A session that proved nothing recently got recovery codes.');
-        } catch (StepUpRequired $exception) {
-            self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), operation: 'yorvoid.credential.add'), $exception->requirement, 'The first set is a new credential.');
-        }
+        $remedies = $this->refusedToGenerate($codes, $session, 'A session that proved nothing recently got recovery codes.');
+        self::assertEquals([new StepUpRemedy(Duration::minutes(5), operation: 'yorvoid.credential.add')], $remedies, 'The first set is a new credential.');
 
         Permits::call($this->sessions->stepUp(...), new StepUpSession($session->realm, $session->id, $session->principalId, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, 'yorvoid.credential.add')), new Origin(OriginKind::Web));
-        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
+        $this->generated($codes, $session);
         $this->clock->sleep(300);
 
-        try {
-            Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
-            self::fail('A session that proved nothing recently replaced the recovery codes.');
-        } catch (StepUpRequired $exception) {
-            self::assertEquals(new AuthenticationRequirement(Duration::minutes(5), phishingResistant: true, operation: RecoveryCodes::GENERATE, heldAfterRecovery: true), $exception->requirement);
-        }
+        $remedies = $this->refusedToGenerate($codes, $session, 'A session that proved nothing recently replaced the recovery codes.');
+        self::assertEquals([new StepUpRemedy(Duration::minutes(5), phishingResistant: true, operation: RecoveryCodes::GENERATE)], $remedies);
 
         Permits::call($this->sessions->stepUp(...), new StepUpSession($session->realm, $session->id, $session->principalId, new AuthenticationFactor(AuthenticationMethod::Passkey, $this->clock->now(), true, true, RecoveryCodes::GENERATE)), new Origin(OriginKind::Web));
-        self::assertCount(10, Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session));
+        self::assertCount(10, $this->generated($codes, $session));
     }
 
     #[DataProvider('implementations')]
@@ -226,9 +223,8 @@ final class RecoveryCodesTest extends DatabaseTestCase
         $recovered = Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $code), new Origin(OriginKind::Web));
         self::assertNotNull($recovered);
 
-        $this->expectException(HeldAfterRecovery::class);
-
-        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $recovered->session);
+        $remedies = $this->refusedToGenerate($codes, $recovered->session, 'A new set was made during the cool-down.');
+        self::assertInstanceOf(WaitRemedy::class, $remedies[0] ?? null);
     }
 
     #[DataProvider('implementations')]
@@ -430,12 +426,9 @@ final class RecoveryCodesTest extends DatabaseTestCase
         Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
         $recovered = Permits::call($this->sessions->start(...), new StartSession(new Realm('acme'), $session->principalId, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::RecoveryCode, $this->clock->now()))), new Origin(OriginKind::Web))->session;
 
-        try {
-            Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $recovered);
-            self::fail('A recovery code\'s proof replaced the codes.');
-        } catch (StepUpRequired $exception) {
-            self::assertTrue($exception->requirement->phishingResistant);
-        }
+        $remedies = $this->refusedToGenerate($codes, $recovered, 'A recovery code\'s proof replaced the codes.');
+        self::assertInstanceOf(StepUpRemedy::class, $remedies[0] ?? null);
+        self::assertTrue($remedies[0]->phishingResistant);
 
         self::assertSame(10, $codes->remaining(new Realm('acme'), $session->principalId));
     }
@@ -452,12 +445,8 @@ final class RecoveryCodesTest extends DatabaseTestCase
         self::assertSame(0, $recovered?->recoveryCodesLeft);
 
         // What the page says after the last code: a new set once the wait is over, not now (U-5).
-        try {
-            Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $recovered->session);
-            self::fail('A new set was made during the cool-down.');
-        } catch (HeldAfterRecovery $held) {
-            self::assertEquals($this->clock->now()->modify('+24 hours'), $held->until);
-        }
+        $remedies = $this->refusedToGenerate($codes, $recovered->session, 'A new set was made during the cool-down.');
+        self::assertEquals([new WaitRemedy($this->clock->now()->modify('+24 hours'), WaitReason::Recovered)], $remedies);
     }
 
     public function testTheSizeOfASetIsConfigurable(): void
@@ -501,13 +490,36 @@ final class RecoveryCodesTest extends DatabaseTestCase
         self::assertNull($operation->ability, 'Only the owner generates their own codes.');
     }
 
+    /**
+     * Generates codes as the session through Operations, which decides the step-up (G-8).
+     *
+     * @return list<Secret>
+     */
+    private function generated(RecoveryCodes $codes, Session $session): array
+    {
+        return TestOperations::of($this->log, $this->stack->principals, $this->stepUp, $codes, $this->credentials, $this->sessions)->run(new GenerateRecoveryCodes(new Realm('acme')), $session, new Origin(OriginKind::Web));
+    }
+
+    /**
+     * @return list<Remedy> The refusal's
+     */
+    private function refusedToGenerate(RecoveryCodes $codes, Session $session, string $message): array
+    {
+        try {
+            $this->generated($codes, $session);
+            self::fail($message);
+        } catch (NotPermitted $refused) {
+            return $refused->decision->remedies;
+        }
+    }
+
     private function codes(string $implementation, ?Duration $coolDown = null, ?StatementLog $statements = null, bool $devices = false): RecoveryCodes
     {
         $this->stack = $this->stack($implementation, $statements);
         $this->clock = new MockClock('2026-10-28 18:45:30 UTC');
         $this->events = new RecordingDispatcher();
         $ids = new UuidV7Generator($this->clock);
-        $log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        $log = $this->log = new SecurityLog($this->stack->log, $this->stack->transactions, $this->events, $ids, $this->clock);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, events: $this->events, ids: $ids, clock: $this->clock, devices: $devices ? $this->stack->devices : null);
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock, $coolDown);
