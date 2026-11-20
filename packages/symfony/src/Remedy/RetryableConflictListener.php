@@ -22,7 +22,7 @@ final readonly class RetryableConflictListener
     public const int PRIORITY = -64;
 
     /** Seconds */
-    public const int RETRY_AFTER = 1;
+    private const string RETRY_AFTER = '1';
 
     private const string TEXT = 'The request conflicted with another one. Try again.';
 
@@ -32,7 +32,7 @@ final readonly class RetryableConflictListener
             return;
         }
 
-        $headers = ['Retry-After' => (string) self::RETRY_AFTER, 'Cache-Control' => 'no-store'];
+        $headers = ['Retry-After' => self::RETRY_AFTER, 'Cache-Control' => 'no-store'];
         $event->setResponse('json' === $event->getRequest()->getPreferredFormat()
             ? new JsonResponse(['error' => self::TEXT, 'retryable' => true], Response::HTTP_SERVICE_UNAVAILABLE, $headers)
             : new Response(self::TEXT, Response::HTTP_SERVICE_UNAVAILABLE, ['Content-Type' => 'text/plain; charset=UTF-8', ...$headers]));

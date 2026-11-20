@@ -8,6 +8,7 @@ use Doctrine\DBAL\Configuration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Driver;
 use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Exception\ConnectionLost;
 use Doctrine\DBAL\Exception\DeadlockException;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\UuidV7;
@@ -213,6 +214,7 @@ final class RetriesTest extends TestCase
         }
 
         self::assertInstanceOf(RetryableConflict::class, $thrown); // @phpstan-ignore staticMethod.alreadyNarrowedType (that it was thrown)
+        self::assertSame('The work conflicted with another transaction: run it again.', $thrown->getMessage());
         self::assertSame(1, $attempts, 'A conflict inside the application\'s transaction was retried.');
         self::assertSame([], $this->waits);
     }
@@ -264,6 +266,28 @@ final class RetriesTest extends TestCase
         self::assertSame(['first'], $ran->getArrayCopy());
         $transactions->run(static fn (): null => null);
         self::assertSame(['first'], $ran->getArrayCopy(), 'Once.');
+    }
+
+    /**
+     * A lost connection gets no rollback: DBAL still counts the transaction, so what waits for its end
+     * waits on, rather than running as if it had ended.
+     */
+    public function testALostConnectionDoesNotEndTheTransaction(): void
+    {
+        $ended = false;
+
+        try {
+            $this->transactions->run(function () use (&$ended): never {
+                $this->transactions->afterEnd(static function () use (&$ended): void {
+                    $ended = true;
+                });
+
+                throw new ConnectionLost(self::driverError('server closed the connection', '08006'), null);
+            });
+        } catch (ConnectionLost) {
+        }
+
+        self::assertFalse($ended);
     }
 
     /**
@@ -332,6 +356,7 @@ final class RetriesTest extends TestCase
             });
         } catch (RetryableConflict $conflict) {
             self::assertSame([3, 'The work conflicted with another transaction 3 times: run it again.', 3], [$attempts, $conflict->getMessage(), $this->reads->resets]);
+            self::assertInstanceOf(DeadlockException::class, $conflict->getPrevious());
         }
 
         // Inside an open transaction, once.
@@ -384,12 +409,22 @@ final class RetriesTest extends TestCase
 
     public static function deadlock(): DeadlockException
     {
-        return new DeadlockException(new class('deadlock detected') extends \Exception implements Driver\Exception {
+        return new DeadlockException(self::driverError('deadlock detected', '40P01'), null);
+    }
+
+    private static function driverError(string $message, string $state): Driver\Exception
+    {
+        return new class($message, $state) extends \Exception implements Driver\Exception {
+            public function __construct(string $message, private readonly string $state)
+            {
+                parent::__construct($message);
+            }
+
             public function getSQLState(): string
             {
-                return '40P01';
+                return $this->state;
             }
-        }, null);
+        };
     }
 }
 

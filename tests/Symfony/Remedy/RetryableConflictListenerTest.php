@@ -34,7 +34,16 @@ final class RetryableConflictListenerTest extends TestCase
             self::assertNotNull($response, $format);
             self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $response->getStatusCode());
             self::assertSame('1', $response->headers->get('Retry-After'));
+            self::assertTrue($response->headers->hasCacheControlDirective('no-store'));
             self::assertStringNotContainsString('deadlock', (string) $response->getContent());
+            $text = 'The request conflicted with another one. Try again.';
+            if ('json' === $format) {
+                self::assertSame('application/json', $response->headers->get('Content-Type'));
+                self::assertSame(['error' => $text, 'retryable' => true], json_decode((string) $response->getContent(), true, flags: \JSON_THROW_ON_ERROR));
+            } else {
+                self::assertSame('text/plain; charset=UTF-8', $response->headers->get('Content-Type'));
+                self::assertSame($text, $response->getContent());
+            }
         }
     }
 
