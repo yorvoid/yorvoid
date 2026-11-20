@@ -23,7 +23,7 @@ use YorvoID\Core\Realm;
  *
  * @api
  */
-final class VersionedCache
+final class VersionedCache implements ForgetsWhatItRead
 {
     /** The shape of what's kept: entries of another shape are never read. */
     private const string FORMAT = 'v2';

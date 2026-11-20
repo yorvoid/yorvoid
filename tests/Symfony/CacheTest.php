@@ -11,6 +11,7 @@ use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Contracts\Service\ResetInterface;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
+use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Installation;
 use YorvoID\Core\Storage\Migration\Migrator;
 use YorvoID\Core\Storage\VersionedCache;
@@ -21,7 +22,8 @@ use YorvoID\Tests\Symfony\App\TestKernel;
 
 /**
  * The bundle keeps what decisions read in a pool of its own, yorvoid.cache, with the installation's ID
- * in every key; the stores decisions read are the cached ones, and they forget between requests.
+ * in every key; the stores decisions read are the cached ones, and they forget between requests and
+ * before work that conflicted runs again.
  */
 final class CacheTest extends TestCase
 {
@@ -65,6 +67,23 @@ final class CacheTest extends TestCase
         $pool->clear();
         $this->cache($container)->get(new Realm('acme'), 'policy', 1, 'roles', [], $read, \is_array(...));
         self::assertSame(2, $reads, 'The request\'s memo is reset with the container.');
+    }
+
+    /**
+     * Work that conflicted is decided again on what's committed (D-52): every cache of what decisions
+     * read forgets it first, not only the shared memo.
+     */
+    public function testEveryCacheOfDecisionsForgetsBeforeWorkRunsAgain(): void
+    {
+        $container = $this->boot([]);
+        $transactions = $container->get(DbalTransactions::class);
+        \assert($transactions instanceof DbalTransactions);
+        $reads = new \ReflectionProperty(DbalTransactions::class, 'reads')->getValue($transactions);
+        \assert(\is_array($reads));
+
+        foreach ([VersionedCache::class, 'yorvoid.store.policy', 'yorvoid.store.relation'] as $id) {
+            self::assertContains($container->get($id), $reads, $id);
+        }
     }
 
     public function testWithoutAPoolARequestStillReadsOnce(): void

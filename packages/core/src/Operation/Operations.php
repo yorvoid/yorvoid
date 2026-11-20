@@ -11,6 +11,8 @@ use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Storage\RetryableConflict;
+use YorvoID\Core\Storage\Transactions;
 
 /**
  * The way into every operation (D-38): it asks the {@see Authorization} whether the actor may run it,
@@ -33,6 +35,8 @@ final readonly class Operations
 
     /**
      * @param iterable<OperationHandler> $handlers
+     * @param Transactions|null          $transactions Where each operation runs, decided again when it conflicts with
+     *                                                 another transaction; without, conflicts reach the caller
      *
      * @throws IntegratorError When two handlers run one command, an OfflineDecider and the operations that
      *                         accept Permit-offline don't go together, a policy element refuses an operation,
@@ -44,6 +48,7 @@ final readonly class Operations
         private SecurityLog $log,
         iterable $handlers,
         private IdGenerator $ids = new UuidV7Generator(),
+        private ?Transactions $transactions = null,
     ) {
         $map = [];
 
@@ -88,10 +93,27 @@ final readonly class Operations
      *
      * @return T
      *
-     * @throws NotPermitted When the decision isn't Permit, or Permit-offline for an operation that accepts it; the
-     *                      handler's own exceptions otherwise
+     * @throws NotPermitted      When the decision isn't Permit, or Permit-offline for an operation that accepts it; the
+     *                           handler's own exceptions otherwise
+     * @throws RetryableConflict When it conflicted with another transaction 3 times, or once inside the application's
      */
     public function run(Command $command, Actor $actor, Origin $origin): mixed
+    {
+        // One unit of work, the decision with what it permits: one that conflicts with another transaction
+        // is decided again, on what's committed then, never just run again on its first decision (D-52).
+        return null === $this->transactions
+            ? $this->decideAndRun($command, $actor, $origin)
+            : $this->transactions->retrying(fn (): mixed => $this->decideAndRun($command, $actor, $origin));
+    }
+
+    /**
+     * @template T
+     *
+     * @param Command<T> $command
+     *
+     * @return T
+     */
+    private function decideAndRun(Command $command, Actor $actor, Origin $origin): mixed
     {
         // A principal YorvoID verified acts only in the consequences of what verified it (D-45, L-4).
         if ($actor instanceof ActingPrincipal) {

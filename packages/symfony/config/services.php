@@ -162,6 +162,7 @@ use YorvoID\Symfony\Key\KeyFiles;
 use YorvoID\Symfony\Limits;
 use YorvoID\Symfony\Remedy\NotPermittedListener;
 use YorvoID\Symfony\Remedy\RemedyPrompts;
+use YorvoID\Symfony\Remedy\RetryableConflictListener;
 use YorvoID\Symfony\Security\Authenticator\PasskeyAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\RecoveryCodeAuthenticator;
 use YorvoID\Symfony\Security\Authenticator\RecoveryLinkAuthenticator;
@@ -216,7 +217,9 @@ return static function (ContainerConfigurator $container): void {
     $services->set(StorageLocation::class)->args([param('yorvoid.storage.prefix'), param('yorvoid.storage.schema')]);
     $services->set(Database::class)->args([service('yorvoid.connection'), service(StorageLocation::class)]);
     // The middleware's instance on that connection, set by YorvoIDBundle.
-    $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null, service('event_dispatcher'), service('logger')->nullOnInvalid()]);
+    // Before work that conflicted runs again, what the request read is forgotten, so it's decided on what's committed (D-52):
+    // the versions and the cache of every policy read.
+    $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null, service('event_dispatcher'), service('logger')->nullOnInvalid(), [service(VersionedCache::class), service(Stores::IDS[PolicyStore::class].'.cached'), service(Stores::IDS[RelationStore::class].'.cached')]]);
     $services->alias(Transactions::class, DbalTransactions::class)->public();
     $services->set(IdentifierRenormalization::class);
 
@@ -361,7 +364,7 @@ return static function (ContainerConfigurator $container): void {
     ]);
     $services->set(StoredSessions::class)->args([service(Stores::IDS[SessionStore::class]), service(ClockInterface::class)])->tag('yorvoid.actor_prover');
     $services->alias(Authorization::class, Evaluator::class);
-    $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->public();
+    $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->arg('$transactions', service(Transactions::class))->public();
     $services->set(Policy::class)->public();
     $services->set(PolicyVoter::class)->tag('security.voter');
 
@@ -411,6 +414,7 @@ return static function (ContainerConfigurator $container): void {
     // Refusals, for people (M2-10): after the application's own exception listeners, before Symfony's error page.
     $services->set(RemedyPrompts::class)->arg('$translator', service('yorvoid.translator.used'));
     $services->set(NotPermittedListener::class)->tag('kernel.event_listener', ['event' => 'kernel.exception', 'priority' => NotPermittedListener::PRIORITY]);
+    $services->set(RetryableConflictListener::class)->tag('kernel.event_listener', ['event' => 'kernel.exception', 'priority' => RetryableConflictListener::PRIORITY]);
     $services->set(FlowController::class)->public()->tag('controller.service_arguments')
         ->arg('$completed', [])
         ->arg('$deviceCookie', param('yorvoid.cookies.device'))
