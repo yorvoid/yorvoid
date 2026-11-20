@@ -101,7 +101,7 @@ final readonly class Invitations implements OperationHandler
     /**
      * @throws UnknownPrincipal When there's no such principal
      * @throws NotInvited       When it isn't invited
-     * @throws Throttled        When it was sent too recently; nothing was sent
+     * @throws Throttled        When it was sent too recently, also when a conflict ran the operation again; nothing was sent
      */
     public function resend(ResendInvitation $command, Permit $permit, Origin $origin): Invitation
     {
