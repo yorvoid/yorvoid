@@ -28,8 +28,8 @@ sig Execution {}
 sig Requirement {}
 sig Condition {}
 
--- The catalogue's actions; some can't be delegated (06 §5.4).
-sig Action {}
+-- The catalogue's actions, each from the time it was added; some can't be delegated (06 §5.4).
+sig Action { addedAt: one Time }
 sig NonDelegable in Action {}
 
 -- Registered purposes, a tree.
@@ -74,6 +74,7 @@ sig Delegation {
     redelegable: set Action,
     selector: one Selector,
     purpose: one Purpose,
+    issuedAt: one Time,
     notBefore: one Time,
     expires: one Time,
     depth: one Int,
@@ -82,9 +83,8 @@ sig Delegation {
     conditions: set Condition,
     revoked: lone Delegation        -- itself when revoked
 } {
+    -- Facts only for typing and the bound: what a stored record can break, the use checks (validAtUse).
     revoked in this
-    redelegable in actions
-    depth >= 0
     depth <= 4      -- within the bound's integers, so no arithmetic wraps
 }
 
@@ -99,14 +99,25 @@ pred withinParent[d: Delegation] {
         T/lte[p.notBefore, d.notBefore]
         T/lte[d.expires, p.expires]
         d.depth = minus[p.depth, 1]
+        T/lte[p.issuedAt, d.issuedAt]
         some p.execution implies d.execution = p.execution
         p.requirements in d.requirements
         p.conditions in d.conditions
     }
 }
 
--- Issued at all: nothing that can't be delegated (06 §5.4).
-pred issuable[d: Delegation] { no d.actions & NonDelegable }
+-- Issued at all: nothing that can't be delegated (06 §5.4), and only actions the catalogue had when it
+-- was issued: a pattern was expanded then (M4).
+pred issuable[d: Delegation] {
+    no d.actions & NonDelegable
+    all a: d.actions | T/lte[a.addedAt, d.issuedAt]
+}
+
+-- What a stored record must hold by itself, which the use checks because records come from a database.
+pred wellFormed[d: Delegation] {
+    d.redelegable in d.actions
+    d.depth >= 0
+}
 
 sig Request {
     actor: one Principal,
@@ -114,7 +125,9 @@ sig Request {
     resource: one Resource,
     rpurpose: one Purpose,
     at: one Time,
-    rexecution: lone Execution
+    rexecution: lone Execution,
+    satisfies: set Requirement,     -- the evidence the request has (06 §6)
+    meets: set Condition            -- the conditions it meets
 }
 
 -- The root principal's own authority now, as the policy decides it at the use (06 §5.3).
@@ -127,6 +140,8 @@ pred admits[d: Delegation, r: Request] {
     r.rpurpose in within[d.purpose]
     T/lte[d.notBefore, r.at] and T/lt[r.at, d.expires]      -- the window: now < expiry (J14)
     some d.execution implies r.rexecution = d.execution
+    d.requirements in r.satisfies
+    d.conditions in r.meets
 }
 
 fun chain[d: Delegation]: set Delegation { d.*parent }
@@ -140,6 +155,7 @@ pred validAtUse[d: Delegation, r: Request, pol: Policy] {
     admits[d, r]                                        -- the leaf's scope
     all x: chain[d] {
         no x.revoked
+        wellFormed[x]
         issuable[x]
         T/lte[x.notBefore, r.at] and T/lt[r.at, x.expires]
         some x.parent implies withinParent[x]
@@ -156,7 +172,8 @@ assert Attenuation {
 }
 check Attenuation for 4 but 5 Time, 3 Action, 4 Atom, 3 Id, 3 Purpose, 2 Request, 2 Policy, 5 Int expect 0
 
-/* 06 §5.4: no valid chain carries an action that can't be delegated. */
+/* Definitional (a regression pin, not evidence: it restates a conjunct of validAtUse).
+ * 06 §5.4: no valid chain carries an action that can't be delegated. */
 assert NothingNonDelegableIsDelegated {
     all d: Delegation, r: Request, pol: Policy | validAtUse[d, r, pol] implies r.action not in NonDelegable
 }
@@ -169,14 +186,16 @@ assert DepthIsBounded {
 }
 check DepthIsBounded for 4 but 5 Time, 3 Action, 3 Purpose, 6 Int expect 0
 
-/* A revoked or expired link anywhere in the chain stops every use under it. */
+/* Definitional (a regression pin, not evidence: it restates a conjunct of validAtUse).
+ * A revoked or expired link anywhere in the chain stops every use under it. */
 assert ARevokedOrExpiredLinkStopsTheChain {
     all d: Delegation, r: Request, pol: Policy, x: Delegation |
         (x in chain[d] and (some x.revoked or T/lte[x.expires, r.at])) implies not validAtUse[d, r, pol]
 }
 check ARevokedOrExpiredLinkStopsTheChain for 4 but 5 Time, 3 Action, 3 Purpose, 5 Int expect 0
 
-/* The root's authority is re-evaluated now: if the root principal isn't permitted the request now,
+/* Definitional (a regression pin, not evidence: it restates a conjunct of validAtUse).
+ * The root's authority is re-evaluated now: if the root principal isn't permitted the request now,
  * nothing they delegated is (06 §5.3, "if Ana stops being an editor"). */
 assert TheRootLosingAuthorityStopsTheChain {
     all d: Delegation, r: Request, pol: Policy |
@@ -184,10 +203,12 @@ assert TheRootLosingAuthorityStopsTheChain {
 }
 check TheRootLosingAuthorityStopsTheChain for 4 but 5 Time, 3 Action, 3 Purpose, 5 Int expect 0
 
-/* M4: an action added to the catalogue after issuance isn't delegated: delegations hold the actions
- * they were issued with, so a request for another action is never valid under them. */
+/* M4: an action added to the catalogue after the root delegation was issued is never used under the
+ * chain: every link was issued with the actions the catalogue had then, and links come after their
+ * parents. */
 assert ALaterActionIsntDelegated {
-    all d: Delegation, r: Request, pol: Policy | r.action not in d.actions implies not validAtUse[d, r, pol]
+    all d: Delegation, r: Request, pol: Policy |
+        validAtUse[d, r, pol] implies T/lte[r.action.addedAt, root[d].issuedAt]
 }
 check ALaterActionIsntDelegated for 4 but 5 Time, 3 Action, 3 Purpose, 5 Int expect 0
 
@@ -204,7 +225,7 @@ run ADepthThreeChainIsValid {
 -- Without the root's re-evaluation: a chain still passes after the root lost the authority.
 pred validWithoutTheRoot[d: Delegation, r: Request] {
     d not in d.^parent and one root[d] and d.delegate = r.actor and admits[d, r]
-    all x: chain[d] | no x.revoked and issuable[x] and T/lte[x.notBefore, r.at] and T/lt[r.at, x.expires] and (some x.parent implies withinParent[x])
+    all x: chain[d] | no x.revoked and wellFormed[x] and issuable[x] and T/lte[x.notBefore, r.at] and T/lt[r.at, x.expires] and (some x.parent implies withinParent[x])
 }
 assert BrokenWithoutTheRoot {
     all d: Delegation, r: Request, pol: Policy |
@@ -220,7 +241,7 @@ pred narrowsReversed[child, parent: Selector] {
 }
 pred validWithReversedIds[d: Delegation, r: Request, pol: Policy] {
     d not in d.^parent and one root[d] and d.delegate = r.actor and admits[d, r]
-    all x: chain[d] | no x.revoked and issuable[x] and T/lte[x.notBefore, r.at] and T/lt[r.at, x.expires] and
+    all x: chain[d] | no x.revoked and wellFormed[x] and issuable[x] and T/lte[x.notBefore, r.at] and T/lt[r.at, x.expires] and
         (some x.parent implies (x.delegator = x.parent.delegate and x.actions in x.parent.redelegable and
             narrowsReversed[x.selector, x.parent.selector] and x.purpose in within[x.parent.purpose] and
             T/lte[x.parent.notBefore, x.notBefore] and T/lte[x.expires, x.parent.expires]))
@@ -230,3 +251,26 @@ assert BrokenReversedIds {
     all d: Delegation, r: Request, pol: Policy | validWithReversedIds[d, r, pol] implies (all x: chain[d] | admits[x, r])
 }
 check BrokenReversedIds for 3 but 4 Time, 2 Action, 4 Atom, 3 Id, 2 Purpose, 5 Int expect 1
+
+-- Without checking that a record's re-delegable actions are among its own: a child re-delegates an
+-- action its parent never held, and the parent no longer admits the request (A1).
+pred validWithoutRedelegableInActions[d: Delegation, r: Request, pol: Policy] {
+    d not in d.^parent and one root[d] and d.delegate = r.actor and admits[d, r]
+    all x: chain[d] | no x.revoked and x.depth >= 0 and issuable[x] and T/lte[x.notBefore, r.at] and T/lt[r.at, x.expires] and (some x.parent implies withinParent[x])
+    root[d].delegator -> r.action -> r.resource in pol.permits
+}
+assert BrokenWithoutRedelegableInActions {
+    all d: Delegation, r: Request, pol: Policy | validWithoutRedelegableInActions[d, r, pol] implies (all x: chain[d] | admits[x, r])
+}
+check BrokenWithoutRedelegableInActions for 3 but 4 Time, 2 Action, 2 Purpose, 5 Int expect 1
+
+-- Without checking that a record's depth isn't negative: a chain longer than its root allowed (A1).
+pred validWithoutDepthCheck[d: Delegation, r: Request, pol: Policy] {
+    d not in d.^parent and one root[d] and d.delegate = r.actor and admits[d, r]
+    all x: chain[d] | no x.revoked and x.redelegable in x.actions and issuable[x] and T/lte[x.notBefore, r.at] and T/lt[r.at, x.expires] and (some x.parent implies withinParent[x])
+    root[d].delegator -> r.action -> r.resource in pol.permits
+}
+assert BrokenWithoutDepthCheck {
+    all d: Delegation, r: Request, pol: Policy | validWithoutDepthCheck[d, r, pol] implies #chain[d] <= plus[root[d].depth, 1]
+}
+check BrokenWithoutDepthCheck for 4 but 5 Time, 2 Action, 2 Purpose, 5 Int expect 1
