@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every DecisionLogStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -101,7 +101,7 @@ trait DecisionLogStoreContract
         }
 
         self::assertNull($store->find(new Realm('globex'), $denied->id), 'Another realm\'s decisions aren\'t found.');
-        self::assertNull($store->find($acme, (string) new UuidV7()));
+        self::assertNull($store->find($acme, (string) Ids::next()));
     }
 
     #[DataProvider('implementations')]
@@ -180,12 +180,12 @@ trait DecisionLogStoreContract
     private static function decisionRecord(Realm $realm, \DateTimeImmutable $at, string $verdict, ?string $actor, ?ResourceRef $resource): DecisionRecord
     {
         return new DecisionRecord(
-            (string) new UuidV7(),
+            (string) Ids::next(),
             $realm,
             $at,
             null === $resource ? 'operation' : 'ability',
             null === $resource ? 'acme.badge.issue' : 'acme.pages.edit',
-            null === $actor ? null : (string) new UuidV7(),
+            null === $actor ? null : (string) Ids::next(),
             $resource,
             $verdict,
             'permit' === $verdict ? 'ability' : null,

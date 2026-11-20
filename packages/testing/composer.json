@@ -31,7 +31,6 @@
         "psr/clock": "^1.0",
         "psr/container": "^2.0",
         "symfony/clock": "^7.4 || ^8.1",
-        "symfony/uid": "^7.4 || ^8.1",
         "yorvoid/authn": "^0.5",
         "yorvoid/core": "^0.5",
         "yorvoid/flows": "^0.5",
