@@ -115,6 +115,7 @@ final class RetriesTest extends TestCase
                     throw self::deadlock();
                 });
             });
+            self::fail('The third conflict is thrown.'); // @phpstan-ignore deadCode.unreachable (unless retrying() gives up without it)
         } catch (RetryableConflict $conflict) {
             self::assertSame(3, $attempts);
             self::assertSame('The work conflicted with another transaction 3 times: run it again.', $conflict->getMessage());
@@ -133,6 +134,55 @@ final class RetriesTest extends TestCase
         }
 
         self::assertSame([50_000, 150_000], $this->waits);
+    }
+
+    public function testWorkThatConflictedTwiceCommitsOnTheLastAttempt(): void
+    {
+        foreach ([$this->transactions, new InMemoryTransactions()] as $transactions) {
+            $attempts = 0;
+
+            $result = $transactions->retrying(static function () use ($transactions, &$attempts): string {
+                return $transactions->run(static function () use (&$attempts): string {
+                    return ++$attempts < 3 ? throw new RetryableConflict(self::deadlock()) : 'done';
+                });
+            });
+
+            self::assertSame(['done', 3], [$result, $attempts], $transactions::class);
+        }
+    }
+
+    /**
+     * A nested unit that lost the connection doesn't end the transaction it's in: what waits for the end
+     * runs when the outermost unit ends.
+     */
+    public function testAConnectionLostInANestedUnitEndsWithTheOutermost(): void
+    {
+        /** @var \ArrayObject<int, string> $ran */
+        $ran = new \ArrayObject();
+
+        try {
+            $this->transactions->run(function () use ($ran): never {
+                $this->transactions->afterEnd(static function () use ($ran): void {
+                    $ran[] = 'ended';
+                });
+
+                try {
+                    $this->transactions->run(function (): never {
+                        $this->connection->close();
+
+                        throw new \RuntimeException('The connection is gone.');
+                    });
+                } catch (\Throwable) {
+                }
+
+                $ran[] = 'the outermost goes on';
+
+                throw new \RuntimeException('It ends.');
+            });
+        } catch (\Throwable) {
+        }
+
+        self::assertSame(['the outermost goes on', 'ended'], $ran->getArrayCopy());
     }
 
     /**
@@ -382,7 +432,7 @@ final class RetriesTest extends TestCase
     public function testRetryingEndsWithTheWorkItRetries(): void
     {
         foreach ([$this->transactions, new InMemoryTransactions()] as $transactions) {
-            foreach ([static fn (): mixed => throw new RetryableConflict(self::deadlock()), static fn (): string => 'done'] as $work) {
+            foreach ([static fn (): string => 'done', static fn (): mixed => throw new RetryableConflict(self::deadlock())] as $work) {
                 try {
                     $transactions->retrying(static fn (): mixed => $transactions->run($work));
                 } catch (RetryableConflict) {
@@ -439,6 +489,7 @@ final class RetriesTest extends TestCase
                     throw new RetryableConflict(self::deadlock());
                 });
             });
+            self::fail('The third conflict is thrown.'); // @phpstan-ignore deadCode.unreachable (unless retrying() gives up without it)
         } catch (RetryableConflict $conflict) {
             self::assertSame([3, 'The work conflicted with another transaction 3 times: run it again.', 3], [$attempts, $conflict->getMessage(), $this->reads->resets]);
             self::assertInstanceOf(DeadlockException::class, $conflict->getPrevious());

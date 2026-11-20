@@ -122,26 +122,28 @@ final class InMemoryTransactions implements Transactions
         }
 
         $this->retrying = true;
+        $this->final = false;
 
         try {
-            for ($attempt = 1;; ++$attempt) {
-                $this->final = $attempt >= DbalTransactions::ATTEMPTS;
-
+            for ($attempt = 1; $attempt < DbalTransactions::ATTEMPTS; ++$attempt) {
                 try {
                     return $work();
-                } catch (RetryableConflict $conflict) {
-                    if ($this->final) {
-                        throw new RetryableConflict($conflict->getPrevious() ?? $conflict, $attempt);
-                    }
-
+                } catch (RetryableConflict) {
                     foreach ($this->reads as $read) {
                         $read->reset();
                     }
                 }
             }
+
+            $this->final = true;
+
+            try {
+                return $work();
+            } catch (RetryableConflict $conflict) {
+                throw new RetryableConflict($conflict->getPrevious() ?? $conflict, DbalTransactions::ATTEMPTS);
+            }
         } finally {
             $this->retrying = false;
-            $this->final = false;
         }
     }
 

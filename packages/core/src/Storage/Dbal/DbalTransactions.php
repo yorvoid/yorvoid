@@ -141,18 +141,13 @@ final readonly class DbalTransactions implements Transactions
         }
 
         $this->retrying->active = true;
+        $this->retrying->final = false;
 
         try {
-            for ($attempt = 1;; ++$attempt) {
-                $this->retrying->final = $attempt >= self::ATTEMPTS;
-
+            for ($attempt = 1; $attempt < self::ATTEMPTS; ++$attempt) {
                 try {
                     return $work();
-                } catch (RetryableConflict $conflict) {
-                    if ($this->retrying->final) {
-                        throw new RetryableConflict($conflict->getPrevious() ?? $conflict, $attempt);
-                    }
-
+                } catch (RetryableConflict) {
                     foreach ($this->reads as $read) {
                         $read->reset();
                     }
@@ -160,9 +155,16 @@ final readonly class DbalTransactions implements Transactions
                     ($this->wait)($this->pause($attempt));
                 }
             }
+
+            $this->retrying->final = true;
+
+            try {
+                return $work();
+            } catch (RetryableConflict $conflict) {
+                throw new RetryableConflict($conflict->getPrevious() ?? $conflict, self::ATTEMPTS);
+            }
         } finally {
             $this->retrying->active = false;
-            $this->retrying->final = false;
         }
     }
 
