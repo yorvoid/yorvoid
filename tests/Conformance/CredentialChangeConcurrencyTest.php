@@ -71,7 +71,7 @@ final class CredentialChangeConcurrencyTest extends DatabaseTestCase
         try {
             touch($start);
             // Once the other process has changed the phone's passkey, before it commits.
-            usleep(250_000);
+            self::waitFor($start.'.ready');
 
             try {
                 Permits::call($credentials->remove(...), new RemoveCredential($realm, $laptop->id), new Origin(OriginKind::Web), $session);
@@ -83,10 +83,29 @@ final class CredentialChangeConcurrencyTest extends DatabaseTestCase
             $exitCode = proc_close($process);
         } finally {
             unlink($start);
+            if (file_exists($start.'.ready')) {
+                unlink($start.'.ready');
+            }
         }
 
         self::assertSame(0, $exitCode, 'The other change failed: '.$output);
         self::assertTrue($refused, 'Both changes went through: the principal has no way to sign in.');
         self::assertCount(1, array_filter($credentials->of($realm, $principal->id), static fn (Credential $credential): bool => $credential->isActive() && $credential->kind->signsIn()));
+    }
+
+    /**
+     * Until the other process holds what this one must wait for.
+     */
+    private static function waitFor(string $file): void
+    {
+        $deadline = microtime(true) + 10;
+
+        while (!file_exists($file)) {
+            if (microtime(true) > $deadline) {
+                self::fail('The other process never got there.');
+            }
+
+            usleep(1_000);
+        }
     }
 }

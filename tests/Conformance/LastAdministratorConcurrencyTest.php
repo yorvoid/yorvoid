@@ -74,7 +74,7 @@ final class LastAdministratorConcurrencyTest extends DatabaseTestCase
         try {
             touch($start);
             // Inside the revocation's transaction: B's role is taken, not yet committed.
-            usleep(250_000);
+            self::waitFor($start.'.ready');
 
             for ($attempt = 1; $attempt <= 2 && null === $refused; ++$attempt) {
                 try {
@@ -93,6 +93,9 @@ final class LastAdministratorConcurrencyTest extends DatabaseTestCase
             $exitCode = proc_close($process);
         } finally {
             unlink($start);
+            if (file_exists($start.'.ready')) {
+                unlink($start.'.ready');
+            }
             $database->connection->executeStatement('SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED');
         }
 
@@ -101,6 +104,22 @@ final class LastAdministratorConcurrencyTest extends DatabaseTestCase
         self::assertNotNull($refused, 'The suspension didn\'t see the role taken at the same moment: no active administrator is left.');
         self::assertTrue(true === $principals->get($realm, $a->id)?->isActive());
         self::assertSame([(string) $a->id], array_map(strval(...), $stack->policy->principalsWith($realm, 'admin')));
+    }
+
+    /**
+     * Until the other process holds what this one must wait for.
+     */
+    private static function waitFor(string $file): void
+    {
+        $deadline = microtime(true) + 10;
+
+        while (!file_exists($file)) {
+            if (microtime(true) > $deadline) {
+                self::fail('The other process never got there.');
+            }
+
+            usleep(1_000);
+        }
     }
 }
 

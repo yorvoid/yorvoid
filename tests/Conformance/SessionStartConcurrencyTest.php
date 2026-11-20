@@ -74,7 +74,7 @@ final class SessionStartConcurrencyTest extends DatabaseTestCase
         try {
             touch($start);
             // While the other process holds the principal's lock.
-            usleep(250_000);
+            self::waitFor($start.'.ready');
 
             for ($attempt = 1; $attempt <= 2; ++$attempt) {
                 try {
@@ -97,6 +97,9 @@ final class SessionStartConcurrencyTest extends DatabaseTestCase
             $exitCode = proc_close($process);
         } finally {
             unlink($start);
+            if (file_exists($start.'.ready')) {
+                unlink($start.'.ready');
+            }
             $database->connection->executeStatement('SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED');
         }
 
@@ -105,5 +108,21 @@ final class SessionStartConcurrencyTest extends DatabaseTestCase
         self::assertSame('suspend' === $first, $refused, 'A session started for a suspended principal.');
         self::assertSame(PrincipalStatus::Suspended, $principals->get($realm, $principal->id)?->status);
         self::assertSame([], $stack->sessions->current($realm, $principal->id, new \DateTimeImmutable()), 'The suspended principal kept a session started at the same moment.');
+    }
+
+    /**
+     * Until the other process holds what this one must wait for.
+     */
+    private static function waitFor(string $file): void
+    {
+        $deadline = microtime(true) + 10;
+
+        while (!file_exists($file)) {
+            if (microtime(true) > $deadline) {
+                self::fail('The other process never got there.');
+            }
+
+            usleep(1_000);
+        }
     }
 }

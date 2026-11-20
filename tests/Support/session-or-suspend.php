@@ -59,9 +59,10 @@ $connection->executeStatement(sprintf('SET SESSION CHARACTERISTICS AS TRANSACTIO
 $database = new Database($connection, new StorageLocation(StorageLocation::DEFAULT_PREFIX, $schema));
 $transactions = new DbalTransactions($connection, $middleware, location: $database->location);
 
-$slow = new readonly class(new DbalPrincipalStore($database)) implements PrincipalStore {
+$slow = new readonly class(new DbalPrincipalStore($database), $start.'.ready') implements PrincipalStore {
     public function __construct(
         private PrincipalStore $store,
+        private string $ready,
     ) {
     }
 
@@ -83,6 +84,7 @@ $slow = new readonly class(new DbalPrincipalStore($database)) implements Princip
     public function lock(Realm $realm, PrincipalId $id): void
     {
         $this->store->lock($realm, $id);
+        touch($this->ready);
         usleep(500_000);
     }
 

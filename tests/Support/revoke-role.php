@@ -58,8 +58,9 @@ while (!file_exists($start)) {
     usleep(1_000);
 }
 
-$transactions->run(static function () use ($changes, $id, $role): void {
+$transactions->run(static function () use ($changes, $id, $role, $start): void {
     Permits::call($changes->operations()[UnassignRole::class], new UnassignRole(new Realm('acme'), PrincipalId::fromString($id), $role), new Origin(OriginKind::Job, 'process '.getmypid()));
     // Taken, not yet committed: a suspension's guard rule now must wait for this, or count it.
+    touch($start.'.ready');
     usleep(600_000);
 });

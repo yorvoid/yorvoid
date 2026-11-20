@@ -56,9 +56,10 @@ $connection = DriverManager::getConnection(new DsnParser()->parse($url), $config
 $database = new Database($connection, new StorageLocation(StorageLocation::DEFAULT_PREFIX, $schema));
 $transactions = new DbalTransactions($connection, $middleware, location: $database->location);
 
-$slow = new readonly class(new DbalCredentialStore($database)) implements CredentialStore {
+$slow = new readonly class(new DbalCredentialStore($database), $start.'.ready') implements CredentialStore {
     public function __construct(
         private CredentialStore $store,
+        private string $ready,
     ) {
     }
 
@@ -90,6 +91,7 @@ $slow = new readonly class(new DbalCredentialStore($database)) implements Creden
     public function disable(Realm $realm, CredentialId $id): bool
     {
         $disabled = $this->store->disable($realm, $id);
+        touch($this->ready);
         usleep(500_000);
 
         return $disabled;
@@ -98,6 +100,7 @@ $slow = new readonly class(new DbalCredentialStore($database)) implements Creden
     public function remove(Realm $realm, CredentialId $id): bool
     {
         $removed = $this->store->remove($realm, $id);
+        touch($this->ready);
         usleep(500_000);
 
         return $removed;

@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Conformance;
 
 use YorvoID\Authn\Attempt\Attempts;
+use YorvoID\Authn\Invitation\AcceptInvitation;
+use YorvoID\Authn\Invitation\Invitations;
+use YorvoID\Authn\Invitation\Invite;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Setup\CreateSetupCode;
 use YorvoID\Authn\Setup\SetupCodes;
+use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -72,5 +76,49 @@ final class SetupClaimConcurrencyTest extends DatabaseTestCase
             self::assertSame([], $claims);
             self::assertSame([(string) $other->id], $created);
         }
+    }
+
+    /**
+     * The other side of the same rule: a principal made active by accepting an invitation, in the
+     * claim's pause, waits for the claim on the realm's lock. Either the claim made the first active
+     * principal and the invitee became active after it, or the claim was refused.
+     */
+    public function testAClaimNeverCreatesAnOwnerAfterAnInvitationAccepted(): void
+    {
+        $stack = $this->stack('postgresql');
+        $database = $stack->database;
+        \assert($database instanceof Database && null !== $database->location->schema);
+        $realm = new Realm('acme');
+        $log = new SecurityLog($stack->log, $stack->transactions);
+        $principals = new Principals($stack->principals, $stack->identifiers, $log, $stack->transactions);
+        $sessions = new Sessions($stack->sessions, $principals, $log, $stack->transactions);
+        $codes = new SetupCodes($stack->setup, $principals, $log, $stack->transactions, new Attempts(new Throttle($stack->throttle)), $sessions);
+        $invitations = new Invitations($principals, new OneTimeTokens($stack->tokens, $principals, $log, $stack->transactions), $stack->transactions, new Throttle($stack->throttle), $sessions);
+        $invitation = Permits::call($invitations->invite(...), new Invite($realm, 'ana@example.com'), new Origin(OriginKind::Console));
+        $code = Permits::call($codes->create(...), new CreateSetupCode($realm, Duration::days(1)), new Origin(OriginKind::Console));
+        $start = \sprintf('%s/yorvoid-start-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
+        $process = proc_open(
+            [\PHP_BINARY, __DIR__.'/../Support/claim-setup.php', (string) getenv('YORVOID_TEST_POSTGRES_URL'), $database->location->schema, $code->reveal(), $start],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+        );
+        self::assertIsResource($process);
+
+        try {
+            touch($start);
+            // Inside the claim's pause: it has asked, and not yet created the owner.
+            usleep(200_000);
+            self::assertNotNull(Permits::call($invitations->accept(...), new AcceptInvitation($realm, $invitation->token->secret), new Origin(OriginKind::Web)));
+            $output = stream_get_contents($pipes[1]).stream_get_contents($pipes[2]);
+            $exitCode = proc_close($process);
+        } finally {
+            unlink($start);
+        }
+
+        self::assertContains($exitCode, [0, 3], 'The claim failed: '.$output);
+        $entries = iterator_to_array($stack->log->entries($realm, 1), false);
+        $order = array_values(array_map(static fn (LogEntry $entry): string => $entry->action, array_filter($entries, static fn (LogEntry $entry): bool => \in_array($entry->action, ['yorvoid.setup.claim', 'yorvoid.principal.activate'], true) && Outcome::Success === $entry->outcome)));
+
+        self::assertSame(0 === $exitCode ? ['yorvoid.setup.claim', 'yorvoid.principal.activate'] : ['yorvoid.principal.activate'], $order, 'The owner was created after someone else became active.');
     }
 }
