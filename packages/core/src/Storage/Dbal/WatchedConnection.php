@@ -7,6 +7,7 @@ namespace YorvoID\Core\Storage\Dbal;
 use Doctrine\DBAL\Driver\Connection;
 use Doctrine\DBAL\Driver\Middleware\AbstractConnectionMiddleware;
 use Doctrine\DBAL\Driver\Result;
+use Doctrine\DBAL\Driver\Statement;
 
 /**
  * The driver connection seen through TransactionMiddleware. DBAL calls the driver's commit() and
@@ -31,6 +32,7 @@ final class WatchedConnection extends AbstractConnectionMiddleware
         // A callback's commit() at DBAL's level 1 ends its own transaction, not the application's: no hooks.
         if ($this->apart) {
             $this->apart = false;
+            $this->hooks->lockOrder?->end();
             parent::commit();
 
             return;
@@ -41,6 +43,7 @@ final class WatchedConnection extends AbstractConnectionMiddleware
             $this->hooks->beforeCommit();
         } catch (\Throwable $failure) {
             try {
+                $this->hooks->lockOrder?->end();
                 parent::rollBack();
             } finally {
                 $this->hooks->failedBeforeCommit($this);
@@ -49,12 +52,27 @@ final class WatchedConnection extends AbstractConnectionMiddleware
             throw $failure;
         }
 
+        $this->hooks->lockOrder?->end();
         parent::commit();
         $this->hooks->committed($this);
     }
 
+    public function beginTransaction(): void
+    {
+        parent::beginTransaction();
+        $this->hooks->lockOrder?->begin();
+    }
+
+    public function prepare(string $sql): Statement
+    {
+        $this->hooks->lockOrder?->saw($sql);
+
+        return parent::prepare($sql);
+    }
+
     public function exec(string $sql): int|string
     {
+        $this->hooks->lockOrder?->saw($sql);
         $affected = parent::exec($sql);
         $this->followSavepoints($sql);
 
@@ -63,6 +81,7 @@ final class WatchedConnection extends AbstractConnectionMiddleware
 
     public function query(string $sql): Result
     {
+        $this->hooks->lockOrder?->saw($sql);
         $result = parent::query($sql);
         $this->followSavepoints($sql);
 
@@ -98,12 +117,15 @@ final class WatchedConnection extends AbstractConnectionMiddleware
         // Likewise a callback's rollBack(): it would otherwise drop the callbacks still waiting.
         if ($this->apart) {
             $this->apart = false;
+            $this->hooks->lockOrder?->end();
             parent::rollBack();
 
             return;
         }
 
         // Rolled back first: what waits for the end may open a transaction of its own (D-42).
+        $this->hooks->lockOrder?->end();
+
         try {
             parent::rollBack();
         } finally {
@@ -118,6 +140,7 @@ final class WatchedConnection extends AbstractConnectionMiddleware
     {
         parent::beginTransaction();
         $this->apart = true;
+        $this->hooks->lockOrder?->begin();
     }
 
     /**
@@ -134,6 +157,7 @@ final class WatchedConnection extends AbstractConnectionMiddleware
     public function commitApart(): void
     {
         $this->apart = false;
+        $this->hooks->lockOrder?->end();
         parent::commit();
     }
 
@@ -141,6 +165,7 @@ final class WatchedConnection extends AbstractConnectionMiddleware
     {
         if ($this->apart) {
             $this->apart = false;
+            $this->hooks->lockOrder?->end();
             parent::rollBack();
         }
     }

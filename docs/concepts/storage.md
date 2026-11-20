@@ -82,6 +82,8 @@ Savepoints are followed by name, DBAL's and your own, set through DBAL's `execut
 
 Each lock is a write, not only `SELECT ... FOR UPDATE`. Under `REPEATABLE READ`, a transaction that waited for one then fails as a conflict (`RetryableConflict`) and runs again on what's committed, rather than going on with what it saw before. Under `READ COMMITTED`, it reads what was committed when it gets the lock. On SQLite, a second writer at the same moment gets `SQLITE_BUSY` once its busy timeout runs out, which YorvoID doesn't retry: fine for development and tests.
 
+YorvoID's test suite checks the order on every transaction: set `YORVOID_LOCK_ORDER=check` in your own tests to check your transactions the same way, on connections with `TransactionMiddleware`. A version row written without the realm's lock, the realm's lock after another lock, or a lock after the security log's head then throws `LogicException`. It reads the statements sent, so it doesn't see what the database locks by itself, e.g. a parent row for a foreign key or a trigger's writes, nor whose rows a statement locks: that a transaction without the realm's lock locks one principal's rows only is up to its code.
+
 Your own transaction can still meet YorvoID's in another order, e.g. one that changes your own authority rows and then suspends someone. PostgreSQL then ends one of them as a deadlock, a `RetryableConflict` for you to retry. A failure appending the log at your commit through DBAL's `transactional()` may reach you as `NoActiveTransaction`, with the cause as its previous; it isn't retried.
 
 ### Without a database

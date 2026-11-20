@@ -56,14 +56,20 @@ trait RelationStoreContract
         $ada = new Subject(new ResourceRef('principal', 'ada'));
         [$failed, $seen, $kept] = [new ResourceRef('page', 'failed'), new ResourceRef('page', 'seen'), new ResourceRef('page', 'kept')];
         $version = $store->version($acme);
+        // As YorvoID's changes do: the realm's lock first, then the store's writes, which bump its version.
+        $locked = static fn (\Closure $write): \Closure => static function () use ($transactions, $acme, $write): mixed {
+            $transactions->lockRealm($acme);
 
-        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add(new RelationTuple($acme, $failed, 'viewer', $ada)), static fn (): bool => [] === $store->of($acme, $failed));
+            return $write();
+        };
+
+        InTransaction::assertGoneAfterARollback($transactions, $locked(static fn () => $store->add(new RelationTuple($acme, $failed, 'viewer', $ada))), static fn (): bool => [] === $store->of($acme, $failed));
         self::assertSame($version, $store->version($acme), 'A rolled-back change left the version incremented: caches would read it as a change.');
-        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add(new RelationTuple($acme, $seen, 'viewer', $ada)), static fn (): bool => [] !== $store->of($acme, $seen));
+        InTransaction::assertSeenInsideItsTransaction($transactions, $locked(static fn () => $store->add(new RelationTuple($acme, $seen, 'viewer', $ada))), static fn (): bool => [] !== $store->of($acme, $seen));
         InTransaction::assertTheTransactionGoesOn($transactions, [
-            static fn () => $store->add(new RelationTuple($acme, $seen, 'viewer', $ada)),
-            static fn (): bool => $store->remove(new RelationTuple($acme, $failed, 'viewer', $ada)),
-        ], static fn () => $store->add(new RelationTuple($acme, $kept, 'viewer', $ada)), static fn (): bool => [] !== $store->of($acme, $kept));
+            $locked(static fn () => $store->add(new RelationTuple($acme, $seen, 'viewer', $ada))),
+            $locked(static fn (): bool => $store->remove(new RelationTuple($acme, $failed, 'viewer', $ada))),
+        ], $locked(static fn () => $store->add(new RelationTuple($acme, $kept, 'viewer', $ada))), static fn (): bool => [] !== $store->of($acme, $kept));
     }
 
     /**

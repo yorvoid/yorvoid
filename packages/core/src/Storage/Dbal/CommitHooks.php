@@ -10,6 +10,7 @@ use Psr\Log\NullLogger;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Log\AuditAlarm;
 use YorvoID\Core\Log\Event\AuditFailed;
+use YorvoID\Core\Storage\StorageLocation;
 
 /**
  * Callbacks waiting for the connection's outermost transaction to end. TransactionMiddleware tells it
@@ -46,6 +47,9 @@ final class CommitHooks
 
     private ?Connection $connection = null;
 
+    /** Checks the order of the transaction's locks, in the tests (YORVOID_LOCK_ORDER=check) */
+    public private(set) ?LockOrder $lockOrder = null;
+
     private LoggerInterface $logger;
 
     private AuditAlarm $alarm;
@@ -59,9 +63,10 @@ final class CommitHooks
     /**
      * The DBAL connection over the watched one, and where a callback's failure goes.
      */
-    public function attach(Connection $connection, LoggerInterface $logger, AuditAlarm $alarm): void
+    public function attach(Connection $connection, LoggerInterface $logger, AuditAlarm $alarm, StorageLocation $location = new StorageLocation()): void
     {
         $this->connection = $connection;
+        $this->lockOrder ??= LockOrder::fromEnvironment($location);
         $this->logger = $logger;
         $this->alarm = $alarm;
     }

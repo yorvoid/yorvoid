@@ -30,6 +30,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `@experimental`: `ActsUnderDelegation`, `Request::$execution` and `Request::$purpose`, the shapes of M3's delegation.
 - `Transactions::lockRealm()`: locks a realm until the transaction ends, for a check over the realm as a whole, e.g. that it keeps an administrator, and every change that can break one. Changes of status, claiming a setup, creating an active principal, and every change of roles, groups, abilities, relations and attributes take it first ([locks](docs/concepts/storage.md#locks)).
 - `Transactions::beforeCommit()`: runs a callback just before the outermost transaction commits, inside it; if it fails, nothing commits.
+- `YORVOID_LOCK_ORDER=check`: in your tests, every transaction on a connection with `TransactionMiddleware` throws when it takes YorvoID's locks out of their order ([locks](docs/concepts/storage.md#locks)).
 
 ### Breaking
 

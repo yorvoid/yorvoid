@@ -59,15 +59,21 @@ trait PolicyStoreContract
         $at = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
         [$failed, $seen, $kept] = [new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7())];
         $version = $store->version($acme);
+        // As YorvoID's changes do: the realm's lock first, then the store's writes, which bump its version.
+        $locked = static fn (\Closure $write): \Closure => static function () use ($transactions, $acme, $write): mixed {
+            $transactions->lockRealm($acme);
 
-        InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->assign(new RoleAssignment($acme, $failed, 'editor', $at)), static fn (): bool => [] === $store->assignments($acme, $failed));
+            return $write();
+        };
+
+        InTransaction::assertGoneAfterARollback($transactions, $locked(static fn () => $store->assign(new RoleAssignment($acme, $failed, 'editor', $at))), static fn (): bool => [] === $store->assignments($acme, $failed));
         self::assertSame($version, $store->version($acme), 'A rolled-back change left the version incremented: caches would read it as a change.');
-        InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->assign(new RoleAssignment($acme, $seen, 'editor', $at)), static fn (): bool => [] !== $store->assignments($acme, $seen));
+        InTransaction::assertSeenInsideItsTransaction($transactions, $locked(static fn () => $store->assign(new RoleAssignment($acme, $seen, 'editor', $at))), static fn (): bool => [] !== $store->assignments($acme, $seen));
         InTransaction::assertTheTransactionGoesOn($transactions, [
-            static fn (): bool => $store->unassign($acme, $failed, 'editor', null),
-            static fn (): bool => $store->unassignGroup($acme, 'nobody', 'editor', null),
-            static fn () => $store->deleteRole($acme, 'none'),
-        ], static fn () => $store->assign(new RoleAssignment($acme, $kept, 'editor', $at)), static fn (): bool => [] !== $store->assignments($acme, $kept));
+            $locked(static fn (): bool => $store->unassign($acme, $failed, 'editor', null)),
+            $locked(static fn (): bool => $store->unassignGroup($acme, 'nobody', 'editor', null)),
+            $locked(static fn () => $store->deleteRole($acme, 'none')),
+        ], $locked(static fn () => $store->assign(new RoleAssignment($acme, $kept, 'editor', $at))), static fn (): bool => [] !== $store->assignments($acme, $kept));
     }
 
     /**

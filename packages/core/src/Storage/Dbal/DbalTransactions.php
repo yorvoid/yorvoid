@@ -74,7 +74,7 @@ final readonly class DbalTransactions implements Transactions
         $this->retrying = new RetryScope();
         $this->alarm = new AuditAlarm($events, $logger);
         $this->logger = $logger;
-        $middleware?->hooks()->attach($connection, $logger, $this->alarm);
+        $middleware?->hooks()->attach($connection, $logger, $this->alarm, $location);
     }
 
     public function run(\Closure $work): mixed

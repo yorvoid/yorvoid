@@ -655,8 +655,8 @@ final class PasskeysTest extends DatabaseTestCase
         $started = microtime(true);
 
         $database->connection->beginTransaction();
-        // An earlier change of the application's, in the same transaction: it holds the realm's log lock.
-        $this->stack->log->lock(new Realm('acme'));
+        // An earlier change of the application's, in the same transaction: it holds the realm's lock.
+        $this->stack->transactions->lockRealm(new Realm('acme'));
         $this->refused(Refusal::SuspectedCopy, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $copy), new Origin(OriginKind::Web)));
         $database->connection->commit();
 

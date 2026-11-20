@@ -56,6 +56,7 @@ final class LastAdministratorConcurrencyTest extends DatabaseTestCase
             Permits::call($principals->create(...), new CreatePrincipal($realm, PrincipalKind::Human), new Origin(OriginKind::Console)),
         ];
         $stack->transactions->run(static function () use ($stack, $realm, $a, $b): void {
+            $stack->transactions->lockRealm($realm);
             $stack->policy->saveRole($realm, 'admin', 'Administrator');
             $stack->policy->assign(new RoleAssignment($realm, $a->id, 'admin', new \DateTimeImmutable()));
             $stack->policy->assign(new RoleAssignment($realm, $b->id, 'admin', new \DateTimeImmutable()));
