@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Event\Origin;
@@ -33,6 +32,7 @@ use YorvoID\Policy\Attribute\UnknownAttribute;
 use YorvoID\Policy\Rule\Rule;
 use YorvoID\Policy\Rule\RuleAnswer;
 use YorvoID\Policy\Storage\InMemoryAttributeStore;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Policy\Fixtures\AcmeAttributes;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Support\Permits;
@@ -97,7 +97,7 @@ final class AttributesTest extends TestCase
                 $this->store->forget($realm, $principalId);
             }
         };
-        $ada = new PrincipalId(new UuidV7());
+        $ada = new PrincipalId(Ids::next());
         $store->set(new \YorvoID\Core\Realm('acme'), $ada, 'acme.department', 'R&D');
         $store->set(new \YorvoID\Core\Realm('acme'), $ada, 'acme.clearance', 3);
         $attributes = new Attributes([new AcmeAttributes()], $store);
@@ -158,7 +158,7 @@ final class AttributesTest extends TestCase
         self::assertSame([['attribute' => 'acme.teams', 'removed' => false], 'principal'], [array_diff_key(self::entries($world)[0]->details, ['decision' => true]), self::entries($world)[0]->subjectType], 'The name, never the value.');
 
         $this->expectException(UnknownPrincipal::class);
-        $world->asOperator(new SetAttribute($world->realm, new PrincipalId(new UuidV7()), 'acme.department', 'R&D'));
+        $world->asOperator(new SetAttribute($world->realm, new PrincipalId(Ids::next()), 'acme.department', 'R&D'));
     }
 
     public function testAttributesAreNamedAndDeclaredOnce(): void

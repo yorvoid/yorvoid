@@ -35,9 +35,9 @@ final readonly class DbalCredentialStore implements CredentialStore
     public function add(Credential $credential): void
     {
         if (!$this->database->insertUnlessExists(self::TABLE, [
-            'id' => $credential->id->uuid->toRfc4122(),
+            'id' => $credential->id->id->toString(),
             'realm' => $credential->realm->name,
-            'principal_id' => $credential->principalId->uuid->toRfc4122(),
+            'principal_id' => $credential->principalId->id->toString(),
             'kind' => $credential->kind->value,
             'label' => $credential->label,
             'created_at' => $credential->createdAt,
@@ -50,7 +50,7 @@ final readonly class DbalCredentialStore implements CredentialStore
 
     public function get(Realm $realm, CredentialId $id): ?Credential
     {
-        $row = $this->database->connection->fetchAssociative(\sprintf('SELECT %s FROM %s WHERE realm = ? AND id = ?', self::COLUMNS, $this->database->table(self::TABLE)), [$realm->name, $id->uuid->toRfc4122()]);
+        $row = $this->database->connection->fetchAssociative(\sprintf('SELECT %s FROM %s WHERE realm = ? AND id = ?', self::COLUMNS, $this->database->table(self::TABLE)), [$realm->name, $id->id->toString()]);
 
         return false === $row ? null : $this->credential($realm, $row);
     }
@@ -61,7 +61,7 @@ final readonly class DbalCredentialStore implements CredentialStore
 
         foreach ($this->database->connection->iterateAssociative(
             \sprintf('SELECT %s FROM %s WHERE realm = ? AND principal_id = ? ORDER BY created_at, id', self::COLUMNS, $this->database->table(self::TABLE)),
-            [$realm->name, $principalId->uuid->toRfc4122()],
+            [$realm->name, $principalId->id->toString()],
         ) as $row) {
             $credentials[] = $this->credential($realm, $row);
         }
@@ -99,7 +99,7 @@ final readonly class DbalCredentialStore implements CredentialStore
      */
     private static function key(Realm $realm, CredentialId $id): array
     {
-        return ['realm' => $realm->name, 'id' => $id->uuid->toRfc4122()];
+        return ['realm' => $realm->name, 'id' => $id->id->toString()];
     }
 
     /**

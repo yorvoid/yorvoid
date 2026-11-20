@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -14,6 +13,7 @@ use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every PrincipalStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -78,7 +78,7 @@ trait PrincipalStoreContract
 
         foreach (PrincipalKind::cases() as $i => $kind) {
             $status = PrincipalStatus::cases()[$i % \count(PrincipalStatus::cases())];
-            $principal = new Principal(new PrincipalId(new UuidV7()), new Realm('acme'), $kind, $status, new \DateTimeImmutable('2026-10-27 18:40:01 UTC'), new \DateTimeImmutable('2026-10-28 09:15:30 UTC'), new \DateTimeImmutable('2026-10-28 09:15:29 UTC'), 3 + $i);
+            $principal = new Principal(new PrincipalId(Ids::next()), new Realm('acme'), $kind, $status, new \DateTimeImmutable('2026-10-27 18:40:01 UTC'), new \DateTimeImmutable('2026-10-28 09:15:30 UTC'), new \DateTimeImmutable('2026-10-28 09:15:29 UTC'), 3 + $i);
             $store->add($principal);
 
             self::assertEquals($principal, $store->get(new Realm('acme'), $principal->id));
@@ -92,7 +92,7 @@ trait PrincipalStoreContract
         $principal = self::principal(new Realm('acme'));
         $store->add($principal);
 
-        self::assertNull($store->get(new Realm('acme'), new PrincipalId(new UuidV7())));
+        self::assertNull($store->get(new Realm('acme'), new PrincipalId(Ids::next())));
         self::assertNull($store->get(new Realm('globex'), $principal->id), 'A principal was found across realms.');
     }
 
@@ -103,7 +103,7 @@ trait PrincipalStoreContract
         self::assertFalse($store->hasActive(new Realm('acme')));
 
         foreach ([PrincipalStatus::Invited, PrincipalStatus::Suspended, PrincipalStatus::Deleted] as $status) {
-            $store->add(new Principal(new PrincipalId(new UuidV7()), new Realm('acme'), PrincipalKind::Human, $status, new \DateTimeImmutable(), new \DateTimeImmutable(), new \DateTimeImmutable()));
+            $store->add(new Principal(new PrincipalId(Ids::next()), new Realm('acme'), PrincipalKind::Human, $status, new \DateTimeImmutable(), new \DateTimeImmutable(), new \DateTimeImmutable()));
         }
 
         $store->add(self::principal(new Realm('globex')));
@@ -160,7 +160,7 @@ trait PrincipalStoreContract
         $transactions->run(static function () use ($store, $principal): void {
             $store->lock($principal->realm, $principal->id);
             $store->lock($principal->realm, $principal->id);
-            $store->lock($principal->realm, new PrincipalId(new UuidV7()));
+            $store->lock($principal->realm, new PrincipalId(Ids::next()));
         });
 
         self::assertEquals($principal, $store->get(new Realm('acme'), $principal->id));
@@ -186,6 +186,6 @@ trait PrincipalStoreContract
     {
         $now = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
 
-        return new Principal(new PrincipalId(new UuidV7()), $realm, PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now);
+        return new Principal(new PrincipalId(Ids::next()), $realm, PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now);
     }
 }

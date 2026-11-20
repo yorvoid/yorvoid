@@ -25,6 +25,7 @@ use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\RecordBadge;
@@ -50,7 +51,7 @@ final class DecisionCitationsTest extends TestCase
         $log = new SecurityLog($entries, $transactions);
         $decisions = new InMemoryDecisionLogStore();
         $digests = new DecisionDigests($decisions, $log, $entries, $transactions);
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
 
         $this->operations($log, new DecisionLog($decisions))->run(new IssueBadge($realm, $ana), new Member($realm, $ana), new Origin(OriginKind::Web));
         self::assertSame([], $digests->citations($realm), 'The application\'s decision point records what its entries cite.');
@@ -67,7 +68,7 @@ final class DecisionCitationsTest extends TestCase
     public function testACitationWithAnotherHashThanItsRecordsIsFound(): void
     {
         [$realm, $log, $digests, $decisions] = $this->setUpLog();
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
         $this->operations($log, new DecisionLog($decisions))->run(new IssueBadge($realm, $ana), new Member($realm, $ana), new Origin(OriginKind::Web));
         $id = $this->citedIds($this->entries, $realm)[0];
         $permit = Decisions::identified(Decisions::permit(AuthorizedBy::Self, 'Cited.'), $id, new \DateTimeImmutable());
@@ -88,7 +89,7 @@ final class DecisionCitationsTest extends TestCase
     {
         [$realm, $log, $digests, $decisions] = $this->setUpLog();
         $refusal = Decision::deny('No.')->identified((string) new UuidV7(), new \DateTimeImmutable(), []);
-        $decisions->add([DecisionRecord::of(Request::forAbility('acme.pages.edit', $realm, null, new Member($realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web), new \DateTimeImmutable()), $refusal)]);
+        $decisions->add([DecisionRecord::of(Request::forAbility('acme.pages.edit', $realm, null, new Member($realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web), new \DateTimeImmutable()), $refusal)]);
 
         $log->citing($refusal, static function () use ($log, $realm): void {
             $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web));
@@ -105,7 +106,7 @@ final class DecisionCitationsTest extends TestCase
         // The chain keeps an entry's time to the second.
         $clock = new MockClock('2026-11-19 18:00:00');
         [$realm, $log, $digests, $decisions] = $this->setUpLog($clock);
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
         $this->operations($log, null)->run(new IssueBadge($realm, $ana), new Member($realm, $ana), new Origin(OriginKind::Web));
 
         $decisions->prune($clock->now());

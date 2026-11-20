@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
@@ -28,6 +27,7 @@ use YorvoID\Policy\Rule\RuleElements;
 use YorvoID\Policy\Rule\RuleOutcome;
 use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
@@ -110,7 +110,7 @@ final class RuleElementsTest extends TestCase
 
     private static function member(): Member
     {
-        return new Member(new Realm('acme'), new PrincipalId(new UuidV7()));
+        return new Member(new Realm('acme'), new PrincipalId(Ids::next()));
     }
 
     private static function id(Member $member): PrincipalId

@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Authn\Session;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -31,6 +30,7 @@ use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Operation\ViewingAs;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
 use YorvoID\Tests\Support\RecordingLogger;
 
@@ -153,7 +153,7 @@ final class StoredSessionsTest extends TestCase
     public function testAnActorNothingProvesIsIndeterminateAndWarnedAboutOnce(): void
     {
         $logger = new RecordingLogger();
-        $actor = new readonly class(new Realm('acme'), new PrincipalId(new UuidV7())) implements Actor {
+        $actor = new readonly class(new Realm('acme'), new PrincipalId(Ids::next())) implements Actor {
             public function __construct(public ?Realm $realm, public ?PrincipalId $principalId)
             {
             }
@@ -211,6 +211,6 @@ final class StoredSessionsTest extends TestCase
     {
         $now = $this->clock->now();
 
-        return new Session($id ?? new SessionId(new UuidV7()), $this->realm, $principal ?? new PrincipalId(new UuidV7()), 0, new AuthenticationContext(new AuthenticationFactor($method, $now, AuthenticationMethod::Passkey === $method, AuthenticationMethod::Passkey === $method)), $now, $now, $now->modify($expires), $now->modify($expires));
+        return new Session($id ?? new SessionId(Ids::next()), $this->realm, $principal ?? new PrincipalId(Ids::next()), 0, new AuthenticationContext(new AuthenticationFactor($method, $now, AuthenticationMethod::Passkey === $method, AuthenticationMethod::Passkey === $method)), $now, $now, $now->modify($expires), $now->modify($expires));
     }
 }

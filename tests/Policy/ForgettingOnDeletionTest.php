@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
@@ -20,6 +19,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Policy\Attribute\ForgetAttributesOfDeletedPrincipals;
 use YorvoID\Policy\ForgetRolesOfDeletedPrincipals;
 use YorvoID\Relations\ForgetRelationsOfDeletedPrincipals;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Tests\Support\Permits;
 
@@ -46,8 +46,8 @@ final class ForgettingOnDeletionTest extends TestCase
     public function testAnEventNamingAnotherPrincipalIsRefused(\Closure $listener): void
     {
         $realm = new Realm('acme');
-        $deleted = new PrincipalId(new UuidV7());
-        $other = self::principal($realm, new PrincipalId(new UuidV7()), PrincipalStatus::Active);
+        $deleted = new PrincipalId(Ids::next());
+        $other = self::principal($realm, new PrincipalId(Ids::next()), PrincipalStatus::Active);
         $permit = Permits::for($command = new DeletePrincipal($realm, $deleted));
         $permit->use($command);
 

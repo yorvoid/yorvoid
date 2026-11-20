@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Relations;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\ForbidElement;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
@@ -27,6 +26,7 @@ use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\ResourceType;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Relations\Fixtures\CountingRelationStore;
@@ -50,7 +50,7 @@ final class RelationPermitTest extends TestCase
         }]);
         $store = new InMemoryRelationStore();
         $realm = new Realm('acme');
-        $ada = new PrincipalId(new UuidV7());
+        $ada = new PrincipalId(Ids::next());
         $permit = new RelationPermit(new Relations($schema, $store, 2));
         $request = static fn (string $doc): Request => Request::forAbility('acme.docs.read', $realm, new ResourceRef('doc', $doc), new Member($realm, $ada), new Origin(OriginKind::Web), new \DateTimeImmutable());
 
@@ -72,7 +72,7 @@ final class RelationPermitTest extends TestCase
         $counting = new CountingRelationStore($store);
         $store->add(new RelationTuple($realm, new ResourceRef('doc', '3'), 'owner', Subject::principal($ada)));
         $batched = new RelationPermit(new Relations($schema, $counting, 2));
-        $bob = new PrincipalId(new UuidV7());
+        $bob = new PrincipalId(Ids::next());
         $requests = [$request('1'), $request('2'), $request('3'), $request('d0'), Request::forAbility('acme.docs.read', $realm, new ResourceRef('doc', '3'), new Member($realm, $bob), new Origin(OriginKind::Web), new \DateTimeImmutable()), Request::forAbility('acme.docs.read', new Realm('other'), new ResourceRef('doc', '3'), new Member(new Realm('other'), $ada), new Origin(OriginKind::Web), new \DateTimeImmutable())];
         $batched->preload($requests);
         $reads = $counting->reads;

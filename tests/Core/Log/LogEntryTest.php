@@ -6,14 +6,15 @@ namespace YorvoID\Tests\Core\Log;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 
 final class LogEntryTest extends TestCase
 {
@@ -42,7 +43,7 @@ final class LogEntryTest extends TestCase
     public function testRecordsTextThatIsntValidUtf8(): void
     {
         // E.g. what someone typed into a failed sign-in: recording it must never fail.
-        $entry = LogEntry::create(Realm::default(), 1, Uuid::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8c'), new \DateTimeImmutable(), 'yorvoid.session.sign_in', Outcome::Denied, new Origin(OriginKind::Web, "/login\xFF"), null, 'identifier', "grace\xC3", ['typed' => "grace\xC3\x28", "key\x80" => ['nested' => "\xE9"]], 'previous');
+        $entry = LogEntry::create(Realm::default(), 1, Id::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8c'), new \DateTimeImmutable(), 'yorvoid.session.sign_in', Outcome::Denied, new Origin(OriginKind::Web, "/login\xFF"), null, 'identifier', "grace\xC3", ['typed' => "grace\xC3\x28", "key\x80" => ['nested' => "\xE9"]], 'previous');
 
         self::assertSame("grace\u{FFFD}", $entry->subjectId);
         self::assertSame("/login\u{FFFD}", $entry->origin->detail);
@@ -62,14 +63,14 @@ final class LogEntryTest extends TestCase
     public function testEveryFieldIsCovered(): void
     {
         $base = self::entry([]);
-        $id = Uuid::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8c');
+        $id = Id::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8c');
         $actor = PrincipalId::fromString('01970d9c-8a2e-7b1c-9f3a-000000000001');
         $origin = new Origin(OriginKind::Console, 'yorvoid:principal:create', 'req-42');
         $at = new \DateTimeImmutable('2026-10-27 18:40:59 UTC');
         $variants = [
             LogEntry::create(new Realm('other'), 7, $id, $at, 'yorvoid.principal.create', Outcome::Success, $origin, $actor, 'principal', '01970d9c-8a2e-7b1c-9f3a-000000000002', [], 'previous'),
             LogEntry::create(new Realm('acme'), 8, $id, $at, 'yorvoid.principal.create', Outcome::Success, $origin, $actor, 'principal', '01970d9c-8a2e-7b1c-9f3a-000000000002', [], 'previous'),
-            LogEntry::create(new Realm('acme'), 7, Uuid::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8d'), $at, 'yorvoid.principal.create', Outcome::Success, $origin, $actor, 'principal', '01970d9c-8a2e-7b1c-9f3a-000000000002', [], 'previous'),
+            LogEntry::create(new Realm('acme'), 7, Id::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8d'), $at, 'yorvoid.principal.create', Outcome::Success, $origin, $actor, 'principal', '01970d9c-8a2e-7b1c-9f3a-000000000002', [], 'previous'),
             LogEntry::create(new Realm('acme'), 7, $id, $at->modify('+1 second'), 'yorvoid.principal.create', Outcome::Success, $origin, $actor, 'principal', '01970d9c-8a2e-7b1c-9f3a-000000000002', [], 'previous'),
             LogEntry::create(new Realm('acme'), 7, $id, $at, 'yorvoid.principal.suspend', Outcome::Success, $origin, $actor, 'principal', '01970d9c-8a2e-7b1c-9f3a-000000000002', [], 'previous'),
             LogEntry::create(new Realm('acme'), 7, $id, $at, 'yorvoid.principal.create', Outcome::Denied, $origin, $actor, 'principal', '01970d9c-8a2e-7b1c-9f3a-000000000002', [], 'previous'),
@@ -146,12 +147,12 @@ final class LogEntryTest extends TestCase
     {
         $this->expectException(IntegratorError::class);
 
-        LogEntry::create(Realm::default(), 1, Uuid::v7(), new \DateTimeImmutable(), $action, Outcome::Success, Origin::system('test'), null, $subjectType, $subjectId, [], 'previous');
+        LogEntry::create(Realm::default(), 1, Ids::next(), new \DateTimeImmutable(), $action, Outcome::Success, Origin::system('test'), null, $subjectType, $subjectId, [], 'previous');
     }
 
     public function testAcceptsTheLongestSubject(): void
     {
-        $entry = LogEntry::create(Realm::default(), 1, Uuid::v7(), new \DateTimeImmutable(), 'yorvoid.principal.create', Outcome::Success, Origin::system('test'), null, str_repeat('a', 63), str_repeat('b', 191), [], 'previous');
+        $entry = LogEntry::create(Realm::default(), 1, Ids::next(), new \DateTimeImmutable(), 'yorvoid.principal.create', Outcome::Success, Origin::system('test'), null, str_repeat('a', 63), str_repeat('b', 191), [], 'previous');
 
         self::assertSame(191, \strlen((string) $entry->subjectId));
     }
@@ -164,7 +165,7 @@ final class LogEntryTest extends TestCase
         return LogEntry::create(
             new Realm('acme'),
             7,
-            Uuid::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8c'),
+            Id::fromString('01970d9c-8a2e-7b1c-9f3a-2d4e5f6a7b8c'),
             new \DateTimeImmutable('2026-10-27 19:40:59.987654', new \DateTimeZone('Europe/Skopje')),
             'yorvoid.principal.create',
             Outcome::Success,

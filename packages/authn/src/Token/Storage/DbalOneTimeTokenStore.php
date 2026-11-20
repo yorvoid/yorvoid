@@ -30,7 +30,7 @@ final readonly class DbalOneTimeTokenStore implements OneTimeTokenStore
         if (!$this->database->insertUnlessExists(self::TABLE, [
             'selector' => $token->selector,
             'realm' => $token->realm->name,
-            'principal_id' => $token->principalId->uuid->toRfc4122(),
+            'principal_id' => $token->principalId->id->toString(),
             'purpose' => $token->purpose,
             'verifier_hash' => $verifierHash,
             'email' => $token->email,
@@ -64,7 +64,7 @@ final readonly class DbalOneTimeTokenStore implements OneTimeTokenStore
 
     public function deleteFor(Realm $realm, PrincipalId $principalId, string $purpose): int
     {
-        return (int) $this->database->connection->delete($this->database->table(self::TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122(), 'purpose' => $purpose]);
+        return (int) $this->database->connection->delete($this->database->table(self::TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->id->toString(), 'purpose' => $purpose]);
     }
 
     public function purge(\DateTimeImmutable $now): int

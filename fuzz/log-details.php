@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 /** @var PhpFuzzer\Config $config */
 
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 
 require __DIR__.'/bootstrap.php';
 
@@ -26,7 +26,7 @@ $config->setTarget(onlyRefusals(static function (string $input): void {
     $details = [] !== $details ? $details : ['value' => $input];
     $subject = '' === $input ? null : substr($input, 0, 191);
 
-    $entry = LogEntry::create(Realm::default(), 1, Uuid::v7(), new DateTimeImmutable(), 'yorvoid.fuzz.details', Outcome::Success, new Origin(OriginKind::Web, $input), null, 'fuzz', $subject, $details, 'previous');
+    $entry = LogEntry::create(Realm::default(), 1, Ids::next(), new DateTimeImmutable(), 'yorvoid.fuzz.details', Outcome::Success, new Origin(OriginKind::Web, $input), null, 'fuzz', $subject, $details, 'previous');
 
     if ($entry->computeHash() !== $entry->hash) {
         throw new Error('A created entry doesn\'t match its own hash.');

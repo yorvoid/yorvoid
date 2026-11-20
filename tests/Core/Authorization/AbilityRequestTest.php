@@ -7,7 +7,6 @@ namespace YorvoID\Tests\Core\Authorization;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
 use Symfony\Component\Clock\MockClock;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PermitElement;
@@ -26,6 +25,7 @@ use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubOfflineDecider;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
@@ -135,7 +135,7 @@ final class AbilityRequestTest extends TestCase
         self::assertSame([AuthorizedBy::Ability, AuthorizedBy::Operator], $request->authorizedBy());
 
         $badge = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Ability], 'acme.badges.issue', null, IssueBadge::class, []);
-        self::assertNull(Request::forOperation($badge, new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7())), self::member(), new Origin(OriginKind::Web), new \DateTimeImmutable())->resource);
+        self::assertNull(Request::forOperation($badge, new IssueBadge(new Realm('acme'), new PrincipalId(Ids::next())), self::member(), new Origin(OriginKind::Web), new \DateTimeImmutable())->resource);
     }
 
     public function testAnAbilityIsNeverDecidedOfflineAndItsIndeterminateIsLoggedByName(): void
@@ -200,6 +200,6 @@ final class AbilityRequestTest extends TestCase
 
     private static function member(): Member
     {
-        return new Member(new Realm('acme'), new PrincipalId(new UuidV7()));
+        return new Member(new Realm('acme'), new PrincipalId(Ids::next()));
     }
 }

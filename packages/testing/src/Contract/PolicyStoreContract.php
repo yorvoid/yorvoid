@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -14,6 +13,7 @@ use YorvoID\Policy\AbilityChanges;
 use YorvoID\Policy\GroupRoleAssignment;
 use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\RoleAssignment;
+use YorvoID\Testing\Ids;
 
 /**
  * What every PolicyStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -57,7 +57,7 @@ trait PolicyStoreContract
         $transactions = $this->transactions($implementation);
         $acme = new Realm('acme');
         $at = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
-        [$failed, $seen, $kept] = [new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7())];
+        [$failed, $seen, $kept] = [new PrincipalId(Ids::next()), new PrincipalId(Ids::next()), new PrincipalId(Ids::next())];
         $version = $store->version($acme);
         // As YorvoID's changes do: the realm's lock first, then the store's writes, which bump its version.
         $locked = static fn (\Closure $write): \Closure => static function () use ($transactions, $acme, $write): mixed {
@@ -136,8 +136,8 @@ trait PolicyStoreContract
     {
         $store = $this->policyStore($implementation);
         $acme = new Realm('acme');
-        $ada = new PrincipalId(new UuidV7());
-        $bob = new PrincipalId(new UuidV7());
+        $ada = new PrincipalId(Ids::next());
+        $bob = new PrincipalId(Ids::next());
         $at = new \DateTimeImmutable('2026-11-07 20:00:00.000000 UTC');
         $until = new \DateTimeImmutable('2026-12-07 20:00:00.000000 UTC');
         $site = new ResourceRef('site', '42');
@@ -259,7 +259,7 @@ trait PolicyStoreContract
         $past = new \DateTimeImmutable('2026-11-09 02:00:00.000000 UTC');
         $a = new ResourceRef('page', 'a');
         $b = new ResourceRef('page', 'b');
-        $ada = new PrincipalId(new UuidV7());
+        $ada = new PrincipalId(Ids::next());
 
         self::assertSame([], $store->rolesOn($acme, []));
         self::assertSame([], $store->rolesOn($acme, [$a]));
@@ -319,7 +319,7 @@ trait PolicyStoreContract
     {
         $store = $this->policyStore($implementation);
         $acme = new Realm('acme');
-        $principal = new PrincipalId(new UuidV7());
+        $principal = new PrincipalId(Ids::next());
         $at = new \DateTimeImmutable('2026-11-17 18:00:00 UTC');
         $changes = [
             'saveRole' => static fn () => $store->saveRole($acme, 'editor', 'Editor'),
@@ -354,7 +354,7 @@ trait PolicyStoreContract
      */
     private static function sorted(array $ids): array
     {
-        usort($ids, static fn (PrincipalId $a, PrincipalId $b): int => $a->uuid->toRfc4122() <=> $b->uuid->toRfc4122());
+        usort($ids, static fn (PrincipalId $a, PrincipalId $b): int => $a->id->toString() <=> $b->id->toString());
 
         return $ids;
     }

@@ -67,6 +67,8 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `Credentials` takes `Principals`, as its third argument.
 - `DbalTransactions` takes the `StorageLocation` (`location:`) when YorvoID's tables aren't in the default place; the Symfony bundle passes it.
 - Inside a transaction you opened through DBAL's `transactional()`, a failure appending the security log at your commit may reach you as `NoActiveTransaction`, with the cause as its previous. It isn't retried.
+- YorvoID's IDs are its own `YorvoID\Core\Id\Id`, a UUID's canonical text, rather than Symfony's `Uuid`: no `symfony/uid` type is in the API any more. `PrincipalId`, `SessionId` and `CredentialId` take an `Id`, and `->uuid` is `->id`: write `$principalId->id->toString()` or `(string) $principalId` where you wrote `->uuid->toRfc4122()`, and `PrincipalId::fromString()` or `new PrincipalId(Id::fromString(...))` where you built one from a `Uuid`. `IdGenerator::next()` returns an `Id`. `LogEntry::$id` and `Ceremony::$id` are `Id`s, and so is `CeremonyStore::take()`'s, for a store of your own. `Passkey::$aaguid` is the AAGUID's text. In tests, `YorvoID\Testing\Ids::next()` gives a new `Id`. What's stored doesn't change.
+- `PrincipalUser` keeps only its identifier in a Symfony session; the firewall loads the principal again, as it already did on every request. Sessions written before 0.5 aren't read: users sign in again.
 
 ### Security
 

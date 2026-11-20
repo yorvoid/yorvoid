@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Setup\SetupState;
 use YorvoID\Authn\Setup\SetupStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every SetupStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -63,8 +63,8 @@ trait SetupStoreContract
         InTransaction::assertGoneAfterARollback($transactions, static fn (): bool => $store->replaceCode(new Realm('acme'), str_repeat('a', 64), $created, $expires), static fn (): bool => null === $store->get(new Realm('acme')));
         InTransaction::assertSeenInsideItsTransaction($transactions, static fn (): bool => $store->replaceCode(new Realm('globex'), str_repeat('b', 64), $created, $expires), static fn (): bool => null !== $store->get(new Realm('globex')));
         InTransaction::assertTheTransactionGoesOn($transactions, [
-            static fn (): bool => $store->claim(new Realm('initech'), str_repeat('c', 64), new PrincipalId(new UuidV7()), $created),
-            static fn (): bool => $store->claim(new Realm('globex'), str_repeat('c', 64), new PrincipalId(new UuidV7()), $created),
+            static fn (): bool => $store->claim(new Realm('initech'), str_repeat('c', 64), new PrincipalId(Ids::next()), $created),
+            static fn (): bool => $store->claim(new Realm('globex'), str_repeat('c', 64), new PrincipalId(Ids::next()), $created),
         ], static fn (): bool => $store->replaceCode(new Realm('initech'), str_repeat('c', 64), $created, $expires), static fn (): bool => null !== $store->get(new Realm('initech')));
     }
 
@@ -74,7 +74,7 @@ trait SetupStoreContract
         $store = $this->setupStore($implementation);
         $created = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
         $expires = new \DateTimeImmutable('2026-10-28 18:40:00 UTC');
-        $owner = new PrincipalId(new UuidV7());
+        $owner = new PrincipalId(Ids::next());
 
         self::assertNull($store->get(new Realm('initech')), 'A realm nobody created a code for has a setup.');
         self::assertTrue($store->replaceCode(new Realm('acme'), str_repeat('a', 64), $created, $expires));
@@ -85,7 +85,7 @@ trait SetupStoreContract
         self::assertFalse($store->claim(new Realm('acme'), str_repeat('a', 64), $owner, $expires), 'A replaced code claimed the realm.');
         self::assertFalse($store->claim(new Realm('globex'), str_repeat('b', 64), $owner, $expires), 'A realm without a code was claimed.');
         self::assertTrue($store->claim(new Realm('acme'), str_repeat('b', 64), $owner, new \DateTimeImmutable('2026-10-27 19:00:00 UTC')));
-        self::assertFalse($store->claim(new Realm('acme'), str_repeat('b', 64), new PrincipalId(new UuidV7()), $expires), 'A realm was claimed twice.');
+        self::assertFalse($store->claim(new Realm('acme'), str_repeat('b', 64), new PrincipalId(Ids::next()), $expires), 'A realm was claimed twice.');
         self::assertFalse($store->replaceCode(new Realm('acme'), str_repeat('c', 64), $created, $expires), 'A claimed realm got a new code.');
 
         self::assertEquals(new SetupState(new Realm('acme'), str_repeat('b', 64), $created, $expires, new \DateTimeImmutable('2026-10-27 19:00:00 UTC'), $owner), $store->get(new Realm('acme')));

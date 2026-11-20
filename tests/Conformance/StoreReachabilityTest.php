@@ -9,7 +9,6 @@ use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception\DriverException;
 use Doctrine\DBAL\Exception\LockWaitTimeoutException;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PrincipalAuthority;
@@ -24,6 +23,7 @@ use YorvoID\Core\Principal\Storage\DbalPrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\StoreUnreachable;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
@@ -125,7 +125,7 @@ final class StoreReachabilityTest extends DatabaseTestCase
         // Self-service that lets anyone: what this is about is the store.
         $evaluator = Evaluator::builtIn(new PrincipalAuthority(new DbalPrincipalStore(new Database($connection))), selfService: new SelfService(), actors: [new TrustedActors()]);
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Self], null, null, IssueBadge::class, []);
-        $principal = new PrincipalId(new UuidV7());
+        $principal = new PrincipalId(Ids::next());
 
         return $evaluator->decide($operation, new IssueBadge(new Realm('acme'), $principal), new Member(new Realm('acme'), $principal), new Origin(OriginKind::Web));
     }

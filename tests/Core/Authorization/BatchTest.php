@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Core\Authorization;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
 use YorvoID\Core\Authorization\Evaluator;
@@ -21,6 +20,7 @@ use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\PreloadingPermit;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -114,6 +114,6 @@ final class BatchTest extends TestCase
 
     private static function member(): Member
     {
-        return new Member(new Realm('acme'), new PrincipalId(new UuidV7()));
+        return new Member(new Realm('acme'), new PrincipalId(Ids::next()));
     }
 }

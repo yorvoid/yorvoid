@@ -57,7 +57,7 @@ final readonly class DbalSetupStore implements SetupStore
     {
         return 1 === $this->database->connection->executeStatement(
             \sprintf('UPDATE %s SET claimed_at = ?, claimed_by = ? WHERE realm = ? AND code_hash = ? AND claimed_at IS NULL', $this->database->table(self::TABLE)),
-            [$at, $by->uuid->toRfc4122(), $realm->name, $codeHash],
+            [$at, $by->id->toString(), $realm->name, $codeHash],
             [0 => Types::DATETIMETZ_IMMUTABLE],
         );
     }

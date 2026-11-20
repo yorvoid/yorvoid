@@ -63,7 +63,7 @@ final class InMemorySessionStore implements SessionStore, InMemoryStore
             }
         }
 
-        usort($current, static fn (Session $a, Session $b): int => [$b->lastSeenAt, $b->id->uuid->toRfc4122()] <=> [$a->lastSeenAt, $a->id->uuid->toRfc4122()]);
+        usort($current, static fn (Session $a, Session $b): int => [$b->lastSeenAt, $b->id->id->toString()] <=> [$a->lastSeenAt, $a->id->id->toString()]);
 
         return $current;
     }

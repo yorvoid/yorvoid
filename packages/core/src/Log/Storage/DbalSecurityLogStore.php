@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace YorvoID\Core\Log\Storage;
 
 use Doctrine\DBAL\Types\Types;
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLogStore;
@@ -57,14 +57,14 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
         $connection->insert($this->database->table(self::TABLE), [
             'realm' => $realm->name,
             'sequence' => $entry->sequence,
-            'id' => $entry->id->toRfc4122(),
+            'id' => $entry->id->toString(),
             'recorded_at' => $entry->recordedAt,
             'action' => $entry->action,
             'outcome' => $entry->outcome->value,
             'origin_kind' => $entry->origin->kind->value,
             'origin_detail' => $entry->origin->detail,
             'correlation_id' => $entry->origin->correlationId,
-            'actor' => $entry->actor?->uuid->toRfc4122(),
+            'actor' => $entry->actor?->id->toString(),
             'subject_type' => $entry->subjectType,
             'subject_id' => $entry->subjectId,
             'details' => $entry->details,
@@ -135,7 +135,7 @@ final readonly class DbalSecurityLogStore implements SecurityLogStore
         return new LogEntry(
             $realm,
             Row::int($row, 'sequence'),
-            Uuid::fromString(Row::string($row, 'id')),
+            Id::fromString(Row::string($row, 'id')),
             $recordedAt,
             Row::string($row, 'action'),
             Outcome::from(Row::string($row, 'outcome')),

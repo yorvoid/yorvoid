@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Support;
 
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
@@ -17,6 +16,7 @@ use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\SetIdentifier;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 
 /**
  * Permits for tests of a handler by itself, without deciding: only Operations::run() issues them
@@ -61,7 +61,7 @@ final class Permits
      */
     public static function because(Realm $realm, ?PrincipalId $about = null): Permit
     {
-        $command = new SetIdentifier($realm, $about ?? new PrincipalId(new UuidV7()), IdentifierKind::Email, 'ana@example.com');
+        $command = new SetIdentifier($realm, $about ?? new PrincipalId(Ids::next()), IdentifierKind::Email, 'ana@example.com');
         $permit = self::for($command);
         $permit->use($command);
 

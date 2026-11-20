@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Core\Principal;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\Identifier;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\IdentifierStore;
@@ -14,6 +13,7 @@ use YorvoID\Core\Principal\Storage\DbalIdentifierStore;
 use YorvoID\Core\Principal\Storage\IdentifierRenormalization;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Support\DatabaseTestCase;
 
 /**
@@ -84,7 +84,7 @@ final class IdentifierRenormalizationTest extends DatabaseTestCase
      */
     private function stored(IdentifierStore $identifiers, Database $database, string $realm, string $valid, string $old, IdentifierKind $kind = IdentifierKind::Email, ?string $value = null): void
     {
-        $identifier = new Identifier(new Realm($realm), new PrincipalId(new UuidV7()), $kind, $valid, new \DateTimeImmutable('2026-10-27 18:40:00 UTC'));
+        $identifier = new Identifier(new Realm($realm), new PrincipalId(Ids::next()), $kind, $valid, new \DateTimeImmutable('2026-10-27 18:40:00 UTC'));
         self::assertTrue($identifiers->add($identifier));
         $database->connection->update($database->table(DbalIdentifierStore::TABLE), ['normalized' => $old, 'value' => $value ?? $valid], ['realm' => $realm, 'kind' => $kind->value, 'normalized' => $identifier->normalized]);
     }

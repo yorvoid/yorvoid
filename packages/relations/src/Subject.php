@@ -32,7 +32,7 @@ final readonly class Subject implements \Stringable
 
     public static function principal(PrincipalId $id): self
     {
-        return new self(new ResourceRef('principal', $id->uuid->toRfc4122()));
+        return new self(new ResourceRef('principal', $id->id->toString()));
     }
 
     /**

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\ChangesAuthority;
 use YorvoID\Core\Authorization\DeclaredEffects;
 use YorvoID\Core\Authorization\DeclaresEffects;
@@ -33,6 +32,7 @@ use YorvoID\Policy\NoEscalation;
 use YorvoID\Policy\PolicyEffects;
 use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\StepUpForSensitiveChanges;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Support\TestPrincipal;
@@ -134,7 +134,7 @@ final class DeclaredEffectsTest extends TestCase
 
     private static function actor(): TestPrincipal
     {
-        return new TestPrincipal(new Realm('acme'), new PrincipalId(new UuidV7()));
+        return new TestPrincipal(new Realm('acme'), new PrincipalId(Ids::next()));
     }
 
     private static function web(): Origin

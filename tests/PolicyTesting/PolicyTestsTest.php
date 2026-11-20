@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\PolicyTesting;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Precedence;
@@ -31,6 +30,7 @@ use YorvoID\PolicyTesting\PolicyResult;
 use YorvoID\PolicyTesting\PolicyServices;
 use YorvoID\PolicyTesting\PolicyTests;
 use YorvoID\PolicyTesting\PolicyUnderTest;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
@@ -100,7 +100,7 @@ final class PolicyTestsTest extends TestCase
     {
         $this->expectException(IntegratorError::class);
         $this->expectExceptionMessage('The command YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge isn\'t in the operation catalogue.');
-        new PolicyTests()->one(self::policy(), PolicyCase::that('not an operation of the policy')->before(static fn (Realm $realm): Command => new IssueBadge($realm, new PrincipalId(new UuidV7())))->asks('acme.pages.view')->permits());
+        new PolicyTests()->one(self::policy(), PolicyCase::that('not an operation of the policy')->before(static fn (Realm $realm): Command => new IssueBadge($realm, new PrincipalId(Ids::next())))->asks('acme.pages.view')->permits());
     }
 
     public function testComparesTheRemediesByName(): void

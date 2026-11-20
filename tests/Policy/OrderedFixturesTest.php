@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\OrderedFact;
@@ -20,6 +19,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Policy\Ordered\OrderedCondition;
 use YorvoID\Policy\Ordered\OrderedConditions;
 use YorvoID\Policy\Rule\RuleElements;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubForbid;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
@@ -83,8 +83,8 @@ final class OrderedFixturesTest extends TestCase
     private static function decide(array $fixtures): int
     {
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Ability], 'acme.badges.issue', null, IssueBadge::class, []);
-        $command = new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7()));
-        $actor = new Member(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $command = new IssueBadge(new Realm('acme'), new PrincipalId(Ids::next()));
+        $actor = new Member(new Realm('acme'), new PrincipalId(Ids::next()));
         $missing = 0;
 
         foreach ($fixtures as $fixture) {

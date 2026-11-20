@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Policy;
 
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
 use YorvoID\Policy\Storage\DbalAttributeStore;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Support\DatabaseTestCase;
 
 /**
@@ -21,11 +21,11 @@ final class DbalAttributeStoreTest extends DatabaseTestCase
         $stack = $this->stackOf('sqlite');
         \assert(null !== $stack->database);
         $store = new DbalAttributeStore($stack->database);
-        $ada = new PrincipalId(new UuidV7());
+        $ada = new PrincipalId(Ids::next());
 
         foreach (['{"a":"b"}', '[1]', '1.5', 'null', '["a",null]'] as $value) {
             $stack->database->connection->delete($stack->database->table(DbalAttributeStore::TABLE), ['realm' => 'acme']);
-            $stack->database->connection->insert($stack->database->table(DbalAttributeStore::TABLE), ['realm' => 'acme', 'principal_id' => $ada->uuid->toRfc4122(), 'name' => 'acme.x', 'value' => $value]);
+            $stack->database->connection->insert($stack->database->table(DbalAttributeStore::TABLE), ['realm' => 'acme', 'principal_id' => $ada->id->toString(), 'name' => 'acme.x', 'value' => $value]);
 
             try {
                 $store->of(new Realm('acme'), $ada);

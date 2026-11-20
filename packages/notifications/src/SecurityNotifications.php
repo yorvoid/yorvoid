@@ -63,7 +63,7 @@ final readonly class SecurityNotifications
      */
     public static function notMePurpose(?CredentialId $credential): string
     {
-        return null === $credential ? self::NOT_ME : self::NOT_ME.'.c'.str_replace('-', '', $credential->uuid->toRfc4122());
+        return null === $credential ? self::NOT_ME : self::NOT_ME.'.c'.str_replace('-', '', $credential->id->toString());
     }
 
     private AuditAlarm $alarm;
@@ -258,7 +258,7 @@ final readonly class SecurityNotifications
         $application = ['application' => $this->settings->applicationName];
         // YorvoID's own doing, as the host's operator: whatever caused the notice already happened.
         $issued = $this->operations->run(new IssueNotMeLink($realm, $principalId, $suspect?->id, $this->settings->notMeLifetime, $current ? $email->value : null), new Operator(), Origin::system('security notification'));
-        $url = strtr($this->settings->notMeUrl, ['{token}' => rawurlencode($issued->secret->reveal()), '{credential}' => null === $suspect ? '' : $suspect->id->uuid->toRfc4122()]);
+        $url = strtr($this->settings->notMeUrl, ['{token}' => rawurlencode($issued->secret->reveal()), '{credential}' => null === $suspect ? '' : $suspect->id->id->toString()]);
         $labelled = [];
 
         foreach ($facts($locale) as $name => $value) {

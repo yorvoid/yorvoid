@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Core\Authorization;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\Explanation;
 use YorvoID\Core\Authorization\IndeterminateReason;
@@ -35,6 +34,7 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Core\Storage\StoreUnreachable;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubForbid;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubOfflineDecider;
@@ -233,7 +233,7 @@ final class OfflineTest extends TestCase
 
     private static function actor(): Member
     {
-        return new Member(new Realm('acme'), new PrincipalId(new UuidV7()));
+        return new Member(new Realm('acme'), new PrincipalId(Ids::next()));
     }
 
     private static function decider(Truth|\Throwable $answer): StubOfflineDecider

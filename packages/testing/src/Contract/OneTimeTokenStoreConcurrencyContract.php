@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Token\OneTimeToken;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\Race;
 
 /**
@@ -54,7 +54,7 @@ trait OneTimeTokenStoreConcurrencyContract
         $rounds = [];
 
         for ($i = 0; $i < Races::ROUNDS; ++$i) {
-            $token = new OneTimeToken(bin2hex(random_bytes(16)), new Realm('acme'), new PrincipalId(new UuidV7()), 'acme.race', null, new \DateTimeImmutable('2026-10-27 18:40:00 UTC'), new \DateTimeImmutable('2126-10-27 18:40:00 UTC'));
+            $token = new OneTimeToken(bin2hex(random_bytes(16)), new Realm('acme'), new PrincipalId(Ids::next()), 'acme.race', null, new \DateTimeImmutable('2026-10-27 18:40:00 UTC'), new \DateTimeImmutable('2126-10-27 18:40:00 UTC'));
             $store->add($token, str_repeat('a', 64));
             $rounds[] = ['realm' => 'acme', 'selector' => $token->selector, 'purpose' => 'acme.race'];
         }

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\StepUp\CoolDownStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every CoolDownStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -52,7 +52,7 @@ trait CoolDownStoreContract
         $store = $this->coolDownStore($implementation);
         $transactions = $this->transactions($implementation);
         $acme = new Realm('acme');
-        [$failed, $seen, $kept] = [new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7())];
+        [$failed, $seen, $kept] = [new PrincipalId(Ids::next()), new PrincipalId(Ids::next()), new PrincipalId(Ids::next())];
         $until = new \DateTimeImmutable('2026-10-28 18:00:00 UTC');
 
         InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->extend($acme, $failed, $until), static fn (): bool => null === $store->until($acme, $failed));
@@ -66,8 +66,8 @@ trait CoolDownStoreContract
     public function testACoolDownOnlyGrowsLonger(string $implementation): void
     {
         $store = $this->coolDownStore($implementation);
-        $principal = new PrincipalId(new UuidV7());
-        $someoneElse = new PrincipalId(new UuidV7());
+        $principal = new PrincipalId(Ids::next());
+        $someoneElse = new PrincipalId(Ids::next());
         self::assertNull($store->until(new Realm('acme'), $principal));
 
         $store->extend(new Realm('acme'), $principal, new \DateTimeImmutable('2026-10-28 18:00:00 UTC'));
@@ -88,8 +88,8 @@ trait CoolDownStoreContract
     public function testPurgesOnlyWhatEndedBefore(string $implementation): void
     {
         $store = $this->coolDownStore($implementation);
-        $ended = new PrincipalId(new UuidV7());
-        $endingNow = new PrincipalId(new UuidV7());
+        $ended = new PrincipalId(Ids::next());
+        $endingNow = new PrincipalId(Ids::next());
         $store->extend(new Realm('acme'), $ended, new \DateTimeImmutable('2026-10-28 17:59:59 UTC'));
         $store->extend(new Realm('globex'), $endingNow, new \DateTimeImmutable('2026-10-28 18:00:00 UTC'));
 

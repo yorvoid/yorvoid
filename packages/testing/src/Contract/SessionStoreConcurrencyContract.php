@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -14,6 +13,7 @@ use YorvoID\Authn\Session\SessionId;
 use YorvoID\Authn\Session\SessionStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\Race;
 
 /**
@@ -60,7 +60,7 @@ trait SessionStoreConcurrencyContract
         for ($i = 0; $i < Races::ROUNDS; ++$i) {
             $started = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
             $later = new \DateTimeImmutable('2126-10-27 18:40:00 UTC');
-            $session = new Session(new SessionId(new UuidV7()), new Realm('acme'), new PrincipalId(new UuidV7()), 1, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $started)), $started, $started, $later, $later);
+            $session = new Session(new SessionId(Ids::next()), new Realm('acme'), new PrincipalId(Ids::next()), 1, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $started)), $started, $started, $later, $later);
             $store->add($session, hash('sha256', 'race '.$i.' '.$test));
             $rounds[] = ['realm' => 'acme', 'session' => (string) $session->id, 'at' => '2026-10-27 19:00:00 UTC'];
         }

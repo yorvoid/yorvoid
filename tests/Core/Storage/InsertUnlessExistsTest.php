@@ -6,12 +6,11 @@ namespace YorvoID\Tests\Core\Storage;
 
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\Uuid;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Passkeys\Passkey;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Support\DatabaseTestCase;
 
 /**
@@ -24,10 +23,10 @@ final class InsertUnlessExistsTest extends DatabaseTestCase
     public function testAConflictOnAnotherUniqueKeyThrows(string $platform): void
     {
         $passkeys = $this->stack($platform)->passkeys;
-        $first = self::passkey(new CredentialId(new UuidV7()), random_bytes(16));
+        $first = self::passkey(new CredentialId(Ids::next()), random_bytes(16));
 
         self::assertTrue($passkeys->add($first));
-        self::assertFalse($passkeys->add(self::passkey(new CredentialId(new UuidV7()), $first->webauthnId)), 'The key it expects: the WebAuthn ID.');
+        self::assertFalse($passkeys->add(self::passkey(new CredentialId(Ids::next()), $first->webauthnId)), 'The key it expects: the WebAuthn ID.');
 
         $this->expectException(UniqueConstraintViolationException::class);
 
@@ -36,6 +35,6 @@ final class InsertUnlessExistsTest extends DatabaseTestCase
 
     private static function passkey(CredentialId $id, string $webauthnId): Passkey
     {
-        return new Passkey($id, new Realm('acme'), new PrincipalId(new UuidV7()), $webauthnId, random_bytes(77), random_bytes(32), 0, [], Uuid::fromString('00000000-0000-0000-0000-000000000000'), false, false, true, 'none');
+        return new Passkey($id, new Realm('acme'), new PrincipalId(Ids::next()), $webauthnId, random_bytes(77), random_bytes(32), 0, [], '00000000-0000-0000-0000-000000000000', false, false, true, 'none');
     }
 }

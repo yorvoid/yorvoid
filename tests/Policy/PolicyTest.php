@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\ResourceRef;
@@ -34,6 +33,7 @@ use YorvoID\Policy\RolePermit;
 use YorvoID\Policy\Roles;
 use YorvoID\Policy\StepUpForSensitiveChanges;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
@@ -53,7 +53,7 @@ final class PolicyTest extends TestCase
         $principals = new InMemoryPrincipalStore();
         $store = new InMemoryPolicyStore();
         $now = new \DateTimeImmutable('2026-11-07 20:00:00');
-        $ada = new Principal(new PrincipalId(new UuidV7()), $realm, PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now);
+        $ada = new Principal(new PrincipalId(Ids::next()), $realm, PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now);
         $principals->add($ada);
         $store->assign(new RoleAssignment($realm, $ada->id, 'editor', $now));
         $roles = new Roles(PolicyCatalogue::of([new AcmeDeclarations()]), $store);

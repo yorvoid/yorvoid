@@ -38,7 +38,7 @@ final readonly class DbalIdentifierStore implements IdentifierStore
             'kind' => $identifier->kind->value,
             'normalized' => $identifier->normalized,
             'value' => $identifier->value,
-            'principal_id' => $identifier->principalId->uuid->toRfc4122(),
+            'principal_id' => $identifier->principalId->id->toString(),
             'created_at' => $identifier->createdAt,
             'verified_at' => $identifier->verifiedAt,
         ], null, ['created_at' => Types::DATETIMETZ_IMMUTABLE, 'verified_at' => Types::DATETIMETZ_IMMUTABLE]);
@@ -46,12 +46,12 @@ final readonly class DbalIdentifierStore implements IdentifierStore
 
     public function remove(Realm $realm, PrincipalId $principalId, IdentifierKind $kind): void
     {
-        $this->database->connection->delete($this->database->table(self::TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122(), 'kind' => $kind->value]);
+        $this->database->connection->delete($this->database->table(self::TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->id->toString(), 'kind' => $kind->value]);
     }
 
     public function removeAll(Realm $realm, PrincipalId $principalId): void
     {
-        $this->database->connection->delete($this->database->table(self::TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122()]);
+        $this->database->connection->delete($this->database->table(self::TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->id->toString()]);
     }
 
     public function find(Realm $realm, IdentifierKind $kind, string $normalized): ?Identifier
@@ -70,7 +70,7 @@ final readonly class DbalIdentifierStore implements IdentifierStore
 
         foreach ($this->database->connection->iterateAssociative(
             \sprintf('SELECT %s FROM %s WHERE realm = ? AND principal_id = ? ORDER BY kind', self::COLUMNS, $this->database->table(self::TABLE)),
-            [$realm->name, $principalId->uuid->toRfc4122()],
+            [$realm->name, $principalId->id->toString()],
         ) as $row) {
             $identifier = $this->identifier($realm, $row);
             $identifiers[$identifier->kind->value] = $identifier;

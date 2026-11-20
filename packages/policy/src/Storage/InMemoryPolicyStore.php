@@ -84,7 +84,7 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
         foreach ($this->assignments as $assignment) {
             if ($assignment->realm->equals($realm) && $assignment->role === $role) {
-                $ids[$assignment->principalId->uuid->toRfc4122()] = $assignment->principalId;
+                $ids[$assignment->principalId->id->toString()] = $assignment->principalId;
             }
         }
 
@@ -230,7 +230,7 @@ final class InMemoryPolicyStore implements PolicyStore, InMemoryStore
 
     private static function key(Realm $realm, PrincipalId $principalId, string $role, ?ResourceRef $scope): string
     {
-        return implode("\n", [$realm->name, $principalId->uuid->toRfc4122(), $role, (string) $scope]);
+        return implode("\n", [$realm->name, $principalId->id->toString(), $role, (string) $scope]);
     }
 
     private static function groupKey(Realm $realm, string $group, string $role, ?ResourceRef $scope): string

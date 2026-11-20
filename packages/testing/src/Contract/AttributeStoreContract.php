@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Policy\Attribute\AttributeStore;
+use YorvoID\Testing\Ids;
 
 /**
  * What every AttributeStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -52,13 +52,13 @@ trait AttributeStoreContract
         $store = $this->attributeStore($implementation);
         $transactions = $this->transactions($implementation);
         $acme = new Realm('acme');
-        $ada = new PrincipalId(new UuidV7());
+        $ada = new PrincipalId(Ids::next());
 
         InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->set($acme, $ada, 'acme.failed', 1), static fn (): bool => !\array_key_exists('acme.failed', $store->of($acme, $ada)));
         InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->set($acme, $ada, 'acme.seen', 1), static fn (): bool => \array_key_exists('acme.seen', $store->of($acme, $ada)));
         InTransaction::assertTheTransactionGoesOn($transactions, [
             static fn (): bool => $store->remove($acme, $ada, 'acme.none'),
-            static fn () => $store->forget($acme, new PrincipalId(new UuidV7())),
+            static fn () => $store->forget($acme, new PrincipalId(Ids::next())),
         ], static fn () => $store->set($acme, $ada, 'acme.kept', 1), static fn (): bool => \array_key_exists('acme.kept', $store->of($acme, $ada)));
     }
 
@@ -67,8 +67,8 @@ trait AttributeStoreContract
     {
         $store = $this->attributeStore($implementation);
         $acme = new Realm('acme');
-        $ada = new PrincipalId(new UuidV7());
-        $bob = new PrincipalId(new UuidV7());
+        $ada = new PrincipalId(Ids::next());
+        $bob = new PrincipalId(Ids::next());
 
         self::assertSame([], $store->of($acme, $ada));
 

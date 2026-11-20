@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Operation\NotPermitted;
@@ -20,6 +19,7 @@ use YorvoID\Policy\ViewAs\Beyond;
 use YorvoID\Policy\ViewAs\CannotViewAs;
 use YorvoID\Policy\ViewAs\ViewAsStart;
 use YorvoID\Policy\YorvoIDDeclarations;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Support\TestPrincipal;
 
@@ -52,7 +52,7 @@ final class ViewAsTest extends TestCase
 
         $entry = self::logged($world)[0];
         self::assertTrue(self::id($bob)->equals($entry->actor ?? throw new \LogicException()), 'Recorded with the viewer as the actor…');
-        self::assertSame(['principal', self::id($ada)->uuid->toRfc4122()], [$entry->subjectType, $entry->subjectId], '…and the target as the subject.');
+        self::assertSame(['principal', self::id($ada)->id->toString()], [$entry->subjectType, $entry->subjectId], '…and the target as the subject.');
         self::assertSame([], $entry->details['beyond'] ?? null);
     }
 
@@ -173,7 +173,7 @@ final class ViewAsTest extends TestCase
         }
 
         $this->expectException(UnknownPrincipal::class);
-        $this->begin($world, $admin, new TestPrincipal($world->realm, new PrincipalId(new UuidV7())));
+        $this->begin($world, $admin, new TestPrincipal($world->realm, new PrincipalId(Ids::next())));
     }
 
     private function begin(PolicyWorld $world, TestPrincipal $viewer, TestPrincipal $target): ViewAsStart

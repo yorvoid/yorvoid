@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Core\Principal;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\InvalidStatusChange;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 
 final class PrincipalStatusTest extends TestCase
 {
@@ -43,7 +43,7 @@ final class PrincipalStatusTest extends TestCase
     public function testAPrincipalWithAnotherStatusCountsTheChange(): void
     {
         $created = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
-        $principal = new Principal(new PrincipalId(new UuidV7()), new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Invited, $created, $created, $created);
+        $principal = new Principal(new PrincipalId(Ids::next()), new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Invited, $created, $created, $created);
 
         $active = $principal->withStatus(PrincipalStatus::Active, new \DateTimeImmutable('2026-10-28 10:00:00.9 Europe/Skopje'));
 
@@ -60,7 +60,7 @@ final class PrincipalStatusTest extends TestCase
     public function testRefusesAChangeItDoesntAllow(): void
     {
         $now = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
-        $principal = new Principal(new PrincipalId(new UuidV7()), new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Deleted, $now, $now, $now);
+        $principal = new Principal(new PrincipalId(Ids::next()), new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Deleted, $now, $now, $now);
 
         $this->expectException(InvalidStatusChange::class);
         $this->expectExceptionMessage(\sprintf('The principal %s is deleted and can\'t become active.', $principal->id));

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys\Storage;
 
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Authn\Session\SessionId;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryStore;
 use YorvoID\Passkeys\Ceremony;
@@ -23,18 +23,18 @@ final class InMemoryCeremonyStore implements CeremonyStore, InMemoryStore
 
     public function add(Ceremony $ceremony): void
     {
-        $this->ceremonies[$ceremony->id->toRfc4122()] = $ceremony;
+        $this->ceremonies[$ceremony->id->toString()] = $ceremony;
     }
 
-    public function take(Realm $realm, Uuid $id, ?SessionId $session = null): ?Ceremony
+    public function take(Realm $realm, Id $id, ?SessionId $session = null): ?Ceremony
     {
-        $ceremony = $this->ceremonies[$id->toRfc4122()] ?? null;
+        $ceremony = $this->ceremonies[$id->toString()] ?? null;
 
-        if (null === $ceremony || !$ceremony->realm->equals($realm) || $ceremony->sessionId?->uuid->toRfc4122() !== $session?->uuid->toRfc4122()) {
+        if (null === $ceremony || !$ceremony->realm->equals($realm) || $ceremony->sessionId?->id->toString() !== $session?->id->toString()) {
             return null;
         }
 
-        unset($this->ceremonies[$id->toRfc4122()]);
+        unset($this->ceremonies[$id->toString()]);
 
         return $ceremony;
     }

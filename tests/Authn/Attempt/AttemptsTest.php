@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Authn\Attempt;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Attempt\AttemptLimits;
 use YorvoID\Authn\Attempt\Attempts;
 use YorvoID\Core\Duration;
@@ -15,6 +14,7 @@ use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
+use YorvoID\Testing\Ids;
 use YorvoID\Throttle\Limit;
 use YorvoID\Throttle\Storage\InMemoryThrottleStore;
 use YorvoID\Throttle\Throttle;
@@ -155,7 +155,7 @@ final class AttemptsTest extends TestCase
 
     private static function principal(): PrincipalId
     {
-        return new PrincipalId(new UuidV7());
+        return new PrincipalId(Ids::next());
     }
 
     /**

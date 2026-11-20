@@ -24,6 +24,7 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Badges;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -141,7 +142,7 @@ final class DecisionDigestsTest extends DatabaseTestCase
         $log->attempt($realm, 'yorvoid.setup.claim', Outcome::Failed, new Origin(OriginKind::Web));
 
         try {
-            $operations->run(new IssueBadge($realm, new PrincipalId(new UuidV7())), new Member($realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web));
+            $operations->run(new IssueBadge($realm, new PrincipalId(Ids::next())), new Member($realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web));
         } catch (NotPermitted) {
         }
 

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Recovery\RecoveryCodeStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every RecoveryCodeStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -57,7 +57,7 @@ trait RecoveryCodeStoreContract
         $store = $this->recoveryCodeStore($implementation);
         $transactions = $this->transactions($implementation);
         $acme = new Realm('acme');
-        [$failed, $seen, $kept] = [new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7()), new PrincipalId(new UuidV7())];
+        [$failed, $seen, $kept] = [new PrincipalId(Ids::next()), new PrincipalId(Ids::next()), new PrincipalId(Ids::next())];
         $at = new \DateTimeImmutable('2026-10-28 18:00:00 UTC');
 
         InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->replace($acme, $failed, [self::hash('a')], $at), static fn (): bool => 0 === $store->count($acme, $failed));
@@ -72,8 +72,8 @@ trait RecoveryCodeStoreContract
     public function testACodeWorksOnceForItsPrincipal(string $implementation): void
     {
         $store = $this->recoveryCodeStore($implementation);
-        $principal = new PrincipalId(new UuidV7());
-        $someoneElse = new PrincipalId(new UuidV7());
+        $principal = new PrincipalId(Ids::next());
+        $someoneElse = new PrincipalId(Ids::next());
         $store->replace(new Realm('acme'), $principal, [self::hash('a'), self::hash('b'), self::hash('a')], new \DateTimeImmutable('2026-10-28 18:00:00 UTC'));
         $store->replace(new Realm('acme'), $someoneElse, [self::hash('c')], new \DateTimeImmutable('2026-10-28 18:00:00 UTC'));
         self::assertSame(2, $store->count(new Realm('acme'), $principal));
@@ -91,8 +91,8 @@ trait RecoveryCodeStoreContract
     public function testReplacingRemovesTheOldCodes(string $implementation): void
     {
         $store = $this->recoveryCodeStore($implementation);
-        $principal = new PrincipalId(new UuidV7());
-        $elsewhere = new PrincipalId(new UuidV7());
+        $principal = new PrincipalId(Ids::next());
+        $elsewhere = new PrincipalId(Ids::next());
         $store->replace(new Realm('acme'), $principal, [self::hash('a'), self::hash('b')], new \DateTimeImmutable('2026-10-28 18:00:00 UTC'));
         $store->replace(new Realm('globex'), $principal, [self::hash('a')], new \DateTimeImmutable('2026-10-28 18:00:00 UTC'));
         $store->replace(new Realm('acme'), $elsewhere, [self::hash('a')], new \DateTimeImmutable('2026-10-28 18:00:00 UTC'));

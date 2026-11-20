@@ -29,7 +29,7 @@ final readonly class DbalAttributeStore implements AttributeStore
     {
         $attributes = [];
 
-        foreach ($this->database->connection->iterateAssociative(\sprintf('SELECT name, value FROM %s WHERE realm = ? AND principal_id = ? ORDER BY name', $this->table()), [$realm->name, $principalId->uuid->toRfc4122()]) as $row) {
+        foreach ($this->database->connection->iterateAssociative(\sprintf('SELECT name, value FROM %s WHERE realm = ? AND principal_id = ? ORDER BY name', $this->table()), [$realm->name, $principalId->id->toString()]) as $row) {
             $attributes[Row::string($row, 'name')] = self::value(json_decode(Row::string($row, 'value'), true, flags: \JSON_THROW_ON_ERROR), Row::string($row, 'name'));
         }
 
@@ -39,17 +39,17 @@ final readonly class DbalAttributeStore implements AttributeStore
     public function set(Realm $realm, PrincipalId $principalId, string $name, string|int|bool|array $value): void
     {
         $this->remove($realm, $principalId, $name);
-        $this->database->connection->insert($this->table(), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122(), 'name' => $name, 'value' => json_encode($value, \JSON_THROW_ON_ERROR)]);
+        $this->database->connection->insert($this->table(), ['realm' => $realm->name, 'principal_id' => $principalId->id->toString(), 'name' => $name, 'value' => json_encode($value, \JSON_THROW_ON_ERROR)]);
     }
 
     public function remove(Realm $realm, PrincipalId $principalId, string $name): bool
     {
-        return 0 < $this->database->connection->delete($this->table(), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122(), 'name' => $name]);
+        return 0 < $this->database->connection->delete($this->table(), ['realm' => $realm->name, 'principal_id' => $principalId->id->toString(), 'name' => $name]);
     }
 
     public function forget(Realm $realm, PrincipalId $principalId): void
     {
-        $this->database->connection->delete($this->table(), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122()]);
+        $this->database->connection->delete($this->table(), ['realm' => $realm->name, 'principal_id' => $principalId->id->toString()]);
     }
 
     /**

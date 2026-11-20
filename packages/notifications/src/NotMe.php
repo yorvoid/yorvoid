@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Notifications;
 
 use Psr\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Authn\Credential\Credentials;
 use YorvoID\Authn\Credential\DisableCredential;
@@ -17,6 +16,7 @@ use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\OperationHandler;
@@ -67,7 +67,7 @@ final readonly class NotMe implements OperationHandler
     {
         $permit->use($command);
         [$realm, $token, $credential] = [$command->realm, $command->token, $command->credential];
-        $suspect = null === $credential || '' === $credential ? null : (Uuid::isValid($credential) ? CredentialId::fromString($credential) : false);
+        $suspect = null === $credential || '' === $credential ? null : (Id::isValid($credential) ? CredentialId::fromString($credential) : false);
 
         if (false === $suspect) {
             return null;

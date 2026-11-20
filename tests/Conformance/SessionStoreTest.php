@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Conformance;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Session\SessionStore;
 use YorvoID\Authn\Session\Storage\DbalSessionStore;
 use YorvoID\Core\Principal\PrincipalId;
@@ -13,6 +12,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
 use YorvoID\Testing\Contract\ConcurrencyTestedIn;
 use YorvoID\Testing\Contract\SessionStoreContract;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Support\DatabaseTestCase;
 
 /**
@@ -28,7 +28,7 @@ final class SessionStoreTest extends DatabaseTestCase
     {
         $stack = $this->stack($platform);
         \assert(null !== $stack->database);
-        $session = self::session(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $session = self::session(new Realm('acme'), new PrincipalId(Ids::next()));
         $stack->sessions->add($session, self::hash('a'));
         $stack->database->connection->executeStatement(\sprintf('UPDATE %s SET authentication = ?', $stack->database->table(DbalSessionStore::TABLE)), [$json]);
 

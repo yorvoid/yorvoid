@@ -301,6 +301,7 @@ final readonly class AppUsers implements PrincipalUsers
 
 - Your user's `getUserIdentifier()` returns the principal's ID: the firewall loads your user again by it on every request. YorvoID refuses a user identified otherwise.
 - Controllers, voters and `#[IsGranted]` then see only your user, with your roles.
+- Symfony keeps the user in the session with `serialize()`. Keep only the identifier there (`__serialize()` returning it), not a `Principal` or other YorvoID objects: a release that changes their shape would otherwise sign everyone out, or fail to read their sessions. `PrincipalUser` keeps only its identifier.
 - A principal that isn't active any more isn't loaded, so a suspended person is signed out whatever your user says.
 
 ## Flow pages

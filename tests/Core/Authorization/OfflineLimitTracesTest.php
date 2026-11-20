@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Core\Authorization;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\TruthValue;
@@ -19,6 +18,7 @@ use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\MockElapsed;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubOfflineDecider;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -40,7 +40,7 @@ final class OfflineLimitTracesTest extends TestCase
     public function testTheLimitBehavesAsTheModel(): void
     {
         $operation = new OperationDescription('acme.door.open', 'Open a door', [AuthorizedBy::Ability], 'acme.doors.open', null, OpenDoor::class, [], [], true);
-        $request = Request::forOperation($operation, new OpenDoor(new Realm('acme')), new Member(new Realm('acme'), new PrincipalId(new UuidV7())), new Origin(OriginKind::Web), new \DateTimeImmutable());
+        $request = Request::forOperation($operation, new OpenDoor(new Realm('acme')), new Member(new Realm('acme'), new PrincipalId(Ids::next())), new Origin(OriginKind::Web), new \DateTimeImmutable());
         $steps = 0;
 
         foreach (Itf::traces(self::TRACES) as $number => $trace) {

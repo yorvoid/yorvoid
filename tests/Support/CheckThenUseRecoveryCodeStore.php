@@ -30,7 +30,7 @@ final readonly class CheckThenUseRecoveryCodeStore implements RecoveryCodeStore
 
     public function use(Realm $realm, PrincipalId $principalId, string $hash): bool
     {
-        $where = ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122(), 'code_hash' => $hash];
+        $where = ['realm' => $realm->name, 'principal_id' => $principalId->id->toString(), 'code_hash' => $hash];
         $found = false !== $this->database->connection->fetchOne(\sprintf('SELECT 1 FROM %s WHERE realm = ? AND principal_id = ? AND code_hash = ?', $this->database->table(DbalRecoveryCodeStore::TABLE)), array_values($where));
         $this->database->connection->delete($this->database->table(DbalRecoveryCodeStore::TABLE), $where);
 

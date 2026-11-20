@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Core\Operation;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Finder\Finder;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -21,6 +20,7 @@ use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\SetIdentifier;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 
 /**
@@ -133,23 +133,23 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
     public function testNobodyMarksTheirOwnAddressVerified(): void
     {
         $realm = new Realm('acme');
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
         $actor = new Member($realm, $ana);
 
         self::assertTrue(new SetIdentifier($realm, $ana, IdentifierKind::Email, 'ana@example.com')->concerns($actor));
         self::assertFalse(new SetIdentifier($realm, $ana, IdentifierKind::Email, 'ana@example.com', verified: true)->concerns($actor));
-        self::assertFalse(new SetIdentifier($realm, new PrincipalId(new UuidV7()), IdentifierKind::Email, 'ana@example.com')->concerns($actor));
+        self::assertFalse(new SetIdentifier($realm, new PrincipalId(Ids::next()), IdentifierKind::Email, 'ana@example.com')->concerns($actor));
     }
 
     public function testOnlyTheSessionItselfEndsItselfOnItsOwnSay(): void
     {
         $realm = new Realm('acme');
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
         $now = new \DateTimeImmutable();
-        $session = new Session(new SessionId(new UuidV7()), $realm, $ana, 1, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $now, true, true)), $now, $now, $now, $now);
+        $session = new Session(new SessionId(Ids::next()), $realm, $ana, 1, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $now, true, true)), $now, $now, $now, $now);
 
         self::assertTrue(new EndSession($realm, $session->id, SessionEndReason::SignedOut)->concerns($session));
-        self::assertFalse(new EndSession($realm, new SessionId(new UuidV7()), SessionEndReason::SignedOut)->concerns($session));
+        self::assertFalse(new EndSession($realm, new SessionId(Ids::next()), SessionEndReason::SignedOut)->concerns($session));
         self::assertFalse(new EndSession($realm, $session->id, SessionEndReason::SignedOut)->concerns(new Member($realm, $ana)), 'Not by the principal without the session.');
     }
 

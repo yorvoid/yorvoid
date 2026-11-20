@@ -33,7 +33,7 @@ final readonly class DbalPrincipalStore implements PrincipalStore
     public function add(Principal $principal): void
     {
         if (!$this->database->insertUnlessExists(self::TABLE, [
-            'id' => $principal->id->uuid->toRfc4122(),
+            'id' => $principal->id->id->toString(),
             'realm' => $principal->realm->name,
             'kind' => $principal->kind->value,
             'status' => $principal->status->value,
@@ -50,7 +50,7 @@ final readonly class DbalPrincipalStore implements PrincipalStore
     {
         $row = $this->database->connection->fetchAssociative(
             \sprintf('SELECT kind, status, created_at, updated_at, status_changed_at, status_version FROM %s WHERE realm = ? AND id = ?', $this->database->table(self::TABLE)),
-            [$realm->name, $id->uuid->toRfc4122()],
+            [$realm->name, $id->id->toString()],
         );
 
         if (false === $row) {
@@ -82,7 +82,7 @@ final readonly class DbalPrincipalStore implements PrincipalStore
         $this->inTransaction();
 
         // A write, not FOR UPDATE: under REPEATABLE READ, whoever waited for it then conflicts (D-52).
-        $this->database->connection->executeStatement(\sprintf('UPDATE %s SET lock_count = lock_count + 1 WHERE realm = ? AND id = ?', $this->database->table(self::TABLE)), [$realm->name, $id->uuid->toRfc4122()]);
+        $this->database->connection->executeStatement(\sprintf('UPDATE %s SET lock_count = lock_count + 1 WHERE realm = ? AND id = ?', $this->database->table(self::TABLE)), [$realm->name, $id->id->toString()]);
     }
 
     private function inTransaction(): void
@@ -97,7 +97,7 @@ final readonly class DbalPrincipalStore implements PrincipalStore
         return 1 === $this->database->connection->update(
             $this->database->table(self::TABLE),
             ['status' => $after->status->value, 'updated_at' => $after->updatedAt, 'status_changed_at' => $after->statusChangedAt, 'status_version' => $after->statusVersion],
-            ['realm' => $before->realm->name, 'id' => $before->id->uuid->toRfc4122(), 'status_version' => $before->statusVersion],
+            ['realm' => $before->realm->name, 'id' => $before->id->id->toString(), 'status_version' => $before->statusVersion],
             self::TIMES,
         );
     }

@@ -33,6 +33,7 @@ use YorvoID\Relations\Change\AddRelation;
 use YorvoID\Relations\Change\RemoveRelation;
 use YorvoID\Relations\Subject;
 use YorvoID\Relations\UnknownRelation;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Policy\Fixtures\StubStepUpCheck;
 
@@ -156,7 +157,7 @@ final class RelationsAndGroupsTest extends TestCase
         $world->asOperator(new CreateGroup($world->realm, 'writers', 'Writers'));
         $cases = [
             UnknownGroup::class => [new AddGroupMember($world->realm, 'ghosts', self::subject($world->principal())), new AddGroupMember($world->realm, 'writers', GroupRelations::members('ghosts')), new DeleteGroup($world->realm, 'ghosts'), new AssignGroupRole($world->realm, 'ghosts', 'editor')],
-            UnknownPrincipal::class => [new AddGroupMember($world->realm, 'writers', Subject::principal(new PrincipalId(new \Symfony\Component\Uid\UuidV7())))],
+            UnknownPrincipal::class => [new AddGroupMember($world->realm, 'writers', Subject::principal(new PrincipalId(Ids::next())))],
             InvalidRole::class => [new AddGroupMember($world->realm, 'writers', GroupRelations::members('writers')), new AddGroupMember($world->realm, 'writers', new Subject(new ResourceRef('page', '1'))), new AssignGroupRole($world->realm, 'writers', 'everyone'), new CreateGroup($world->realm, 'Bad', 'Bad')],
             UnknownRole::class => [new AssignGroupRole($world->realm, 'writers', 'ghost')],
         ];

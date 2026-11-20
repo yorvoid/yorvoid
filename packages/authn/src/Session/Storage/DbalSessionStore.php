@@ -46,9 +46,9 @@ final readonly class DbalSessionStore implements SessionStore
     {
         try {
             $added = $this->database->insertUnlessExists(self::TABLE, [
-                'id' => $session->id->uuid->toRfc4122(),
+                'id' => $session->id->id->toString(),
                 'realm' => $session->realm->name,
-                'principal_id' => $session->principalId->uuid->toRfc4122(),
+                'principal_id' => $session->principalId->id->toString(),
                 'principal_status_version' => $session->principalStatusVersion,
                 'token_hash' => $tokenHash,
                 'authentication' => $session->authentication->toArray(),
@@ -79,7 +79,7 @@ final readonly class DbalSessionStore implements SessionStore
 
     public function get(Realm $realm, SessionId $id): ?Session
     {
-        return $this->one('realm = ? AND id = ?', [$realm->name, $id->uuid->toRfc4122()]);
+        return $this->one('realm = ? AND id = ?', [$realm->name, $id->id->toString()]);
     }
 
     public function current(Realm $realm, PrincipalId $principalId, \DateTimeImmutable $now): array
@@ -88,7 +88,7 @@ final readonly class DbalSessionStore implements SessionStore
 
         foreach ($this->database->connection->iterateAssociative(
             \sprintf('SELECT %s FROM %s WHERE realm = ? AND principal_id = ? AND ended_at IS NULL AND expires_at > ? AND idle_expires_at > ? ORDER BY last_seen_at DESC, id DESC', self::COLUMNS, $this->database->table(self::TABLE)),
-            [$realm->name, $principalId->uuid->toRfc4122(), $now, $now],
+            [$realm->name, $principalId->id->toString(), $now, $now],
             [2 => Types::DATETIMETZ_IMMUTABLE, 3 => Types::DATETIMETZ_IMMUTABLE],
         ) as $row) {
             $sessions[] = $this->session($row);
@@ -101,7 +101,7 @@ final readonly class DbalSessionStore implements SessionStore
     {
         return 1 === $this->database->connection->executeStatement(
             \sprintf('UPDATE %s SET token_hash = ? WHERE realm = ? AND id = ? AND ended_at IS NULL', $this->database->table(self::TABLE)),
-            [$tokenHash, $realm->name, $id->uuid->toRfc4122()],
+            [$tokenHash, $realm->name, $id->id->toString()],
         );
     }
 
@@ -113,7 +113,7 @@ final readonly class DbalSessionStore implements SessionStore
         for ($attempt = 0; $attempt < 2; ++$attempt) {
             $row = $this->database->connection->fetchAssociative(
                 \sprintf('SELECT authentication, token_hash FROM %s WHERE realm = ? AND id = ? AND ended_at IS NULL%s', $table, SqlPlatform::PostgreSQL === $this->database->platform ? ' FOR UPDATE' : ''),
-                [$realm->name, $id->uuid->toRfc4122()],
+                [$realm->name, $id->id->toString()],
             );
 
             if (false === $row) {
@@ -124,7 +124,7 @@ final readonly class DbalSessionStore implements SessionStore
 
             if (1 === $this->database->connection->executeStatement(
                 \sprintf('UPDATE %s SET authentication = ?, token_hash = ? WHERE realm = ? AND id = ? AND ended_at IS NULL AND token_hash = ?', $table),
-                [$authentication->toArray(), $tokenHash, $realm->name, $id->uuid->toRfc4122(), Row::string($row, 'token_hash')],
+                [$authentication->toArray(), $tokenHash, $realm->name, $id->id->toString(), Row::string($row, 'token_hash')],
                 [0 => Types::JSON],
             )) {
                 return $authentication;
@@ -139,7 +139,7 @@ final readonly class DbalSessionStore implements SessionStore
         $this->database->connection->update(
             $this->database->table(self::TABLE),
             ['last_seen_at' => $lastSeenAt, 'idle_expires_at' => $idleExpiresAt],
-            ['realm' => $realm->name, 'id' => $id->uuid->toRfc4122()],
+            ['realm' => $realm->name, 'id' => $id->id->toString()],
             self::TYPES,
         );
     }
@@ -151,7 +151,7 @@ final readonly class DbalSessionStore implements SessionStore
         // One statement, however many there are; PostgreSQL and SQLite return what they changed.
         foreach ($this->database->connection->iterateAssociative(
             \sprintf('UPDATE %s SET ended_at = ?, end_reason = ? WHERE realm = ? AND principal_id = ? AND ended_at IS NULL AND expires_at > ? AND idle_expires_at > ?%s RETURNING %s', $this->database->table(self::TABLE), null === $except ? '' : ' AND id <> ?', self::COLUMNS),
-            [$now, $reason->value, $realm->name, $principalId->uuid->toRfc4122(), $now, $now, ...(null === $except ? [] : [$except->uuid->toRfc4122()])],
+            [$now, $reason->value, $realm->name, $principalId->id->toString(), $now, $now, ...(null === $except ? [] : [$except->id->toString()])],
             [0 => Types::DATETIMETZ_IMMUTABLE, 4 => Types::DATETIMETZ_IMMUTABLE, 5 => Types::DATETIMETZ_IMMUTABLE],
         ) as $row) {
             $sessions[] = $this->session($row);
@@ -164,7 +164,7 @@ final readonly class DbalSessionStore implements SessionStore
     {
         return 1 === $this->database->connection->executeStatement(
             \sprintf('UPDATE %s SET ended_at = ?, end_reason = ? WHERE realm = ? AND id = ? AND ended_at IS NULL', $this->database->table(self::TABLE)),
-            [$endedAt, $reason->value, $realm->name, $id->uuid->toRfc4122()],
+            [$endedAt, $reason->value, $realm->name, $id->id->toString()],
             [0 => Types::DATETIMETZ_IMMUTABLE],
         );
     }

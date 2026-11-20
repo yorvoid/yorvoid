@@ -132,7 +132,8 @@ deptrac:
       - Exception
       - Root
     Exception: ~
-    Id: ~
+    Id:
+      - Exception
     Key:
       - Exception
       - Root

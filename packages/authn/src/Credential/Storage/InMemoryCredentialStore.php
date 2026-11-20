@@ -42,7 +42,7 @@ final class InMemoryCredentialStore implements CredentialStore, InMemoryStore
     public function of(Realm $realm, PrincipalId $principalId): array
     {
         $credentials = array_filter($this->credentials, static fn (Credential $credential): bool => $credential->realm->equals($realm) && $credential->principalId->equals($principalId));
-        usort($credentials, static fn (Credential $a, Credential $b): int => [$a->createdAt, $a->id->uuid->toRfc4122()] <=> [$b->createdAt, $b->id->uuid->toRfc4122()]);
+        usort($credentials, static fn (Credential $a, Credential $b): int => [$a->createdAt, $a->id->id->toString()] <=> [$b->createdAt, $b->id->id->toString()]);
 
         return $credentials;
     }

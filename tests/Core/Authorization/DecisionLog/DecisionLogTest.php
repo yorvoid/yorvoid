@@ -33,6 +33,7 @@ use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\RecordBadge;
@@ -104,7 +105,7 @@ final class DecisionLogTest extends TestCase
     public function testAnOperationsDecisionIsRecordedBeforeItRuns(): void
     {
         [$operations, $badges] = $this->operations();
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
         $badges->onRun = function (Permit $permit): void {
             self::assertNotNull($this->store->find($this->realm, $permit->decisionId), 'It\'s recorded before the operation runs.');
         };
@@ -126,7 +127,7 @@ final class DecisionLogTest extends TestCase
     public function testWhatAnOperationRecordsCitesItsDecision(): void
     {
         [$operations, $badges] = $this->operations();
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
 
         $operations->run(new IssueBadge($this->realm, $ana), new Member($this->realm, $ana), new Origin(OriginKind::Web));
 
@@ -145,10 +146,10 @@ final class DecisionLogTest extends TestCase
     public function testARefusalIsRecordedAndNotChained(): void
     {
         [$operations] = $this->operations();
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
 
         try {
-            $operations->run(new IssueBadge($this->realm, new PrincipalId(new UuidV7())), new Member($this->realm, $ana), new Origin(OriginKind::Web));
+            $operations->run(new IssueBadge($this->realm, new PrincipalId(Ids::next())), new Member($this->realm, $ana), new Origin(OriginKind::Web));
             self::fail('It was permitted.');
         } catch (NotPermitted $refused) {
             $decision = $refused->decision;
@@ -202,7 +203,7 @@ final class DecisionLogTest extends TestCase
     {
         [$operations, $badges] = $this->operations();
         $this->store->failing = true;
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
 
         try {
             $operations->run(new IssueBadge($this->realm, $ana), new Member($this->realm, $ana), new Origin(OriginKind::Web));
@@ -363,7 +364,7 @@ final class DecisionLogTest extends TestCase
 
     private function ability(string $ability = 'acme.pages.edit', string $correlation = 'request-1'): Request
     {
-        return Request::forAbility($ability, $this->realm, new ResourceRef('page', '42'), new Member($this->realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web, correlationId: $correlation), $this->clock->now());
+        return Request::forAbility($ability, $this->realm, new ResourceRef('page', '42'), new Member($this->realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web, correlationId: $correlation), $this->clock->now());
     }
 
     private function decided(Decision $decision): Decision

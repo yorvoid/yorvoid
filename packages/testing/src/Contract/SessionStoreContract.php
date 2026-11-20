@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
@@ -17,6 +16,7 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every SessionStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -64,7 +64,7 @@ trait SessionStoreContract
         $store = $this->sessionStore($implementation);
         $transactions = $this->transactions($implementation);
         $acme = new Realm('acme');
-        [$failed, $seen, $kept] = [self::session($acme, new PrincipalId(new UuidV7())), self::session($acme, new PrincipalId(new UuidV7())), self::session($acme, new PrincipalId(new UuidV7()))];
+        [$failed, $seen, $kept] = [self::session($acme, new PrincipalId(Ids::next())), self::session($acme, new PrincipalId(Ids::next())), self::session($acme, new PrincipalId(Ids::next()))];
 
         InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add($failed, self::hash('failed')), static fn (): bool => null === $store->get($acme, $failed->id));
         InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add($seen, self::hash('seen')), static fn (): bool => null !== $store->get($acme, $seen->id));
@@ -80,9 +80,9 @@ trait SessionStoreContract
     {
         $store = $this->sessionStore($implementation);
         $full = new Session(
-            new SessionId(new UuidV7()),
+            new SessionId(Ids::next()),
             new Realm('acme'),
-            new PrincipalId(new UuidV7()),
+            new PrincipalId(Ids::next()),
             7,
             new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable('2026-10-27 18:40:00 UTC'), true, true), new AuthenticationFactor(AuthenticationMethod::RecoveryCode, new \DateTimeImmutable('2026-10-27 18:50:00 UTC'), false, false)),
             new \DateTimeImmutable('2026-10-27 18:40:00 UTC'),
@@ -94,7 +94,7 @@ trait SessionStoreContract
             new \DateTimeImmutable('2026-10-27 19:00:00 UTC'),
             SessionEndReason::EndedByAdministrator,
         );
-        $bare = self::session(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $bare = self::session(new Realm('acme'), new PrincipalId(Ids::next()));
 
         $store->add($full, self::hash('full'));
         $store->add($bare, self::hash('bare'));
@@ -109,10 +109,10 @@ trait SessionStoreContract
     public function testRefusesADuplicateIdOrToken(string $implementation): void
     {
         $store = $this->sessionStore($implementation);
-        $session = self::session(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $session = self::session(new Realm('acme'), new PrincipalId(Ids::next()));
         $store->add($session, self::hash('a'));
 
-        foreach ([[$session, self::hash('b')], [self::session(new Realm('acme'), new PrincipalId(new UuidV7())), self::hash('a')]] as [$duplicate, $hash]) {
+        foreach ([[$session, self::hash('b')], [self::session(new Realm('acme'), new PrincipalId(Ids::next())), self::hash('a')]] as [$duplicate, $hash]) {
             try {
                 $store->add($duplicate, $hash);
                 self::fail('A duplicate session was added.');
@@ -126,7 +126,7 @@ trait SessionStoreContract
     public function testFindsNothingInAnotherRealm(string $implementation): void
     {
         $store = $this->sessionStore($implementation);
-        $session = self::session(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $session = self::session(new Realm('acme'), new PrincipalId(Ids::next()));
         $store->add($session, self::hash('a'));
 
         self::assertNull($store->get(new Realm('globex'), $session->id));
@@ -142,14 +142,14 @@ trait SessionStoreContract
     public function testListsOnlyCurrentSessionsTheMostRecentlyUsedFirst(string $implementation): void
     {
         $store = $this->sessionStore($implementation);
-        $principal = new PrincipalId(new UuidV7());
+        $principal = new PrincipalId(Ids::next());
         $now = new \DateTimeImmutable('2026-10-27 20:00:00 UTC');
         $older = self::session(new Realm('acme'), $principal, lastSeen: '2026-10-27 19:10:00');
         $newer = self::session(new Realm('acme'), $principal, lastSeen: '2026-10-27 19:50:00');
         $ended = self::session(new Realm('acme'), $principal, lastSeen: '2026-10-27 19:55:00');
         $expired = self::session(new Realm('acme'), $principal, expires: '2026-10-27 20:00:00');
         $idle = self::session(new Realm('acme'), $principal, idleExpires: '2026-10-27 20:00:00');
-        $someoneElses = self::session(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $someoneElses = self::session(new Realm('acme'), new PrincipalId(Ids::next()));
 
         foreach ([$older, $newer, $ended, $expired, $idle, $someoneElses] as $i => $session) {
             $store->add($session, self::hash((string) $i));
@@ -163,7 +163,7 @@ trait SessionStoreContract
     public function testEndsASessionOnceAndThenNeverRenewsItsToken(string $implementation): void
     {
         $store = $this->sessionStore($implementation);
-        $session = self::session(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $session = self::session(new Realm('acme'), new PrincipalId(Ids::next()));
         $store->add($session, self::hash('a'));
 
         self::assertTrue($store->replaceTokenHash(new Realm('acme'), $session->id, self::hash('b')));
@@ -185,14 +185,14 @@ trait SessionStoreContract
     public function testEndsAPrincipalsCurrentSessionsButOneInOneGo(string $implementation): void
     {
         $store = $this->sessionStore($implementation);
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
         $now = new \DateTimeImmutable('2026-10-27 19:00:00 UTC');
         $kept = self::session(new Realm('acme'), $ana);
         $current = [self::session(new Realm('acme'), $ana, '2026-10-27 18:50:00'), self::session(new Realm('acme'), $ana, '2026-10-27 18:45:00')];
         $others = [
             self::session(new Realm('acme'), $ana, idleExpires: '2026-10-27 19:00:00'),
             self::session(new Realm('globex'), $ana),
-            self::session(new Realm('acme'), new PrincipalId(new UuidV7())),
+            self::session(new Realm('acme'), new PrincipalId(Ids::next())),
         ];
 
         foreach ([$kept, ...$current, ...$others] as $i => $session) {
@@ -219,7 +219,7 @@ trait SessionStoreContract
     public function testSteppingUpReplacesTheAuthenticationAndTheToken(string $implementation): void
     {
         $store = $this->sessionStore($implementation);
-        $session = self::session(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $session = self::session(new Realm('acme'), new PrincipalId(Ids::next()));
         $other = self::session(new Realm('acme'), $session->principalId);
         $store->add($session, self::hash('a'));
         $store->add($other, self::hash('other'));
@@ -241,7 +241,7 @@ trait SessionStoreContract
     public function testTouchingRecordsTheLastUse(string $implementation): void
     {
         $store = $this->sessionStore($implementation);
-        $session = self::session(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $session = self::session(new Realm('acme'), new PrincipalId(Ids::next()));
         $store->add($session, self::hash('a'));
 
         $store->touch(new Realm('acme'), $session->id, new \DateTimeImmutable('2026-10-27 18:50:00 UTC'), new \DateTimeImmutable('2026-10-27 19:50:00 UTC'));
@@ -256,7 +256,7 @@ trait SessionStoreContract
     public function testPurgesOnlyWhatEndedOrExpiredBefore(string $implementation): void
     {
         $store = $this->sessionStore($implementation);
-        $principal = new PrincipalId(new UuidV7());
+        $principal = new PrincipalId(Ids::next());
         $before = new \DateTimeImmutable('2026-10-27 20:00:00 UTC');
         $endedLongAgo = self::session(new Realm('acme'), $principal);
         $endedRecently = self::session(new Realm('acme'), $principal);
@@ -286,7 +286,7 @@ trait SessionStoreContract
     {
         $started = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
 
-        return new Session(new SessionId(new UuidV7()), $realm, $principal, 1, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $started)), $started, new \DateTimeImmutable($lastSeen.' UTC'), new \DateTimeImmutable($expires.' UTC'), new \DateTimeImmutable($idleExpires.' UTC'));
+        return new Session(new SessionId(Ids::next()), $realm, $principal, 1, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, $started)), $started, new \DateTimeImmutable($lastSeen.' UTC'), new \DateTimeImmutable($expires.' UTC'), new \DateTimeImmutable($idleExpires.' UTC'));
     }
 
     private static function factor(string $operation): AuthenticationFactor

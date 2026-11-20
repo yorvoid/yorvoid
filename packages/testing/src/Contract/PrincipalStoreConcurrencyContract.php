@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\Race;
 
 /**
@@ -57,7 +57,7 @@ trait PrincipalStoreConcurrencyContract
 
         for ($i = 0; $i < Races::ROUNDS; ++$i) {
             $now = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
-            $principal = new Principal(new PrincipalId(new UuidV7()), new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now);
+            $principal = new Principal(new PrincipalId(Ids::next()), new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now);
             $store->add($principal);
             $rounds[] = ['realm' => 'acme', 'principal' => (string) $principal->id, 'at' => '2026-10-28 08:00:00 UTC'];
         }

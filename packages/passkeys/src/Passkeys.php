@@ -13,7 +13,6 @@ use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
 use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Component\Uid\Uuid;
 use Webauthn\AttestationStatement\AttestationStatementSupportManager;
 use Webauthn\AuthenticatorAssertionResponse;
 use Webauthn\AuthenticatorAssertionResponseValidator;
@@ -49,6 +48,7 @@ use YorvoID\Authn\Session\StepUpSession;
 use YorvoID\Authn\StepUp\AuthenticationRequirement;
 use YorvoID\Authn\StepUp\StepUpRequired;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
@@ -186,7 +186,7 @@ final readonly class Passkeys implements OperationHandler
             if ([] !== $existing && $existing[0]->userHandle !== $record->userHandle) {
                 throw new PasskeyRefused(Refusal::CeremonyExpired);
             }
-            $passkey = new Passkey($credential->id, $session->realm, $session->principalId, $record->publicKeyCredentialId, $record->credentialPublicKey, $record->userHandle, $record->counter, $record->transports, $record->aaguid, true === $record->backupEligible, true === $record->backupStatus, true === $record->uvInitialized, $record->attestationType);
+            $passkey = new Passkey($credential->id, $session->realm, $session->principalId, $record->publicKeyCredentialId, $record->credentialPublicKey, $record->userHandle, $record->counter, $record->transports, $record->aaguid->toRfc4122(), true === $record->backupEligible, true === $record->backupStatus, true === $record->uvInitialized, $record->attestationType);
 
             // The store refuses an authenticator's ID that's registered already; the credential is rolled back.
             if (!$this->store->add($passkey)) {
@@ -367,7 +367,7 @@ final readonly class Passkeys implements OperationHandler
     private function begin(Realm $realm, CeremonyKind $kind, PublicKeyCredentialCreationOptions|PublicKeyCredentialRequestOptions $options, ?Session $session = null, ?string $operation = null): BegunCeremony
     {
         $json = $this->serializer->serialize($options, 'json', [AbstractObjectNormalizer::SKIP_NULL_VALUES => true]);
-        $ceremony = new Ceremony(Uuid::fromString((string) $this->ids->next()), $realm, $kind, $json, $this->policy->timeout->after(Time::stored($this->clock->now())), $session?->id, $operation);
+        $ceremony = new Ceremony($this->ids->next(), $realm, $kind, $json, $this->policy->timeout->after(Time::stored($this->clock->now())), $session?->id, $operation);
         $this->ceremonyStore->add($ceremony);
 
         return new BegunCeremony((string) $ceremony->id, $json);
@@ -375,7 +375,7 @@ final readonly class Passkeys implements OperationHandler
 
     private function take(Realm $realm, string $id, CeremonyKind $kind, ?SessionId $session = null): Ceremony
     {
-        $ceremony = Uuid::isValid($id) ? $this->transactions->run(fn (): ?Ceremony => $this->ceremonyStore->take($realm, Uuid::fromString($id), $session)) : null;
+        $ceremony = Id::isValid($id) ? $this->transactions->run(fn (): ?Ceremony => $this->ceremonyStore->take($realm, Id::fromString($id), $session)) : null;
 
         if (null === $ceremony || $kind !== $ceremony->kind || $this->clock->now() >= $ceremony->expiresAt) {
             throw new PasskeyRefused(Refusal::CeremonyExpired);

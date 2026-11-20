@@ -7,8 +7,8 @@ namespace YorvoID\Symfony\Security;
 use Symfony\Component\Security\Core\Exception\UserNotFoundException;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Core\User\UserProviderInterface;
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
@@ -37,7 +37,7 @@ final readonly class PrincipalUserProvider implements UserProviderInterface
     {
         // The request's session already loaded its principal, in the same request (PERF-07).
         $held = $this->current?->principal();
-        $principal = null !== $held && (string) $held->id === $identifier ? $held : (Uuid::isValid($identifier) ? $this->principals->get($this->realm, PrincipalId::fromString($identifier)) : null);
+        $principal = null !== $held && (string) $held->id === $identifier ? $held : (Id::isValid($identifier) ? $this->principals->get($this->realm, PrincipalId::fromString($identifier)) : null);
 
         if (null === $principal || !$principal->isActive()) {
             throw new UserNotFoundException();

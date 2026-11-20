@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Policy\AbilityChanges;
 use YorvoID\Policy\GroupRoleAssignment;
 use YorvoID\Policy\RoleAssignment;
 use YorvoID\Policy\Storage\InMemoryPolicyStore;
+use YorvoID\Testing\Ids;
 
 final class InMemoryPolicyStoreTest extends TestCase
 {
@@ -19,7 +19,7 @@ final class InMemoryPolicyStoreTest extends TestCase
     {
         $store = new InMemoryPolicyStore();
         $realm = new Realm('acme');
-        $ada = new PrincipalId(new UuidV7());
+        $ada = new PrincipalId(Ids::next());
         $store->saveRole($realm, 'reviewer', 'Reviewer');
         $store->saveChanges($realm, new AbilityChanges(['a.x' => ['reviewer']]));
         $store->assign(new RoleAssignment($realm, $ada, 'reviewer', new \DateTimeImmutable()));

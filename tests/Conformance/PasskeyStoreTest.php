@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Conformance;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
@@ -15,6 +14,7 @@ use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Testing\Contract\CeremonyStoreContract;
 use YorvoID\Testing\Contract\ConcurrencyTestedIn;
 use YorvoID\Testing\Contract\PasskeyStoreContract;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Support\DatabaseTestCase;
 
 /**
@@ -30,7 +30,7 @@ final class PasskeyStoreTest extends DatabaseTestCase
     public function testKeepsEveryFieldAndFindsByTheAuthenticatorsId(string $implementation): void
     {
         $store = $this->stack($implementation)->passkeys;
-        $principal = new PrincipalId(new UuidV7());
+        $principal = new PrincipalId(Ids::next());
         $long = self::passkey(new Realm('acme'), $principal, random_bytes(1023), ['usb', 'nfc'], true);
         $short = self::passkey(new Realm('acme'), $principal, "\x00\xFF", [], false);
 
@@ -62,7 +62,7 @@ final class PasskeyStoreTest extends DatabaseTestCase
     {
         $stack = $this->stack($platform);
         \assert(null !== $stack->database);
-        $passkey = self::passkey(new Realm('acme'), new PrincipalId(new UuidV7()), random_bytes(16));
+        $passkey = self::passkey(new Realm('acme'), new PrincipalId(Ids::next()), random_bytes(16));
         $stack->passkeys->add($passkey);
         $table = $stack->database->table('passkey');
 

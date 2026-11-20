@@ -21,7 +21,7 @@ final class InMemoryAttributeStore implements AttributeStore, InMemoryStore
 
     public function of(Realm $realm, PrincipalId $principalId): array
     {
-        $attributes = $this->attributes[$realm->name][$principalId->uuid->toRfc4122()] ?? [];
+        $attributes = $this->attributes[$realm->name][$principalId->id->toString()] ?? [];
         ksort($attributes, \SORT_STRING);
 
         return $attributes;
@@ -29,20 +29,20 @@ final class InMemoryAttributeStore implements AttributeStore, InMemoryStore
 
     public function set(Realm $realm, PrincipalId $principalId, string $name, string|int|bool|array $value): void
     {
-        $this->attributes[$realm->name][$principalId->uuid->toRfc4122()][$name] = $value;
+        $this->attributes[$realm->name][$principalId->id->toString()][$name] = $value;
     }
 
     public function remove(Realm $realm, PrincipalId $principalId, string $name): bool
     {
-        $had = isset($this->attributes[$realm->name][$principalId->uuid->toRfc4122()][$name]);
-        unset($this->attributes[$realm->name][$principalId->uuid->toRfc4122()][$name]);
+        $had = isset($this->attributes[$realm->name][$principalId->id->toString()][$name]);
+        unset($this->attributes[$realm->name][$principalId->id->toString()][$name]);
 
         return $had;
     }
 
     public function forget(Realm $realm, PrincipalId $principalId): void
     {
-        unset($this->attributes[$realm->name][$principalId->uuid->toRfc4122()]);
+        unset($this->attributes[$realm->name][$principalId->id->toString()]);
     }
 
     public function snapshot(): mixed

@@ -101,7 +101,7 @@ final readonly class DbalPolicyStore implements PolicyStore
 
         foreach ($this->database->connection->iterateAssociative(
             \sprintf('SELECT role, scope, assigned_at, expires_at FROM %s WHERE realm = ? AND principal_id = ? ORDER BY role, scope', $this->table(self::ASSIGNMENT_TABLE)),
-            [$realm->name, $principalId->uuid->toRfc4122()],
+            [$realm->name, $principalId->id->toString()],
         ) as $row) {
             $scope = Row::string($row, 'scope');
             $assignments[] = new RoleAssignment(
@@ -130,7 +130,7 @@ final readonly class DbalPolicyStore implements PolicyStore
         $this->unassign($assignment->realm, $assignment->principalId, $assignment->role, $assignment->scope);
         $this->database->connection->insert($this->table(self::ASSIGNMENT_TABLE), [
             'realm' => $assignment->realm->name,
-            'principal_id' => $assignment->principalId->uuid->toRfc4122(),
+            'principal_id' => $assignment->principalId->id->toString(),
             'role' => $assignment->role,
             'scope' => (string) $assignment->scope,
             'assigned_at' => $assignment->assignedAt,
@@ -142,7 +142,7 @@ final readonly class DbalPolicyStore implements PolicyStore
     {
         $this->bump($realm);
 
-        return 0 < $this->database->connection->delete($this->table(self::ASSIGNMENT_TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122(), 'role' => $role, 'scope' => (string) $scope]);
+        return 0 < $this->database->connection->delete($this->table(self::ASSIGNMENT_TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->id->toString(), 'role' => $role, 'scope' => (string) $scope]);
     }
 
     public function unassignRole(Realm $realm, string $role): void
@@ -241,7 +241,7 @@ final readonly class DbalPolicyStore implements PolicyStore
     public function forgetPrincipal(Realm $realm, PrincipalId $principalId): void
     {
         $this->bump($realm);
-        $this->database->connection->delete($this->table(self::ASSIGNMENT_TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->uuid->toRfc4122()]);
+        $this->database->connection->delete($this->table(self::ASSIGNMENT_TABLE), ['realm' => $realm->name, 'principal_id' => $principalId->id->toString()]);
     }
 
     public function version(Realm $realm): int

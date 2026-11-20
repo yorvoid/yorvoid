@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -22,6 +21,7 @@ use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\Storage\CachedRelationStore;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
+use YorvoID\Testing\Ids;
 
 /**
  * The cached stores read what the pool holds at the realm's version, and only what's of the shape the
@@ -40,7 +40,7 @@ final class CachedPolicyStoreTest extends TestCase
     {
         $this->pool = new ArrayAdapter();
         $this->realm = new Realm('acme');
-        $this->ada = new PrincipalId(new UuidV7());
+        $this->ada = new PrincipalId(Ids::next());
     }
 
     public function testWhatThePoolHoldsIsRead(): void
@@ -68,7 +68,7 @@ final class CachedPolicyStoreTest extends TestCase
     public function testWhatsNotWhatTheStoreGivesIsReadAgain(): void
     {
         $at = new \DateTimeImmutable('2026-11-08 20:00:00');
-        $bob = new PrincipalId(new UuidV7());
+        $bob = new PrincipalId(Ids::next());
         $other = new Realm('other');
         $cases = [
             'roles' => [['helper' => 1], [7 => 'Helper'], 'not labels'],
@@ -164,7 +164,7 @@ final class CachedPolicyStoreTest extends TestCase
         $other = new CachedRelationStore($inner, new VersionedCache());
         $inner->add(new RelationTuple($this->realm, $page, 'viewer', Subject::principal($this->ada)));
         $inner->add(new RelationTuple($this->realm, new ResourceRef('page', '2'), 'editor', Subject::principal($this->ada)));
-        $bob = Subject::principal(new PrincipalId(new UuidV7()));
+        $bob = Subject::principal(new PrincipalId(Ids::next()));
 
         foreach ([[[$page, 'editor']], [[$page, 'viewer']], [[new ResourceRef('page', '2'), 'editor']], [[new ResourceRef('editor', '1'), 'editor']]] as $of) {
             self::assertEquals($inner->subjects($this->realm, $of), $other->subjects($this->realm, $of));

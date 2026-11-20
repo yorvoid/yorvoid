@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Core\Operation;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Session\EndSessions;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Token\IssueToken;
@@ -18,6 +17,7 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Consequences\Twice;
 use YorvoID\Tests\Core\Operation\Fixtures\Consequences\Unbound;
 use YorvoID\Tests\Support\Permits;
@@ -37,8 +37,8 @@ final class PermitTest extends TestCase
     protected function setUp(): void
     {
         $this->realm = new Realm('acme');
-        $this->ana = new PrincipalId(new UuidV7());
-        $this->bob = new PrincipalId(new UuidV7());
+        $this->ana = new PrincipalId(Ids::next());
+        $this->bob = new PrincipalId(Ids::next());
     }
 
     public function testAPermitIsAboutItsCommandsPrincipal(): void
