@@ -6,6 +6,7 @@ namespace YorvoID\Relations\Storage;
 
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\ForgetsWhatItRead;
 use YorvoID\Core\Storage\VersionedCache;
 use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationTuple;
@@ -19,7 +20,7 @@ use YorvoID\Relations\Subject;
  *
  * @api
  */
-final class CachedRelationStore implements RelationStore
+final class CachedRelationStore implements RelationStore, ForgetsWhatItRead
 {
     /** @var array<string, int> By realm */
     private array $versions = [];

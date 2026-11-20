@@ -12,11 +12,12 @@ use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\RetryableConflict;
 use YorvoID\Core\Storage\Transactions;
 
 /**
  * What every Transactions keeps (PLT-025): all or nothing, after-commit callbacks only after the outermost
- * commit, and a failed nested unit undoing only itself. A principal store that takes part in the
+ * commit, a failed nested unit undoing only itself, and retrying() running work that conflicted again. A principal store that takes part in the
  * transactions shows what was kept:
  *
  * ```php
@@ -296,6 +297,94 @@ trait TransactionsContract
         $transactions->afterEnd(static function (): void {
             throw new \RuntimeException('failed at once');
         });
+    }
+
+    /**
+     * A conflict runs the work again from the start: the attempt's writes and callbacks go with it.
+     */
+    #[DataProvider('implementations')]
+    public function testRetryingRunsWorkThatConflictedAgain(string $implementation): void
+    {
+        $transactions = $this->transactions($implementation);
+        $principals = $this->principalStore($implementation);
+        $first = self::principal();
+        $second = self::principal();
+        /** @var \ArrayObject<int, string> $ran */
+        $ran = new \ArrayObject();
+
+        $result = $transactions->retrying(static fn (): string => $transactions->run(static function () use ($transactions, $principals, $first, $second, $ran): string {
+            $again = \count($ran) > 0;
+            $ran->append($again ? 'second attempt' : 'first attempt');
+            $principals->add($again ? $second : $first);
+            $transactions->afterCommit(static function () use ($ran, $again): void {
+                $ran->append($again ? 'committed second' : 'committed first');
+            });
+            $transactions->afterEnd(static function () use ($ran, $again): void {
+                $ran->append($again ? 'ended second' : 'ended first');
+            });
+
+            return $again ? 'done' : throw new RetryableConflict(new \RuntimeException('conflict'));
+        }));
+
+        self::assertSame('done', $result); // @phpstan-ignore staticMethod.alreadyNarrowedType (it's what retrying() gives back)
+        self::assertEqualsCanonicalizing(['first attempt', 'second attempt', 'committed second', 'ended second'], $ran->getArrayCopy(), 'In whichever order the implementation runs its callbacks.');
+        self::assertNull($principals->get($first->realm, $first->id), 'The first attempt was kept.');
+        self::assertNotNull($principals->get($second->realm, $second->id));
+    }
+
+    /**
+     * The third conflict is thrown. Nothing runs the last attempt again: what it left waiting for the end
+     * runs, and the earlier attempts' never.
+     */
+    #[DataProvider('implementations')]
+    public function testRetryingThrowsTheThirdConflict(string $implementation): void
+    {
+        $transactions = $this->transactions($implementation);
+        /** @var \ArrayObject<int, string> $ran */
+        $ran = new \ArrayObject();
+        $thrown = null;
+
+        try {
+            $transactions->retrying(static fn (): mixed => $transactions->run(static function () use ($transactions, $ran): never {
+                $ran->append('attempt');
+                $attempt = \count($ran);
+                $transactions->afterEnd(static function () use ($ran, $attempt): void {
+                    $ran->append('ended '.$attempt);
+                });
+
+                throw new RetryableConflict(new \RuntimeException('conflict'));
+            }));
+        } catch (RetryableConflict $conflict) {
+            $thrown = $conflict;
+        }
+
+        self::assertInstanceOf(RetryableConflict::class, $thrown, 'The third conflict wasn\'t thrown.'); // @phpstan-ignore staticMethod.alreadyNarrowedType (that it was thrown)
+        self::assertSame(['attempt', 'attempt', 'attempt', 'ended 3'], $ran->getArrayCopy());
+    }
+
+    /**
+     * Inside a transaction already open the work isn't the unit's own to run again: the conflict is
+     * thrown at once.
+     */
+    #[DataProvider('implementations')]
+    public function testRetryingInsideATransactionThrowsAtOnce(string $implementation): void
+    {
+        $transactions = $this->transactions($implementation);
+        $attempts = new \ArrayObject();
+        $thrown = null;
+
+        try {
+            $transactions->run(static fn (): mixed => $transactions->retrying(static function () use ($attempts): never {
+                $attempts->append('attempt');
+
+                throw new RetryableConflict(new \RuntimeException('conflict'));
+            }));
+        } catch (RetryableConflict $conflict) {
+            $thrown = $conflict;
+        }
+
+        self::assertInstanceOf(RetryableConflict::class, $thrown, 'The conflict wasn\'t thrown.'); // @phpstan-ignore staticMethod.alreadyNarrowedType (that it was thrown)
+        self::assertCount(1, $attempts);
     }
 
     private static function principal(): Principal

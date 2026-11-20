@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Core\Storage\Dbal;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception\ConnectionLost;
 use Doctrine\DBAL\Exception\DeadlockException;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
@@ -81,8 +82,9 @@ final readonly class DbalTransactions implements Transactions
 
         $waiting = $hooks->count();
         $outermost = !$this->connection->isTransactionActive();
-        // Run again from the start, it leaves its callbacks again: this attempt's go, before the rollback runs them.
-        $discards = $outermost && $this->retrying->active;
+        // Run again from the start after a conflict, it leaves its callbacks again: this attempt's go,
+        // before the rollback runs them. Not on the last attempt, which nothing runs again.
+        $discards = $outermost && $this->retrying->active && !$this->retrying->final;
 
         if ($outermost) {
             $hooks->defer(true);
@@ -102,10 +104,17 @@ final readonly class DbalTransactions implements Transactions
             // The outermost rollback drops every callback; a failed nested one only its own.
             $hooks->truncate($waiting);
 
-            // A commit that failed ended the transaction without a rollback reaching the driver's hooks:
-            // what waits for the end runs now, or, run again from the start, goes with the attempt.
+            // A lost connection gets no rollback, but the server ended the transaction: DBAL's state is
+            // unknown, so it forgets it and reconnects on its next use, for the callbacks too.
+            if ($outermost && $exception instanceof ConnectionLost) {
+                $this->connection->close();
+            }
+
+            // A commit that failed, or a lost connection, ended the transaction without a rollback
+            // reaching the driver's hooks: what waits for the end runs now, or, if a conflict runs the
+            // work again from the start, goes with the attempt.
             if ($outermost && 0 === $this->connection->getTransactionNestingLevel()) {
-                $discards ? $hooks->discard() : $hooks->rolledBack();
+                $discards && ($exception instanceof DeadlockException || $exception instanceof RetryableConflict) ? $hooks->discard() : $hooks->rolledBack();
             }
 
             throw $exception instanceof DeadlockException ? new RetryableConflict($exception) : $exception;
@@ -135,10 +144,12 @@ final readonly class DbalTransactions implements Transactions
 
         try {
             for ($attempt = 1;; ++$attempt) {
+                $this->retrying->final = $attempt >= self::ATTEMPTS;
+
                 try {
                     return $work();
                 } catch (RetryableConflict $conflict) {
-                    if ($attempt >= self::ATTEMPTS) {
+                    if ($this->retrying->final) {
                         throw new RetryableConflict($conflict->getPrevious() ?? $conflict, $attempt);
                     }
 
@@ -151,6 +162,7 @@ final readonly class DbalTransactions implements Transactions
             }
         } finally {
             $this->retrying->active = false;
+            $this->retrying->final = false;
         }
     }
 

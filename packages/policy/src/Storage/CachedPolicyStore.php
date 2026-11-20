@@ -7,6 +7,7 @@ namespace YorvoID\Policy\Storage;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\ForgetsWhatItRead;
 use YorvoID\Core\Storage\VersionedCache;
 use YorvoID\Policy\AbilityChanges;
 use YorvoID\Policy\GroupRoleAssignment;
@@ -21,7 +22,7 @@ use YorvoID\Policy\RoleAssignment;
  *
  * @api
  */
-final class CachedPolicyStore implements PolicyStore
+final class CachedPolicyStore implements PolicyStore, ForgetsWhatItRead
 {
     /** @var array<string, int> By realm */
     private array $versions = [];

@@ -10,6 +10,7 @@ use Doctrine\DBAL\Driver;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception\ConnectionLost;
 use Doctrine\DBAL\Exception\DeadlockException;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
@@ -269,17 +270,18 @@ final class RetriesTest extends TestCase
     }
 
     /**
-     * A lost connection gets no rollback: DBAL still counts the transaction, so what waits for its end
-     * waits on, rather than running as if it had ended.
+     * A lost connection gets no rollback, but the server ended the transaction: DBAL forgets it, what
+     * waits for the end runs then, once, and doesn't wait for the next transaction's.
      */
-    public function testALostConnectionDoesNotEndTheTransaction(): void
+    public function testALostConnectionEndsTheTransaction(): void
     {
-        $ended = false;
+        /** @var \ArrayObject<int, string> $ran */
+        $ran = new \ArrayObject();
 
         try {
-            $this->transactions->run(function () use (&$ended): never {
-                $this->transactions->afterEnd(static function () use (&$ended): void {
-                    $ended = true;
+            $this->transactions->run(function () use ($ran): never {
+                $this->transactions->afterEnd(static function () use ($ran): void {
+                    $ran[] = 'ended';
                 });
 
                 throw new ConnectionLost(self::driverError('server closed the connection', '08006'), null);
@@ -287,7 +289,90 @@ final class RetriesTest extends TestCase
         } catch (ConnectionLost) {
         }
 
-        self::assertFalse($ended);
+        self::assertSame(0, $this->connection->getTransactionNestingLevel());
+        self::assertSame(['ended'], $ran->getArrayCopy());
+        $this->transactions->run(static fn (): null => null);
+        self::assertSame(['ended'], $ran->getArrayCopy(), 'Once.');
+    }
+
+    /**
+     * A commit that fails for another reason than a conflict isn't run again: what waits for the end
+     * runs, once, also inside retrying().
+     */
+    public function testAFailedCommitInsideRetryingRunsWhatWaitsForTheEnd(): void
+    {
+        $middleware = new TransactionMiddleware();
+        $configuration = new Configuration();
+        $configuration->setMiddlewares([$middleware]);
+        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true, 'wrapperClass' => ViolatingCommit::class], $configuration);
+        $transactions = $this->transactions($connection, $middleware, static fn (int $min, int $max): int => $min);
+        /** @var \ArrayObject<int, string> $ran */
+        $ran = new \ArrayObject();
+
+        $thrown = null;
+
+        try {
+            $transactions->retrying(static function () use ($transactions, $ran): void {
+                $transactions->run(static function () use ($transactions, $ran): void {
+                    $transactions->afterEnd(static function () use ($ran): void {
+                        $ran[] = 'ended';
+                    });
+                });
+            });
+        } catch (\Exception $failed) {
+            $thrown = $failed;
+        }
+
+        self::assertInstanceOf(UniqueConstraintViolationException::class, $thrown);
+        self::assertSame(['ended'], $ran->getArrayCopy());
+        $transactions->run(static fn (): null => null);
+        self::assertSame(['ended'], $ran->getArrayCopy(), 'Once.');
+    }
+
+    /**
+     * Nothing runs the last attempt again: what it left waiting for the end runs, once, and the earlier
+     * attempts' never.
+     */
+    public function testTheLastAttemptKeepsWhatWaitsForTheEnd(): void
+    {
+        $middleware = new TransactionMiddleware();
+        $configuration = new Configuration();
+        $configuration->setMiddlewares([$middleware]);
+        $atCommit = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true, 'wrapperClass' => AlwaysConflictingCommit::class], $configuration);
+        $cases = [
+            'in the work' => [$this->transactions, static fn (): never => throw self::deadlock()],
+            'at the commit' => [$this->transactions($atCommit, $middleware, static fn (int $min, int $max): int => $min), static fn (): null => null],
+            'in memory' => [new InMemoryTransactions(), static fn (): never => throw new RetryableConflict(self::deadlock())],
+        ];
+
+        foreach ($cases as $case => [$transactions, $then]) {
+            /** @var \ArrayObject<int, int> $attempts */
+            $attempts = new \ArrayObject();
+            /** @var \ArrayObject<int, int> $ended */
+            $ended = new \ArrayObject();
+
+            try {
+                $transactions->retrying(static fn (): mixed => $transactions->run(static function () use ($transactions, $then, $ended, $attempts): mixed {
+                    $attempts[] = $attempt = \count($attempts) + 1;
+                    $transactions->afterEnd(static function () use ($ended, $attempt): void {
+                        $ended[] = $attempt;
+                    });
+
+                    return $then();
+                }));
+                self::fail('No conflict: '.$case);
+            } catch (RetryableConflict) {
+            }
+
+            self::assertSame([3, [3]], [\count($attempts), $ended->getArrayCopy()], $case);
+
+            try {
+                $transactions->run(static fn (): null => null);
+            } catch (RetryableConflict) { // Its every commit conflicts.
+            }
+
+            self::assertSame([3], $ended->getArrayCopy(), $case.': once.');
+        }
     }
 
     /**
@@ -412,7 +497,7 @@ final class RetriesTest extends TestCase
         return new DeadlockException(self::driverError('deadlock detected', '40P01'), null);
     }
 
-    private static function driverError(string $message, string $state): Driver\Exception
+    public static function driverError(string $message, string $state): Driver\Exception
     {
         return new class($message, $state) extends \Exception implements Driver\Exception {
             public function __construct(string $message, private readonly string $state)
@@ -439,17 +524,64 @@ final class ConflictingCommit extends Connection
     {
         if (!$this->conflicted && 1 === $this->getTransactionNestingLevel()) {
             $this->conflicted = true;
-            // The database ended the transaction: no rollback reaches the driver's hooks, and DBAL counts
-            // no transaction once commit() has returned or thrown.
-            $native = $this->getNativeConnection();
-            \assert($native instanceof \PDO);
-            $native->rollBack();
-            new \ReflectionProperty(Connection::class, 'transactionNestingLevel')->setValue($this, 0);
+            Ended::byTheDatabase($this);
 
             throw RetriesTest::deadlock();
         }
 
         parent::commit();
+    }
+}
+
+/**
+ * Every commit fails as a serialization failure at the commit does.
+ */
+final class AlwaysConflictingCommit extends Connection
+{
+    public function commit(): void
+    {
+        if (1 === $this->getTransactionNestingLevel()) {
+            Ended::byTheDatabase($this);
+
+            throw RetriesTest::deadlock();
+        }
+
+        parent::commit();
+    }
+}
+
+/**
+ * Its first commit fails as a deferred constraint does: not a conflict, nothing to run again.
+ */
+final class ViolatingCommit extends Connection
+{
+    private bool $violated = false;
+
+    public function commit(): void
+    {
+        if (!$this->violated && 1 === $this->getTransactionNestingLevel()) {
+            $this->violated = true;
+            Ended::byTheDatabase($this);
+
+            throw new UniqueConstraintViolationException(RetriesTest::driverError('duplicate key value', '23505'), null);
+        }
+
+        parent::commit();
+    }
+}
+
+/**
+ * What a commit that failed in the database leaves: no rollback reaches the driver's hooks, and DBAL
+ * counts no transaction once commit() has thrown.
+ */
+final class Ended
+{
+    public static function byTheDatabase(Connection $connection): void
+    {
+        $native = $connection->getNativeConnection();
+        \assert($native instanceof \PDO);
+        $native->rollBack();
+        new \ReflectionProperty(Connection::class, 'transactionNestingLevel')->setValue($connection, 0);
     }
 }
 

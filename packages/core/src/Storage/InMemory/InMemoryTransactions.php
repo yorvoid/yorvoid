@@ -42,6 +42,9 @@ final class InMemoryTransactions implements Transactions
 
     private bool $retrying = false;
 
+    /** On retrying()'s last attempt, which nothing runs again */
+    private bool $final = false;
+
     /**
      * @param EventDispatcherInterface    $events Where an afterEnd() callback's failure is announced (AuditFailed)
      * @param LoggerInterface             $logger Where it's logged, at critical, and an afterCommit() callback's at error
@@ -85,8 +88,8 @@ final class InMemoryTransactions implements Transactions
 
             $this->afterCommit = \array_slice($this->afterCommit, 0, $waiting);
 
-            // Run again from the start, it leaves its callbacks again: this attempt's go.
-            if ($outermost && $this->retrying && $exception instanceof RetryableConflict) {
+            // Run again from the start, it leaves its callbacks again: this attempt's go. Not the last's.
+            if ($outermost && $this->retrying && !$this->final && $exception instanceof RetryableConflict) {
                 $this->afterEnd = [];
             }
 
@@ -122,10 +125,12 @@ final class InMemoryTransactions implements Transactions
 
         try {
             for ($attempt = 1;; ++$attempt) {
+                $this->final = $attempt >= DbalTransactions::ATTEMPTS;
+
                 try {
                     return $work();
                 } catch (RetryableConflict $conflict) {
-                    if ($attempt >= DbalTransactions::ATTEMPTS) {
+                    if ($this->final) {
                         throw new RetryableConflict($conflict->getPrevious() ?? $conflict, $attempt);
                     }
 
@@ -136,6 +141,7 @@ final class InMemoryTransactions implements Transactions
             }
         } finally {
             $this->retrying = false;
+            $this->final = false;
         }
     }
 

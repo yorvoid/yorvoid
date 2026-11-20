@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Acme\Storage;
 
+use YorvoID\Core\Storage\RetryableConflict;
 use YorvoID\Core\Storage\Transactions;
 
 /**
@@ -19,6 +20,11 @@ final class PdoTransactions implements Transactions
 
     /** @var list<\Closure(): void> For the end, committed or rolled back */
     private array $ended = [];
+
+    private bool $retrying = false;
+
+    /** Under retrying(), on an attempt a conflict runs again */
+    private bool $again = false;
 
     public function __construct(
         private readonly \PDO $pdo,
@@ -36,6 +42,12 @@ final class PdoTransactions implements Transactions
             $this->rollBack();
             // The outermost rollback drops every callback; a failed nested unit only its own.
             $this->callbacks = \array_slice($this->callbacks, 0, $waiting);
+
+            // Run again from the start, the work leaves its callbacks for the end again: this attempt's go.
+            if (0 === $this->depth && $this->again && $exception instanceof RetryableConflict) {
+                $this->ended = [];
+            }
+
             $this->ended();
 
             throw $exception;
@@ -59,11 +71,34 @@ final class PdoTransactions implements Transactions
     }
 
     /**
-     * An SQLite file serializes its writers, so its transactions don't deadlock: the work runs once.
+     * An SQLite file serializes its writers, so its own transactions don't deadlock, but work that throws
+     * a RetryableConflict runs again from the start: up to 3 attempts, and never inside an open
+     * transaction, whose work isn't this unit's own. A database that conflicts would wrap its error in a
+     * RetryableConflict in run(), and wait a little between attempts.
      */
     public function retrying(\Closure $work): mixed
     {
-        return $work();
+        if (0 !== $this->depth || $this->retrying) {
+            return $work();
+        }
+
+        $this->retrying = true;
+
+        try {
+            for ($attempt = 1;; ++$attempt) {
+                $this->again = $attempt < 3;
+
+                try {
+                    return $work();
+                } catch (RetryableConflict $conflict) {
+                    if (!$this->again) {
+                        throw $conflict;
+                    }
+                }
+            }
+        } finally {
+            $this->retrying = $this->again = false;
+        }
     }
 
     public function afterEnd(\Closure $callback): void

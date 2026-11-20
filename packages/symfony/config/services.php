@@ -217,8 +217,9 @@ return static function (ContainerConfigurator $container): void {
     $services->set(StorageLocation::class)->args([param('yorvoid.storage.prefix'), param('yorvoid.storage.schema')]);
     $services->set(Database::class)->args([service('yorvoid.connection'), service(StorageLocation::class)]);
     // The middleware's instance on that connection, set by YorvoIDBundle.
-    // Before work that conflicted runs again, what the request read is forgotten, so it's decided on what's committed (D-52).
-    $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null, service('event_dispatcher'), service('logger')->nullOnInvalid(), [service(VersionedCache::class)]]);
+    // Before work that conflicted runs again, what the request read is forgotten, so it's decided on what's committed (D-52):
+    // the versions and the cache of every policy read.
+    $services->set(DbalTransactions::class)->args([service('yorvoid.connection'), null, service('event_dispatcher'), service('logger')->nullOnInvalid(), [service(VersionedCache::class), service(Stores::IDS[PolicyStore::class].'.cached'), service(Stores::IDS[RelationStore::class].'.cached')]]);
     $services->alias(Transactions::class, DbalTransactions::class)->public();
     $services->set(IdentifierRenormalization::class);
 
