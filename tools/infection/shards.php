@@ -12,38 +12,38 @@ declare(strict_types=1);
  * Every file Infection mutates (infection.json5's sources, as Infection collects them) is mutated by
  * exactly one part's paths, or this fails: a new package or directory, or a change to the sources,
  * isn't left out of the run without anyone noticing. CI runs it before each part. The parts are
- * balanced by lines of code; the core is split in two, as the largest package.
+ * balanced by how long CI took to mutate them.
  */
 
 $root = dirname(__DIR__, 2);
-$entries = static fn (string $directory): array => false === ($list = scandir($directory)) ? [] : $list;
 
-// The core's two largest directories make a part; the rest of the core is the next.
-$coreRest = [];
+// A directory's entries that Infection could mutate (directories and PHP files), except those named,
+// as paths: so a new directory or file lands in the part that takes the rest of its directory.
+$rest = static function (string $directory, array $except) use ($root): array {
+    $paths = [];
 
-foreach ($entries($root.'/packages/core') as $entry) {
-    if ('.' === $entry[0] || 'src' === $entry || !(is_dir($root.'/packages/core/'.$entry) || str_ends_with($entry, '.php'))) {
-        continue;
+    foreach (false === ($list = scandir($root.'/'.$directory)) ? [] : $list as $entry) {
+        $isDirectory = is_dir($root.'/'.$directory.'/'.$entry);
+
+        if ('.' === $entry[0] || in_array($entry, $except, true) || !($isDirectory || str_ends_with($entry, '.php'))) {
+            continue;
+        }
+
+        $paths[] = $directory.'/'.$entry.($isDirectory ? '/' : '');
     }
 
-    $coreRest[] = 'packages/core/'.$entry.(is_dir($root.'/packages/core/'.$entry) ? '/' : '');
-}
+    return $paths;
+};
 
-foreach ($entries($root.'/packages/core/src') as $entry) {
-    if ('.' === $entry[0] || 'Authorization' === $entry || 'Storage' === $entry || !(is_dir($root.'/packages/core/src/'.$entry) || str_ends_with($entry, '.php'))) {
-        continue;
-    }
-
-    $coreRest[] = 'packages/core/src/'.$entry.(is_dir($root.'/packages/core/src/'.$entry) ? '/' : '');
-}
-
+// The core and the Symfony bundle, the packages slowest to mutate, are each split in two.
 $parts = [
     1 => ['packages/core/src/Authorization/', 'packages/core/src/Storage/'],
-    2 => $coreRest,
+    2 => array_merge($rest('packages/core', ['src']), $rest('packages/core/src', ['Authorization', 'Storage'])),
     3 => ['packages/authn/', 'packages/throttle/', 'packages/mail/'],
-    4 => ['packages/symfony/', 'packages/translation/', 'packages/virtual-authenticator/', 'packages/intent-signing/'],
-    5 => ['packages/policy/', 'packages/policy-testing/', 'packages/relations/', 'packages/phpstan-rules/'],
-    6 => ['packages/passkeys/', 'packages/intent-verifier/', 'packages/flows/', 'packages/notifications/', 'packages/testing/'],
+    4 => ['packages/symfony/src/Command/', 'packages/symfony/src/Controller/', 'packages/symfony/src/Templates/', 'packages/symfony/src/Factories.php'],
+    5 => array_merge($rest('packages/symfony', ['src']), $rest('packages/symfony/src', ['Command', 'Controller', 'Templates', 'Factories.php'])),
+    6 => ['packages/policy/', 'packages/policy-testing/', 'packages/relations/', 'packages/phpstan-rules/'],
+    7 => ['packages/passkeys/', 'packages/intent-verifier/', 'packages/flows/', 'packages/notifications/', 'packages/testing/', 'packages/translation/', 'packages/virtual-authenticator/', 'packages/intent-signing/'],
 ];
 
 // What Infection mutates, as Infection's own command lists it, from infection.json5's sources and with

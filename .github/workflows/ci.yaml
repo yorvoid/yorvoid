@@ -280,7 +280,7 @@ jobs:
         run: docker compose logs
 
   mutation:
-    name: Mutation testing${{ matrix.part != 0 && format(' ({0} of 6)', matrix.part) || '' }}
+    name: Mutation testing${{ matrix.part != 0 && format(' ({0} of 7)', matrix.part) || '' }}
     # It mutates against the tests job's coverage of this commit, rather than running the suite again.
     needs: tests
     runs-on: ubuntu-latest
@@ -290,7 +290,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: ${{ fromJSON(github.event_name == 'pull_request' && '[0]' || '[1, 2, 3, 4, 5, 6]') }}
+        part: ${{ fromJSON(github.event_name == 'pull_request' && '[0]' || '[1, 2, 3, 4, 5, 6, 7]') }}
     timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 90 }}
     steps:
       - name: Checkout code
