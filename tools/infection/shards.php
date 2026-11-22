@@ -4,19 +4,16 @@ declare(strict_types=1);
 
 /*
  * Splits the full mutation run into parts that run side by side, each within CI's time limit, and
- * prints the part asked for as Infection's --filter: path fragments, comma-separated.
+ * prints the part asked for as the paths to give Infection, one per line.
  *
- *   php tools/infection/shards.php 3    prints the third part's filter
+ *   php tools/infection/shards.php 3    prints the third part's paths
  *   php tools/infection/shards.php      lists every part and how many files each has
  *
  * Every file Infection mutates (infection.json5's sources, as Infection collects them) is mutated by
- * exactly one part's filter, or this fails: a new package or directory, or a change to the sources,
+ * exactly one part's paths, or this fails: a new package or directory, or a change to the sources,
  * isn't left out of the run without anyone noticing. CI runs it before each part. The parts are
  * balanced by lines of code; the core is split in two, as the largest package.
  */
-
-use Infection\Configuration\SourceFilter\PlainFilter;
-use Infection\Source\Collector\BasicSourceCollector;
 
 $root = dirname(__DIR__, 2);
 $entries = static fn (string $directory): array => false === ($list = scandir($directory)) ? [] : $list;
@@ -49,23 +46,37 @@ $parts = [
     6 => ['packages/passkeys/', 'packages/intent-verifier/', 'packages/flows/', 'packages/notifications/', 'packages/testing/'],
 ];
 
-// What Infection mutates, as Infection collects it from infection.json5's sources, and what it mutates
-// with each part's filter: never a copy of those sources here, which could drift from the file.
-require $root.'/vendor/autoload.php';
+// What Infection mutates, as Infection's own command lists it, from infection.json5's sources and with
+// each part's paths: never a copy of those sources here, nor of Infection's code, which could drift.
+$collect = static function (array $paths) use ($root): array {
+    $command = escapeshellarg(\PHP_BINARY).' '.escapeshellarg($root.'/vendor/bin/infection').' config:list-sources --no-ansi --configuration='.escapeshellarg($root.'/infection.json5');
 
-$config = json5_decode((string) file_get_contents($root.'/infection.json5'), true);
-$source = is_array($config) && is_array($config['source'] ?? null) ? $config['source'] : [];
-/** @var list<non-empty-string> $directories */
-$directories = $source['directories'] ?? [];
-/** @var list<non-empty-string> $excludes */
-$excludes = $source['excludes'] ?? [];
-$collect = static fn (?PlainFilter $filter): array => array_map(
-    static fn (SplFileInfo $file): string => substr((string) $file->getRealPath(), strlen((string) realpath($root)) + 1),
-    BasicSourceCollector::create($root.'/infection.json5', $directories, $excludes, $filter)->collect(),
-);
+    foreach ($paths as $path) {
+        $command .= ' '.escapeshellarg(is_string($path) ? $path : '');
+    }
 
-$files = $collect(null);
-$inPart = array_map(static fn (array $fragments): array => $collect(PlainFilter::tryToCreate(implode(',', $fragments))), $parts);
+    $lines = [];
+    exec($command.' 2>/dev/null', $lines, $status);
+
+    if (0 !== $status) {
+        fwrite(\STDERR, "Infection couldn't list the sources (vendor/bin/infection config:list-sources).\n");
+
+        exit(1);
+    }
+
+    $files = [];
+
+    foreach ($lines as $line) {
+        if (str_ends_with($line = trim($line), '.php')) {
+            $files[] = $line;
+        }
+    }
+
+    return $files;
+};
+
+$files = $collect([]);
+$inPart = array_map($collect, $parts);
 $counts = array_map(count(...), $inPart);
 $wrong = [];
 
@@ -91,7 +102,7 @@ $asked = $argv[1] ?? null;
 
 if (null === $asked) {
     foreach ($parts as $part => $fragments) {
-        printf("%d: %d files, %s\n", $part, $counts[$part], implode(',', $fragments));
+        printf("%d: %d files, %s\n", $part, $counts[$part], implode(' ', $fragments));
     }
 
     exit(0);
@@ -103,4 +114,4 @@ if (!isset($parts[(int) $asked]) || (string) (int) $asked !== $asked) {
     exit(1);
 }
 
-echo implode(',', $parts[(int) $asked]), "\n";
+echo implode("\n", $parts[(int) $asked]), "\n";

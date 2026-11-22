@@ -337,8 +337,10 @@ jobs:
         env:
           PART: ${{ matrix.part }}
         run: |
-          filter=$(docker compose exec -T php php tools/infection/shards.php "$PART")
-          docker compose exec -T -e YORVOID_COVERAGE=reuse php composer infection -- --filter="$filter"
+          paths=$(docker compose exec -T php php tools/infection/shards.php "$PART")
+          # One argument per path: the paths have no spaces.
+          # shellcheck disable=SC2086
+          docker compose exec -T -e YORVOID_COVERAGE=reuse php composer infection -- $paths
       - name: Show logs on failure
         if: failure()
         run: docker compose logs
