@@ -69,6 +69,26 @@ done
 # The executions M3-2's PHP tests will replay: "node traces.mjs delegation/chains.qnt checked 100 14 0xc4a1d5 > delegation/traces.itf.json".
 TRACES_CHAINS='node traces.mjs delegation/chains.qnt checked 100 14 0xc4a1d5'
 holds "delegation chains: the executions to replay are the model's" sh -c "$TRACES_CHAINS | cmp -s - delegation/traces.itf.json"
+
+# The guard (M3-1), in Quint: I5 (no guarded effect commits on revoked authority) and P4 (a single-use
+# permit consumed once, by its effect), under READ COMMITTED and REPEATABLE READ. Broken: reading before
+# the lock; a lock that doesn't write, under REPEATABLE READ (safe under READ COMMITTED, as checked);
+# consuming without a compare-and-swap. The witnesses show an effect, a revocation and a conflict.
+holds "guard: typecheck (Quint)" quint typecheck guard/guard.qnt
+for main in guardRc guardRr readLockRc; do
+	holds "guard: $main is safe (Quint, Apalache)" quint verify --main=$main --invariant=SAFETY --max-steps=10 guard/guard.qnt
+	holds "guard: $main is safe (Quint, simulation)" quint run --main=$main --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 guard/guard.qnt
+done
+violated "guard: reading before the lock commits on revoked authority (Quint, Apalache)" "\[violation\]" quint verify --main=checkThenLockRc --invariant=I5 --max-steps=10 guard/guard.qnt
+violated "guard: a lock that doesn't write, under REPEATABLE READ, commits on revoked authority (Quint, Apalache)" "\[violation\]" quint verify --main=readLockRr --invariant=I5 --max-steps=10 guard/guard.qnt
+violated "guard: consuming without a compare-and-swap uses the permit twice (Quint, Apalache)" "\[violation\]" quint verify --main=noCasRc --invariant=P4 --max-steps=10 guard/guard.qnt
+for witness in NO_EFFECT NO_REVOCATION NO_CONFLICT; do
+	violated "guard: $witness is reached (Quint, simulation)" "\[violation\]" quint run --main=guardRr --invariant=$witness --max-samples=20000 --max-steps=20 --seed=42 guard/guard.qnt
+done
+# The executions M3-3's PHP tests will replay, under both isolation levels:
+# "node traces.mjs guard/guard.qnt guardRc 100 14 0x9a4d0 > guard/traces-rc.itf.json" (and guardRr, traces-rr).
+holds "guard: the executions to replay are the model's (READ COMMITTED)" sh -c "node traces.mjs guard/guard.qnt guardRc 100 14 0x9a4d0 | cmp -s - guard/traces-rc.itf.json"
+holds "guard: the executions to replay are the model's (REPEATABLE READ)" sh -c "node traces.mjs guard/guard.qnt guardRr 100 14 0x9a4d0 | cmp -s - guard/traces-rr.itf.json"
 # The requests that tests/Core/Authorization/PrecedenceFixturesTest.php decides with the PHP evaluator
 # must be the model's: regenerate them with "node decisions/fixtures.mjs > decisions/fixtures.json".
 holds "decisions: the fixtures the PHP tests decide are the model's (default configuration)" sh -c 'node decisions/fixtures.mjs | cmp -s - decisions/fixtures.json'
