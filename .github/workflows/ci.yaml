@@ -280,7 +280,7 @@ jobs:
         run: docker compose logs
 
   mutation:
-    name: Mutation testing${{ matrix.part != 0 && format(' ({0} of 6)', matrix.part) || '' }}
+    name: Mutation testing${{ matrix.part != 0 && format(' ({0} of 7)', matrix.part) || '' }}
     # It mutates against the tests job's coverage of this commit, rather than running the suite again.
     needs: tests
     runs-on: ubuntu-latest
@@ -290,7 +290,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: ${{ fromJSON(github.event_name == 'pull_request' && '[0]' || '[1, 2, 3, 4, 5, 6]') }}
+        part: ${{ fromJSON(github.event_name == 'pull_request' && '[0]' || '[1, 2, 3, 4, 5, 6, 7]') }}
     timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 90 }}
     steps:
       - name: Checkout code
@@ -336,8 +336,9 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           PART: ${{ matrix.part }}
+          PARTS: ${{ strategy.job-total }}
         run: |
-          paths=$(docker compose exec -T php php tools/infection/shards.php "$PART")
+          paths=$(docker compose exec -T php php tools/infection/shards.php "$PART" "$PARTS")
           # One argument per path: the paths have no spaces.
           # shellcheck disable=SC2086
           docker compose exec -T -e YORVOID_COVERAGE=reuse php composer infection -- $paths
