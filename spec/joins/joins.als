@@ -19,7 +19,9 @@
  * Each scenario below is a world in which exactly that row's fault is present: a run shows it exists,
  * a check that it has the row's outcome. The properties hold in both configurations (XP-16): the
  * default, and the extended one, where XP-04's root-anchor resolver is a nondeterministic step that
- * may only say Deny or Indeterminate. The broken variant accepts one input's evidence for another's.
+ * may only say Deny or Indeterminate. Broken variants, each a counterexample: one input's evidence
+ * accepted for another's; the input grants counted as synthesis authority; the join's added
+ * restrictions ignored.
  *
  * Not here: R19 and J20, an effect committed after a revocation, are the guard's (guard/guard.qnt).
  *
@@ -129,35 +131,37 @@ one sig TwoIssuances, NoIssuance, OtherIssuance, IssuanceNotCanonical, IssuanceI
     InputIndeterminate, DecisionForAnotherRequest, EvidenceOfAnotherInput, NoProvenance,
     ProvenanceMismatch, ProvenanceBroken extends Unknown {}
 
-fun faults[r: Request]: set Fault {
+-- The faults of a join, with s the delegations taken as its synthesis authority and rs the restrictions
+-- it carries: YorvoID's are faults[r] below.
+fun faultsWith[r: Request, s: set Delegation, rs: set RestrictionRef]: set Fault {
     { f: Fault |
-        (f = ForbidsThePurpose and some restrictionsOf[r].resolves & forbids.(r.purpose)) or
-        (f = RestrictionUnresolved and some x: restrictionsOf[r] | no x.resolves) or
+        (f = ForbidsThePurpose and some rs.resolves & forbids.(r.purpose)) or
+        (f = RestrictionUnresolved and some x: rs | no x.resolves) or
         -- Known invalid authority.
-        (f = NoSynthesisDelegation and no syn[r]) or
-        (f = UntrustedIssuer and some syn[r].issuer - Registry.trusted) or
-        (f = NotTheActor and some syn[r].delegate - r.actor) or
-        (f = OtherPurpose and some d: syn[r] | r.purpose not in d.purposes) or
-        (f = Expired and some d: syn[r] | T/lte[d.expires, r.now]) or            -- now < expiry (J14)
-        (f = Revoked and some syn[r].revoked) or
-        (f = OtherInputs and some d: syn[r] |
+        (f = NoSynthesisDelegation and no s) or
+        (f = UntrustedIssuer and some s.issuer - Registry.trusted) or
+        (f = NotTheActor and some s.delegate - r.actor) or
+        (f = OtherPurpose and some d: s | r.purpose not in d.purposes) or
+        (f = Expired and some d: s | T/lte[d.expires, r.now]) or            -- now < expiry (J14)
+        (f = Revoked and some s.revoked) or
+        (f = OtherInputs and some d: s |
             (r.order = InOrder and r.inputs.artifact != d.commits) or
             (r.order = AnyOrder and ins[r].artifact != d.commits.elems)) or
-        (f = IssuanceDenied and Deny in syn[r].issuance.result) or
+        (f = IssuanceDenied and Deny in s.issuance.result) or
         (f = InputDenied and Deny in ev[r].decision.result) or
         (f = SourcePurposeExcluded and SourcePurposesConstrain in Deployment.settings and
             some g: sources[r] | r.purpose not in g.purposes) or
         (f = SourceInactive and ActiveAtEachStage in Deployment.settings and
             some g: sources[r] | some g.revoked or T/lte[g.expires, r.now]) or
         -- Missing, dangling, inconsistent or ambiguous records.
-        (f = TwoIssuances and some d: syn[r] | not lone d.(r.refs)) or
-        (f = NoIssuance and some d: syn[r] | no d.issuance) or
-        (f = OtherIssuance and some d: syn[r] | some d.issuance and d.(r.refs) != d.issuance) or
-        (f = IssuanceNotCanonical and some d: syn[r] | some d.issuance and d.issuance.fingerprint != d.canonical) or
-        (f = IssuanceIndeterminate and Indeterminate in syn[r].issuance.result) or
-        (f = VersionsDisagree and some d: syn[r] | some d.issuance and d.issuance.version != d.version) or
-        (f = ExpiriesDisagree and some d: syn[r] | d.expires != d.issuedExpires) or
-        (f = OtherDigest and some d: syn[r], i: ins[r] |
+        (f = TwoIssuances and some d: s | not lone d.(r.refs)) or
+        (f = NoIssuance and some d: s | no d.issuance) or
+        (f = OtherIssuance and some d: s | some d.issuance and d.(r.refs) != d.issuance) or
+        (f = IssuanceNotCanonical and some d: s | some d.issuance and d.issuance.fingerprint != d.canonical) or
+        (f = IssuanceIndeterminate and Indeterminate in s.issuance.result) or
+        (f = VersionsDisagree and some d: s | some d.issuance and d.issuance.version != d.version) or
+        (f = ExpiriesDisagree and some d: s | d.expires != d.issuedExpires) or
+        (f = OtherDigest and some d: s, i: ins[r] |
             i.artifact in d.commits.elems and d.commitDigest[i.artifact] != i.digest) or
         (f = UnregisteredDigest and some i: ins[r] | i.digest != i.artifact.registered) or
         (f = NoEvidence and some i: ins[r] | no i.evidence) or
@@ -173,6 +177,8 @@ fun faults[r: Request]: set Fault {
             some i.node and (i.node in i.node.^up or some i.node.^up - Registry.nodes))
     }
 }
+
+fun faults[r: Request]: set Fault { faultsWith[r, syn[r], restrictionsOf[r]] }
 
 -- 06 §3's precedence over the faults; the extended configuration's resolver can add an invalid or an
 -- unknown authority, nothing else.
@@ -456,7 +462,7 @@ run TheResolverDenies { some r: Request | faults[r] = none and outcome[r, Extend
 run TheResolverDoesntKnow { some r: Request | faults[r] = none and outcome[r, Extended] = Indeterminate } for 3 but 3 seq expect 1
 
 /*
- * The broken variant, which must fail (spec/check.sh "violated"): the evidence an input carries is
+ * The broken variants, each of which must fail ("expect 1"). First, the evidence an input carries is
  * accepted without checking it's bound to that input, so one input's stands in for another's.
  */
 fun outcomeUnbound[r: Request]: one Outcome { decide[r, Default, faults[r] - EvidenceOfAnotherInput] }
@@ -465,3 +471,25 @@ assert BrokenUnboundEvidence {
         all i: ins[r] | i.evidence.boundArtifact = i.artifact and i.evidence.boundDigest = i.digest
 }
 check BrokenUnboundEvidence for 3 but 3 seq expect 1
+
+-- The input grants counted as synthesis authority too: a join is permitted with no delegation that
+-- covers synthesis (06 §8.3).
+fun outcomeSourcesAsAuthority[r: Request]: one Outcome {
+    decide[r, Default, faultsWith[r, syn[r] + sources[r], restrictionsOf[r]] - NoSynthesisDelegation]
+}
+assert BrokenSourcesAsAuthority {
+    all r: Request | outcomeSourcesAsAuthority[r] = Permit implies
+        some d: r.refs.Decision | Synthesize in d.covers and d.issuance.result = Permit
+}
+check BrokenSourcesAsAuthority for 3 but 3 seq expect 1
+
+-- The restrictions added to the join ignored, only the inputs' counted: adding one that forbids the
+-- purpose turns a Deny into a Permit (P3, J11).
+fun outcomeAddedIgnored[r: Request]: one Outcome { decide[r, Default, faultsWith[r, syn[r], ins[r].restrictions]] }
+assert BrokenAddedIgnored {
+    all r1, r2: Request |
+        (sameBut[r1, r2] and r1.inputs.(artifact + digest + node + evidence) = r2.inputs.(artifact + digest + node + evidence)
+            and restrictionsOf[r1] in restrictionsOf[r2] and outcomeAddedIgnored[r1] != Permit)
+            implies outcomeAddedIgnored[r2] != Permit
+}
+check BrokenAddedIgnored for 3 but 3 seq expect 1

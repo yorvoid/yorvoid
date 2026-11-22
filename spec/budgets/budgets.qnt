@@ -6,12 +6,21 @@
 // its parent's reservation for the leaf. A delegation that's revoked or expires stops every delegation
 // under it, and gives back to its delegator what it didn't consume.
 //
+// What the model's atomic steps require of the implementation (M3-3): each delegation's row holds its
+// spend as one counter, what it reserved for the delegations issued under it plus its own uses. Issuing
+// is one conditional UPDATE of the delegator's row (spend + limit <= its limit), a use one of the leaf's
+// row (spend < limit), and the return at the end one of the delegator's row (spend - unconsumed), each
+// with its row count checked. A spend computed as a SUM over the children's rows isn't that: two issues
+// under one delegator, at the same moment, would each see room and both commit (write skew).
+//
 // Invariants:
 // - NO_OVERSPEND: no delegation's uses, its own and those under it, exceed its limit, and no spend does;
 // - NO_FALSE_REFUSAL: a use is refused only when its leaf's budget has no room (or the leaf ended);
 // - RETURNED: once a delegation has ended, its delegator holds for it exactly what it consumed.
 //
-// MODE "reserve" is YorvoID's. Broken, each must fail:
+// MODE "reserve" is YorvoID's. In it NO_FALSE_REFUSAL and RETURNED hold by construction (a use is
+// refused only by the room check, an end sets what's held to what was consumed); their broken modes
+// show the checks aren't vacuous. Broken, each must fail:
 // - "checkThenCharge": the room is read, then the use is charged without checking again: two concurrent
 //   uses of the last unit both commit (NO_OVERSPEND);
 // - "noReservation": a delegation is issued without reserving its limit from its delegator, whose own

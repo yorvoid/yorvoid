@@ -49,7 +49,8 @@ holds "decisions/precedence.als (Alloy)" alloy decisions/precedence.als
 holds "delegation/attenuation.als (Alloy)" alloy delegation/attenuation.als
 # Joins (M3-1): each of R01-R24 and J01-J20 (but R19 and J20, the guard's) exists and has its outcome;
 # no cross-branch substitution, the input grants never authority, P1-P3, in both configurations
-# (XP-16); evidence accepted unbound is the expected counterexample ("expect 1").
+# (XP-16); evidence accepted unbound, input grants taken as synthesis authority and the join's added
+# restrictions ignored are the expected counterexamples ("expect 1").
 holds "joins/joins.als (Alloy)" alloy joins/joins.als
 
 # Delegation chains over time (M3-1), in Quint: no use is accepted while a link is revoked or expired or

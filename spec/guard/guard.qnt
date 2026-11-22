@@ -20,6 +20,11 @@
 // - "revokeNoLock": the revoker commits without taking the lock, under either isolation level.
 // And each must break P4: "noCas", the permit consumed without a compare-and-swap; "noBinding", the
 // permit consumed by an effect it doesn't name.
+//
+// What I5 covers: authority YorvoID holds, whose revocation takes the realm's lock. In the extended
+// configuration (XP-16) a root anchor is also resolved by XP-04's resolver, outside YorvoID: a root anchor
+// revoked there between the decision and the effect's commit takes no lock here, so the guard doesn't
+// see it. That residual is the resolver's freshness, documented with it, not something the lock closes.
 module guard {
   const MODE: str
   const ISOLATION: str
