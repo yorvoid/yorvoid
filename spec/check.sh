@@ -72,8 +72,9 @@ holds "delegation chains: the executions to replay are the model's" sh -c "$TRAC
 
 # The guard (M3-1), in Quint: I5 (no guarded effect commits on revoked authority) and P4 (a single-use
 # permit consumed once, by its effect), under READ COMMITTED and REPEATABLE READ. Broken: reading before
-# the lock; a lock that doesn't write, under REPEATABLE READ (safe under READ COMMITTED, as checked);
-# consuming without a compare-and-swap. The witnesses show an effect, a revocation and a conflict.
+# the lock; a lock that doesn't write, under REPEATABLE READ (safe under READ COMMITTED, as checked); a
+# revoker that doesn't take the lock; consuming without a compare-and-swap; a permit not bound to its
+# effect. The witnesses show an effect, a revocation and a conflict.
 holds "guard: typecheck (Quint)" quint typecheck guard/guard.qnt
 for main in guardRc guardRr readLockRc; do
 	holds "guard: $main is safe (Quint, Apalache)" quint verify --main=$main --invariant=SAFETY --max-steps=10 guard/guard.qnt
@@ -81,7 +82,11 @@ for main in guardRc guardRr readLockRc; do
 done
 violated "guard: reading before the lock commits on revoked authority (Quint, Apalache)" "\[violation\]" quint verify --main=checkThenLockRc --invariant=I5 --max-steps=10 guard/guard.qnt
 violated "guard: a lock that doesn't write, under REPEATABLE READ, commits on revoked authority (Quint, Apalache)" "\[violation\]" quint verify --main=readLockRr --invariant=I5 --max-steps=10 guard/guard.qnt
+for isolation in Rc Rr; do
+	violated "guard: a revoker without the lock lets an effect commit on revoked authority ($isolation, Quint, Apalache)" "\[violation\]" quint verify --main=revokeNoLock$isolation --invariant=I5 --max-steps=10 guard/guard.qnt
+done
 violated "guard: consuming without a compare-and-swap uses the permit twice (Quint, Apalache)" "\[violation\]" quint verify --main=noCasRc --invariant=P4 --max-steps=10 guard/guard.qnt
+violated "guard: a permit not bound to its effect is used by another (Quint, Apalache)" "\[violation\]" quint verify --main=noBindingRc --invariant=P4 --max-steps=10 guard/guard.qnt
 for witness in NO_EFFECT NO_REVOCATION NO_CONFLICT; do
 	violated "guard: $witness is reached (Quint, simulation)" "\[violation\]" quint run --main=guardRr --invariant=$witness --max-samples=20000 --max-steps=20 --seed=42 guard/guard.qnt
 done

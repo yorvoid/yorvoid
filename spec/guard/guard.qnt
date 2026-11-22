@@ -17,7 +17,9 @@
 // - "readLock": the lock is SELECT ... FOR UPDATE only, which writes nothing: under REPEATABLE READ, a
 //   transaction that waited for it goes on with its old snapshot (G-5's R6, reproduced on PostgreSQL).
 //   Under READ COMMITTED it's still safe, as the check shows.
-// And "noCas", the permit consumed without a compare-and-swap, must break P4.
+// - "revokeNoLock": the revoker commits without taking the lock, under either isolation level.
+// And each must break P4: "noCas", the permit consumed without a compare-and-swap; "noBinding", the
+// permit consumed by an effect it doesn't name.
 module guard {
   const MODE: str
   const ISOLATION: str
@@ -99,7 +101,7 @@ module guard {
   // or it's consumed already (the consumption is a compare-and-swap). Either way the lock is released.
   action commitEffect(t: str): bool = all {
     phase.get(t) == Read,
-    val commitsIt = not(sawRevoked.get(t)) and NAMED.contains(t) and (MODE == "noCas" or consumedBy == "")
+    val commitsIt = not(sawRevoked.get(t)) and (MODE == "noBinding" or NAMED.contains(t)) and (MODE == "noCas" or consumedBy == "")
     all {
       commits' = if (commitsIt) commits + 1 else commits,
       consumedBy' = if (commitsIt) t else consumedBy,
@@ -113,15 +115,16 @@ module guard {
     snapshot' = snapshot, sawRevoked' = sawRevoked, conflicts' = conflicts,
   }
 
-  // The revocation commits under the lock: from now on, the authority is revoked.
+  // The revocation commits under the lock: from now on, the authority is revoked. In "revokeNoLock" it
+  // commits once started, without the lock, and writes no lock row.
   action revoke: bool = all {
-    phase.get("revoker") == Locked,
+    phase.get("revoker") == Locked or (MODE == "revokeNoLock" and phase.get("revoker") == Started),
     not(revoked),
     commits' = commits + 1,
     revoked' = true,
     revokedAt' = commits + 1,
-    lockRowWrittenAt' = if (MODE != "readLock") commits + 1 else lockRowWrittenAt,
-    holder' = "",
+    lockRowWrittenAt' = if (MODE != "readLock" and phase.get("revoker") == Locked) commits + 1 else lockRowWrittenAt,
+    holder' = if (holder == "revoker") "" else holder,
     phase' = phase.set("revoker", Done),
     consumedBy' = consumedBy, effects' = effects, onRevoked' = onRevoked,
     snapshot' = snapshot, sawRevoked' = sawRevoked, conflicts' = conflicts,
@@ -159,3 +162,6 @@ module checkThenLockRc { import guard(MODE = "checkThenLock", ISOLATION = "rc").
 module readLockRc { import guard(MODE = "readLock", ISOLATION = "rc").* }
 module readLockRr { import guard(MODE = "readLock", ISOLATION = "rr").* }
 module noCasRc { import guard(MODE = "noCas", ISOLATION = "rc").* }
+module revokeNoLockRc { import guard(MODE = "revokeNoLock", ISOLATION = "rc").* }
+module revokeNoLockRr { import guard(MODE = "revokeNoLock", ISOLATION = "rr").* }
+module noBindingRc { import guard(MODE = "noBinding", ISOLATION = "rc").* }
