@@ -9,10 +9,14 @@ declare(strict_types=1);
  *   php tools/infection/shards.php 3    prints the third part's filter
  *   php tools/infection/shards.php      lists every part and how many files each has
  *
- * Every file Infection mutates (infection.json5's sources) is in exactly one part, or this fails:
- * a new package or directory isn't left out of the run without anyone noticing. The parts are
+ * Every file Infection mutates (infection.json5's sources, as Infection collects them) is mutated by
+ * exactly one part's filter, or this fails: a new package or directory, or a change to the sources,
+ * isn't left out of the run without anyone noticing. CI runs it before each part. The parts are
  * balanced by lines of code; the core is split in two, as the largest package.
  */
+
+use Infection\Configuration\SourceFilter\PlainFilter;
+use Infection\Source\Collector\BasicSourceCollector;
 
 $root = dirname(__DIR__, 2);
 $entries = static fn (string $directory): array => false === ($list = scandir($directory)) ? [] : $list;
@@ -45,34 +49,36 @@ $parts = [
     6 => ['packages/passkeys/', 'packages/intent-verifier/', 'packages/flows/', 'packages/notifications/', 'packages/testing/'],
 ];
 
-// What Infection mutates: every PHP file under packages, but those infection.json5 excludes.
-$files = [];
-$iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/packages', FilesystemIterator::SKIP_DOTS));
+// What Infection mutates, as Infection collects it from infection.json5's sources, and what it mutates
+// with each part's filter: never a copy of those sources here, which could drift from the file.
+require $root.'/vendor/autoload.php';
 
-/** @var SplFileInfo $file */
-foreach ($iterator as $file) {
-    $path = substr($file->getPathname(), strlen($root) + 1);
+$config = json5_decode((string) file_get_contents($root.'/infection.json5'), true);
+$source = is_array($config) && is_array($config['source'] ?? null) ? $config['source'] : [];
+/** @var list<non-empty-string> $directories */
+$directories = $source['directories'] ?? [];
+/** @var list<non-empty-string> $excludes */
+$excludes = $source['excludes'] ?? [];
+$collect = static fn (?PlainFilter $filter): array => array_map(
+    static fn (SplFileInfo $file): string => substr((string) $file->getRealPath(), strlen((string) realpath($root)) + 1),
+    BasicSourceCollector::create($root.'/infection.json5', $directories, $excludes, $filter)->collect(),
+);
 
-    if (!str_ends_with($path, '.php') || 1 === preg_match('~/(vendor|node_modules)/|^packages/testing/src/Contract/~', $path)) {
-        continue;
-    }
-
-    $files[] = $path;
-}
-
-$counts = array_fill_keys(array_keys($parts), 0);
+$files = $collect(null);
+$inPart = array_map(static fn (array $fragments): array => $collect(PlainFilter::tryToCreate(implode(',', $fragments))), $parts);
+$counts = array_map(count(...), $inPart);
 $wrong = [];
 
 foreach ($files as $path) {
-    $in = array_keys(array_filter($parts, static fn (array $fragments): bool => [] !== array_filter($fragments, static fn (string $fragment): bool => str_starts_with($path, $fragment))));
+    $in = array_keys(array_filter($inPart, static fn (array $mutated): bool => in_array($path, $mutated, true)));
 
     if (1 !== count($in)) {
         $wrong[] = sprintf('%s is in %s.', $path, [] === $in ? 'no part' : 'parts '.implode(', ', $in));
     }
+}
 
-    foreach ($in as $part) {
-        ++$counts[$part];
-    }
+foreach (array_diff(array_merge(...array_values($inPart)), $files) as $path) {
+    $wrong[] = sprintf('%s is in a part, but not among the sources.', $path);
 }
 
 if ([] !== $wrong) {
