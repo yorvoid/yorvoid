@@ -47,6 +47,10 @@ holds "decisions/precedence.als (Alloy)" alloy decisions/precedence.als
 # non-delegable passed on; its broken variants (no root check, id narrowing reversed) are expected
 # counterexamples within the file ("expect 1").
 holds "delegation/attenuation.als (Alloy)" alloy delegation/attenuation.als
+# Joins (M3-1): each of R01-R24 and J01-J20 (but R19 and J20, the guard's) exists and has its outcome;
+# no cross-branch substitution, the input grants never authority, P1-P3, in both configurations
+# (XP-16); evidence accepted unbound is the expected counterexample ("expect 1").
+holds "joins/joins.als (Alloy)" alloy joins/joins.als
 
 # Delegation chains over time (M3-1), in Quint: no use is accepted while a link is revoked or expired or
 # the root lost the authority. "versioned" is YorvoID's cache (every link's version, the authority's
