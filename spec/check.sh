@@ -98,6 +98,31 @@ done
 # "node traces.mjs guard/guard.qnt guardRc 100 14 0x9a4d0 > guard/traces-rc.itf.json" (and guardRr, traces-rr).
 holds "guard: the executions to replay are the model's (READ COMMITTED)" sh -c "node traces.mjs guard/guard.qnt guardRc 100 14 0x9a4d0 | cmp -s - guard/traces-rc.itf.json"
 holds "guard: the executions to replay are the model's (REPEATABLE READ)" sh -c "node traces.mjs guard/guard.qnt guardRr 100 14 0x9a4d0 | cmp -s - guard/traces-rr.itf.json"
+
+# Budgets along a delegation chain (M3-1), in Quint: no delegation's uses or reservations exceed its
+# limit, a use is refused only when its leaf has no room, and an ended delegation gives back what it
+# didn't consume. "reserve" is YorvoID's: a limit reserved from the delegator when issued, a use charged
+# to its leaf in one compare-and-swap. Broken: checking then charging, issuing without reserving,
+# charging the whole chain, keeping an ended reservation whole. The witnesses show a use, a refusal, a
+# return and a use at depth 3. Apalache checks the safe mode for 6 steps (enough to issue two delegations
+# and race two uses for the last unit; 8 takes over an hour), the broken ones for 8 (the longest, issuing
+# without reserving, takes 8); simulation for 20.
+holds "budgets: typecheck (Quint)" quint typecheck budgets/budgets.qnt
+holds "budgets: reserving is safe (Quint, Apalache)" quint verify --main=reserve --invariant=SAFETY --max-steps=6 budgets/budgets.qnt
+violated "budgets: checking then charging overspends (Quint, Apalache)" "\[violation\]" quint verify --main=checkThenCharge --invariant=NO_OVERSPEND --max-steps=8 budgets/budgets.qnt
+violated "budgets: issuing without reserving overspends (Quint, Apalache)" "\[violation\]" quint verify --main=noReservation --invariant=NO_OVERSPEND --max-steps=8 budgets/budgets.qnt
+violated "budgets: charging the whole chain refuses a use with room (Quint, Apalache)" "\[violation\]" quint verify --main=chargeChain --invariant=NO_FALSE_REFUSAL --max-steps=8 budgets/budgets.qnt
+violated "budgets: an ended reservation kept whole isn't given back (Quint, Apalache)" "\[violation\]" quint verify --main=noReturn --invariant=RETURNED --max-steps=8 budgets/budgets.qnt
+holds "budgets: reserving is safe (Quint, simulation)" quint run --main=reserve --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 budgets/budgets.qnt
+for broken in "checkThenCharge NO_OVERSPEND" "noReservation NO_OVERSPEND" "chargeChain NO_FALSE_REFUSAL" "noReturn RETURNED"; do
+	set -- $broken
+	violated "budgets: $1 breaks $2 (Quint, simulation)" "\[violation\]" quint run --main=$1 --invariant=$2 --max-samples=20000 --max-steps=20 --seed=42 budgets/budgets.qnt
+done
+for witness in NO_USE NO_REFUSAL NO_RETURN NO_DEEP_USE; do
+	violated "budgets: $witness is reached (Quint, simulation)" "\[violation\]" quint run --main=reserve --invariant=$witness --max-samples=20000 --max-steps=20 --seed=42 budgets/budgets.qnt
+done
+# The executions M3-3's PHP tests will replay: "node traces.mjs budgets/budgets.qnt reserve 100 14 0xb6d9e7 > budgets/traces.itf.json".
+holds "budgets: the executions to replay are the model's" sh -c "node traces.mjs budgets/budgets.qnt reserve 100 14 0xb6d9e7 | cmp -s - budgets/traces.itf.json"
 # The requests that tests/Core/Authorization/PrecedenceFixturesTest.php decides with the PHP evaluator
 # must be the model's: regenerate them with "node decisions/fixtures.mjs > decisions/fixtures.json".
 holds "decisions: the fixtures the PHP tests decide are the model's (default configuration)" sh -c 'node decisions/fixtures.mjs | cmp -s - decisions/fixtures.json'
