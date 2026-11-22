@@ -9,10 +9,10 @@
 // ATOMIC = false marks it whatever it holds, which must break ONE_OWNER when nothing else serializes the
 // claims (LOCKED = false too).
 //
-// An invitation accepted creates a principal and records it in the security log, which locks the realm's
-// log until it commits: it's one step here, taken only while nobody else holds the lock. LOCKED = true is
-// YorvoID's way: a claim locks the realm's log before it checks, and holds it until it commits.
-// LOCKED = false checks without the lock, which must break OWNER_FIRST.
+// Every change that makes a principal active, e.g. an invitation accepted, takes the realm's lock first
+// and holds it until it commits (D-52): it's one step here, taken only while nobody else holds the lock.
+// LOCKED = true is YorvoID's way: a claim takes the realm's lock before it checks, and holds it until it
+// commits. LOCKED = false checks without the lock, which must break OWNER_FIRST.
 module setupClaim {
   type Phase = Idle | Checked | Created | Won | Lost
 
@@ -26,7 +26,7 @@ module setupClaim {
   var owners: Set[str]
   // Whether an invitation was accepted: an active principal that isn't an owner.
   var invited: bool
-  // Who holds the realm's log lock, "" for nobody.
+  // Who holds the realm's lock, "" for nobody.
   var lock: str
   // The realm's first principal to commit, "" while there is none.
   var first: str
@@ -40,7 +40,7 @@ module setupClaim {
     first' = "",
   }
 
-  // Locks the realm's log (if LOCKED), then reads: the code matches, the realm isn't claimed yet, and it
+  // Takes the realm's lock (if LOCKED), then reads: the code matches, the realm isn't claimed yet, and it
   // has no active principal that committed.
   action check(c: str): bool = all {
     phase.get(c) == Idle,
@@ -76,7 +76,7 @@ module setupClaim {
     },
   }
 
-  // An invitation accepted: a principal created, its log entry appended under the lock, committed.
+  // An invitation accepted: a principal created active under the realm's lock, committed.
   action accept: bool = all {
     not(invited),
     lock == "",

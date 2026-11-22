@@ -46,7 +46,7 @@ The `spec` container has every tool, pinned and checksum-verified: Alloy 6.2.0, 
 - Whoever loses the race keeps **no principal**: their transaction rolled back.
 - The owner is **the realm's first principal**: a claim never succeeds after someone became active another way, e.g. by an invitation accepted at the same moment. The claim locks the realm's log before it checks.
 
-Each model also contains a **deliberately broken variant**, e.g. the naive "read, then delete" token consumption, a removal that counts only the current keys, a claim without a compare-and-swap, or one that checks without the log's lock, and the script requires the checker to find what each breaks. A checker that stopped finding problems would therefore fail the build too.
+Each model also contains a **deliberately broken variant**, e.g. the naive "read, then delete" token consumption, a removal that counts only the current keys, a claim without a compare-and-swap, or one that checks without the realm's lock, and the script requires the checker to find what each breaks. A checker that stopped finding problems would therefore fail the build too.
 
 ## Bounds
 
@@ -76,7 +76,7 @@ Each file stays under 1 MB: more executions or steps are added only where they r
   - **The replay** applies the first key's change at once, as `Verifier` does. `Verifier` applies what's due at every call, so of the model's executions it shows only those where a due change doesn't wait.
 
 **The setup claim** is replayed by the order its transactions commit in, not step by step. The argument:
-- `SetupCodes::claimWith()` takes the realm's log lock before it checks the code and the realm, and holds it until it commits. That's the model's `LOCKED = true`, where `check` needs the lock and takes it, and an invitation's principal appends to the log under the same lock.
+- `SetupCodes::claimWith()` takes the realm's lock before it checks the code and the realm, and holds it until it commits. That's the model's `LOCKED = true`, where `check` needs the lock and takes it, and an invitation's principal, created active by `Principals::create()`, takes the same lock first.
 - So the claims and the invitation serialize: the order they commit or are refused in decides the outcome.
 - Each execution is replayed as that order: one owner, the losers with no principal, a claim refused once the realm is claimed or someone is active in it.
 - What happens inside one transaction is the model's, and `tests/Conformance/SetupClaimConcurrencyTest.php`'s, with two connections.

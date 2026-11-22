@@ -137,11 +137,11 @@ holds "verifier keys: the executions the PHP tests replay are the model's" sh -c
 
 # Claiming a realm with its setup code, in Quint: one owner, whoever comes at the same moment, and the
 # realm's first principal, also when an invitation is accepted at the same moment. Marking it claimed
-# without a compare-and-swap must give it two; checking without the log's lock, an owner after someone.
+# without a compare-and-swap must give it two; checking without the realm's lock, an owner after someone.
 holds "setup claim: typecheck (Quint)" quint typecheck setup/setup_claim.qnt
 holds "setup claim: one owner, the first principal (Quint, Apalache)" quint verify --main=atomic --invariant=SAFETY --max-steps=12 setup/setup_claim.qnt
 violated "setup claim: without a compare-and-swap, two owners (Quint, Apalache)" "\[violation\]" quint verify --main=naive --invariant=ONE_OWNER --max-steps=12 setup/setup_claim.qnt
-violated "setup claim: without the log's lock, an owner after someone (Quint, Apalache)" "\[violation\]" quint verify --main=unlocked --invariant=OWNER_FIRST --max-steps=12 setup/setup_claim.qnt
+violated "setup claim: without the realm's lock, an owner after someone (Quint, Apalache)" "\[violation\]" quint verify --main=unlocked --invariant=OWNER_FIRST --max-steps=12 setup/setup_claim.qnt
 holds "setup claim: one owner, the first principal (Quint, simulation)" quint run --main=atomic --invariant=SAFETY --max-samples=20000 --max-steps=20 --seed=42 setup/setup_claim.qnt
 # What tests/Authn/Setup/SetupClaimTracesTest.php replays against SetupCodes: only LOCKED = true, YorvoID's.
 TRACES_SETUP='node traces.mjs setup/setup_claim.qnt atomic 100 14 0x5e7c1a1'
