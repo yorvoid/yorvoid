@@ -280,12 +280,18 @@ jobs:
         run: docker compose logs
 
   mutation:
-    name: Mutation testing
+    name: Mutation testing${{ matrix.part != 0 && format(' ({0} of 6)', matrix.part) || '' }}
     # It mutates against the tests job's coverage of this commit, rather than running the suite again.
     needs: tests
     runs-on: ubuntu-latest
-    # A pull request's lines take minutes; the full run on main and each night takes much longer.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 120 }}
+    # A pull request's lines take minutes, in one job. The full run on main and each night mutates
+    # all the code, which takes hours in one: it's split in parts that run side by side
+    # (tools/infection/shards.php), each with the score's minimums.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(github.event_name == 'pull_request' && '[0]' || '[1, 2, 3, 4, 5, 6]') }}
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 90 }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -326,9 +332,13 @@ jobs:
         run: docker compose exec -T -e YORVOID_COVERAGE=reuse php composer infection -- --git-diff-lines --git-diff-base="$BASE" --ignore-msi-with-no-mutations --logger-github
       # Also catches what a pull request's lines can't show: a change to a test that lets mutants of
       # code it didn't touch survive.
-      - name: Mutate all the code
+      - name: Mutate all the code, this part of it
         if: github.event_name != 'pull_request'
-        run: docker compose exec -T -e YORVOID_COVERAGE=reuse php composer infection
+        env:
+          PART: ${{ matrix.part }}
+        run: |
+          filter=$(docker compose exec -T php php tools/infection/shards.php "$PART")
+          docker compose exec -T -e YORVOID_COVERAGE=reuse php composer infection -- --filter="$filter"
       - name: Show logs on failure
         if: failure()
         run: docker compose logs
