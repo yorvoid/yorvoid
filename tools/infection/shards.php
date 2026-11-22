@@ -56,7 +56,7 @@ $collect = static function (array $paths) use ($root): array {
     }
 
     $lines = [];
-    exec($command.' 2>/dev/null', $lines, $status);
+    exec($command, $lines, $status);
 
     if (0 !== $status) {
         fwrite(\STDERR, "Infection couldn't list the sources (vendor/bin/infection config:list-sources).\n");
