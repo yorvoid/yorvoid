@@ -336,8 +336,9 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           PART: ${{ matrix.part }}
+          PARTS: ${{ strategy.job-total }}
         run: |
-          paths=$(docker compose exec -T php php tools/infection/shards.php "$PART")
+          paths=$(docker compose exec -T php php tools/infection/shards.php "$PART" "$PARTS")
           # One argument per path: the paths have no spaces.
           # shellcheck disable=SC2086
           docker compose exec -T -e YORVOID_COVERAGE=reuse php composer infection -- $paths

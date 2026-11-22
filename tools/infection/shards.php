@@ -6,13 +6,16 @@ declare(strict_types=1);
  * Splits the full mutation run into parts that run side by side, each within CI's time limit, and
  * prints the part asked for as the paths to give Infection, one per line.
  *
- *   php tools/infection/shards.php 3    prints the third part's paths
- *   php tools/infection/shards.php      lists every part and how many files each has
+ *   php tools/infection/shards.php 3      prints the third part's paths
+ *   php tools/infection/shards.php 3 7    the same, and fails unless there are 7 parts
+ *   php tools/infection/shards.php        lists every part and how many files each has
  *
  * Every file Infection mutates (infection.json5's sources, as Infection collects them) is mutated by
  * exactly one part's paths, or this fails: a new package or directory, or a change to the sources,
- * isn't left out of the run without anyone noticing. CI runs it before each part. The parts are
- * balanced by how long CI took to mutate them.
+ * isn't left out of the run without anyone noticing. CI runs it before each part, with the number of
+ * parts its matrix runs, so a part added here but not there fails rather than never running. The
+ * parts are balanced by how long CI took to mutate them, except the Symfony bundle's two halves,
+ * split by lines of code until a run measures them.
  */
 
 $root = dirname(__DIR__, 2);
@@ -35,16 +38,18 @@ $rest = static function (string $directory, array $except) use ($root): array {
     return $paths;
 };
 
-// The core and the Symfony bundle, the packages slowest to mutate, are each split in two.
+// The parts, numbered from 1 in this order. The core and the Symfony bundle, the packages slowest to
+// mutate, are each split in two.
 $parts = [
-    1 => ['packages/core/src/Authorization/', 'packages/core/src/Storage/'],
-    2 => array_merge($rest('packages/core', ['src']), $rest('packages/core/src', ['Authorization', 'Storage'])),
-    3 => ['packages/authn/', 'packages/throttle/', 'packages/mail/'],
-    4 => ['packages/symfony/src/Command/', 'packages/symfony/src/Controller/', 'packages/symfony/src/Templates/', 'packages/symfony/src/Factories.php'],
-    5 => array_merge($rest('packages/symfony', ['src']), $rest('packages/symfony/src', ['Command', 'Controller', 'Templates', 'Factories.php'])),
-    6 => ['packages/policy/', 'packages/policy-testing/', 'packages/relations/', 'packages/phpstan-rules/'],
-    7 => ['packages/passkeys/', 'packages/intent-verifier/', 'packages/flows/', 'packages/notifications/', 'packages/testing/', 'packages/translation/', 'packages/virtual-authenticator/', 'packages/intent-signing/'],
+    ['packages/core/src/Authorization/', 'packages/core/src/Storage/'],
+    array_merge($rest('packages/core', ['src']), $rest('packages/core/src', ['Authorization', 'Storage'])),
+    ['packages/authn/', 'packages/throttle/', 'packages/mail/'],
+    ['packages/symfony/src/Command/', 'packages/symfony/src/Controller/', 'packages/symfony/src/Templates/', 'packages/symfony/src/Factories.php'],
+    array_merge($rest('packages/symfony', ['src']), $rest('packages/symfony/src', ['Command', 'Controller', 'Templates', 'Factories.php'])),
+    ['packages/policy/', 'packages/policy-testing/', 'packages/relations/', 'packages/phpstan-rules/'],
+    ['packages/passkeys/', 'packages/intent-verifier/', 'packages/flows/', 'packages/notifications/', 'packages/testing/', 'packages/translation/', 'packages/virtual-authenticator/', 'packages/intent-signing/'],
 ];
+$parts = array_combine(range(1, count($parts)), $parts);
 
 // What Infection mutates, as Infection's own command lists it, from infection.json5's sources and with
 // each part's paths: never a copy of those sources here, nor of Infection's code, which could drift.
@@ -99,6 +104,13 @@ if ([] !== $wrong) {
 }
 
 $asked = $argv[1] ?? null;
+$total = $argv[2] ?? null;
+
+if (null !== $total && (string) count($parts) !== $total) {
+    fwrite(\STDERR, sprintf("CI runs %s parts, but there are %d (tools/infection/shards.php).\n", $total, count($parts)));
+
+    exit(1);
+}
 
 if (null === $asked) {
     foreach ($parts as $part => $fragments) {
