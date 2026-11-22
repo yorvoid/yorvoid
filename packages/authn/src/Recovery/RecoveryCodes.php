@@ -119,6 +119,9 @@ final readonly class RecoveryCodes implements OperationHandler
         $session = Credentials::session($permit, 'concepts/recovery-codes.md#generating-codes');
 
         return $this->transactions->run(function () use ($session, $permit, $origin): array {
+            // Two new sets at once are made one after the other: the later replaces the earlier, and only
+            // one set works; and only one of two first sets adds the credential (D-52).
+            $this->principals->lock($session->realm, $session->principalId);
             $credential = $this->credential($session->realm, $session->principalId);
 
             if (null === $credential) {
@@ -136,8 +139,6 @@ final readonly class RecoveryCodes implements OperationHandler
                 $hashes[] = self::hash($code);
             }
 
-            // Recording first takes the realm's log lock, so two new sets at once are made one after the
-            // other: the later replaces the earlier, and only one set works.
             $this->log->record($session->realm, self::GENERATE, Outcome::Success, $origin, $session->principalId, 'credential', (string) $credential->id, [
                 'count' => $this->count,
                 'principal' => (string) $session->principalId,
@@ -251,6 +252,9 @@ final readonly class RecoveryCodes implements OperationHandler
      */
     private function useCode(Realm $realm, PrincipalId $principalId, string $hash, Permit $permit, Origin $origin, ?string $device, ?string $address, ?Secret $deviceCookie): ?StartedSession
     {
+        // Two recoveries of one account at once take turns: each sees the other's cool-down and sessions (D-52).
+        $this->principals->lock($realm, $principalId);
+
         $credential = $this->credential($realm, $principalId);
         $usable = null !== $credential && $credential->isActive();
 

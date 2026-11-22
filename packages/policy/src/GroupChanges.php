@@ -70,6 +70,8 @@ final readonly class GroupChanges implements OperationHandler, RequiresForbids
         $group = new Role($command->name, $command->label);
 
         $this->transactions->run(function () use ($command, $group, $permit, $origin): void {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $this->store->saveGroup($command->realm, $group->name, $group->label);
             $this->record($command->realm, 'yorvoid.group.create', $permit, $origin, $group->name, ['label' => $group->label]);
@@ -85,6 +87,8 @@ final readonly class GroupChanges implements OperationHandler, RequiresForbids
         $this->known($command->realm, $command->name);
 
         $this->transactions->run(function () use ($command, $permit, $origin): void {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $this->relations->forget($command->realm, GroupRelations::group($command->name));
             $this->store->deleteGroup($command->realm, $command->name);
@@ -119,6 +123,8 @@ final readonly class GroupChanges implements OperationHandler, RequiresForbids
         }
 
         $this->transactions->run(function () use ($command, $permit, $origin): void {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $this->relations->add(new RelationTuple($command->realm, GroupRelations::group($command->group), GroupRelations::MEMBER, $command->member));
             $this->record($command->realm, 'yorvoid.group.add_member', $permit, $origin, $command->group, ['member' => (string) $command->member]);
@@ -133,6 +139,8 @@ final readonly class GroupChanges implements OperationHandler, RequiresForbids
         $permit->use($command);
 
         return $this->transactions->run(function () use ($command, $permit, $origin): bool {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $was = $this->relations->remove(new RelationTuple($command->realm, GroupRelations::group($command->group), GroupRelations::MEMBER, $command->member));
 
@@ -162,6 +170,8 @@ final readonly class GroupChanges implements OperationHandler, RequiresForbids
         }
 
         return $this->transactions->run(function () use ($command, $permit, $origin): GroupRoleAssignment {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $assignment = new GroupRoleAssignment($command->realm, $command->group, $command->role, Time::stored($this->clock->now()), $command->scope, null === $command->expiresAt ? null : Time::stored($command->expiresAt));
             $this->store->assignGroup($assignment);
@@ -183,6 +193,8 @@ final readonly class GroupChanges implements OperationHandler, RequiresForbids
         $permit->use($command);
 
         return $this->transactions->run(function () use ($command, $permit, $origin): bool {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $had = $this->store->unassignGroup($command->realm, $command->group, $command->role, $command->scope);
 

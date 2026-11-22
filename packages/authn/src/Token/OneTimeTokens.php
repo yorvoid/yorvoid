@@ -91,6 +91,9 @@ final readonly class OneTimeTokens implements OperationHandler
         $this->refuseIfNotTheOwners($command->realm, 'issue', $command->purpose, $command->principalId, $permit, $origin);
 
         return $this->transactions->run(function () use ($command, $origin, $actor): IssuedToken {
+            // Two tokens issued at once are stored one after the other: with newestOnly, the later removes
+            // the earlier (D-52).
+            $this->principals->lock($command->realm, $command->principalId);
             $principal = $this->principals->get($command->realm, $command->principalId) ?? throw new UnknownPrincipal($command->realm, $command->principalId);
 
             if (!self::mayUseTokens($principal)) {
@@ -104,8 +107,6 @@ final readonly class OneTimeTokens implements OperationHandler
             $verifier = Secret::fromString(self::base64url(random_bytes(32)));
             $token = new OneTimeToken($selector, $principal->realm, $principal->id, $command->purpose, $email, $now, $command->lifetime->after($now));
 
-            // Recording first takes the realm's log lock, so two tokens issued at once are stored one after
-            // the other: with newestOnly, the later removes the earlier.
             $this->log->record($principal->realm, 'yorvoid.token.issue', Outcome::Success, $origin, $actor, 'principal', (string) $principal->id, [
                 'expires_at' => $token->expiresAt->format(\DATE_ATOM),
                 'purpose' => $token->purpose,

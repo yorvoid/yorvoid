@@ -22,6 +22,9 @@
         <ini name="memory_limit" value="1G"/>
         <ini name="zend.assertions" value="1"/>
         <ini name="assert.exception" value="1"/>
+        <!-- Every transaction's locks are checked against the one order that can't deadlock (LockOrder);
+             the separate processes the concurrency tests start inherit it. -->
+        <env name="YORVOID_LOCK_ORDER" value="check" force="true"/>
     </php>
 
     <testsuites>

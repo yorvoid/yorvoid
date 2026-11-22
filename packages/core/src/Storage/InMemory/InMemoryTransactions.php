@@ -8,7 +8,9 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use YorvoID\Core\Event\NoEventListeners;
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\AuditAlarm;
+use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\ForgetsWhatItRead;
 use YorvoID\Core\Storage\RetryableConflict;
@@ -17,7 +19,8 @@ use YorvoID\Core\Storage\Transactions;
 /**
  * Transactions for in-memory storage, used by tests and by applications without a database. A failed
  * unit of work puts the registered stores back as they were when it began and drops the callbacks it
- * added, like a database transaction or, when nested, a savepoint. Callbacks run when the outermost
+ * added, like a database transaction or, when nested, a savepoint. What waits for the commit runs at
+ * the end of the outermost unit, and its failure undoes it. Callbacks run when the outermost
  * transaction succeeds; a failing one is logged at error, not thrown (D-43).
  *
  * @api
@@ -34,6 +37,9 @@ final class InMemoryTransactions implements Transactions
 
     /** @var list<\Closure(): void> */
     private array $afterEnd = [];
+
+    /** @var list<\Closure(): void> */
+    private array $beforeCommit = [];
 
     private readonly AuditAlarm $alarm;
 
@@ -77,16 +83,24 @@ final class InMemoryTransactions implements Transactions
         $outermost = 0 === $this->depth;
         $restorers = array_map(static fn (\Closure $take): \Closure => $take(), $this->stores);
         $waiting = \count($this->afterCommit);
+        $before = \count($this->beforeCommit);
         ++$this->depth;
 
         try {
             $result = $work();
+
+            // Just before the outermost commit, in it: a failure undoes the whole transaction.
+            while ($outermost && [] !== $this->beforeCommit) {
+                $callback = array_shift($this->beforeCommit);
+                $callback();
+            }
         } catch (\Throwable $exception) {
             foreach ($restorers as $restore) {
                 $restore();
             }
 
             $this->afterCommit = \array_slice($this->afterCommit, 0, $waiting);
+            $this->beforeCommit = $outermost ? [] : \array_slice($this->beforeCommit, 0, $before);
 
             // Run again from the start, it leaves its callbacks again: this attempt's go. Not the last's.
             if ($outermost && $this->retrying && !$this->final && $exception instanceof RetryableConflict) {
@@ -145,6 +159,27 @@ final class InMemoryTransactions implements Transactions
         } finally {
             $this->retrying = false;
         }
+    }
+
+    /**
+     * Memory has one process: nothing to wait for.
+     */
+    public function lockRealm(Realm $realm): void
+    {
+        if (0 === $this->depth) {
+            throw new IntegratorError('A realm was locked outside a transaction.', 'Lock it inside Transactions::run(), before reading what the change depends on.', 'concepts/storage.md#locks');
+        }
+    }
+
+    public function beforeCommit(\Closure $callback): bool
+    {
+        if (0 === $this->depth) {
+            return false;
+        }
+
+        $this->beforeCommit[] = $callback;
+
+        return true;
     }
 
     public function afterCommit(\Closure $callback): void

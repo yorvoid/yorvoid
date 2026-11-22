@@ -37,6 +37,7 @@ use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\StatementLog;
 
 /**
  * Operator-issued recovery links on every implementation (ATN-033, ATN-029).
@@ -124,14 +125,36 @@ final class RecoveryLinksTest extends DatabaseTestCase
         new IssueRecoveryLink(new Realm('acme'), new PrincipalId(new UuidV7Generator()->next()), Duration::hours(25));
     }
 
+    /**
+     * Two recoveries of one account at once take turns: once the link is used up, the account's
+     * principal is locked before its sessions are ended.
+     */
+    #[DataProvider('platforms')]
+    public function testUsingALinkLocksThePrincipalBeforeItsSessions(string $platform): void
+    {
+        $statements = new StatementLog();
+        $links = $this->links($platform, $statements);
+        $owner = Permits::call($this->principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $link = Permits::call($links->issue(...), new IssueRecoveryLink(new Realm('acme'), $owner->id), new Origin(OriginKind::Console, 'owner:recover'));
+        $statements->take();
+
+        Permits::call($links->redeem(...), new UseRecoveryLink(new Realm('acme'), $link->secret, 'Firefox on Linux', '192.0.2.10'), new Origin(OriginKind::Web));
+
+        $locks = $statements->takeLocks();
+        $first = static fn (string $part): int|false => array_find_key($locks, static fn (string $sql): bool => str_contains($sql, $part)) ?? false;
+
+        self::assertLessThan($first('yorvoid_authentication_session"'), $first('SET lock_count = lock_count + 1'), 'The principal wasn\'t locked before its sessions.');
+        self::assertGreaterThan($first('yorvoid_one_time_token"'), $first('SET lock_count = lock_count + 1'), 'Locked before the link was used up.');
+    }
+
     public function testIssuingIsAnOperation(): void
     {
         self::assertSame('yorvoid.principals.recover', new OperationCatalogue([IssueRecoveryLink::class])->get('yorvoid.recovery_link.issue')->ability);
     }
 
-    private function links(string $implementation): RecoveryLinks
+    private function links(string $implementation, ?StatementLog $statements = null): RecoveryLinks
     {
-        $this->stack = $this->stack($implementation);
+        $this->stack = $this->stack($implementation, $statements);
         $this->clock = new MockClock('2026-10-27 18:45:30 UTC');
         $log = new SecurityLog($this->stack->log, $this->stack->transactions, clock: $this->clock);
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, clock: $this->clock);

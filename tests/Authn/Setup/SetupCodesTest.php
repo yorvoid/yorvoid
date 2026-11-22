@@ -19,9 +19,7 @@ use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
-use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\SecurityLog;
-use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\Principal;
@@ -32,6 +30,7 @@ use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Secret;
+use YorvoID\Core\Storage\Transactions;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\Stack;
@@ -231,41 +230,53 @@ final class SetupCodesTest extends DatabaseTestCase
     }
 
     /**
-     * The claim locks the realm's log before it asks whether the realm has an active principal, so a
-     * principal created at the same moment comes before or after it (SetupClaimConcurrencyTest).
+     * Making a code and the claim lock the realm before they ask whether the realm has an active
+     * principal, so a principal made active at the same moment comes before or after them
+     * (SetupClaimConcurrencyTest).
      */
-    public function testTheClaimLocksTheLogBeforeAskingWhoIsActive(): void
+    public function testTheClaimLocksTheRealmBeforeAskingWhoIsActive(): void
     {
         $stack = $this->stack('memory');
         /** @var \ArrayObject<int, string> $calls */
         $calls = new \ArrayObject();
-        $log = new SecurityLog(new readonly class($stack->log, $calls) implements SecurityLogStore {
+        $transactions = new readonly class($stack->transactions, $calls) implements Transactions {
             /** @param \ArrayObject<int, string> $calls */
-            public function __construct(private SecurityLogStore $store, private \ArrayObject $calls)
+            public function __construct(private Transactions $transactions, private \ArrayObject $calls)
             {
             }
 
-            public function append(Realm $realm, \Closure $build): LogEntry
+            public function run(\Closure $work): mixed
             {
-                return $this->store->append($realm, $build);
+                return $this->transactions->run($work);
             }
 
-            public function lock(Realm $realm): void
+            public function afterCommit(\Closure $callback): void
             {
-                $this->calls[] = 'lock';
-                $this->store->lock($realm);
+                $this->transactions->afterCommit($callback);
             }
 
-            public function entries(Realm $realm, int $fromSequence): iterable
+            public function afterEnd(\Closure $callback): void
             {
-                return $this->store->entries($realm, $fromSequence);
+                $this->transactions->afterEnd($callback);
             }
 
-            public function head(Realm $realm): ?array
+            public function lockRealm(Realm $realm): void
             {
-                return $this->store->head($realm);
+                $this->calls[] = 'lockRealm';
+                $this->transactions->lockRealm($realm);
             }
-        }, $stack->transactions);
+
+            public function beforeCommit(\Closure $callback): bool
+            {
+                return $this->transactions->beforeCommit($callback);
+            }
+
+            public function retrying(\Closure $work): mixed
+            {
+                return $this->transactions->retrying($work);
+            }
+        };
+        $log = new SecurityLog($stack->log, $transactions);
         $principals = new Principals(new readonly class($stack->principals, $calls) implements PrincipalStore {
             /** @param \ArrayObject<int, string> $calls */
             public function __construct(private PrincipalStore $store, private \ArrayObject $calls)
@@ -289,20 +300,26 @@ final class SetupCodesTest extends DatabaseTestCase
                 return $this->store->hasActive($realm);
             }
 
+            public function lock(Realm $realm, PrincipalId $id): void
+            {
+                $this->store->lock($realm, $id);
+            }
+
             public function changeStatus(Principal $before, Principal $after): bool
             {
                 return $this->store->changeStatus($before, $after);
             }
-        }, $stack->identifiers, $log, $stack->transactions);
-        $plainLog = new SecurityLog($stack->log, $stack->transactions);
-        $plainPrincipals = new Principals($stack->principals, $stack->identifiers, $plainLog, $stack->transactions);
-        $plain = new SetupCodes($stack->setup, $plainPrincipals, $plainLog, $stack->transactions, new Attempts(new Throttle($stack->throttle)), new Sessions($stack->sessions, $plainPrincipals, $plainLog, $stack->transactions));
-        $code = Permits::call($plain->create(...), new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
-        $codes = new SetupCodes($stack->setup, $principals, $log, $stack->transactions, new Attempts(new Throttle($stack->throttle)), new Sessions($stack->sessions, $principals, $log, $stack->transactions));
+        }, $stack->identifiers, $log, $transactions);
+        $codes = new SetupCodes($stack->setup, $principals, $log, $transactions, new Attempts(new Throttle($stack->throttle)), new Sessions($stack->sessions, $principals, $log, $transactions));
+
+        // Making a code asks the same, under the same lock.
+        $code = Permits::call($codes->create(...), new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
+        self::assertSame(['lockRealm', 'hasActive'], \array_slice($calls->getArrayCopy(), 0, 2), 'The realm wasn\'t locked before making a code.');
+        $calls->exchangeArray([]);
 
         Permits::call($codes->claim(...), new ClaimSetup(new Realm('acme'), $code, new CreatePrincipal(new Realm('acme'), PrincipalKind::Human)), new Origin(OriginKind::Web));
 
-        self::assertSame(['lock', 'hasActive'], $calls->getArrayCopy());
+        self::assertSame(['lockRealm', 'hasActive'], \array_slice($calls->getArrayCopy(), 0, 2), 'The realm wasn\'t locked first.');
     }
 
     public function testCodesAreUniformlyRandom(): void

@@ -145,6 +145,28 @@ trait PrincipalStoreContract
         self::assertEquals($suspended, $store->get(new Realm('acme'), $principal->id));
     }
 
+    /**
+     * Locking changes nothing a read sees, also when taken twice, and the status still changes from the
+     * version it was read at: the lock's write is its own (D-52).
+     */
+    #[DataProvider('implementations')]
+    public function testLockingAPrincipalChangesNothingItHolds(string $implementation): void
+    {
+        $store = $this->principalStore($implementation);
+        $transactions = $this->transactions($implementation);
+        $principal = self::principal(new Realm('acme'));
+        $store->add($principal);
+
+        $transactions->run(static function () use ($store, $principal): void {
+            $store->lock($principal->realm, $principal->id);
+            $store->lock($principal->realm, $principal->id);
+            $store->lock($principal->realm, new PrincipalId(new UuidV7()));
+        });
+
+        self::assertEquals($principal, $store->get(new Realm('acme'), $principal->id));
+        self::assertTrue($store->changeStatus($principal, $principal->withStatus(PrincipalStatus::Suspended, new \DateTimeImmutable())));
+    }
+
     #[DataProvider('implementations')]
     public function testChangesNothingInAnotherRealmOrUnknown(string $implementation): void
     {

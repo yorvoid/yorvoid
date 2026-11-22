@@ -75,7 +75,10 @@ final readonly class SetupCodes implements OperationHandler
         $permit->use($command);
 
         return $this->transactions->run(function () use ($command, $origin): Secret {
-            // Only while no owner exists (ATN-034): people who came another way, e.g. invited, count.
+            // Only while no owner exists (ATN-034): people who came another way, e.g. invited, count. A
+            // principal made active at the same moment waits, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
+
             if ($this->principals->hasActive($command->realm)) {
                 throw new RealmAlreadyClaimed($command->realm);
             }
@@ -136,10 +139,10 @@ final readonly class SetupCodes implements OperationHandler
     {
         return $this->transactions->run(function () use ($command, $permit, $origin): StartedSession {
             $realm = $command->realm;
-            // Before asking whether the realm has an active principal: a principal created at the same
-            // moment, e.g. by an invitation accepted, records it in the log, so it waits for this claim
-            // or this claim waits for it, and sees it.
-            $this->log->lock($realm);
+            // Before asking whether the realm has an active principal: every change that makes one active,
+            // e.g. an invitation accepted, takes the same lock, so it waits for this claim or this claim
+            // waits for it, and sees it (D-52).
+            $this->transactions->lockRealm($realm);
             $state = $this->store->get($realm);
             $hash = self::hash(HumanCode::normalize($command->code->reveal()));
 

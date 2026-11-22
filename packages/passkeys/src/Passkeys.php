@@ -181,8 +181,8 @@ final readonly class Passkeys implements OperationHandler
             $credential = $permit->cause($this->credentials->add(...), new AddCredential($session->realm, CredentialKind::Passkey, $label), $origin);
             $existing = $this->store->of($session->realm, $session->principalId);
 
-            // Adding the credential took the realm's log lock, so this sees a first passkey registered at the
-            // same time, under another user handle: one handle per principal, so this one starts again.
+            // Adding the credential locked the principal, so this sees a first passkey registered at the same
+            // time, under another user handle: one handle per principal, so this one starts again (D-52).
             if ([] !== $existing && $existing[0]->userHandle !== $record->userHandle) {
                 throw new PasskeyRefused(Refusal::CeremonyExpired);
             }

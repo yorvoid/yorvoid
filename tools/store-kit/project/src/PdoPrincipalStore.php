@@ -80,6 +80,16 @@ final readonly class PdoPrincipalStore implements PrincipalStore
         return false !== $statement->fetchColumn();
     }
 
+    /**
+     * A write, so that it's a lock under any isolation: SQLite writes one transaction at a time, and an
+     * update takes its lock. On a database with row locks, update a counter column of the principal's,
+     * not SELECT ... FOR UPDATE, which under REPEATABLE READ lets a waiter go on with an older snapshot.
+     */
+    public function lock(Realm $realm, PrincipalId $id): void
+    {
+        $this->pdo->prepare('UPDATE acme_principal SET status_version = status_version WHERE realm = ? AND id = ?')->execute([$realm->name, $id->uuid->toRfc4122()]);
+    }
+
     public function changeStatus(Principal $before, Principal $after): bool
     {
         $statement = $this->pdo->prepare('UPDATE acme_principal SET status = ?, updated_at = ?, status_changed_at = ?, status_version = ? WHERE realm = ? AND id = ? AND status_version = ?');

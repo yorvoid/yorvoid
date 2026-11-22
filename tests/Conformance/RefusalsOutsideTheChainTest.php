@@ -76,7 +76,7 @@ final class RefusalsOutsideTheChainTest extends DatabaseTestCase
 
         $holder->transactions->run(static function () use ($holder, $realm, $operations): void {
             // Another request holds the realm's log lock until it commits.
-            new SecurityLog($holder->log, $holder->transactions)->lock($realm);
+            $holder->log->lock($realm);
 
             try {
                 $operations->run(new IssueBadge($realm, new PrincipalId(new UuidV7())), new Member($realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web));

@@ -11,6 +11,7 @@ use YorvoID\Authn\Recovery\RecoveryCodes;
 use YorvoID\Authn\Session\AuthenticationContext;
 use YorvoID\Authn\Session\AuthenticationFactor;
 use YorvoID\Authn\Session\AuthenticationMethod;
+use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\StepUp\StepUp;
@@ -46,7 +47,7 @@ final class RecoveryCodeConcurrencyTest extends DatabaseTestCase
         $principals = new Principals($stack->principals, $stack->identifiers, $log, $stack->transactions);
         $sessions = new Sessions($stack->sessions, $principals, $log, $stack->transactions);
         $stepUp = new StepUp($sessions, $stack->coolDowns, $log);
-        $codes = new RecoveryCodes($stack->recoveryCodes, new Credentials($stack->credentials, $sessions, $stepUp, $log, $stack->transactions), $sessions, $stepUp, new Attempts(new Throttle($stack->throttle)), $log, $stack->transactions, $principals);
+        $codes = new RecoveryCodes($stack->recoveryCodes, new Credentials($stack->credentials, $sessions, $principals, $stepUp, $log, $stack->transactions), $sessions, $stepUp, new Attempts(new Throttle($stack->throttle)), $log, $stack->transactions, $principals);
         $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
         $session = Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web))->session;
         $code = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session)[0];
@@ -87,5 +88,61 @@ final class RecoveryCodeConcurrencyTest extends DatabaseTestCase
         $used = array_filter(iterator_to_array($stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.recovery_code.use' === $entry->action && Outcome::Success === $entry->outcome);
         self::assertCount(1, $used);
         self::assertSame(9, $codes->remaining(new Realm('acme'), $principal->id));
+    }
+
+    /**
+     * Two recoveries of one account at once, with two codes: both go through, one after the other on the
+     * principal's lock, and each extends the cool-down; neither fails on the other's.
+     */
+    public function testTwoRecoveriesAtOnceBothStartTheCoolDown(): void
+    {
+        $stack = $this->stack('postgresql');
+        $database = $stack->database;
+        \assert($database instanceof Database && null !== $database->location->schema);
+        $log = new SecurityLog($stack->log, $stack->transactions);
+        $principals = new Principals($stack->principals, $stack->identifiers, $log, $stack->transactions);
+        $sessions = new Sessions($stack->sessions, $principals, $log, $stack->transactions);
+        $stepUp = new StepUp($sessions, $stack->coolDowns, $log);
+        $codes = new RecoveryCodes($stack->recoveryCodes, new Credentials($stack->credentials, $sessions, $principals, $stepUp, $log, $stack->transactions), $sessions, $stepUp, new Attempts(new Throttle($stack->throttle)), $log, $stack->transactions, $principals);
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Human), new Origin(OriginKind::Console));
+        $session = Permits::call($sessions->start(...), new StartSession(new Realm('acme'), $principal->id, new AuthenticationContext(new AuthenticationFactor(AuthenticationMethod::Passkey, new \DateTimeImmutable()))), new Origin(OriginKind::Web))->session;
+        $generated = Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
+        // No session left for the two to end: they meet only where the lock serializes them.
+        $stack->sessions->endCurrent(new Realm('acme'), $principal->id, new \DateTimeImmutable(), SessionEndReason::SignedOut);
+        $start = \sprintf('%s/yorvoid-start-%s', sys_get_temp_dir(), bin2hex(random_bytes(6)));
+        $processes = [];
+
+        foreach ([$generated[0], $generated[1]] as $code) {
+            $process = proc_open(
+                [\PHP_BINARY, __DIR__.'/../Support/use-recovery-code.php', (string) getenv('YORVOID_TEST_POSTGRES_URL'), $database->location->schema, (string) $principal->id, $code->reveal(), $start, '3600'],
+                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+                $pipes,
+            );
+            self::assertIsResource($process);
+            $processes[] = [$process, $pipes];
+        }
+
+        touch($start);
+        $results = [];
+
+        try {
+            foreach ($processes as $i => [$process, $pipes]) {
+                $output = stream_get_contents($pipes[1]).stream_get_contents($pipes[2]);
+                $results[] = [proc_close($process), $output];
+                unset($processes[$i]);
+            }
+        } finally {
+            unlink($start);
+
+            foreach ($processes as [$process]) {
+                proc_terminate($process);
+            }
+        }
+
+        self::assertSame([0, 0], array_column($results, 0), 'A recovery failed on the other\'s: '.implode(' | ', array_column($results, 1)));
+        $coolDowns = array_filter(iterator_to_array($stack->log->entries(new Realm('acme'), 1), false), static fn (LogEntry $entry): bool => 'yorvoid.recovery.cool_down' === $entry->action);
+        self::assertCount(2, $coolDowns);
+        self::assertNotNull($stack->coolDowns->until(new Realm('acme'), $principal->id));
+        self::assertSame(8, $codes->remaining(new Realm('acme'), $principal->id));
     }
 }

@@ -30,6 +30,7 @@ use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Operation\Permit;
 use YorvoID\Core\Principal\PrincipalId;
+use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Core\Text;
@@ -54,6 +55,7 @@ final readonly class Credentials implements OperationHandler
     public function __construct(
         private CredentialStore $store,
         private Sessions $sessions,
+        private Principals $principals,
         private StepUp $stepUp,
         private SecurityLog $log,
         private Transactions $transactions,
@@ -130,6 +132,9 @@ final readonly class Credentials implements OperationHandler
 
         // The proof is the operation's that causes it, decided before it's permitted (G-8).
         return $this->transactions->run(function () use ($command, $session, $origin): Credential {
+            // Ways to sign in of one principal change one after the other: e.g. a first passkey registered
+            // twice at once sees the other (D-52).
+            $this->principals->lock($session->realm, $session->principalId);
             $credential = new Credential(new CredentialId($this->ids->next()), $command->realm, $session->principalId, $command->kind, self::label($command->label, $command->kind), Time::stored($this->clock->now()));
             $this->store->add($credential);
             $this->record('yorvoid.credential.add', $credential, $origin);
@@ -154,13 +159,14 @@ final readonly class Credentials implements OperationHandler
         $session = self::session($permit);
 
         $this->transactions->run(function () use ($command, $session, $permit, $origin): void {
+            // Before reading what's left: two sessions removing the last two passkeys at once, or a
+            // removal and a disable, count what's left one after the other (D-52).
+            $this->principals->lock($command->realm, $session->principalId);
             $credential = $this->own($command->realm, $command->credentialId, $session);
             $permit->about($credential->principalId);
 
             $this->events->dispatch(new CredentialRemoving($credential, $origin));
             $this->store->remove($credential->realm, $credential->id);
-            // Recording takes the realm's log lock: two sessions removing the last two passkeys at once
-            // count what's left one after the other.
             $this->record('yorvoid.credential.remove', $credential, $origin);
 
             if ($credential->kind->signsIn() && [] === array_filter($this->store->of($credential->realm, $credential->principalId), static fn (Credential $other): bool => $other->isActive() && $other->kind->signsIn())) {
@@ -222,6 +228,8 @@ final readonly class Credentials implements OperationHandler
         $permit->use($command);
 
         return $this->transactions->run(function () use ($command, $origin): ?Credential {
+            // As a removal does: what a removal of the principal's counts as left waits for this (D-52).
+            $this->principals->lock($command->realm, $command->principalId);
             $credential = $this->store->get($command->realm, $command->credentialId);
 
             // Removed since the caller read it, or someone else's: nothing to disable, and nothing to record.

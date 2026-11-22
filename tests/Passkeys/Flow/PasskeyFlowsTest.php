@@ -124,7 +124,7 @@ final class PasskeyFlowsTest extends DatabaseTestCase
         $this->principals = new Principals($stack->principals, $stack->identifiers, $log, $stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($stack->sessions, $this->principals, $log, $stack->transactions, ids: $ids, clock: $this->clock);
         $stepUp = new StepUp($this->sessions, $stack->coolDowns, $log, $this->clock);
-        $this->credentials = $credentials = new Credentials($stack->credentials, $this->sessions, $stepUp, $log, $stack->transactions, ids: $ids, clock: $this->clock);
+        $this->credentials = $credentials = new Credentials($stack->credentials, $this->sessions, $this->principals, $stepUp, $log, $stack->transactions, ids: $ids, clock: $this->clock);
         $this->passkeys = new Passkeys($stack->passkeys, $stack->ceremonies, $credentials, $this->sessions, $this->principals, $log, $stack->transactions, new PasskeyPolicy('example.com', ['https://example.com']), $attempts, $ids, $this->clock);
         $this->recoveryCodes = new RecoveryCodes($stack->recoveryCodes, $credentials, $this->sessions, $stepUp, $attempts, $log, $stack->transactions, $this->principals, clock: $this->clock);
         $tokens = new OneTimeTokens($stack->tokens, $this->principals, $log, $stack->transactions, clock: $this->clock);

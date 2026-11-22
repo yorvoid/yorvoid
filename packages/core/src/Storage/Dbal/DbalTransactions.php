@@ -13,9 +13,13 @@ use Psr\Log\NullLogger;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\AuditAlarm;
+use YorvoID\Core\Realm;
+use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\ForgetsWhatItRead;
 use YorvoID\Core\Storage\RetryableConflict;
 use YorvoID\Core\Storage\RetryScope;
+use YorvoID\Core\Storage\SqlPlatform;
+use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Core\Storage\Transactions;
 
 /**
@@ -29,6 +33,9 @@ final readonly class DbalTransactions implements Transactions
 {
     /** How many times retrying() runs work that conflicts, in all */
     public const int ATTEMPTS = 3;
+
+    /** One row per realm, written by lockRealm() */
+    public const string REALM_LOCK_TABLE = 'realm_lock';
 
     private AuditAlarm $alarm;
 
@@ -44,11 +51,12 @@ final readonly class DbalTransactions implements Transactions
     private RetryScope $retrying;
 
     /**
-     * @param EventDispatcherInterface       $events Where an afterEnd() callback's failure is announced (AuditFailed)
-     * @param LoggerInterface                $logger Where it's logged, at critical, and an afterCommit() callback's at error
-     * @param iterable<ForgetsWhatItRead>    $reads  What forgets what it read before work that conflicted runs again
-     * @param (\Closure(int): void)|null     $wait   How it waits before an attempt, in microseconds: usleep() if not given
-     * @param (\Closure(int, int): int)|null $random How long, between two bounds: random_int() if not given
+     * @param EventDispatcherInterface       $events   Where an afterEnd() callback's failure is announced (AuditFailed)
+     * @param LoggerInterface                $logger   Where it's logged, at critical, and an afterCommit() callback's at error
+     * @param iterable<ForgetsWhatItRead>    $reads    What forgets what it read before work that conflicted runs again
+     * @param (\Closure(int): void)|null     $wait     How it waits before an attempt, in microseconds: usleep() if not given
+     * @param (\Closure(int, int): int)|null $random   How long, between two bounds: random_int() if not given
+     * @param StorageLocation                $location Where YorvoID's tables are, for the realm's lock
      */
     public function __construct(
         private Connection $connection,
@@ -58,6 +66,7 @@ final readonly class DbalTransactions implements Transactions
         iterable $reads = [],
         ?\Closure $wait = null,
         ?\Closure $random = null,
+        private StorageLocation $location = new StorageLocation(),
     ) {
         $this->reads = array_values([...$reads]);
         $this->wait = $wait ?? usleep(...);
@@ -65,7 +74,7 @@ final readonly class DbalTransactions implements Transactions
         $this->retrying = new RetryScope();
         $this->alarm = new AuditAlarm($events, $logger);
         $this->logger = $logger;
-        $middleware?->hooks()->attach($connection, $logger, $this->alarm);
+        $middleware?->hooks()->attach($connection, $logger, $this->alarm, $location);
     }
 
     public function run(\Closure $work): mixed
@@ -74,7 +83,7 @@ final readonly class DbalTransactions implements Transactions
 
         if (null === $hooks) {
             try {
-                return $this->connection->transactional($work);
+                return $this->transactional($work);
             } catch (DeadlockException $conflict) {
                 throw new RetryableConflict($conflict);
             }
@@ -91,7 +100,7 @@ final readonly class DbalTransactions implements Transactions
         }
 
         try {
-            $result = $this->connection->transactional($discards ? static function () use ($work, $hooks): mixed {
+            $result = $this->transactional($discards ? static function () use ($work, $hooks): mixed {
                 try {
                     return $work();
                 } catch (DeadlockException|RetryableConflict $conflict) {
@@ -129,6 +138,36 @@ final readonly class DbalTransactions implements Transactions
         if ($outermost) {
             $hooks->runCommitted();
         }
+
+        return $result;
+    }
+
+    /**
+     * DBAL's transactional(), except after a commit that failed: DBAL has ended the transaction then,
+     * and rolling back again would throw NoActiveTransaction over the commit's own failure.
+     *
+     * @template T
+     *
+     * @param \Closure(): T $work
+     *
+     * @return T
+     */
+    private function transactional(\Closure $work): mixed
+    {
+        $this->connection->beginTransaction();
+
+        try {
+            $result = $work();
+        } catch (ConnectionLost $lost) {
+            // Nothing to roll back on: as DBAL's transactional().
+            throw $lost;
+        } catch (\Throwable $failure) {
+            $this->connection->rollBack();
+
+            throw $failure;
+        }
+
+        $this->connection->commit();
 
         return $result;
     }
@@ -196,6 +235,35 @@ final readonly class DbalTransactions implements Transactions
         }
 
         $hooks->add($callback);
+    }
+
+    public function lockRealm(Realm $realm): void
+    {
+        if (!$this->connection->isTransactionActive()) {
+            throw new IntegratorError('A realm was locked outside a transaction.', 'Lock it inside Transactions::run(), before reading what the change depends on.', 'concepts/storage.md#locks');
+        }
+
+        $database = new Database($this->connection, $this->location);
+        $table = $database->table(self::REALM_LOCK_TABLE);
+
+        // Made the first time and written every time, in one statement: of two at once, the second waits,
+        // and under REPEATABLE READ then conflicts (D-52).
+        $this->connection->executeStatement(SqlPlatform::PostgreSQL === $database->platform
+            ? \sprintf('INSERT INTO %s AS held (realm, n) VALUES (?, 1) ON CONFLICT (realm) DO UPDATE SET n = held.n + 1', $table)
+            : \sprintf('INSERT INTO %s (realm, n) VALUES (?, 1) ON CONFLICT (realm) DO UPDATE SET n = n + 1', $table), [$realm->name]);
+    }
+
+    public function beforeCommit(\Closure $callback): bool
+    {
+        $hooks = $this->middleware?->hooks();
+
+        if (!$this->connection->isTransactionActive() || null === $hooks || !$hooks->isWatching()) {
+            return false;
+        }
+
+        $hooks->addBeforeCommit($callback);
+
+        return true;
     }
 
     public function afterEnd(\Closure $callback): void

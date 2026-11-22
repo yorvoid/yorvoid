@@ -15,7 +15,6 @@ use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
-use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
@@ -74,10 +73,14 @@ final class DecisionCitationsTest extends TestCase
         $permit = Decisions::identified(Decisions::permit(AuthorizedBy::Self, 'Cited.'), $id, new \DateTimeImmutable());
 
         // The ID alone, of a recorded permit, is a citation that holds.
-        $log->citing($permit, static fn (): LogEntry => $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web)));
+        $log->citing($permit, static function () use ($log, $realm): void {
+            $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web));
+        });
         self::assertSame([], $digests->citations($realm));
 
-        $log->citing(Decisions::recorded($permit, '0000'), static fn (): LogEntry => $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web)));
+        $log->citing(Decisions::recorded($permit, '0000'), static function () use ($log, $realm): void {
+            $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web));
+        });
         self::assertSame([\sprintf('Entry 4 (acme.badge.note) cites the decision %s with another hash than its record\'s.', $id)], $digests->citations($realm));
     }
 
@@ -87,7 +90,9 @@ final class DecisionCitationsTest extends TestCase
         $refusal = Decision::deny('No.')->identified((string) new UuidV7(), new \DateTimeImmutable(), []);
         $decisions->add([DecisionRecord::of(Request::forAbility('acme.pages.edit', $realm, null, new Member($realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web), new \DateTimeImmutable()), $refusal)]);
 
-        $log->citing($refusal, static fn (): LogEntry => $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web)));
+        $log->citing($refusal, static function () use ($log, $realm): void {
+            $log->record($realm, 'acme.badge.note', Outcome::Success, new Origin(OriginKind::Web));
+        });
 
         self::assertSame([\sprintf('Entry 1 (acme.badge.note) cites the decision %s, which is a deny.', $refusal->id)], $digests->citations($realm));
     }

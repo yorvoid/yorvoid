@@ -82,6 +82,8 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
         }
 
         return $this->transactions->run(function () use ($command, $role, $permit, $origin): Role {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             // A role deleted earlier left nothing, but changes made with its name before go too.
             $changes = $this->store->changes($command->realm)->withoutRole($role->name);
@@ -109,6 +111,8 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
         $role = new Role($command->name, $command->label);
 
         return $this->transactions->run(function () use ($command, $role, $permit, $origin): Role {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $this->store->saveRole($command->realm, $role->name, $role->label);
             $this->record($command->realm, 'yorvoid.role.relabel', $permit, $origin, 'role', $role->name, ['label' => $role->label]);
@@ -129,6 +133,8 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
         $this->created($command->realm, $command->name, 'deleted');
 
         $this->transactions->run(function () use ($command, $permit, $origin): void {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $this->store->unassignRole($command->realm, $command->name);
             $this->store->saveChanges($command->realm, $this->store->changes($command->realm)->withoutRole($command->name));
@@ -152,6 +158,10 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
                 throw new UnknownPrincipal($command->realm, $command->principalId);
             }
 
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+
+            $this->transactions->lockRealm($command->realm);
+
             $this->store->bump($command->realm);
             $assignment = new RoleAssignment($command->realm, $command->principalId, $command->role, Time::stored($this->clock->now()), $command->scope, null === $command->expiresAt ? null : Time::stored($command->expiresAt));
             $this->store->assign($assignment);
@@ -173,6 +183,8 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
         $permit->use($command);
 
         return $this->transactions->run(function () use ($command, $permit, $origin): bool {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $had = $this->store->unassign($command->realm, $command->principalId, $command->role, $command->scope);
 
@@ -219,6 +231,8 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
 
         // An ability that isn't declared has no defaults: UnknownAbility, and nothing changes.
         return $this->transactions->run(function () use ($command, $permit, $origin): AbilityChanges {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $taken = array_diff($this->roles->abilitiesOf($command->realm, $command->role), $command->abilities);
             $changes = $this->store->changes($command->realm);
@@ -247,6 +261,8 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
         $this->declared($command->abilities ?? []);
 
         return $this->transactions->run(function () use ($command, $permit, $origin): AbilityChanges {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($command->realm);
             $this->store->bump($command->realm);
             $changes = $this->store->changes($command->realm)->reset($command->abilities);
             $this->store->saveChanges($command->realm, $changes);
@@ -265,6 +281,8 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
 
         // An ability that isn't declared has no defaults: UnknownAbility, and nothing changes.
         return $this->transactions->run(function () use ($realm, $role, $abilities, $grant, $action, $permit, $origin): AbilityChanges {
+            // The realm first: a guard rule that reads roles waits for this, or is waited for (D-52).
+            $this->transactions->lockRealm($realm);
             $this->store->bump($realm);
             $changes = $this->store->changes($realm);
 

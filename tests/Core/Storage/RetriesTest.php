@@ -194,13 +194,18 @@ final class RetriesTest extends TestCase
         $attempts = 0;
         /** @var \ArrayObject<int, int> $ended */
         $ended = new \ArrayObject();
+        /** @var \ArrayObject<int, int> $beforeCommit */
+        $beforeCommit = new \ArrayObject();
 
-        $this->transactions->retrying(function () use (&$attempts, $ended): void {
-            $this->transactions->run(function () use (&$attempts, $ended): void {
+        $this->transactions->retrying(function () use (&$attempts, $ended, $beforeCommit): void {
+            $this->transactions->run(function () use (&$attempts, $ended, $beforeCommit): void {
                 ++$attempts;
                 $this->transactions->afterEnd(static function () use ($ended, $attempts): void {
                     $ended[] = $attempts;
                 });
+                self::assertTrue($this->transactions->beforeCommit(static function () use ($beforeCommit, $attempts): void {
+                    $beforeCommit[] = $attempts;
+                }));
 
                 if (1 === $attempts) {
                     $this->transactions->run(static fn (): mixed => throw self::deadlock());
@@ -209,6 +214,7 @@ final class RetriesTest extends TestCase
         });
 
         self::assertSame([2], $ended->getArrayCopy());
+        self::assertSame([2], $beforeCommit->getArrayCopy(), 'What the first attempt left for its commit ran.');
     }
 
     /**

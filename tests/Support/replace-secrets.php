@@ -61,7 +61,7 @@ $configuration = new Configuration();
 $configuration->setMiddlewares([$middleware]);
 $connection = DriverManager::getConnection(new DsnParser()->parse($url), $configuration);
 $database = new Database($connection, new StorageLocation(StorageLocation::DEFAULT_PREFIX, $schema));
-$transactions = new DbalTransactions($connection, $middleware);
+$transactions = new DbalTransactions($connection, $middleware, location: $database->location);
 $log = new SecurityLog(new DbalSecurityLogStore($database), $transactions);
 $principals = new Principals(new DbalPrincipalStore($database), new DbalIdentifierStore($database), $log, $transactions);
 $sessions = new Sessions(new DbalSessionStore($database), $principals, $log, $transactions);
@@ -70,7 +70,7 @@ $origin = new Origin(OriginKind::Web, 'process '.getmypid());
 
 $replace = match ($kind) {
     'codes' => static function () use ($database, $sessions, $stepUp, $log, $transactions, $principals, $id, $origin): array {
-        $codes = new RecoveryCodes(new DbalRecoveryCodeStore($database), new Credentials(new DbalCredentialStore($database), $sessions, $stepUp, $log, $transactions), $sessions, $stepUp, new Attempts(new Throttle(new DbalThrottleStore($database))), $log, $transactions, $principals);
+        $codes = new RecoveryCodes(new DbalRecoveryCodeStore($database), new Credentials(new DbalCredentialStore($database), $sessions, $principals, $stepUp, $log, $transactions), $sessions, $stepUp, new Attempts(new Throttle(new DbalThrottleStore($database))), $log, $transactions, $principals);
         $session = $sessions->get(new Realm('acme'), SessionId::fromString($id)) ?? throw new LogicException('No such session.');
 
         return array_map(static fn (Secret $code): string => $code->reveal(), Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), $origin, $session));

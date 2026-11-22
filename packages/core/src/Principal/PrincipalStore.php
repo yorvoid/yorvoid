@@ -28,6 +28,17 @@ interface PrincipalStore
     public function hasActive(Realm $realm): bool;
 
     /**
+     * Locks the principal's row until the transaction ends, before the reads a change of theirs depends
+     * on: changes of one principal, e.g. two removals of their last two passkeys, then happen one after
+     * the other, and each reads what the other committed. It's a write, e.g. of a counter of its own:
+     * under REPEATABLE READ, a transaction that waited for it then fails as a conflict, and runs again
+     * on what was committed, rather than going on with an older snapshot. Locks after the realm's
+     * (Transactions::lockRealm()) and version rows, before the security log's (D-52). Inside a
+     * transaction only.
+     */
+    public function lock(Realm $realm, PrincipalId $id): void;
+
+    /**
      * Writes the principal's new status, if it's still at the status version $before has: another
      * transaction may have changed it since it was read.
      *

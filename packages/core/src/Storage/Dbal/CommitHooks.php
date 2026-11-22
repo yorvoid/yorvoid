@@ -10,6 +10,7 @@ use Psr\Log\NullLogger;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Log\AuditAlarm;
 use YorvoID\Core\Log\Event\AuditFailed;
+use YorvoID\Core\Storage\StorageLocation;
 
 /**
  * Callbacks waiting for the connection's outermost transaction to end. TransactionMiddleware tells it
@@ -29,6 +30,14 @@ final class CommitHooks
     /** @var list<\Closure(): void> Callbacks for the end, committed or rolled back */
     private array $ended = [];
 
+    /**
+     * Callbacks just before the commit, in savepoint frames: the transaction's own first, then one per
+     * savepoint open, by name, as the database keeps them.
+     *
+     * @var non-empty-list<array{?string, list<\Closure(): void>}>
+     */
+    private array $beforeCommit = [[null, []]];
+
     private bool $watching = false;
 
     /** Whether a commit should wait for runCommitted() rather than run the callbacks at once */
@@ -37,6 +46,9 @@ final class CommitHooks
     private bool $committed = false;
 
     private ?Connection $connection = null;
+
+    /** Checks the order of the transaction's locks, in the tests (YORVOID_LOCK_ORDER=check) */
+    public private(set) ?LockOrder $lockOrder = null;
 
     private LoggerInterface $logger;
 
@@ -51,9 +63,10 @@ final class CommitHooks
     /**
      * The DBAL connection over the watched one, and where a callback's failure goes.
      */
-    public function attach(Connection $connection, LoggerInterface $logger, AuditAlarm $alarm): void
+    public function attach(Connection $connection, LoggerInterface $logger, AuditAlarm $alarm, StorageLocation $location = new StorageLocation()): void
     {
         $this->connection = $connection;
+        $this->lockOrder ??= LockOrder::fromEnvironment($location);
         $this->logger = $logger;
         $this->alarm = $alarm;
     }
@@ -85,6 +98,124 @@ final class CommitHooks
     }
 
     /**
+     * @param \Closure(): void $callback
+     */
+    public function addBeforeCommit(\Closure $callback): void
+    {
+        $this->beforeCommit[array_key_last($this->beforeCommit)][1][] = $callback;
+    }
+
+    /**
+     * A savepoint was set: what's added from now on is undone with it.
+     */
+    public function savepoint(string $name): void
+    {
+        $this->beforeCommit[] = [$name, []];
+    }
+
+    /**
+     * The savepoint was released: what waited in it, and in those set after it, now waits in the one
+     * it was set in.
+     */
+    public function released(string $name): void
+    {
+        $frame = $this->frame($name);
+
+        if (null === $frame) {
+            $this->unknown('released', $name);
+
+            return;
+        }
+
+        $merged = array_merge(...array_column(\array_slice($this->beforeCommit, $frame), 1));
+        $kept = \array_slice($this->beforeCommit, 0, $frame);
+        \assert([] !== $kept);
+        [$name, $waiting] = $kept[\count($kept) - 1];
+        $kept[\count($kept) - 1] = [$name, [...$waiting, ...$merged]];
+        $this->beforeCommit = $kept;
+    }
+
+    /**
+     * Rolled back to the savepoint: what was added since it was set won't be committed. The savepoint
+     * itself stays, as the database keeps it.
+     */
+    public function rolledBackTo(string $name): void
+    {
+        $frame = $this->frame($name);
+
+        if (null === $frame) {
+            $this->unknown('rolled back to', $name);
+
+            return;
+        }
+
+        $kept = \array_slice($this->beforeCommit, 0, $frame);
+        $kept[] = [$name, []];
+        $this->beforeCommit = $kept;
+    }
+
+    /**
+     * A savepoint statement that can't be read, e.g. a name with spaces: which of what waits it undoes
+     * can't be told. It's kept, and the audit alert says so, rather than guessing (D-52).
+     */
+    public function unreadableSavepoint(string $sql): void
+    {
+        $this->unknown('changed', $sql);
+    }
+
+    /**
+     * The latest open savepoint of the name, as the database finds it.
+     */
+    private function frame(string $name): ?int
+    {
+        // The transaction's own frame has no name: never found.
+        return array_find_key(array_reverse($this->beforeCommit, true), static fn (array $frame): bool => $frame[0] === $name);
+    }
+
+    private function unknown(string $what, string $savepoint): void
+    {
+        $waiting = \count(array_merge(...array_column($this->beforeCommit, 1)));
+
+        if (0 < $waiting) {
+            $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_LOG, null, $waiting, false, new \LogicException(\sprintf('The transaction %s the savepoint "%s", which YorvoID didn\'t see set: it kept the security log entries it waited to append at the commit, which may include some of the work undone.', $what, $savepoint))));
+        }
+    }
+
+    /**
+     * The driver is about to commit: runs what waits for that, in the order it was added. A failure is
+     * thrown, for the commit to roll back.
+     */
+    public function beforeCommit(): void
+    {
+        $waiting = array_merge(...array_column($this->beforeCommit, 1));
+        $this->beforeCommit = [[null, []]];
+
+        if ([] === $waiting) {
+            return;
+        }
+
+        foreach ($waiting as $callback) {
+            $callback();
+        }
+
+        // Callbacks may leave callbacks of their own: those run next, in the same commit.
+        $this->beforeCommit();
+    }
+
+    /**
+     * What waited before the commit failed, and the driver rolled back: nothing of the transaction is
+     * committed. DBAL still counts it as open until its commit() has thrown, so what waits for the end
+     * runs in a transaction of its own on the driver, as after a commit (D-43).
+     */
+    public function failedBeforeCommit(WatchedConnection $driver): void
+    {
+        $this->callbacks = [];
+        $this->beforeCommit = [[null, []]];
+        $connection = $this->connection;
+        $this->runEnded(null === $connection ? null : fn (\Closure $callback) => $this->apart($connection, $driver, $callback));
+    }
+
+    /**
      * How many callbacks are waiting, to drop those a failed unit of work added (see truncate()).
      */
     public function count(): int
@@ -103,7 +234,9 @@ final class CommitHooks
 
     /**
      * Drops everything waiting, for the commit and for the end: the outermost transaction conflicted,
-     * and its work runs again from the start and leaves them again (D-52).
+     * and its work runs again from the start and leaves them again (D-52). What waited just before the
+     * commit already went with the transaction's end: its rollback, the failure before the commit, or
+     * the commit that ran it.
      */
     public function discard(): void
     {
@@ -156,6 +289,7 @@ final class CommitHooks
     public function rolledBack(): void
     {
         $this->callbacks = [];
+        $this->beforeCommit = [[null, []]];
         // DBAL counts no transaction once it rolls back, before the driver does: they can open one.
         $this->runEnded();
     }
@@ -231,7 +365,11 @@ final class CommitHooks
             if (!$driver->isApart()) {
                 throw new \LogicException('A callback after the commit ended the transaction it ran in.');
             }
+
+            // What it left for just before its commit, e.g. its security log entries: in its transaction.
+            $this->beforeCommit();
         } catch (\Throwable $e) {
+            $this->beforeCommit = [[null, []]];
             $this->unwind($connection, $driver, $e);
         }
 

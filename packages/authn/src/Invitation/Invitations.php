@@ -125,6 +125,8 @@ final readonly class Invitations implements OperationHandler
         $permit->use($command);
 
         $this->transactions->run(function () use ($command, $permit, $origin): void {
+            // It deletes the principal: the realm's lock first, as every change of status takes (D-52).
+            $this->transactions->lockRealm($command->realm);
             $principal = $this->invited($command->realm, $command->principalId);
             $permit->cause($this->tokens->revoke(...), new RevokeTokens($principal->realm, $principal->id, self::PURPOSE), $origin);
             $permit->cause($this->principals->delete(...), new DeletePrincipal($principal->realm, $principal->id), $origin);
@@ -156,6 +158,9 @@ final readonly class Invitations implements OperationHandler
         $token = $command->token;
 
         return $this->transactions->run(function () use ($command, $realm, $token, $permit, $origin): ?StartedSession {
+            // It makes the principal active: the realm's lock first, as every change of status takes (D-52).
+            $this->transactions->lockRealm($realm);
+
             if (null === $this->peek($realm, $token)) {
                 return null;
             }

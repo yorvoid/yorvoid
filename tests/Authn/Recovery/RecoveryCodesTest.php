@@ -189,6 +189,24 @@ final class RecoveryCodesTest extends DatabaseTestCase
         self::assertNotNull(Permits::call($codes->redeem(...), new RedeemRecoveryCode(new Realm('acme'), $session->principalId, $new[0]), new Origin(OriginKind::Web)));
     }
 
+    /**
+     * Two new sets at once take turns: each locks its principal before reading its codes' credential,
+     * also when there's one already and nothing adds it.
+     */
+    #[DataProvider('platforms')]
+    public function testANewSetLocksThePrincipalFirst(string $platform): void
+    {
+        $statements = new StatementLog();
+        $codes = $this->codes($platform, statements: $statements);
+        $session = $this->session();
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
+        $statements->take();
+
+        Permits::call($codes->generate(...), new GenerateRecoveryCodes(new Realm('acme')), new Origin(OriginKind::Web), $session);
+
+        self::assertStringContainsString('SET lock_count = lock_count + 1', $statements->takeLocks()[0] ?? '', 'The principal wasn\'t locked first.');
+    }
+
     #[DataProvider('implementations')]
     public function testGeneratingNeedsARecentProof(string $implementation): void
     {
@@ -523,7 +541,7 @@ final class RecoveryCodesTest extends DatabaseTestCase
         $this->principals = new Principals($this->stack->principals, $this->stack->identifiers, $log, $this->stack->transactions, ids: $ids, clock: $this->clock);
         $this->sessions = new Sessions($this->stack->sessions, $this->principals, $log, $this->stack->transactions, events: $this->events, ids: $ids, clock: $this->clock, devices: $devices ? $this->stack->devices : null);
         $this->stepUp = new StepUp($this->sessions, $this->stack->coolDowns, $log, $this->clock, $coolDown);
-        $this->credentials = new Credentials($this->stack->credentials, $this->sessions, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
+        $this->credentials = new Credentials($this->stack->credentials, $this->sessions, $this->principals, $this->stepUp, $log, $this->stack->transactions, $this->events, $ids, $this->clock);
 
         $this->attempts = new Attempts(new Throttle($this->stack->throttle, $this->clock));
 
