@@ -90,6 +90,19 @@ final class LockOrderTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
+    /**
+     * Another application's tables, and YorvoID's own bookkeeping, aren't locks it orders: the realm's
+     * lock may come after them.
+     */
+    public function testOtherTablesComeBeforeTheRealmsLock(): void
+    {
+        $order = $this->order();
+        $order->saw('UPDATE app_orders SET paid = 1');
+        $order->saw('INSERT INTO "yorvoid_throttle_key" (key_hash) VALUES (?)');
+        $order->saw('INSERT INTO "yorvoid_realm_lock" (realm, n) VALUES (?, 1) ON CONFLICT (realm) DO UPDATE SET n = n + 1');
+        $this->addToAssertionCount(1);
+    }
+
     public function testOutsideATransactionNothingIsOrdered(): void
     {
         new LockOrder(new StorageLocation())->saw('UPDATE "yorvoid_policy_version" SET version = version + 1');

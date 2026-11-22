@@ -136,10 +136,9 @@ final class LockOrder
             }
 
             $found = preg_match('/\bFROM\s+('.$table.')/i', $statement, $target);
-        } elseif (\in_array($keyword, ['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'TRUNCATE', 'LOCK'], true)) {
-            $found = preg_match('/^(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?|LOCK(?:\s+TABLE)?)\s+(?:ONLY\s+)?('.$table.')/i', $statement, $target);
         } else {
-            $found = 0;
+            // Any other statement is a write of the table it names first, or can't be placed.
+            $found = preg_match('/^(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?|LOCK(?:\s+TABLE)?)\s+(?:ONLY\s+)?('.$table.')/i', $statement, $target);
         }
 
         if (1 !== $found) {

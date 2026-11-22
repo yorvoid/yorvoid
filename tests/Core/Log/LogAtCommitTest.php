@@ -120,11 +120,18 @@ final class LogAtCommitTest extends TestCase
         $log = $this->log();
         $this->failing = true;
         $thrown = null;
+        $native = $this->connection->getNativeConnection();
+        \assert($native instanceof \PDO);
+        $endedIn = null;
 
         try {
-            $this->connection->transactional(function () use ($log): void {
+            $this->connection->transactional(function () use ($log, $native, &$endedIn): void {
                 $this->connection->executeStatement('INSERT INTO change (v) VALUES (1)');
                 $log->record($this->realm, 'acme.thing.change', Outcome::Success, new Origin(OriginKind::Web));
+                // DBAL still counts the failed one as open: what waits for the end gets one of its own.
+                $this->transactions->afterEnd(static function () use ($native, &$endedIn): void {
+                    $endedIn = $native->inTransaction();
+                });
             });
         } catch (\Throwable $e) {
             $thrown = $e;
@@ -138,6 +145,7 @@ final class LogAtCommitTest extends TestCase
         }
 
         self::assertContains('The log is full.', $causes, 'The cause was lost.');
+        self::assertTrue($endedIn, 'What waits for the end didn\'t run in a transaction of its own.');
         self::assertSame('The log is full.', $this->alerts->of(AuditFailed::class)[0]->error->getMessage());
         $this->assertNothingCommitted();
         self::assertFalse($this->connection->isTransactionActive());
@@ -148,9 +156,33 @@ final class LogAtCommitTest extends TestCase
     }
 
     /**
+     * A callback after the application's commit that fails drops what it left for its own commit; the
+     * next transaction's savepoints are followed as before.
+     */
+    public function testACallbackThatFailsAfterTheCommitLeavesNothingWaiting(): void
+    {
+        $log = $this->log();
+
+        $this->connection->transactional(function () use ($log): void {
+            $this->transactions->afterCommit(function () use ($log): never {
+                $log->record($this->realm, 'acme.thing.dropped', Outcome::Success, new Origin(OriginKind::Web));
+
+                throw new \RuntimeException('the callback failed');
+            });
+        });
+
+        $this->assertASavepointRolledBackDropsItsEntries();
+    }
+
+    /**
      * A savepoint the application rolls back takes its entries with it; the rest commit.
      */
     public function testASavepointRolledBackDropsItsEntries(): void
+    {
+        $this->assertASavepointRolledBackDropsItsEntries();
+    }
+
+    private function assertASavepointRolledBackDropsItsEntries(): void
     {
         $log = $this->log();
 

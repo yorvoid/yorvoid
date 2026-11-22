@@ -27,6 +27,16 @@ final class StatementLog extends AbstractLogger
         return $statements;
     }
 
+    /**
+     * The statements since the last call that lock a row: writes, and reads FOR UPDATE or FOR SHARE.
+     *
+     * @return list<string>
+     */
+    public function takeLocks(): array
+    {
+        return array_values(array_filter($this->take(), static fn (string $sql): bool => 1 === preg_match('/^\s*(?:INSERT|UPDATE|DELETE)\b|\bFOR\s+(?:UPDATE|SHARE)\b/i', $sql)));
+    }
+
     public function log($level, string|\Stringable $message, array $context = []): void
     {
         $sql = $context['sql'] ?? null;

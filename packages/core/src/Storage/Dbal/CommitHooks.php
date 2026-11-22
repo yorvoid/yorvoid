@@ -168,13 +168,8 @@ final class CommitHooks
      */
     private function frame(string $name): ?int
     {
-        for ($i = \count($this->beforeCommit) - 1; $i > 0; --$i) {
-            if ($this->beforeCommit[$i][0] === $name) {
-                return $i;
-            }
-        }
-
-        return null;
+        // The transaction's own frame has no name: never found.
+        return array_find_key(array_reverse($this->beforeCommit, true), static fn (array $frame): bool => $frame[0] === $name);
     }
 
     private function unknown(string $what, string $savepoint): void
@@ -192,15 +187,19 @@ final class CommitHooks
      */
     public function beforeCommit(): void
     {
-        while ([] !== ($waiting = array_merge(...array_column($this->beforeCommit, 1)))) {
-            $this->beforeCommit = [[null, []]];
+        $waiting = array_merge(...array_column($this->beforeCommit, 1));
+        $this->beforeCommit = [[null, []]];
 
-            foreach ($waiting as $callback) {
-                $callback();
-            }
+        if ([] === $waiting) {
+            return;
         }
 
-        $this->beforeCommit = [[null, []]];
+        foreach ($waiting as $callback) {
+            $callback();
+        }
+
+        // Callbacks may leave callbacks of their own: those run next, in the same commit.
+        $this->beforeCommit();
     }
 
     /**
@@ -235,13 +234,14 @@ final class CommitHooks
 
     /**
      * Drops everything waiting, for the commit and for the end: the outermost transaction conflicted,
-     * and its work runs again from the start and leaves them again (D-52).
+     * and its work runs again from the start and leaves them again (D-52). What waited just before the
+     * commit already went with the transaction's end: its rollback, the failure before the commit, or
+     * the commit that ran it.
      */
     public function discard(): void
     {
         $this->callbacks = [];
         $this->ended = [];
-        $this->beforeCommit = [[null, []]];
     }
 
     /**

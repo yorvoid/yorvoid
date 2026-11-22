@@ -424,6 +424,8 @@ trait TransactionsContract
 
         $seen = $transactions->run(static function () use ($transactions, $ran): bool {
             $transactions->afterCommit(static fn () => $ran->append('after'));
+            // Left before the nested unit: its failure drops only what it left itself.
+            $transactions->beforeCommit(static fn () => $ran->append('kept'));
 
             try {
                 $transactions->run(static function () use ($transactions, $ran): never {
@@ -437,7 +439,7 @@ trait TransactionsContract
             return $transactions->beforeCommit(static fn () => $ran->append('before'));
         });
 
-        self::assertSame($seen ? ['before', 'after'] : ['after'], $ran->getArrayCopy());
+        self::assertSame($seen ? ['kept', 'before', 'after'] : ['after'], $ran->getArrayCopy());
 
         if (!$seen) {
             return;

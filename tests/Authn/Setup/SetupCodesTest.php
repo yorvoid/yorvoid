@@ -230,8 +230,9 @@ final class SetupCodesTest extends DatabaseTestCase
     }
 
     /**
-     * The claim locks the realm before it asks whether the realm has an active principal, so a principal
-     * made active at the same moment comes before or after it (SetupClaimConcurrencyTest).
+     * Making a code and the claim lock the realm before they ask whether the realm has an active
+     * principal, so a principal made active at the same moment comes before or after them
+     * (SetupClaimConcurrencyTest).
      */
     public function testTheClaimLocksTheRealmBeforeAskingWhoIsActive(): void
     {
@@ -309,11 +310,12 @@ final class SetupCodesTest extends DatabaseTestCase
                 return $this->store->changeStatus($before, $after);
             }
         }, $stack->identifiers, $log, $transactions);
-        $plainLog = new SecurityLog($stack->log, $stack->transactions);
-        $plainPrincipals = new Principals($stack->principals, $stack->identifiers, $plainLog, $stack->transactions);
-        $plain = new SetupCodes($stack->setup, $plainPrincipals, $plainLog, $stack->transactions, new Attempts(new Throttle($stack->throttle)), new Sessions($stack->sessions, $plainPrincipals, $plainLog, $stack->transactions));
-        $code = Permits::call($plain->create(...), new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
         $codes = new SetupCodes($stack->setup, $principals, $log, $transactions, new Attempts(new Throttle($stack->throttle)), new Sessions($stack->sessions, $principals, $log, $transactions));
+
+        // Making a code asks the same, under the same lock.
+        $code = Permits::call($codes->create(...), new CreateSetupCode(new Realm('acme'), Duration::days(1)), new Origin(OriginKind::Console));
+        self::assertSame(['lockRealm', 'hasActive'], \array_slice($calls->getArrayCopy(), 0, 2), 'The realm wasn\'t locked before making a code.');
+        $calls->exchangeArray([]);
 
         Permits::call($codes->claim(...), new ClaimSetup(new Realm('acme'), $code, new CreatePrincipal(new Realm('acme'), PrincipalKind::Human)), new Origin(OriginKind::Web));
 
