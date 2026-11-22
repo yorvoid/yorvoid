@@ -59,7 +59,7 @@
         "deptrac/deptrac": "^4.7",
         "doctrine/doctrine-bundle": "^3.3",
         "friendsofphp/php-cs-fixer": "^3.95",
-        "infection/infection": "^0.35.8",
+        "infection/infection": "^0.35.10",
         "innmind/black-box": "^7.0",
         "nikic/php-fuzzer": "^0.0.11",
         "phpstan/extension-installer": "^1.4",

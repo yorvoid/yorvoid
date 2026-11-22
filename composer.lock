@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "953bcab006bbffea7d7475d3b8e8bd82",
+    "content-hash": "2c0277d9634c886c1ed53c27f3e4a28b",
     "packages": [
         {
             "name": "brick/math",
@@ -1173,7 +1173,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-11-03T12:14:22+00:00"
+            "time": "2026-11-03T12:14:22+00:00",
+            "published-time": "2026-11-03T12:14:36+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -6982,7 +6983,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/authn",
-                "reference": "3918ed1d95f8b054d9da986b307616ca8a2e43fc"
+                "reference": "a82669c8bb25d41860dae028cdf23f4e312022e7"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -6993,7 +6994,6 @@
                 "psr/event-dispatcher": "^1.0",
                 "psr/log": "^3.0",
                 "symfony/clock": "^7.4 || ^8.1",
-                "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/core": "^0.5",
                 "yorvoid/throttle": "^0.5"
             },
@@ -7345,7 +7345,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/notifications",
-                "reference": "95bbbc6fc648d386518f2d577c693399461d3c3b"
+                "reference": "1efdf4368f665f1090fc1b58cd672f45142f6a95"
             },
             "require": {
                 "ext-intl": "*",
@@ -7355,7 +7355,6 @@
                 "psr/log": "^3.0",
                 "symfony/clock": "^7.4 || ^8.1",
                 "symfony/translation-contracts": "^3.6",
-                "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.5",
                 "yorvoid/core": "^0.5",
                 "yorvoid/mail": "^0.5"
@@ -7713,7 +7712,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/symfony",
-                "reference": "6816582ba8ee9ff8d51e377a409f2efea21fbf28"
+                "reference": "01f92f947e6dac4e485d987323c3688cbc141584"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
@@ -7739,7 +7738,6 @@
                 "symfony/security-http": "^7.4 || ^8.1",
                 "symfony/service-contracts": "^3.6",
                 "symfony/translation-contracts": "^3.6",
-                "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.5",
                 "yorvoid/core": "^0.5",
                 "yorvoid/flows": "^0.5",
@@ -7805,7 +7803,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/testing",
-                "reference": "bed83d617a85290a80fadf89d8c551ac20e3eb60"
+                "reference": "d089312074215bb4671beb924b7ddd913176563e"
             },
             "require": {
                 "ext-mbstring": "*",
@@ -7814,7 +7812,6 @@
                 "psr/clock": "^1.0",
                 "psr/container": "^2.0",
                 "symfony/clock": "^7.4 || ^8.1",
-                "symfony/uid": "^7.4 || ^8.1",
                 "yorvoid/authn": "^0.5",
                 "yorvoid/core": "^0.5",
                 "yorvoid/flows": "^0.5",
@@ -7826,6 +7823,7 @@
             },
             "suggest": {
                 "symfony/framework-bundle": "To sign in to Symfony functional tests with BrowserSignIn",
+                "yorvoid/intent-verifier": "To check a verifier store or log of your own with VerifierStoreContract and VerifierLogContract",
                 "yorvoid/symfony": "To sign in to Symfony functional tests with BrowserSignIn"
             },
             "type": "library",
@@ -12630,5 +12628,5 @@
         "php": ">=8.4"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.9.0"
+    "plugin-api-version": "2.11.0"
 }
