@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Core\Authorization;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Truth;
@@ -17,6 +16,7 @@ use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubForbid;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubOfflineDecider;
@@ -63,8 +63,8 @@ final class PrecedenceFixturesTest extends TestCase
         self::assertCount($count, $fixtures, 'Every multiset of elements the model enumerates, with each authority.');
         $offline = \in_array('offline', $engaged, true);
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Ability], 'acme.badges.issue', null, IssueBadge::class, [], acceptsOffline: $offline);
-        $command = new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7()));
-        $actor = new Member(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $command = new IssueBadge(new Realm('acme'), new PrincipalId(Ids::next()));
+        $actor = new Member(new Realm('acme'), new PrincipalId(Ids::next()));
         $offlines = 0;
 
         foreach ($fixtures as $fixture) {

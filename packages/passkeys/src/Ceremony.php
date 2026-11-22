@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Passkeys;
 
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Authn\Session\SessionId;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Realm;
 
 /**
@@ -22,7 +22,7 @@ final readonly class Ceremony
      * @param string|null    $operation For a step-up, the operation it's for
      */
     public function __construct(
-        public Uuid $id,
+        public Id $id,
         public Realm $realm,
         public CeremonyKind $kind,
         public string $options,

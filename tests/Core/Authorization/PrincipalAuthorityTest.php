@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Core\Authorization;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\Request;
@@ -23,6 +22,7 @@ use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Core\Principal\PrincipalStatus;
 use YorvoID\Core\Principal\Storage\InMemoryPrincipalStore;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 
@@ -63,7 +63,7 @@ final class PrincipalAuthorityTest extends TestCase
     public function testAPrincipalNotOnRecordIsUnknown(): void
     {
         [$authority] = self::with(PrincipalStatus::Active);
-        $truth = $authority->check(self::request(new Member(new Realm('acme'), $missing = new PrincipalId(new UuidV7()))));
+        $truth = $authority->check(self::request(new Member(new Realm('acme'), $missing = new PrincipalId(Ids::next()))));
 
         self::assertSame([TruthValue::Unknown, IndeterminateReason::MissingData, \sprintf('The acting principal %s isn\'t on record.', $missing)], [$truth->value, $truth->reason, $truth->detail]);
     }
@@ -80,7 +80,7 @@ final class PrincipalAuthorityTest extends TestCase
     public function testAPrincipalLoadedAlreadyIsntReadAgain(): void
     {
         $now = new \DateTimeImmutable('2026-11-07 18:00:00 UTC');
-        $id = new PrincipalId(new UuidV7());
+        $id = new PrincipalId(Ids::next());
         $suspended = new Principal($id, new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Suspended, $now, $now, $now);
         $store = new InMemoryPrincipalStore();
         $store->add(new Principal($id, new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now));
@@ -91,7 +91,7 @@ final class PrincipalAuthorityTest extends TestCase
         self::assertSame('The acting principal is suspended.', $loaded->check(self::request($member))->detail);
         self::assertSame(TruthValue::Holds, $loaded->check(self::request(new Member(new Realm('acme'), $id)))->value, 'Another actor\'s isn\'t loaded.');
 
-        foreach ([new Principal(new PrincipalId(new UuidV7()), new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Suspended, $now, $now, $now), new Principal($id, new Realm('globex'), PrincipalKind::Human, PrincipalStatus::Suspended, $now, $now, $now)] as $other) {
+        foreach ([new Principal(new PrincipalId(Ids::next()), new Realm('acme'), PrincipalKind::Human, PrincipalStatus::Suspended, $now, $now, $now), new Principal($id, new Realm('globex'), PrincipalKind::Human, PrincipalStatus::Suspended, $now, $now, $now)] as $other) {
             $mismatched = new PrincipalAuthority($store, static fn (Actor $actor): Principal => $other);
             self::assertSame(TruthValue::Holds, $mismatched->check(self::request($member))->value, 'A loaded principal that isn\'t the actor\'s is ignored.');
         }
@@ -103,11 +103,11 @@ final class PrincipalAuthorityTest extends TestCase
     private static function with(PrincipalStatus $status): array
     {
         $store = new InMemoryPrincipalStore();
-        $id = new PrincipalId(new UuidV7());
+        $id = new PrincipalId(Ids::next());
         $now = new \DateTimeImmutable('2026-11-07 18:00:00 UTC');
         $store->add(new Principal($id, new Realm('acme'), PrincipalKind::Human, $status, $now, $now, $now));
         // The same ID elsewhere would be another principal: it's looked up in the actor's realm.
-        $store->add(new Principal(new PrincipalId(new UuidV7()), new Realm('globex'), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now));
+        $store->add(new Principal(new PrincipalId(Ids::next()), new Realm('globex'), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now));
 
         return [new PrincipalAuthority($store), $id];
     }
@@ -116,6 +116,6 @@ final class PrincipalAuthorityTest extends TestCase
     {
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Ability], 'acme.badges.issue', null, IssueBadge::class, []);
 
-        return Request::forOperation($operation, new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7())), $actor, new Origin(OriginKind::Web), new \DateTimeImmutable());
+        return Request::forOperation($operation, new IssueBadge(new Realm('acme'), new PrincipalId(Ids::next())), $actor, new Origin(OriginKind::Web), new \DateTimeImmutable());
     }
 }

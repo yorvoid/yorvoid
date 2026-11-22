@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\Truth;
@@ -36,6 +35,7 @@ use YorvoID\Relations\ResourceType;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
 use YorvoID\Relations\TooDeep;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Support\TestPrincipal;
 
@@ -240,7 +240,7 @@ final class NoEscalationEffectsTest extends TestCase
 
     private function principal(): PrincipalId
     {
-        return new PrincipalId(new UuidV7());
+        return new PrincipalId(Ids::next());
     }
 
     private function roles(int $maxDepth): Roles

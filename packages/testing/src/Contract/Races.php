@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Assert;
-use Symfony\Component\Uid\Uuid;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Recovery\RecoveryCodeStore;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Session\SessionId;
@@ -15,6 +13,7 @@ use YorvoID\Authn\Setup\SetupStore;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLogStore;
@@ -27,6 +26,7 @@ use YorvoID\Core\Storage\Transactions;
 use YorvoID\IntentVerifier\VerifierState;
 use YorvoID\IntentVerifier\VerifierStore;
 use YorvoID\Passkeys\CeremonyStore;
+use YorvoID\Testing\Ids;
 use YorvoID\Throttle\ThrottleStore;
 
 /**
@@ -87,13 +87,13 @@ final readonly class Races
                 $store = $get(SetupStore::class);
                 \assert($store instanceof SetupStore);
 
-                return $store->claim(new Realm((string) $round['realm']), (string) $round['hash'], new PrincipalId(new UuidV7()), new \DateTimeImmutable((string) $round['at']));
+                return $store->claim(new Realm((string) $round['realm']), (string) $round['hash'], new PrincipalId(Ids::next()), new \DateTimeImmutable((string) $round['at']));
             }),
             'ceremony.take' => new self($nothing, static function (\Closure $get, array $round): bool {
                 $store = $get(CeremonyStore::class);
                 \assert($store instanceof CeremonyStore);
 
-                return null !== $store->take(new Realm((string) $round['realm']), Uuid::fromString((string) $round['ceremony']));
+                return null !== $store->take(new Realm((string) $round['realm']), Id::fromString((string) $round['ceremony']));
             }),
             'throttle.advance' => new self($nothing, static function (\Closure $get, array $round): bool {
                 $store = $get(ThrottleStore::class);
@@ -230,6 +230,6 @@ final readonly class Races
      */
     private static function entry(Realm $realm): \Closure
     {
-        return static fn (int $sequence, ?string $previous): LogEntry => LogEntry::create($realm, $sequence, new UuidV7(), new \DateTimeImmutable(), 'yorvoid.test.race', Outcome::Success, new Origin(OriginKind::Job, 'race'), null, null, null, ['process' => getmypid()], $previous ?? 'genesis');
+        return static fn (int $sequence, ?string $previous): LogEntry => LogEntry::create($realm, $sequence, Ids::next(), new \DateTimeImmutable(), 'yorvoid.test.race', Outcome::Success, new Origin(OriginKind::Job, 'race'), null, null, null, ['process' => getmypid()], $previous ?? 'genesis');
     }
 }

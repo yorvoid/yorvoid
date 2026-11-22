@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\StepUpRemedy;
@@ -37,6 +36,7 @@ use YorvoID\Policy\RoleAssignment;
 use YorvoID\Policy\UnknownAbility;
 use YorvoID\Policy\UnknownRole;
 use YorvoID\Policy\YorvoIDDeclarations;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Policy\Fixtures\StubStepUpCheck;
 
@@ -50,7 +50,7 @@ final class PolicyChangesTest extends TestCase
     {
         $world = new PolicyWorld();
         $ada = $world->principal();
-        $id = self::id($ada)->uuid->toRfc4122();
+        $id = self::id($ada)->id->toString();
         $until = new \DateTimeImmutable('2026-12-01 10:00:00.123456 UTC');
 
         // Every change counts, one that changed nothing too.
@@ -124,7 +124,7 @@ final class PolicyChangesTest extends TestCase
         $before = $world->memory->policy->version($world->realm);
 
         try {
-            $world->asOperator(new AssignRole($world->realm, new PrincipalId(new UuidV7()), 'editor'));
+            $world->asOperator(new AssignRole($world->realm, new PrincipalId(Ids::next()), 'editor'));
             self::fail('A role was given to nobody.');
         } catch (UnknownPrincipal) {
             self::assertSame($before, $world->memory->policy->version($world->realm), 'Nothing changed.');

@@ -22,6 +22,7 @@ use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Support\DatabaseTestCase;
@@ -56,8 +57,8 @@ final class DecisionLogLockTest extends DatabaseTestCase
 
             for ($i = 0; $i < 1000; ++$i) {
                 $request = 0 === $i % 2
-                    ? Request::forOperation($operation, new IssueBadge($realm, new PrincipalId(new UuidV7())), new Operator(), new Origin(OriginKind::Console), new \DateTimeImmutable())
-                    : Request::forAbility('acme.pages.edit', $realm, new ResourceRef('page', (string) $i), new Member($realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web), new \DateTimeImmutable());
+                    ? Request::forOperation($operation, new IssueBadge($realm, new PrincipalId(Ids::next())), new Operator(), new Origin(OriginKind::Console), new \DateTimeImmutable())
+                    : Request::forAbility('acme.pages.edit', $realm, new ResourceRef('page', (string) $i), new Member($realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web), new \DateTimeImmutable());
                 $ids[] = (string) $decisions->record($request, Decision::deny('No.')->identified((string) new UuidV7(), new \DateTimeImmutable(), ['policy' => 1]))->id;
             }
 

@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Core\Operation;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
 use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
@@ -39,6 +38,7 @@ use YorvoID\Core\Operation\ViewingAs;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Badges;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -64,7 +64,7 @@ final class OperationsTest extends TestCase
     protected function setUp(): void
     {
         $this->realm = new Realm('acme');
-        $this->ana = new PrincipalId(new UuidV7());
+        $this->ana = new PrincipalId(Ids::next());
         $this->log = new InMemorySecurityLogStore();
         $this->decisions = new InMemoryDecisionLogStore();
         $this->badges = new Badges();
@@ -279,7 +279,7 @@ final class OperationsTest extends TestCase
 
     public function testWithoutAnAbilityPolicyNobodyElseMayRunIt(): void
     {
-        $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Member($this->realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web));
+        $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Member($this->realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web));
 
         self::assertSame(Verdict::Indeterminate, $decision->verdict);
         self::assertNull($decision->basis);
@@ -290,7 +290,7 @@ final class OperationsTest extends TestCase
 
     public function testTheAbilityPolicyLetsSomeoneElseRunIt(): void
     {
-        $boss = new PrincipalId(new UuidV7());
+        $boss = new PrincipalId(Ids::next());
         $this->operations(new Policy(true))->run(new IssueBadge($this->realm, $this->ana), new Member($this->realm, $boss), new Origin(OriginKind::Web));
 
         self::assertSame(AuthorizedBy::Ability, $this->badges->permits[0]->basis);
@@ -299,7 +299,7 @@ final class OperationsTest extends TestCase
 
     public function testAViewAsRunsNothingAndTheViewerIsLogged(): void
     {
-        $boss = new PrincipalId(new UuidV7());
+        $boss = new PrincipalId(Ids::next());
         $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new ViewingAs(new Member($this->realm, $boss), new Member($this->realm, $this->ana)), new Origin(OriginKind::Web), new Policy(true));
 
         self::assertSame(Verdict::Deny, $decision->verdict);
@@ -324,7 +324,7 @@ final class OperationsTest extends TestCase
         $operations = new Operations(new OperationCatalogue([IssueBadge::class, ScanBadge::class, RecordBadge::class]), $permitting, new SecurityLog($this->log, new InMemoryTransactions()), [$this->badges]);
 
         try {
-            $operations->run(new IssueBadge($this->realm, $this->ana), new ViewingAs(new Member($this->realm, new PrincipalId(new UuidV7())), new Member($this->realm, $this->ana)), new Origin(OriginKind::Web));
+            $operations->run(new IssueBadge($this->realm, $this->ana), new ViewingAs(new Member($this->realm, new PrincipalId(Ids::next())), new Member($this->realm, $this->ana)), new Origin(OriginKind::Web));
             self::fail('It ran for a view-as.');
         } catch (IntegratorError $error) {
             self::assertStringStartsWith('The authorization permitted "acme.badge.issue" to a view as someone else.', $error->getMessage());
@@ -349,7 +349,7 @@ final class OperationsTest extends TestCase
 
     public function testTheAbilityPolicyRefuses(): void
     {
-        $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Member($this->realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web), new Policy(false));
+        $decision = $this->refused(new IssueBadge($this->realm, $this->ana), new Member($this->realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web), new Policy(false));
 
         self::assertSame(Verdict::Deny, $decision->verdict);
         self::assertSame('The actor doesn\'t hold "acme.badges.issue".', $decision->reason);
@@ -431,7 +431,7 @@ final class OperationsTest extends TestCase
                 return [ScanBadge::class => static function (ScanBadge $command, Permit $permit): Permit {
                     $permit->use($command);
 
-                    return $permit->consequence(new IssueBadge($command->realm, new PrincipalId(new UuidV7())));
+                    return $permit->consequence(new IssueBadge($command->realm, new PrincipalId(Ids::next())));
                 }];
             }
         };

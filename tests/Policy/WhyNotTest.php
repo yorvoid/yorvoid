@@ -30,6 +30,7 @@ use YorvoID\Policy\Rule\RuleAnswer;
 use YorvoID\Policy\UnknownAbility;
 use YorvoID\Policy\WhyNot;
 use YorvoID\Policy\YorvoIDDeclarations;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
@@ -77,7 +78,7 @@ final class WhyNotTest extends TestCase
     {
         $world = new PolicyWorld();
         $policy = new Policy(new Evaluator([new StubPermit('roles', Truth::fails('Prove it.', new StepUpRemedy(Duration::minutes(5))))], new StubAuthority(Truth::holds('valid')), actors: [new TrustedActors()]), $world->roles);
-        $ada = new TestPrincipal($world->realm, new PrincipalId(new \Symfony\Component\Uid\UuidV7()));
+        $ada = new TestPrincipal($world->realm, new PrincipalId(Ids::next()));
 
         self::assertCount(1, $policy->whyNot($ada, $ada, 'acme.pages.publish', $world->realm, null, new Origin(OriginKind::Web))->remedies);
 

@@ -44,7 +44,7 @@ final readonly class Passkey
         public string $userHandle,
         public int $signCount,
         array $transports,
-        public Uuid $aaguid,
+        public string $aaguid,
         public bool $backupEligible,
         public bool $backedUp,
         public bool $userVerificationInitialized,
@@ -67,6 +67,6 @@ final readonly class Passkey
      */
     public function record(): CredentialRecord
     {
-        return new CredentialRecord($this->webauthnId, 'public-key', $this->transports, $this->attestationType, EmptyTrustPath::create(), $this->aaguid, $this->publicKey, $this->userHandle, $this->signCount, null, $this->backupEligible, $this->backedUp, $this->userVerificationInitialized);
+        return new CredentialRecord($this->webauthnId, 'public-key', $this->transports, $this->attestationType, EmptyTrustPath::create(), Uuid::fromString($this->aaguid), $this->publicKey, $this->userHandle, $this->signCount, null, $this->backupEligible, $this->backedUp, $this->userVerificationInitialized);
     }
 }

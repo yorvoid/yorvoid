@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\Uuid;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Passkeys\Passkey;
 use YorvoID\Passkeys\PasskeyStore;
+use YorvoID\Testing\Ids;
 
 /**
  * What every PasskeyStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -57,13 +56,13 @@ trait PasskeyStoreContract
         $acme = new Realm('acme');
         [$failed, $seen, $kept] = [random_bytes(16), random_bytes(16), random_bytes(16)];
 
-        InTransaction::assertGoneAfterARollback($transactions, static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(new UuidV7()), $failed)), static fn (): bool => null === $store->find($acme, $failed));
-        InTransaction::assertSeenInsideItsTransaction($transactions, static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(new UuidV7()), $seen)), static fn (): bool => null !== $store->find($acme, $seen));
+        InTransaction::assertGoneAfterARollback($transactions, static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(Ids::next()), $failed)), static fn (): bool => null === $store->find($acme, $failed));
+        InTransaction::assertSeenInsideItsTransaction($transactions, static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(Ids::next()), $seen)), static fn (): bool => null !== $store->find($acme, $seen));
         InTransaction::assertTheTransactionGoesOn($transactions, [
-            static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(new UuidV7()), $seen)),
-            static fn (): bool => $store->update(self::passkey($acme, new PrincipalId(new UuidV7()), $failed)),
-            static fn () => $store->remove($acme, new CredentialId(new UuidV7())),
-        ], static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(new UuidV7()), $kept)), static fn (): bool => null !== $store->find($acme, $kept));
+            static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(Ids::next()), $seen)),
+            static fn (): bool => $store->update(self::passkey($acme, new PrincipalId(Ids::next()), $failed)),
+            static fn () => $store->remove($acme, new CredentialId(Ids::next())),
+        ], static fn (): bool => $store->add(self::passkey($acme, new PrincipalId(Ids::next()), $kept)), static fn (): bool => null !== $store->find($acme, $kept));
     }
 
     #[DataProvider('implementations')]
@@ -72,16 +71,16 @@ trait PasskeyStoreContract
         $store = $this->passkeyStore($implementation);
         $id = random_bytes(16);
 
-        self::assertTrue($store->add(self::passkey(new Realm('acme'), new PrincipalId(new UuidV7()), $id)));
-        self::assertFalse($store->add(self::passkey(new Realm('acme'), new PrincipalId(new UuidV7()), $id)));
-        self::assertTrue($store->add(self::passkey(new Realm('globex'), new PrincipalId(new UuidV7()), $id)));
+        self::assertTrue($store->add(self::passkey(new Realm('acme'), new PrincipalId(Ids::next()), $id)));
+        self::assertFalse($store->add(self::passkey(new Realm('acme'), new PrincipalId(Ids::next()), $id)));
+        self::assertTrue($store->add(self::passkey(new Realm('globex'), new PrincipalId(Ids::next()), $id)));
     }
 
     #[DataProvider('implementations')]
     public function testUpdatesWhatSignInReportsAndRemovesOnlyInItsRealm(string $implementation): void
     {
         $store = $this->passkeyStore($implementation);
-        $passkey = self::passkey(new Realm('acme'), new PrincipalId(new UuidV7()), random_bytes(16));
+        $passkey = self::passkey(new Realm('acme'), new PrincipalId(Ids::next()), random_bytes(16));
         $store->add($passkey);
         $used = new Passkey($passkey->credentialId, $passkey->realm, $passkey->principalId, $passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, 42, $passkey->transports, $passkey->aaguid, $passkey->backupEligible, true, true, $passkey->attestationType);
 
@@ -91,7 +90,7 @@ trait PasskeyStoreContract
 
         self::assertTrue($store->update($used));
         self::assertEquals($used, $store->find(new Realm('acme'), $passkey->webauthnId));
-        $store->remove(new Realm('acme'), new CredentialId(new UuidV7()));
+        $store->remove(new Realm('acme'), new CredentialId(Ids::next()));
 
         $store->remove(new Realm('globex'), $passkey->credentialId);
         self::assertNotNull($store->find(new Realm('acme'), $passkey->webauthnId));
@@ -103,7 +102,7 @@ trait PasskeyStoreContract
     public function testRecordsACounterOnlyOverALowerOne(string $implementation): void
     {
         $store = $this->passkeyStore($implementation);
-        $passkey = self::passkey(new Realm('acme'), new PrincipalId(new UuidV7()), random_bytes(16));
+        $passkey = self::passkey(new Realm('acme'), new PrincipalId(Ids::next()), random_bytes(16));
         $store->add($passkey);
         $counted = static fn (int $count, bool $eligible = false): Passkey => new Passkey($passkey->credentialId, $passkey->realm, $passkey->principalId, $passkey->webauthnId, $passkey->publicKey, $passkey->userHandle, $count, $passkey->transports, $passkey->aaguid, $eligible, true, true, $passkey->attestationType);
 
@@ -121,6 +120,6 @@ trait PasskeyStoreContract
      */
     private static function passkey(Realm $realm, PrincipalId $principal, string $webauthnId, array $transports = ['internal'], bool $flags = false): Passkey
     {
-        return new Passkey(new CredentialId(new UuidV7()), $realm, $principal, $webauthnId, random_bytes(77), random_bytes(32), 7, $transports, Uuid::fromString('ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4'), $flags, $flags, !$flags, 'none');
+        return new Passkey(new CredentialId(Ids::next()), $realm, $principal, $webauthnId, random_bytes(77), random_bytes(32), 7, $transports, 'ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4', $flags, $flags, !$flags, 'none');
     }
 }

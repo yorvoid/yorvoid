@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -14,6 +13,7 @@ use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\RetryableConflict;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every Transactions keeps (PLT-025): all or nothing, after-commit callbacks only after the outermost
@@ -464,6 +464,6 @@ trait TransactionsContract
     {
         $now = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');
 
-        return new Principal(new PrincipalId(new UuidV7()), Realm::default(), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now);
+        return new Principal(new PrincipalId(Ids::next()), Realm::default(), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now);
     }
 }

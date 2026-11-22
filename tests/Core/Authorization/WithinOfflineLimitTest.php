@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Core\Authorization;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
@@ -23,6 +22,7 @@ use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StoreUnreachable;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\MockElapsed;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubOfflineDecider;
@@ -125,7 +125,7 @@ final class WithinOfflineLimitTest extends TestCase
 
     private static function decide(Evaluator $evaluator): \YorvoID\Core\Operation\Decision
     {
-        return $evaluator->decide(self::operation(), new OpenDoor(new Realm('acme')), new Member(new Realm('acme'), new PrincipalId(new UuidV7())), new Origin(OriginKind::Web));
+        return $evaluator->decide(self::operation(), new OpenDoor(new Realm('acme')), new Member(new Realm('acme'), new PrincipalId(Ids::next())), new Origin(OriginKind::Web));
     }
 
     private static function operation(): OperationDescription
@@ -135,6 +135,6 @@ final class WithinOfflineLimitTest extends TestCase
 
     private static function request(): Request
     {
-        return Request::forOperation(self::operation(), new OpenDoor(new Realm('acme')), new Member(new Realm('acme'), new PrincipalId(new UuidV7())), new Origin(OriginKind::Web), new \DateTimeImmutable());
+        return Request::forOperation(self::operation(), new OpenDoor(new Realm('acme')), new Member(new Realm('acme'), new PrincipalId(Ids::next())), new Origin(OriginKind::Web), new \DateTimeImmutable());
     }
 }

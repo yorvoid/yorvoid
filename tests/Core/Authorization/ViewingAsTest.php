@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Core\Authorization;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
 use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
@@ -31,6 +30,7 @@ use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Operation\ViewingAs;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\PerActor;
 use YorvoID\Tests\Core\Authorization\Fixtures\PreloadingPermit;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
@@ -53,8 +53,8 @@ final class ViewingAsTest extends TestCase
     protected function setUp(): void
     {
         $this->realm = new Realm('acme');
-        $this->viewer = new Member($this->realm, new PrincipalId(new UuidV7()));
-        $this->target = new Member($this->realm, new PrincipalId(new UuidV7()));
+        $this->viewer = new Member($this->realm, new PrincipalId(Ids::next()));
+        $this->target = new Member($this->realm, new PrincipalId(Ids::next()));
     }
 
     public function testItActsAsTheTarget(): void

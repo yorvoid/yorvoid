@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Core\Authorization;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\Explanation;
 use YorvoID\Core\Authorization\Ground;
@@ -28,6 +27,7 @@ use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubForbid;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubPermit;
@@ -128,6 +128,6 @@ final class ExplanationTest extends TestCase
             }
         };
 
-        return new Evaluator($elements, new StubAuthority($authority), versions: [$versions], actors: [new TrustedActors()])->decideAbility(new Member(new Realm('acme'), new PrincipalId(new UuidV7())), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
+        return new Evaluator($elements, new StubAuthority($authority), versions: [$versions], actors: [new TrustedActors()])->decideAbility(new Member(new Realm('acme'), new PrincipalId(Ids::next())), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
     }
 }

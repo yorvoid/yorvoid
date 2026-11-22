@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PolicyElement;
@@ -82,6 +81,7 @@ use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\ResourceType;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Policy\Fixtures\AcmeDeclarations;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
@@ -530,7 +530,7 @@ final class StepUpForSensitiveChangesTest extends TestCase
 
     private function id(): PrincipalId
     {
-        return new PrincipalId(new UuidV7());
+        return new PrincipalId(Ids::next());
     }
 
     private static function check(Truth $truth): StepUpCheck

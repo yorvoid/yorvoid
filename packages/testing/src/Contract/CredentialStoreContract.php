@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Credential\Credential;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Authn\Credential\CredentialKind;
@@ -15,6 +14,7 @@ use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StorageException;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every CredentialStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -57,7 +57,7 @@ trait CredentialStoreContract
         $store = $this->credentialStore($implementation);
         $transactions = $this->transactions($implementation);
         $acme = new Realm('acme');
-        [$failed, $seen, $kept] = [self::credential($acme, new PrincipalId(new UuidV7())), self::credential($acme, new PrincipalId(new UuidV7())), self::credential($acme, new PrincipalId(new UuidV7()))];
+        [$failed, $seen, $kept] = [self::credential($acme, new PrincipalId(Ids::next())), self::credential($acme, new PrincipalId(Ids::next())), self::credential($acme, new PrincipalId(Ids::next()))];
 
         InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add($failed), static fn (): bool => null === $store->get($acme, $failed->id));
         InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add($seen), static fn (): bool => null !== $store->get($acme, $seen->id));
@@ -72,10 +72,10 @@ trait CredentialStoreContract
     public function testKeepsEveryFieldAndListsTheOldestFirst(string $implementation): void
     {
         $store = $this->credentialStore($implementation);
-        $principal = new PrincipalId(new UuidV7());
-        $newer = new Credential(new CredentialId(new UuidV7()), new Realm('acme'), $principal, CredentialKind::Passkey, 'MacBook – Touch ID ✓', new \DateTimeImmutable('2026-10-27 19:00:00 UTC'), new \DateTimeImmutable('2026-10-28 08:00:00 UTC'), CredentialStatus::Disabled);
-        $older = new Credential(new CredentialId(new UuidV7()), new Realm('acme'), $principal, CredentialKind::RecoveryCodes, 'Recovery codes', new \DateTimeImmutable('2026-10-27 18:40:00 UTC'));
-        $someoneElses = self::credential(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $principal = new PrincipalId(Ids::next());
+        $newer = new Credential(new CredentialId(Ids::next()), new Realm('acme'), $principal, CredentialKind::Passkey, 'MacBook – Touch ID ✓', new \DateTimeImmutable('2026-10-27 19:00:00 UTC'), new \DateTimeImmutable('2026-10-28 08:00:00 UTC'), CredentialStatus::Disabled);
+        $older = new Credential(new CredentialId(Ids::next()), new Realm('acme'), $principal, CredentialKind::RecoveryCodes, 'Recovery codes', new \DateTimeImmutable('2026-10-27 18:40:00 UTC'));
+        $someoneElses = self::credential(new Realm('acme'), new PrincipalId(Ids::next()));
         $store->add($newer);
         $store->add($older);
         $store->add($someoneElses);
@@ -90,7 +90,7 @@ trait CredentialStoreContract
     public function testRefusesADuplicateId(string $implementation): void
     {
         $store = $this->credentialStore($implementation);
-        $credential = self::credential(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $credential = self::credential(new Realm('acme'), new PrincipalId(Ids::next()));
         $store->add($credential);
 
         $this->expectException(StorageException::class);
@@ -102,7 +102,7 @@ trait CredentialStoreContract
     public function testChangesAndRemovesOnlyInItsRealm(string $implementation): void
     {
         $store = $this->credentialStore($implementation);
-        $credential = self::credential(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $credential = self::credential(new Realm('acme'), new PrincipalId(Ids::next()));
         $store->add($credential);
         $at = new \DateTimeImmutable('2026-10-28 08:00:00 UTC');
 
@@ -133,7 +133,7 @@ trait CredentialStoreContract
     public function testADisabledCredentialStaysDisabled(string $implementation): void
     {
         $store = $this->credentialStore($implementation);
-        $credential = self::credential(new Realm('acme'), new PrincipalId(new UuidV7()));
+        $credential = self::credential(new Realm('acme'), new PrincipalId(Ids::next()));
         $store->add($credential);
         $other = $this->sameCredentialStore($implementation, $store);
         $stale = $other->get(new Realm('acme'), $credential->id);
@@ -161,6 +161,6 @@ trait CredentialStoreContract
 
     private static function credential(Realm $realm, PrincipalId $principal): Credential
     {
-        return new Credential(new CredentialId(new UuidV7()), $realm, $principal, CredentialKind::Passkey, 'Passkey', new \DateTimeImmutable('2026-10-27 18:40:00 UTC'));
+        return new Credential(new CredentialId(Ids::next()), $realm, $principal, CredentialKind::Passkey, 'Passkey', new \DateTimeImmutable('2026-10-27 18:40:00 UTC'));
     }
 }

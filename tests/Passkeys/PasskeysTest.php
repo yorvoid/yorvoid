@@ -34,6 +34,7 @@ use YorvoID\Core\Crypto\CryptoProvider;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
@@ -247,7 +248,7 @@ final class PasskeysTest extends DatabaseTestCase
 
         foreach (['discouraged', 'preferred'] as $downgrade) {
             $signIn = $passkeys->beginSignIn(new Realm('acme'));
-            $stored = $this->stack->ceremonies->take(new Realm('acme'), \Symfony\Component\Uid\Uuid::fromString($signIn->id));
+            $stored = $this->stack->ceremonies->take(new Realm('acme'), Id::fromString($signIn->id));
             \assert($stored instanceof Ceremony);
             $weakened = str_replace('"userVerification":"required"', '"userVerification":"'.$downgrade.'"', $stored->options);
             self::assertNotSame($stored->options, $weakened);

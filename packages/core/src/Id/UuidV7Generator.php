@@ -21,8 +21,8 @@ final readonly class UuidV7Generator implements IdGenerator
     ) {
     }
 
-    public function next(): UuidV7
+    public function next(): Id
     {
-        return new UuidV7(UuidV7::generate($this->clock->now()));
+        return Id::fromString(UuidV7::generate($this->clock->now()));
     }
 }

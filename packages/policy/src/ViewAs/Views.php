@@ -64,7 +64,7 @@ final readonly class Views implements OperationHandler
 
         $actor = new ViewingAs($viewer, new ActingPrincipal($command->realm, $command->target));
         $beyond = $this->roles->beyond($command->realm, $viewer, $actor->target, $origin, $this->clock->now());
-        $this->log->record($command->realm, 'yorvoid.view_as.begin', Outcome::Success, $origin, $viewer->principalId, 'principal', $command->target->uuid->toRfc4122(), [
+        $this->log->record($command->realm, 'yorvoid.view_as.begin', Outcome::Success, $origin, $viewer->principalId, 'principal', $command->target->id->toString(), [
             'beyond' => array_map(static fn (Beyond $one): string => null === $one->on ? $one->ability : \sprintf('%s on %s', $one->ability, $one->on), $beyond),
         ]);
 

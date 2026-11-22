@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Core\Authorization\DecisionLog;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Reason;
@@ -23,6 +22,7 @@ use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 
@@ -34,7 +34,7 @@ final class DecisionRecordTest extends TestCase
 {
     public function testTheCanonicalFormIsVersionedInUtcAndSorted(): void
     {
-        $ana = new PrincipalId(new UuidV7());
+        $ana = new PrincipalId(Ids::next());
         $request = Request::forAbility('acme.pages.edit', new Realm('acme'), new ResourceRef('page', '42'), new Member(new Realm('acme'), $ana), new Origin(OriginKind::Web, 'pages.edit', 'request-1'), new \DateTimeImmutable('2026-11-08 19:00:00.5 +01:00'));
         $decision = Decision::deny('No permit applies: ana@example.com isn\'t an editor.', [
             new Reason('yorvoid.policy.roles', 'permit', Truth::fails('ana@example.com has no role with it.')),
@@ -119,7 +119,7 @@ final class DecisionRecordTest extends TestCase
     public function testAnOperationsRecordNamesItAndItsBasis(): void
     {
         $operation = new OperationDescription('acme.badge.issue', 'Issue a badge', [AuthorizedBy::Operator], null, null, IssueBadge::class, []);
-        $request = Request::forOperation($operation, new IssueBadge(new Realm('acme'), new PrincipalId(new UuidV7())), new Operator(), new Origin(OriginKind::Console, correlationId: 'job-1'), new \DateTimeImmutable('2026-11-08 18:00:00 UTC'));
+        $request = Request::forOperation($operation, new IssueBadge(new Realm('acme'), new PrincipalId(Ids::next())), new Operator(), new Origin(OriginKind::Console, correlationId: 'job-1'), new \DateTimeImmutable('2026-11-08 18:00:00 UTC'));
         $unknown = Decision::indeterminate([IndeterminateReason::StoreUnreachable], 'Can\'t tell.')->identified('d-2', $request->at, []);
         $permit = \YorvoID\Tests\Support\Decisions::identified(\YorvoID\Tests\Support\Decisions::permit(AuthorizedBy::Operator, 'The operator.'), 'd-3', $request->at);
 

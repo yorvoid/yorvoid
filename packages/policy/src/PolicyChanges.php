@@ -165,7 +165,7 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
             $this->store->bump($command->realm);
             $assignment = new RoleAssignment($command->realm, $command->principalId, $command->role, Time::stored($this->clock->now()), $command->scope, null === $command->expiresAt ? null : Time::stored($command->expiresAt));
             $this->store->assign($assignment);
-            $this->record($command->realm, 'yorvoid.role.assign', $permit, $origin, 'principal', $command->principalId->uuid->toRfc4122(), self::present([
+            $this->record($command->realm, 'yorvoid.role.assign', $permit, $origin, 'principal', $command->principalId->id->toString(), self::present([
                 'role' => $command->role,
                 'scope' => null === $command->scope ? null : (string) $command->scope,
                 'expires_at' => $assignment->expiresAt?->format(\DATE_ATOM),
@@ -189,7 +189,7 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
             $had = $this->store->unassign($command->realm, $command->principalId, $command->role, $command->scope);
 
             if ($had) {
-                $this->record($command->realm, 'yorvoid.role.unassign', $permit, $origin, 'principal', $command->principalId->uuid->toRfc4122(), self::present([
+                $this->record($command->realm, 'yorvoid.role.unassign', $permit, $origin, 'principal', $command->principalId->id->toString(), self::present([
                     'role' => $command->role,
                     'scope' => null === $command->scope ? null : (string) $command->scope,
                 ]));

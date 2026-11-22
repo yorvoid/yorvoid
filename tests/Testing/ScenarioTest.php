@@ -144,7 +144,7 @@ final class ScenarioTest extends TestCase
         self::assertSame(200, $this->browser->getResponse()->getStatusCode());
         $me = json_decode((string) $this->browser->getResponse()->getContent(), true);
         \assert(\is_array($me));
-        self::assertSame([$ana->id->uuid->toRfc4122(), ['passkey']], [$me['user'], $me['methods']]);
+        self::assertSame([$ana->id->id->toString(), ['passkey']], [$me['user'], $me['methods']]);
 
         // Through YorvoID: ending the session signs out.
         Permits::call($this->service(Sessions::class)->end(...), new EndSession(new Realm('acme'), $started->session->id, SessionEndReason::SignedOut), new Origin(OriginKind::Web));

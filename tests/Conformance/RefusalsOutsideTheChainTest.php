@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Conformance;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\Event\DecisionRecorded;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
@@ -20,6 +19,7 @@ use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Badges;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -50,8 +50,8 @@ final class RefusalsOutsideTheChainTest extends DatabaseTestCase
         try {
             // The application's own transaction, rolled back with the refusal, as a framework's wrapper does.
             $stack->transactions->run(static function () use ($operations, $realm, $stack): void {
-                $stack->log->append($realm, static fn (int $sequence, ?string $previous) => \YorvoID\Core\Log\LogEntry::create($realm, $sequence, new UuidV7(), new \DateTimeImmutable(), 'acme.other.change', Outcome::Success, new Origin(OriginKind::Web), null, null, null, [], $previous ?? ''));
-                $operations->run(new IssueBadge($realm, new PrincipalId(new UuidV7())), new Member($realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web));
+                $stack->log->append($realm, static fn (int $sequence, ?string $previous) => \YorvoID\Core\Log\LogEntry::create($realm, $sequence, Ids::next(), new \DateTimeImmutable(), 'acme.other.change', Outcome::Success, new Origin(OriginKind::Web), null, null, null, [], $previous ?? ''));
+                $operations->run(new IssueBadge($realm, new PrincipalId(Ids::next())), new Member($realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web));
             });
         } catch (NotPermitted $e) {
             $refused = $e->decision;
@@ -79,7 +79,7 @@ final class RefusalsOutsideTheChainTest extends DatabaseTestCase
             $holder->log->lock($realm);
 
             try {
-                $operations->run(new IssueBadge($realm, new PrincipalId(new UuidV7())), new Member($realm, new PrincipalId(new UuidV7())), new Origin(OriginKind::Web));
+                $operations->run(new IssueBadge($realm, new PrincipalId(Ids::next())), new Member($realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web));
                 self::fail('It was permitted.');
             } catch (NotPermitted) {
             }

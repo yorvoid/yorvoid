@@ -7,7 +7,6 @@ namespace YorvoID\Tests\Properties;
 use Innmind\BlackBox\PHPUnit\BlackBox;
 use Innmind\BlackBox\Set;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\AuthorityCheck;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
@@ -36,6 +35,7 @@ use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Badges;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -111,12 +111,12 @@ final class DecisionPointPropertiesTest extends TestCase
         )->then(static function (array $rules, string $who, OriginKind $kind, ?bool $holds, TruthValue $selfService, bool $commandLine): void {
             /** @var list<AuthorizedBy> $rules */
             $realm = new Realm('acme');
-            $ana = new PrincipalId(new UuidV7());
+            $ana = new PrincipalId(Ids::next());
             $actor = match ($who) {
                 'operator' => new Operator(),
                 'anonymous' => new Anonymous(),
                 'own' => new Member($realm, $ana),
-                'other' => new Member($realm, new PrincipalId(new UuidV7())),
+                'other' => new Member($realm, new PrincipalId(Ids::next())),
                 'elsewhere' => new Member(new Realm('globex'), $ana),
                 'nowhere' => new Member(null, $ana),
                 default => throw new \LogicException($who),

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Log;
 
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Id\Id;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -41,7 +41,7 @@ final readonly class LogEntry
     public function __construct(
         public Realm $realm,
         public int $sequence,
-        public Uuid $id,
+        public Id $id,
         public \DateTimeImmutable $recordedAt,
         public string $action,
         public Outcome $outcome,
@@ -64,7 +64,7 @@ final readonly class LogEntry
     public static function create(
         Realm $realm,
         int $sequence,
-        Uuid $id,
+        Id $id,
         \DateTimeImmutable $recordedAt,
         string $action,
         Outcome $outcome,
@@ -98,7 +98,7 @@ final readonly class LogEntry
             'format' => 1,
             'realm' => $this->realm->name,
             'sequence' => $this->sequence,
-            'id' => $this->id->toRfc4122(),
+            'id' => $this->id->toString(),
             'recorded_at' => $this->recordedAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z'),
             'action' => $this->action,
             'outcome' => $this->outcome->value,

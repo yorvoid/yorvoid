@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
@@ -39,6 +38,7 @@ use YorvoID\Relations\RelationSchema;
 use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
@@ -260,14 +260,14 @@ final class RolesTest extends TestCase
 
         self::assertSame('yorvoid.roles', $permit->name());
         self::assertTrue($permit->matches(Request::forAbility('acme.pages.view', $this->realm, null, new Anonymous(), $origin, $this->clock->now())));
-        $withoutAbility = Request::forOperation(new OperationDescription('acme.x', 'X', [AuthorizedBy::Operator], null, null, IssueBadge::class, []), new IssueBadge($this->realm, new PrincipalId(new UuidV7())), new Anonymous(), $origin, $this->clock->now());
+        $withoutAbility = Request::forOperation(new OperationDescription('acme.x', 'X', [AuthorizedBy::Operator], null, null, IssueBadge::class, []), new IssueBadge($this->realm, new PrincipalId(Ids::next())), new Anonymous(), $origin, $this->clock->now());
         self::assertFalse($permit->matches($withoutAbility));
         self::assertSame([TruthValue::Fails, 'No ability is asked for.'], [$permit->evaluate($withoutAbility)->value, $permit->evaluate($withoutAbility)->detail]);
     }
 
     private function principal(?string $role = null): Member
     {
-        $member = new Member($this->realm, new PrincipalId(new UuidV7()));
+        $member = new Member($this->realm, new PrincipalId(Ids::next()));
 
         if (null !== $role) {
             $this->store->assign(new RoleAssignment($this->realm, self::id($member), $role, $this->clock->now()));
@@ -285,7 +285,7 @@ final class RolesTest extends TestCase
 
     public function testABatchsRolesAreThoseOfEachRequestAlone(): void
     {
-        $ada = new Member($this->realm, new PrincipalId(new UuidV7()));
+        $ada = new Member($this->realm, new PrincipalId(Ids::next()));
         $at = $this->clock->now();
         $this->store->assign(new RoleAssignment($this->realm, self::id($ada), 'member', $at));
         $this->store->assign(new RoleAssignment($this->realm, self::id($ada), 'editor', $at, new ResourceRef('page', '1')));

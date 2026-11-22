@@ -34,6 +34,7 @@ use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubOfflineDecider;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Badges;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\IssueBadge;
@@ -62,7 +63,7 @@ final class AuthorizationDecoratorTest extends TestCase
     protected function setUp(): void
     {
         $this->realm = new Realm('acme');
-        $this->ana = new PrincipalId(new UuidV7());
+        $this->ana = new PrincipalId(Ids::next());
         $this->decisions = new InMemoryDecisionLogStore();
     }
 

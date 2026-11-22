@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Recovery\RecoveryCodeStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\Race;
 
 /**
@@ -53,7 +53,7 @@ trait RecoveryCodeStoreConcurrencyContract
         $rounds = [];
 
         for ($i = 0; $i < Races::ROUNDS; ++$i) {
-            $principal = new PrincipalId(new UuidV7());
+            $principal = new PrincipalId(Ids::next());
             $hash = hash('sha256', 'code '.$i);
             $store->replace(new Realm('acme'), $principal, [$hash], new \DateTimeImmutable('2026-10-27 18:40:00 UTC'));
             $rounds[] = ['realm' => 'acme', 'principal' => (string) $principal, 'hash' => $hash];

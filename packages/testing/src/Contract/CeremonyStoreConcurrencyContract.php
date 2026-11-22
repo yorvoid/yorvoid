@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Core\Realm;
 use YorvoID\Passkeys\Ceremony;
 use YorvoID\Passkeys\CeremonyKind;
 use YorvoID\Passkeys\CeremonyStore;
+use YorvoID\Testing\Ids;
 use YorvoID\Testing\Race;
 
 /**
@@ -54,7 +54,7 @@ trait CeremonyStoreConcurrencyContract
         $rounds = [];
 
         for ($i = 0; $i < Races::ROUNDS; ++$i) {
-            $ceremony = new Ceremony(Uuid::v7(), new Realm('acme'), CeremonyKind::SignIn, '{}', new \DateTimeImmutable('2126-10-27 18:40:00 UTC'));
+            $ceremony = new Ceremony(Ids::next(), new Realm('acme'), CeremonyKind::SignIn, '{}', new \DateTimeImmutable('2126-10-27 18:40:00 UTC'));
             $store->add($ceremony);
             $rounds[] = ['realm' => 'acme', 'ceremony' => (string) $ceremony->id];
         }

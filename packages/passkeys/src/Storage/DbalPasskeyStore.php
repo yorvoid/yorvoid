@@ -6,7 +6,6 @@ namespace YorvoID\Passkeys\Storage;
 
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Types;
-use Symfony\Component\Uid\Uuid;
 use YorvoID\Authn\Credential\CredentialId;
 use YorvoID\Core\Crypto\Digest;
 use YorvoID\Core\Principal\PrincipalId;
@@ -37,16 +36,16 @@ final readonly class DbalPasskeyStore implements PasskeyStore
     public function add(Passkey $passkey): bool
     {
         if (!$this->database->insertUnlessExists(self::TABLE, [
-            'credential_id' => $passkey->credentialId->uuid->toRfc4122(),
+            'credential_id' => $passkey->credentialId->id->toString(),
             'realm' => $passkey->realm->name,
-            'principal_id' => $passkey->principalId->uuid->toRfc4122(),
+            'principal_id' => $passkey->principalId->id->toString(),
             'webauthn_id_hash' => Digest::sha256($passkey->webauthnId),
             'webauthn_id' => self::encode($passkey->webauthnId),
             'public_key' => self::encode($passkey->publicKey),
             'user_handle' => self::encode($passkey->userHandle),
             'sign_count' => $passkey->signCount,
             'transports' => $passkey->transports,
-            'aaguid' => $passkey->aaguid->toRfc4122(),
+            'aaguid' => $passkey->aaguid,
             'backup_eligible' => $passkey->backupEligible,
             'backed_up' => $passkey->backedUp,
             'user_verification_initialized' => $passkey->userVerificationInitialized,
@@ -74,7 +73,7 @@ final readonly class DbalPasskeyStore implements PasskeyStore
 
         foreach ($this->database->connection->iterateAssociative(
             \sprintf('SELECT %s FROM %s WHERE realm = ? AND principal_id = ? ORDER BY credential_id', self::COLUMNS, $this->database->table(self::TABLE)),
-            [$realm->name, $principalId->uuid->toRfc4122()],
+            [$realm->name, $principalId->id->toString()],
         ) as $row) {
             $passkeys[] = $this->passkey($row);
         }
@@ -86,14 +85,14 @@ final readonly class DbalPasskeyStore implements PasskeyStore
     {
         return 1 === $this->database->connection->executeStatement(
             \sprintf('UPDATE %s SET sign_count = ?, backed_up = ?, user_verification_initialized = ? WHERE realm = ? AND credential_id = ? AND (sign_count < ? OR 0 = ?)', $this->database->table(self::TABLE)),
-            [$passkey->signCount, $passkey->backedUp, $passkey->userVerificationInitialized, $passkey->realm->name, $passkey->credentialId->uuid->toRfc4122(), $passkey->signCount, $passkey->signCount],
+            [$passkey->signCount, $passkey->backedUp, $passkey->userVerificationInitialized, $passkey->realm->name, $passkey->credentialId->id->toString(), $passkey->signCount, $passkey->signCount],
             [ParameterType::INTEGER, ParameterType::BOOLEAN, ParameterType::BOOLEAN, ParameterType::STRING, ParameterType::STRING, ParameterType::INTEGER, ParameterType::INTEGER],
         );
     }
 
     public function remove(Realm $realm, CredentialId $credentialId): void
     {
-        $this->database->connection->delete($this->database->table(self::TABLE), ['realm' => $realm->name, 'credential_id' => $credentialId->uuid->toRfc4122()]);
+        $this->database->connection->delete($this->database->table(self::TABLE), ['realm' => $realm->name, 'credential_id' => $credentialId->id->toString()]);
     }
 
     /**
@@ -114,7 +113,7 @@ final readonly class DbalPasskeyStore implements PasskeyStore
             self::decode(Row::string($row, 'user_handle')),
             Row::int($row, 'sign_count'),
             $transports,
-            Uuid::fromString(Row::string($row, 'aaguid')),
+            Row::string($row, 'aaguid'),
             self::bool($row['backup_eligible']),
             self::bool($row['backed_up']),
             self::bool($row['user_verification_initialized']),

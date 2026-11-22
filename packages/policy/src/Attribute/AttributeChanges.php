@@ -61,7 +61,7 @@ final readonly class AttributeChanges implements OperationHandler, RequiresForbi
             null === $command->value
                 ? $this->store->remove($command->realm, $command->principalId, $command->name)
                 : $this->store->set($command->realm, $command->principalId, $command->name, $command->value);
-            $this->log->record($command->realm, 'yorvoid.attribute.set', Outcome::Success, $origin, $permit->actor->principalId, 'principal', $command->principalId->uuid->toRfc4122(), ['attribute' => $command->name, 'removed' => null === $command->value]);
+            $this->log->record($command->realm, 'yorvoid.attribute.set', Outcome::Success, $origin, $permit->actor->principalId, 'principal', $command->principalId->id->toString(), ['attribute' => $command->name, 'removed' => null === $command->value]);
         });
     }
 

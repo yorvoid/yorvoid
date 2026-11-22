@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Tools;
 
 use Doctrine\DBAL\Connection;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -14,6 +13,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Installation;
 use YorvoID\Core\Storage\StorageLocation;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Stack;
 
@@ -36,7 +36,7 @@ final class TestDatabasesTest extends DatabaseTestCase
 
         // What a test leaves: rows of its own, and a seeded row gone.
         $now = new \DateTimeImmutable('2026-11-18 18:40:00 UTC');
-        $stack->principals->add(new Principal(new PrincipalId(new UuidV7()), Realm::default(), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now));
+        $stack->principals->add(new Principal(new PrincipalId(Ids::next()), Realm::default(), PrincipalKind::Human, PrincipalStatus::Active, $now, $now, $now));
         $shared->connection->executeStatement(\sprintf('DELETE FROM %s', $shared->table(Installation::TABLE)));
         $this->resetSharedDatabase();
 

@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\Uuid;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Authn\Session\SessionId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Passkeys\Ceremony;
 use YorvoID\Passkeys\CeremonyKind;
 use YorvoID\Passkeys\CeremonyStore;
+use YorvoID\Testing\Ids;
 
 /**
  * What every CeremonyStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -61,7 +60,7 @@ trait CeremonyStoreContract
         $transactions = $this->transactions($implementation);
         $acme = new Realm('acme');
         $expires = new \DateTimeImmutable('2026-10-27 18:50:00 UTC');
-        [$failed, $seen, $kept] = [new Ceremony(Uuid::v7(), $acme, CeremonyKind::SignIn, '{}', $expires), new Ceremony(Uuid::v7(), $acme, CeremonyKind::SignIn, '{}', $expires), new Ceremony(Uuid::v7(), $acme, CeremonyKind::SignIn, '{}', $expires)];
+        [$failed, $seen, $kept] = [new Ceremony(Ids::next(), $acme, CeremonyKind::SignIn, '{}', $expires), new Ceremony(Ids::next(), $acme, CeremonyKind::SignIn, '{}', $expires), new Ceremony(Ids::next(), $acme, CeremonyKind::SignIn, '{}', $expires)];
 
         InTransaction::assertGoneAfterARollback($transactions, static fn () => $store->add($failed), static fn (): bool => null === $store->take($acme, $failed->id));
         InTransaction::assertSeenInsideItsTransaction($transactions, static fn () => $store->add($seen), static fn (): bool => null !== $store->take($acme, $seen->id));
@@ -74,15 +73,15 @@ trait CeremonyStoreContract
     public function testACeremonyIsTakenOnce(string $implementation): void
     {
         $store = $this->ceremonyStore($implementation);
-        $registration = new Ceremony(Uuid::v7(), new Realm('acme'), CeremonyKind::Registration, '{"challenge":"x"}', new \DateTimeImmutable('2026-10-27 18:50:00 UTC'), new SessionId(new UuidV7()));
-        $signIn = new Ceremony(Uuid::v7(), new Realm('acme'), CeremonyKind::SignIn, '{"challenge":"y"}', new \DateTimeImmutable('2026-10-27 18:50:00 UTC'));
+        $registration = new Ceremony(Ids::next(), new Realm('acme'), CeremonyKind::Registration, '{"challenge":"x"}', new \DateTimeImmutable('2026-10-27 18:50:00 UTC'), new SessionId(Ids::next()));
+        $signIn = new Ceremony(Ids::next(), new Realm('acme'), CeremonyKind::SignIn, '{"challenge":"y"}', new \DateTimeImmutable('2026-10-27 18:50:00 UTC'));
         $store->add($registration);
         $store->add($signIn);
 
         self::assertNull($store->take(new Realm('globex'), $registration->id, $registration->sessionId));
         self::assertNull($store->take(new Realm('acme'), $registration->id), 'A session\'s ceremony was taken without it.');
-        self::assertNull($store->take(new Realm('acme'), $registration->id, new SessionId(new UuidV7())), 'Another session took the ceremony.');
-        self::assertNull($store->take(new Realm('acme'), $signIn->id, new SessionId(new UuidV7())), 'A session took a ceremony begun outside one.');
+        self::assertNull($store->take(new Realm('acme'), $registration->id, new SessionId(Ids::next())), 'Another session took the ceremony.');
+        self::assertNull($store->take(new Realm('acme'), $signIn->id, new SessionId(Ids::next())), 'A session took a ceremony begun outside one.');
         self::assertEquals($registration, $store->take(new Realm('acme'), $registration->id, $registration->sessionId), 'Someone else\'s attempt used the ceremony up.');
         self::assertNull($store->take(new Realm('acme'), $registration->id, $registration->sessionId), 'A ceremony was taken twice.');
         self::assertEquals($signIn, $store->take(new Realm('acme'), $signIn->id));
@@ -92,8 +91,8 @@ trait CeremonyStoreContract
     public function testPurgesExpiredCeremonies(string $implementation): void
     {
         $store = $this->ceremonyStore($implementation);
-        $expired = new Ceremony(Uuid::v7(), new Realm('acme'), CeremonyKind::SignIn, '{}', new \DateTimeImmutable('2026-10-27 18:50:00 UTC'));
-        $current = new Ceremony(Uuid::v7(), new Realm('globex'), CeremonyKind::SignIn, '{}', new \DateTimeImmutable('2026-10-27 18:50:01 UTC'));
+        $expired = new Ceremony(Ids::next(), new Realm('acme'), CeremonyKind::SignIn, '{}', new \DateTimeImmutable('2026-10-27 18:50:00 UTC'));
+        $current = new Ceremony(Ids::next(), new Realm('globex'), CeremonyKind::SignIn, '{}', new \DateTimeImmutable('2026-10-27 18:50:01 UTC'));
         $store->add($expired);
         $store->add($current);
 

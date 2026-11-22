@@ -55,6 +55,7 @@ use YorvoID\Symfony\Security\PrincipalUser;
 use YorvoID\Symfony\Security\PrincipalUserChecker;
 use YorvoID\Symfony\Security\PrincipalUserProvider;
 use YorvoID\Symfony\Security\PrincipalUsers;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\StatementLog;
 use YorvoID\Tests\Symfony\App\TestKernel;
@@ -553,7 +554,7 @@ final class SecurityTest extends TestCase
         self::assertTrue($provider->supportsClass(InMemoryUser::class));
         self::assertEquals($user, $provider->refreshUser(new InMemoryUser((string) $ana->id, null)));
 
-        foreach (['not-an-id', (string) new PrincipalId(new \Symfony\Component\Uid\UuidV7())] as $unknown) {
+        foreach (['not-an-id', (string) new PrincipalId(Ids::next())] as $unknown) {
             try {
                 $provider->loadUserByIdentifier($unknown);
                 self::fail(\sprintf('"%s" was loaded.', $unknown));

@@ -25,7 +25,7 @@ final readonly class DbalCoolDownStore implements CoolDownStore
     public function extend(Realm $realm, PrincipalId $principalId, \DateTimeImmutable $until): void
     {
         $table = $this->database->table(self::TABLE);
-        $principal = $principalId->uuid->toRfc4122();
+        $principal = $principalId->id->toString();
         $this->database->connection->executeStatement(
             \sprintf('UPDATE %s SET ends_at = ? WHERE realm = ? AND principal_id = ? AND ends_at < ?', $table),
             [$until, $realm->name, $principal, $until],
@@ -40,7 +40,7 @@ final readonly class DbalCoolDownStore implements CoolDownStore
 
     public function until(Realm $realm, PrincipalId $principalId): ?\DateTimeImmutable
     {
-        $value = $this->database->connection->fetchOne(\sprintf('SELECT ends_at FROM %s WHERE realm = ? AND principal_id = ?', $this->database->table(self::TABLE)), [$realm->name, $principalId->uuid->toRfc4122()]);
+        $value = $this->database->connection->fetchOne(\sprintf('SELECT ends_at FROM %s WHERE realm = ? AND principal_id = ?', $this->database->table(self::TABLE)), [$realm->name, $principalId->id->toString()]);
 
         if (false === $value) {
             return null;

@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Principal\Identifier;
 use YorvoID\Core\Principal\IdentifierKind;
 use YorvoID\Core\Principal\IdentifierStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every IdentifierStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must too.
@@ -155,6 +155,6 @@ trait IdentifierStoreContract
 
     private static function id(): PrincipalId
     {
-        return new PrincipalId(new UuidV7());
+        return new PrincipalId(Ids::next());
     }
 }

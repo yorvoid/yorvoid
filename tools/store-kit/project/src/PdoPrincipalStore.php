@@ -31,7 +31,7 @@ final readonly class PdoPrincipalStore implements PrincipalStore
     {
         try {
             $this->pdo->prepare('INSERT INTO acme_principal VALUES (?, ?, ?, ?, ?, ?, ?, ?)')->execute([
-                $principal->id->uuid->toRfc4122(),
+                $principal->id->id->toString(),
                 $principal->realm->name,
                 $principal->kind->value,
                 $principal->status->value,
@@ -52,7 +52,7 @@ final readonly class PdoPrincipalStore implements PrincipalStore
     public function get(Realm $realm, PrincipalId $id): ?Principal
     {
         $statement = $this->pdo->prepare('SELECT kind, status, created_at, updated_at, status_changed_at, status_version FROM acme_principal WHERE realm = ? AND id = ?');
-        $statement->execute([$realm->name, $id->uuid->toRfc4122()]);
+        $statement->execute([$realm->name, $id->id->toString()]);
         /** @var array{kind: string, status: string, created_at: string, updated_at: string, status_changed_at: string, status_version: int}|false $row */
         $row = $statement->fetch(\PDO::FETCH_ASSOC);
 
@@ -87,7 +87,7 @@ final readonly class PdoPrincipalStore implements PrincipalStore
      */
     public function lock(Realm $realm, PrincipalId $id): void
     {
-        $this->pdo->prepare('UPDATE acme_principal SET status_version = status_version WHERE realm = ? AND id = ?')->execute([$realm->name, $id->uuid->toRfc4122()]);
+        $this->pdo->prepare('UPDATE acme_principal SET status_version = status_version WHERE realm = ? AND id = ?')->execute([$realm->name, $id->id->toString()]);
     }
 
     public function changeStatus(Principal $before, Principal $after): bool
@@ -99,7 +99,7 @@ final readonly class PdoPrincipalStore implements PrincipalStore
             $after->statusChangedAt->format(self::TIME),
             $after->statusVersion,
             $before->realm->name,
-            $before->id->uuid->toRfc4122(),
+            $before->id->id->toString(),
             $before->statusVersion,
         ]);
 

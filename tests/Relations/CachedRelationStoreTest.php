@@ -6,7 +6,6 @@ namespace YorvoID\Tests\Relations;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -20,6 +19,7 @@ use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\Storage\CachedRelationStore;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Relations\Fixtures\CountingRelationStore;
 use YorvoID\Tests\Relations\Fixtures\PoolOnlyRelationStore;
 
@@ -44,8 +44,8 @@ final class CachedRelationStoreTest extends TestCase
         $this->pool = new ArrayAdapter();
         $this->store = new InMemoryRelationStore();
         $this->realm = new Realm('acme');
-        $this->ada = Subject::principal(new PrincipalId(new UuidV7()));
-        $this->bob = Subject::principal(new PrincipalId(new UuidV7()));
+        $this->ada = Subject::principal(new PrincipalId(Ids::next()));
+        $this->bob = Subject::principal(new PrincipalId(Ids::next()));
     }
 
     /**

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Log\LogEntry;
@@ -14,6 +13,7 @@ use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 
 /**
  * What every SecurityLogStore keeps (PLT-025): YorvoID's own pass these tests, and a store of your own must
@@ -85,11 +85,11 @@ trait SecurityLogStoreContract
         $details = ['kind' => 'human', 'nested' => ['b' => [1, 2, 3], 'a' => true, 'none' => null], 'text' => 'Ünïcödé "quoted" / slashed'];
 
         $entry = $transactions->run(static fn (): LogEntry => $log->append($realm, static fn (int $sequence, ?string $previous): LogEntry => LogEntry::create(
-            $realm, $sequence, new UuidV7(), new \DateTimeImmutable('2026-10-27 18:40:59.987654 UTC'), 'yorvoid.principal.create', Outcome::Denied,
-            new Origin(OriginKind::Console, 'yorvoid:principal:create', 'req-42'), new PrincipalId(new UuidV7()), 'principal', 'abc-123', $details, $previous ?? 'genesis',
+            $realm, $sequence, Ids::next(), new \DateTimeImmutable('2026-10-27 18:40:59.987654 UTC'), 'yorvoid.principal.create', Outcome::Denied,
+            new Origin(OriginKind::Console, 'yorvoid:principal:create', 'req-42'), new PrincipalId(Ids::next()), 'principal', 'abc-123', $details, $previous ?? 'genesis',
         )));
         $bare = $transactions->run(static fn (): LogEntry => $log->append($realm, static fn (int $sequence, ?string $previous): LogEntry => LogEntry::create(
-            $realm, $sequence, new UuidV7(), new \DateTimeImmutable('2026-10-27 18:41:00 UTC'), 'yorvoid.log.verify', Outcome::Success,
+            $realm, $sequence, Ids::next(), new \DateTimeImmutable('2026-10-27 18:41:00 UTC'), 'yorvoid.log.verify', Outcome::Success,
             Origin::restored(OriginKind::System, null, 'x'), null, null, null, [], (string) $previous,
         )));
 
@@ -108,7 +108,7 @@ trait SecurityLogStoreContract
         $realm = Realm::default();
 
         $entry = $transactions->run(static fn (): LogEntry => $log->append($realm, static fn (int $sequence, ?string $previous): LogEntry => LogEntry::create(
-            $realm, $sequence, new UuidV7(), new \DateTimeImmutable(), 'yorvoid.session.sign_in', Outcome::Denied,
+            $realm, $sequence, Ids::next(), new \DateTimeImmutable(), 'yorvoid.session.sign_in', Outcome::Denied,
             new Origin(OriginKind::Web, "/login\xFF", 'req-1'), null, 'identifier', "grace\xC3", ['typed' => "grace\xC3\x28", "k\x80" => "\xE9"], $previous ?? 'genesis',
         )));
 
@@ -130,7 +130,7 @@ trait SecurityLogStoreContract
         $origin = new Origin(OriginKind::Web, "/login\0".str_repeat('é', 300), 'req-1');
 
         $entry = $transactions->run(static fn (): LogEntry => $log->append($realm, static fn (int $sequence, ?string $previous): LogEntry => LogEntry::create(
-            $realm, $sequence, new UuidV7(), new \DateTimeImmutable(), 'yorvoid.session.sign_in', Outcome::Denied,
+            $realm, $sequence, Ids::next(), new \DateTimeImmutable(), 'yorvoid.session.sign_in', Outcome::Denied,
             $origin, null, 'identifier', "grace\0", ['typed' => "a\0b", "k\0" => ["\0"]], $previous ?? 'genesis',
         )));
 
@@ -227,7 +227,7 @@ trait SecurityLogStoreContract
             return $log->append($realm, static function (int $sequence, ?string $previous) use ($realm, &$seen): LogEntry {
                 $seen[] = [$sequence, $previous];
 
-                return LogEntry::create($realm, $sequence, new UuidV7(), new \DateTimeImmutable(), 'yorvoid.test.append', Outcome::Success, Origin::system('test'), null, null, null, [], $previous ?? 'genesis');
+                return LogEntry::create($realm, $sequence, Ids::next(), new \DateTimeImmutable(), 'yorvoid.test.append', Outcome::Success, Origin::system('test'), null, null, null, [], $previous ?? 'genesis');
             });
         });
     }

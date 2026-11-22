@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace YorvoID\Tests\PolicyTesting;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\AuthorityCheck;
 use YorvoID\Core\Authorization\ChecksCatalogue;
 use YorvoID\Core\Authorization\ForbidElement;
@@ -46,6 +45,7 @@ use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\ResourceType;
 use YorvoID\Relations\Storage\InMemoryRelationStore;
 use YorvoID\Relations\Subject;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Authorization\Fixtures\StubAuthority;
 
 /**
@@ -84,7 +84,7 @@ final class MutantsTest extends TestCase
         $mutants = self::mutants();
         $inner = new InMemoryPolicyStore();
         $store = $mutants->policyStore($inner);
-        $ada = new PrincipalId(new UuidV7());
+        $ada = new PrincipalId(Ids::next());
         $page = new ResourceRef('page', '1');
         $at = new \DateTimeImmutable('2026-11-09 12:00:00');
         $inner->assign(new RoleAssignment($realm, $ada, 'writer', $at, $page));
@@ -121,9 +121,9 @@ final class MutantsTest extends TestCase
         $mutants->activate(null);
         self::assertCount(5, $read());
         $mutants->activate(new Mutant(MutationOperator::GroupsDontCount));
-        self::assertSame(['page:1#editor@principal:'.$ada->uuid->toRfc4122(), 'page:1#within@site:1', 'page:1#within@site:1'], $read());
+        self::assertSame(['page:1#editor@principal:'.$ada->id->toString(), 'page:1#within@site:1', 'page:1#within@site:1'], $read());
         $mutants->activate(new Mutant(MutationOperator::ParentsDontCount));
-        self::assertSame(['page:1#editor@group:team#member', 'page:1#editor@principal:'.$ada->uuid->toRfc4122(), 'group:team#member@principal:'.$ada->uuid->toRfc4122()], $read(), '"within" leads to a parent, as the schema says.');
+        self::assertSame(['page:1#editor@group:team#member', 'page:1#editor@principal:'.$ada->id->toString(), 'group:team#member@principal:'.$ada->id->toString()], $read(), '"within" leads to a parent, as the schema says.');
         self::assertTrue($mutants->leadsToParent('within'));
         self::assertTrue($mutants->leadsToParent('parent'), 'The folder\'s.');
         self::assertFalse($mutants->leadsToParent('editor'));

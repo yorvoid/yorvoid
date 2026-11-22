@@ -12,7 +12,6 @@ use Doctrine\DBAL\Exception\ConnectionLost;
 use Doctrine\DBAL\Exception\DeadlockException;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\UuidV7;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -36,6 +35,7 @@ use YorvoID\Core\Storage\ForgetsWhatItRead;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
 use YorvoID\Core\Storage\RetryableConflict;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\Member;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
 use YorvoID\Tests\Support\TrustedActors;
@@ -527,7 +527,7 @@ final class RetriesTest extends TestCase
             $policy = new Revocable();
             $handler = new ConflictingOnce($transactions, $policy);
             $operations = new Operations(new OperationCatalogue([Touch::class]), Evaluator::builtIn(new ValidAuthority(), $policy, actors: [new TrustedActors()]), new SecurityLog(new InMemorySecurityLogStore(), new InMemoryTransactions()), [$handler], transactions: $transactions);
-            $actor = new Member(new Realm('acme'), new PrincipalId(new UuidV7()));
+            $actor = new Member(new Realm('acme'), new PrincipalId(Ids::next()));
 
             try {
                 $operations->run(new Touch(new Realm('acme')), $actor, new Origin(OriginKind::Web));

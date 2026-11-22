@@ -25,7 +25,7 @@ final readonly class DbalKnownDeviceStore implements KnownDeviceStore
     public function recordUse(Realm $realm, PrincipalId $principalId, string $cookieHash, \DateTimeImmutable $at): bool
     {
         $table = $this->database->table(self::TABLE);
-        $principal = $principalId->uuid->toRfc4122();
+        $principal = $principalId->id->toString();
 
         if (1 === $this->database->connection->executeStatement(\sprintf('UPDATE %s SET last_seen_at = ? WHERE realm = ? AND principal_id = ? AND cookie_hash = ?', $table), [$at, $realm->name, $principal, $cookieHash], [0 => Types::DATETIMETZ_IMMUTABLE])) {
             return true;
@@ -44,12 +44,12 @@ final readonly class DbalKnownDeviceStore implements KnownDeviceStore
 
     public function hasAny(Realm $realm, PrincipalId $principalId): bool
     {
-        return false !== $this->database->connection->fetchOne(\sprintf('SELECT 1 FROM %s WHERE realm = ? AND principal_id = ?', $this->database->table(self::TABLE)), [$realm->name, $principalId->uuid->toRfc4122()]);
+        return false !== $this->database->connection->fetchOne(\sprintf('SELECT 1 FROM %s WHERE realm = ? AND principal_id = ?', $this->database->table(self::TABLE)), [$realm->name, $principalId->id->toString()]);
     }
 
     public function isKnown(Realm $realm, PrincipalId $principalId, string $cookieHash): bool
     {
-        return false !== $this->database->connection->fetchOne(\sprintf('SELECT 1 FROM %s WHERE realm = ? AND principal_id = ? AND cookie_hash = ?', $this->database->table(self::TABLE)), [$realm->name, $principalId->uuid->toRfc4122(), $cookieHash]);
+        return false !== $this->database->connection->fetchOne(\sprintf('SELECT 1 FROM %s WHERE realm = ? AND principal_id = ? AND cookie_hash = ?', $this->database->table(self::TABLE)), [$realm->name, $principalId->id->toString(), $cookieHash]);
     }
 
     public function purge(\DateTimeImmutable $unusedSince): int
