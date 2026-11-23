@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Bench;
 
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\VersionMemo;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Storage\VersionedCache;
@@ -37,8 +38,9 @@ final class DecisionBench
 
     public function setUp(string $subject): void
     {
-        $cached = \in_array($subject, ['benchCachedDecision', 'benchHundredCachedDecisions'], true);
-        [$this->world, $this->ada, $this->pages] = self::$worlds[$cached ? 'cached' : 'uncached'] ??= self::world($cached);
+        $cached = \in_array($subject, ['benchCachedDecision', 'benchHundredCachedDecisions', 'benchHundredMemoizedDecisions'], true);
+        $memo = 'benchHundredMemoizedDecisions' === $subject;
+        [$this->world, $this->ada, $this->pages] = self::$worlds[$memo ? 'memo' : ($cached ? 'cached' : 'uncached')] ??= self::world($cached, $memo);
     }
 
     #[Measure(revolutions: 20)]
@@ -49,6 +51,19 @@ final class DecisionBench
 
     public function benchHundredCachedDecisions(): void
     {
+        foreach ($this->pages as $page) {
+            $this->world->allows($this->ada, 'acme.pages.publish', $page) || throw new \LogicException('Refused.');
+        }
+    }
+
+    /**
+     * The same, with the opt-in memo: one version read for the request.
+     */
+    public function benchHundredMemoizedDecisions(): void
+    {
+        // A request of its own each time: the memo reads the versions once in it.
+        $this->world->memo?->reset();
+
         foreach ($this->pages as $page) {
             $this->world->allows($this->ada, 'acme.pages.publish', $page) || throw new \LogicException('Refused.');
         }
@@ -67,9 +82,9 @@ final class DecisionBench
     /**
      * @return array{PolicyWorld, TestPrincipal, list<ResourceRef>}
      */
-    private static function world(bool $cached): array
+    private static function world(bool $cached, bool $memo = false): array
     {
-        $world = new PolicyWorld(stack: Postgres::stack($cached ? 'decision_cached' : 'decision'), cache: $cached ? new VersionedCache() : null);
+        $world = new PolicyWorld(stack: Postgres::stack($memo ? 'decision_memo' : ($cached ? 'decision_cached' : 'decision')), cache: $cached ? new VersionedCache() : null, memo: $memo ? new VersionMemo() : null);
         $server = new ResourceRef('server', '1');
         $site = new ResourceRef('site', '1');
         $world->asOperator(new AddRelation($world->realm, $site, 'parent', new Subject($server)));

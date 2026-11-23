@@ -13,6 +13,10 @@ namespace YorvoID\Core\Authorization;
  * that's recorded or seen as someone else. An ability's Permit that's neither recorded nor acted on
  * isn't checked, and says so: its moved sources are unknown (null), never none.
  *
+ * A pinned read set is one an opt-in memo gave (VersionMemo): its versions are the request's first,
+ * which can be older than what's committed when it was decided. Only an ability's Permit, for showing,
+ * is ever pinned.
+ *
  * @api
  */
 final readonly class ReadSet
@@ -21,12 +25,24 @@ final readonly class ReadSet
      * @param array<string, int>         $versions   By source, read before judging, e.g. ["policy" => 12, "relations" => 4]
      * @param list<string>|null          $moved      The sources whose version changed while it judged; null when that wasn't checked
      * @param array<string, string>|null $attributes Resolved attributes, by name: a value or its MAC; null while they aren't recorded
+     * @param bool                       $pinned     Whether its versions are the request's, kept by the memo, not read for it
      */
     public function __construct(
         public array $versions = [],
         public ?array $moved = [],
         public ?array $attributes = null,
+        public bool $pinned = false,
     ) {
+    }
+
+    /**
+     * The versions a memo kept for the request: pinned, and unchecked.
+     *
+     * @param array<string, int> $memo
+     */
+    public static function pinned(array $memo): self
+    {
+        return new self($memo, null, null, true);
     }
 
     /**
@@ -70,7 +86,7 @@ final readonly class ReadSet
     {
         ksort($attributes, \SORT_STRING);
 
-        return new self($this->versions, $this->moved, $attributes);
+        return new self($this->versions, $this->moved, $attributes, $this->pinned);
     }
 
     /**

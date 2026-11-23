@@ -21,7 +21,9 @@ use Symfony\Component\VarDumper\Cloner\AbstractCloner;
 use Twig\Extension\AbstractExtension;
 use YorvoID\Authn\Session\Sessions;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
+use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\PolicyElement;
+use YorvoID\Core\Authorization\VersionMemo;
 use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Secret;
@@ -106,6 +108,8 @@ final class YorvoIDBundle extends AbstractBundle
             ->enumNode('mode')->values(['standard', 'fips'])->defaultValue('standard')->info('Which algorithms YorvoID uses: standard, or fips, only with OpenSSL\'s FIPS provider alone active, which it checks at boot (CRY-01)')->end();
         $children->arrayNode('audit')->addDefaultsIfNotSet()->children()
             ->enumNode('on_failure')->values(['continue', 'refuse'])->defaultValue('continue')->info('What a decision whose record can\'t be written does: continue, or refuse, so that nothing is permitted without its record (AUD-006). The alert is raised either way')->end();
+        $children->arrayNode('authorization')->addDefaultsIfNotSet()->children()
+            ->enumNode('version_memo')->values(['none', 'request'])->defaultValue('none')->info('request: an ability\'s permit for showing, e.g. is_granted() for a link, is decided at the versions the request first read, rather than reading them again each time. Never an operation\'s, a view-as\'s, a batch\'s or a refusal; such a permit is recorded as pinned, and can be as old as the request')->end();
         $children->arrayNode('cache')->addDefaultsIfNotSet()->children()
             ->scalarNode('pool')->defaultValue(self::CACHE_POOL)->info('The PSR-6 pool that servers share for what decisions read: roles, assignments, relations. yorvoid.cache is on cache.app; null keeps them for the request only')->end();
         $children->arrayNode('api')->addDefaultsIfNotSet()->children()
@@ -245,6 +249,11 @@ final class YorvoIDBundle extends AbstractBundle
         // The default pool needs FrameworkBundle; one the application names must exist.
         $pool = $settings['cache.pool'];
         $builder->getDefinition(VersionedCache::class)->setArgument(0, \is_string($pool) ? new Reference($pool, self::CACHE_POOL === $pool ? ContainerInterface::NULL_ON_INVALID_REFERENCE : ContainerInterface::EXCEPTION_ON_INVALID_REFERENCE) : null);
+
+        if ('request' === $settings['authorization.version_memo']) {
+            $builder->register(VersionMemo::class, VersionMemo::class)->addTag('kernel.reset', ['method' => 'reset']);
+            $builder->getDefinition(Evaluator::class)->replaceArgument(14, new Reference(VersionMemo::class));
+        }
 
         if (true !== $settings['sessions.recognise_devices']) {
             $builder->getDefinition(Sessions::class)->setArgument('$devices', null);

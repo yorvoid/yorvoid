@@ -376,6 +376,8 @@ return static function (ContainerConfigurator $container): void {
         tagged_iterator('yorvoid.actor_prover'),
         service(DecisionScope::class),
         service(AttributeMacs::class),
+        // The opt-in memo (authorization.version_memo: request), set by the bundle.
+        null,
     ]);
     $services->set(StoredSessions::class)->args([service(Stores::IDS[SessionStore::class]), service(ClockInterface::class)])->tag('yorvoid.actor_prover');
     $services->alias(Authorization::class, Evaluator::class);

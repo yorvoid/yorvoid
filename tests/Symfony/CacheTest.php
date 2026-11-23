@@ -9,6 +9,8 @@ use Psr\Cache\CacheItemPoolInterface;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Contracts\Service\ResetInterface;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\VersionMemo;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
@@ -84,6 +86,33 @@ final class CacheTest extends TestCase
         foreach ([VersionedCache::class, 'yorvoid.store.policy', 'yorvoid.store.relation'] as $id) {
             self::assertContains($container->get($id), $reads, $id);
         }
+    }
+
+    /**
+     * The memo of versions for showing is opt-in, and forgets between requests.
+     */
+    public function testTheVersionMemoIsOptInAndForgetsBetweenRequests(): void
+    {
+        $memo = static function (ContainerInterface $container): mixed {
+            $evaluator = $container->get(Evaluator::class);
+            \assert($evaluator instanceof Evaluator);
+
+            return new \ReflectionProperty(Evaluator::class, 'memo')->getValue($evaluator);
+        };
+
+        self::assertNull($memo($this->boot([])), 'Off by default.');
+        $this->kernel?->shutdown();
+        $this->kernel = null;
+        new Filesystem()->remove($this->directory);
+
+        $container = $this->boot(['authorization' => ['version_memo' => 'request']]);
+        $versions = $memo($container);
+        self::assertInstanceOf(VersionMemo::class, $versions);
+        $versions->versions(new Realm('acme'), static fn (): array => ['policy' => 1]);
+        $resetter = $container->get('services_resetter');
+        \assert($resetter instanceof ResetInterface);
+        $resetter->reset();
+        self::assertSame(['policy' => 2], $versions->versions(new Realm('acme'), static fn (): array => ['policy' => 2]), 'Forgotten at the end of the request.');
     }
 
     public function testWithoutAPoolARequestStillReadsOnce(): void
