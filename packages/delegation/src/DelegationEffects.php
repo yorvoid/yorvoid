@@ -8,8 +8,10 @@ use YorvoID\Core\Authorization\Actions;
 use YorvoID\Core\Authorization\DeclaresEffects;
 use YorvoID\Core\Authorization\Effect;
 use YorvoID\Core\Authorization\EffectPart;
+use YorvoID\Core\Authorization\GrantsThroughRelations;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\Selector\RelatedTo;
 use YorvoID\Delegation\Change\IssueDelegation;
 use YorvoID\Delegation\Change\RevokeDelegation;
 use YorvoID\Delegation\Change\RevokeDelegationsOf;
@@ -30,6 +32,7 @@ final readonly class DelegationEffects implements DeclaresEffects
     public function __construct(
         private Actions|\Closure $actions,
         private ?DelegationStore $store = null,
+        private ?GrantsThroughRelations $relations = null,
     ) {
     }
 
@@ -43,7 +46,7 @@ final readonly class DelegationEffects implements DeclaresEffects
         $command = $request->command;
 
         if ($command instanceof IssueDelegation) {
-            return new Effect(gives: $this->parts($command->actions, $command->resources));
+            return new Effect(gives: $this->given($command, $request));
         }
 
         if (null === $this->store) {
@@ -64,6 +67,41 @@ final readonly class DelegationEffects implements DeclaresEffects
         }
 
         return new Effect(takes: $takes);
+    }
+
+    /**
+     * What issuing gives. A root delegation of the resources the delegator has a relation to, which the
+     * relation's definition gives abilities on, gives those as held by that definition: no-escalation
+     * doesn't weigh them, the decision at each use does, on each resource. Step-up still sees them.
+     *
+     * @return list<EffectPart>
+     */
+    private function given(IssueDelegation $command, Request $request): array
+    {
+        $parts = $this->parts($command->actions, $command->resources);
+        $delegator = $request->actor->principalId;
+
+        if (null !== $command->parent || null !== $command->resources->ids() || null === $this->relations || null === $delegator) {
+            return $parts;
+        }
+
+        $held = [];
+
+        foreach ($command->resources->atoms as $atom) {
+            if ($atom instanceof RelatedTo && 'principal' === $atom->subject->type && $atom->subject->id === (string) $delegator) {
+                array_push($held, ...$this->relations->abilitiesGivenBy($command->resources->type, $atom->relation));
+            }
+        }
+
+        if ([] === $held) {
+            return $parts;
+        }
+
+        $abilities = $parts[0]->abilities;
+        $byDefinition = array_values(array_intersect($abilities, $held));
+        $rest = array_values(array_diff($abilities, $held));
+
+        return [...([] === $rest ? [] : [new EffectPart(abilities: $rest)]), ...([] === $byDefinition ? [] : [new EffectPart(abilities: $byDefinition, heldByDefinition: true)])];
     }
 
     /**

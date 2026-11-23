@@ -7,6 +7,9 @@ namespace YorvoID\Delegation;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
 use YorvoID\Core\Authorization\Actions;
+use YorvoID\Core\Authorization\DecidesForRoot;
+use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
@@ -38,6 +41,10 @@ use YorvoID\Delegation\Change\RevokeDelegationsOf;
  */
 final readonly class Delegations implements OperationHandler
 {
+    /**
+     * @param Actions|\Closure(): Actions                    $actions
+     * @param DecidesForRoot|\Closure(): DecidesForRoot|null $roots   What checks a chain's root now, when a delegation is passed on: without it, none is
+     */
     public function __construct(
         private DelegationStore $store,
         private PrincipalStore $principals,
@@ -48,6 +55,7 @@ final readonly class Delegations implements OperationHandler
         private IdGenerator $ids = new UuidV7Generator(),
         private DelegationLimits $limits = new DelegationLimits(),
         private Purposes $purposes = new Purposes(),
+        private DecidesForRoot|\Closure|null $roots = null,
     ) {
     }
 
@@ -118,6 +126,8 @@ final readonly class Delegations implements OperationHandler
                 if (null !== $outside) {
                     throw new DelegationRefused('outside_parent', \sprintf('It would have %s.', $outside));
                 }
+
+                $this->rootHoldsNow($delegation, $origin);
             }
 
             $this->store->add($delegation);
@@ -210,6 +220,35 @@ final readonly class Delegations implements OperationHandler
         }
 
         return false;
+    }
+
+    /**
+     * The root holds every action it passes on now, on each resource it names by ID, or in the whole realm
+     * (06 §5.3): a delegation passed on from a root that lost the authority is refused when it's issued,
+     * as its every use would be.
+     */
+    private function rootHoldsNow(Delegation $delegation, Origin $origin): void
+    {
+        $roots = $this->roots instanceof \Closure ? ($this->roots)() : $this->roots;
+
+        if (!$roots instanceof DecidesForRoot) {
+            throw new DelegationRefused('no_root_check', 'Passing a delegation on checks its root now: give Delegations the evaluator (DecidesForRoot).');
+        }
+
+        $ids = $delegation->resources->ids();
+        $resources = null === $ids ? [null] : array_map(static fn (string $id): ResourceRef => new ResourceRef($delegation->resources->type, $id), $ids->ids);
+
+        foreach ($delegation->actions as $action) {
+            $ability = null === $this->actions()->operation($action) ? $action : ($this->actions()->abilityOf($action) ?? $action);
+
+            foreach ($resources as $resource) {
+                $truth = $roots->rootHolds($delegation->root, $ability, $delegation->realm, $resource, $origin);
+
+                if (TruthValue::Holds !== $truth->value) {
+                    throw new DelegationRefused('root_not_permitted', \sprintf('Its root may not pass it on now: %s', $truth->detail));
+                }
+            }
+        }
     }
 
     /**
@@ -310,9 +349,6 @@ final readonly class Delegations implements OperationHandler
             return $this->actions;
         }
 
-        $actions = ($this->actions)();
-        \assert($actions instanceof Actions);
-
-        return $actions;
+        return ($this->actions)();
     }
 }

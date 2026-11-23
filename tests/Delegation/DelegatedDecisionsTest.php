@@ -14,6 +14,7 @@ use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Decision;
+use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\UnderDelegation;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Operation\ViewingAs;
@@ -24,6 +25,7 @@ use YorvoID\Core\Principal\SuspendPrincipal;
 use YorvoID\Delegation\Change\IssueDelegation;
 use YorvoID\Delegation\Change\RevokeDelegation;
 use YorvoID\Delegation\Delegation;
+use YorvoID\Delegation\DelegationRefused;
 use YorvoID\Policy\Change\AssignRole;
 use YorvoID\Policy\Change\UnassignRole;
 use YorvoID\Relations\Change\AddRelation;
@@ -176,6 +178,52 @@ final class DelegatedDecisionsTest extends DatabaseTestCase
 
         $world->as($ana, new RevokeDelegation($world->realm, $parent->id, 'done'));
         self::assertSame(Verdict::Deny, $this->decide($world, $under, 'acme.pages.publish', 'p-1')->verdict);
+    }
+
+    /**
+     * Passing a delegation on checks its root now: a root that lost the authority can't be passed on from.
+     */
+    #[DataProvider('implementations')]
+    public function testPassingOnFromARootThatLostItIsRefused(string $implementation): void
+    {
+        $world = $this->world($implementation);
+        $ana = $world->principal('editor');
+        $bea = $world->principal();
+        $bot = $this->agent($world, $bea);
+        $parent = $world->as($ana, new IssueDelegation($world->realm, self::id($bea), ['acme.pages.publish'], new Selector('page'), new \DateTimeImmutable(self::EXPIRES), redelegable: ['acme.pages.publish'], depth: 1));
+        $world->asOperator(new UnassignRole($world->realm, self::id($ana), 'editor'));
+
+        try {
+            $world->as($bea, new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page'), new \DateTimeImmutable('2026-11-10 20:00:00'), parent: $parent->id));
+            self::fail('Passed on.');
+        } catch (DelegationRefused $refused) {
+            self::assertSame('root_not_permitted', $refused->reason);
+        }
+    }
+
+    /**
+     * A delegation of what a relation gives, on the resources the delegator has that relation to: held by
+     * the relation's definition, decided on each resource at use.
+     */
+    #[DataProvider('implementations')]
+    public function testWhatARelationGivesIsDelegatedOnWhatTheDelegatorHasItTo(string $implementation): void
+    {
+        $world = $this->world($implementation);
+        $ana = $world->principal();
+        $bot = $this->agent($world, $ana);
+        $world->asOperator(new AddRelation($world->realm, new ResourceRef('page', 'p-1'), 'editor', Subject::principal(self::id($ana))));
+        $hers = new Selector('page', [new RelatedTo('editor', new ResourceRef('principal', (string) self::id($ana)))]);
+        $under = new UnderDelegation($bot, $this->delegate($world, $ana, $bot, ['acme.pages.publish'], $hers)->id);
+
+        self::assertSame(Verdict::Permit, $this->decide($world, $under, 'acme.pages.publish', 'p-1')->verdict, 'Her page.');
+        self::assertSame(Verdict::Deny, $this->decide($world, $under, 'acme.pages.publish', 'p-2')->verdict, 'Not hers.');
+
+        try {
+            $this->delegate($world, $ana, $bot, ['acme.pages.delete'], $hers);
+            self::fail('What no relation of hers gives.');
+        } catch (NotPermitted) {
+            $this->addToAssertionCount(1);
+        }
     }
 
     public function testADelegationIsUsedByTheActorThatAuthenticatedNeverNested(): void

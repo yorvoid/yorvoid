@@ -97,6 +97,10 @@ final readonly class NoEscalation implements ForbidElement, ChecksCatalogue
         }
 
         foreach ([...$effect->gives, ...$effect->takes] as $part) {
+            if ($part->heldByDefinition) {
+                continue;
+            }
+
             $truth = $this->roles(null === $part->on ? $request : $request->on($part->on), $part->roles, $part->abilities, $part->byRelation);
 
             if (TruthValue::Fails !== $truth->value) {

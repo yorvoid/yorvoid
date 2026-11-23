@@ -39,6 +39,7 @@ use YorvoID\Core\Operation\SelfServicePolicy;
 use YorvoID\Core\Operation\UnderDelegation;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Operation\ViewingAs;
+use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StoreUnreachable;
@@ -65,7 +66,7 @@ use YorvoID\Core\Storage\StoreUnreachable;
  *
  * @api
  */
-final readonly class Evaluator implements Authorization
+final readonly class Evaluator implements Authorization, DecidesForRoot
 {
     /** @var array<string, PolicyElement> By name */
     private array $elements;
@@ -328,6 +329,17 @@ final readonly class Evaluator implements Authorization
         $decision = $this->judged($request, fn (): Decision => $this->consequence($request, $parent));
 
         return self::bound(null === $this->decisions ? $decision : $this->decisions->record($request, $decision, $parent->id), $command, $actor);
+    }
+
+    public function rootHolds(PrincipalId $root, string $ability, Realm $realm, ?ResourceRef $resource, Origin $origin): Truth
+    {
+        $decision = $this->judge(Request::forAbility($ability, $realm, $resource, new ActingPrincipal($realm, $root), $origin, $this->clock->now()));
+
+        return match ($decision->verdict) {
+            Verdict::Permit => Truth::holds(\sprintf('The root holds "%s".', $ability)),
+            Verdict::Deny => Truth::fails(\sprintf('The root doesn\'t hold "%s" now: %s', $ability, $decision->reason)),
+            Verdict::Indeterminate, Verdict::PermitOffline => Truth::unknown($decision->indeterminate[0] ?? IndeterminateReason::EvaluationError, \sprintf('Whether the root holds "%s" couldn\'t be established: %s', $ability, $decision->reason)),
+        };
     }
 
     /**

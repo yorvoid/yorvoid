@@ -17,15 +17,19 @@ final readonly class EffectPart
     /**
      * @param list<string>     $roles
      * @param list<string>     $abilities
-     * @param ResourceRef|null $on         Where: the request's resource (or the realm) if null
-     * @param bool             $byRelation Whether a relation to it holds an ability, or only a role does (for
-     *                                     what every descendant gets)
+     * @param ResourceRef|null $on               Where: the request's resource (or the realm) if null
+     * @param bool             $heldByDefinition Whether its abilities are held by what gives them, e.g. a delegation of a
+     *                                           relation's abilities on what the delegator has it to: no-escalation doesn't
+     *                                           weigh it, step-up does (experimental)
+     * @param bool             $byRelation       Whether a relation to it holds an ability, or only a role does (for
+     *                                           what every descendant gets)
      */
     public function __construct(
         public array $roles = [],
         public array $abilities = [],
         public ?ResourceRef $on = null,
         public bool $byRelation = true,
+        public bool $heldByDefinition = false,
     ) {
     }
 }
