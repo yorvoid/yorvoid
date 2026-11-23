@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Policy;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Core\Authorization\Actions;
 use YorvoID\Core\Authorization\Delegable;
+use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Operation\Operation;
@@ -30,15 +31,35 @@ final class DelegableActionsTest extends TestCase
     {
         $actions = new Actions(new OperationCatalogue([CreatePrincipal::class, \YorvoID\Core\Principal\DeletePrincipal::class, PublishPage::class, ArchivePage::class, PurgePages::class]), [new AbilityActions(PolicyCatalogue::of([new Declarations()]))]);
 
-        self::assertSame(Delegable::Everyone, $actions->delegable('acme.pages.edit'), 'Not strict: anyone.');
-        self::assertSame(Delegable::NotToAgents, $actions->delegable('acme.pages.delete'), 'Strict: not to agents.');
-        self::assertSame(Delegable::Nobody, $actions->delegable('acme.billing.pay'), 'As it declares.');
-        self::assertSame(Delegable::Everyone, $actions->delegable('acme.page.publish'), 'An operation, as its ability.');
-        self::assertSame(Delegable::Nobody, $actions->delegable('acme.page.archive'), 'As it declares, though its ability is delegable.');
-        self::assertSame(Delegable::NotToAgents, $actions->delegable('acme.page.purge'), 'No ability: not to agents.');
-        self::assertSame(Delegable::NotToAgents, $actions->delegable('yorvoid.principal.create'), 'YorvoID\'s own: not to agents.');
-        self::assertNull($actions->delegable('acme.unknown'));
-        self::assertSame(['acme.billing.pay', 'acme.page.archive', 'acme.page.publish', 'acme.page.purge', 'acme.pages.delete', 'acme.pages.edit', 'yorvoid.principal.create', 'yorvoid.principal.delete'], $actions->names());
+        self::assertSame(Delegable::Everyone, $actions->ability('acme.pages.edit'), 'Not strict: anyone.');
+        self::assertSame(Delegable::NotToAgents, $actions->ability('acme.pages.delete'), 'Strict: not to agents.');
+        self::assertSame(Delegable::Nobody, $actions->ability('acme.billing.pay'), 'As it declares.');
+        self::assertSame(Delegable::Everyone, $actions->operation('acme.page.publish'), 'An operation, as its ability.');
+        self::assertSame(Delegable::Nobody, $actions->operation('acme.page.archive'), 'As it declares, though its ability is delegable.');
+        self::assertSame(Delegable::NotToAgents, $actions->operation('acme.page.purge'), 'No ability: not to agents.');
+        self::assertSame(Delegable::NotToAgents, $actions->operation('yorvoid.principal.create'), 'YorvoID\'s own: not to agents.');
+        self::assertNull($actions->ability('acme.page.publish'), 'An operation isn\'t an ability.');
+        self::assertNull($actions->operation('acme.pages.edit'), 'Nor an ability an operation.');
+        self::assertSame(['acme.billing.pay', 'acme.pages.delete', 'acme.pages.edit'], $actions->abilities());
+        self::assertSame(['acme.page.archive', 'acme.page.publish', 'acme.page.purge', 'yorvoid.principal.create', 'yorvoid.principal.delete'], $actions->operations());
+    }
+
+    /**
+     * An operation named like a strict ability, declared delegable to anyone, leaves the ability as it
+     * is: an ability request asks the ability's rule, an operation request the operation's.
+     */
+    public function testAnOperationNamedLikeAnAbilityChangesNothingOfIt(): void
+    {
+        $actions = new Actions(new OperationCatalogue([DeletePagesNow::class]), [new AbilityActions(PolicyCatalogue::of([new Declarations()]))]);
+        $realm = new Realm('acme');
+        $actor = new \YorvoID\Core\Operation\Operator();
+        $origin = new \YorvoID\Core\Event\Origin(\YorvoID\Core\Event\OriginKind::Console);
+        $now = new \DateTimeImmutable();
+
+        self::assertSame(Delegable::NotToAgents, $actions->ability('acme.pages.delete'));
+        self::assertSame(Delegable::Everyone, $actions->operation('acme.pages.delete'));
+        self::assertSame(Delegable::NotToAgents, $actions->forRequest(Request::forAbility('acme.pages.delete', $realm, null, $actor, $origin, $now)), 'isGranted() of the ability.');
+        self::assertSame(Delegable::Everyone, $actions->forRequest(Request::forOperation(new OperationCatalogue([DeletePagesNow::class])->get('acme.pages.delete'), new DeletePagesNow($realm), $actor, $origin, $now)), 'The operation, as it declares.');
     }
 
     public function testDelegableSaysWhoToByKind(): void
@@ -84,6 +105,17 @@ final readonly class PublishPage implements Command
  */
 #[Operation('acme.page.archive', 'Archive a page', AuthorizedBy::Ability, ability: 'acme.pages.edit', delegable: Delegable::Nobody)]
 final readonly class ArchivePage implements Command
+{
+    public function __construct(public Realm $realm)
+    {
+    }
+}
+
+/**
+ * @implements Command<null>
+ */
+#[Operation('acme.pages.delete', 'Delete pages now', AuthorizedBy::Operator, delegable: Delegable::Everyone)]
+final readonly class DeletePagesNow implements Command
 {
     public function __construct(public Realm $realm)
     {
