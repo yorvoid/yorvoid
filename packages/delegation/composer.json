@@ -1,0 +1,43 @@
+{
+    "name": "yorvoid/delegation",
+    "type": "library",
+    "description": "YorvoID's delegations: one principal passing part of its authority to another, e.g. an agent, narrowed at every step and checked again at every use against the root's authority now.",
+    "keywords": [
+        "authorization",
+        "delegation",
+        "agents",
+        "attenuation",
+        "access-control",
+        "security"
+    ],
+    "homepage": "https://github.com/yorvoid/yorvoid",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Darko Poposki",
+            "email": "contact@yorvolabs.com"
+        }
+    ],
+    "support": {
+        "email": "contact@yorvolabs.com",
+        "issues": "https://github.com/yorvoid/yorvoid/issues",
+        "source": "https://github.com/yorvoid/yorvoid/tree/main/packages/delegation",
+        "docs": "https://github.com/yorvoid/yorvoid/tree/main/docs",
+        "security": "https://github.com/yorvoid/yorvoid/security/policy"
+    },
+    "require": {
+        "php": ">=8.4",
+        "doctrine/dbal": "^4.3",
+        "yorvoid/core": "^0.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "YorvoID\\Delegation\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.5.x-dev"
+        }
+    }
+}

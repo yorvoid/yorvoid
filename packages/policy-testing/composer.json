@@ -31,6 +31,7 @@
         "symfony/console": "^7.4 || ^8.1",
         "yorvoid/authn": "^0.5",
         "yorvoid/core": "^0.5",
+        "yorvoid/delegation": "^0.5",
         "yorvoid/passkeys": "^0.5",
         "yorvoid/policy": "^0.5",
         "yorvoid/relations": "^0.5",

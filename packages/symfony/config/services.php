@@ -79,6 +79,9 @@ use YorvoID\Core\Storage\Installation;
 use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Core\Storage\VersionedCache;
+use YorvoID\Delegation\DelegationStore;
+use YorvoID\Delegation\DelegationsVersion;
+use YorvoID\Delegation\Storage\DbalDelegationStore;
 use YorvoID\Flows\Flows;
 use YorvoID\Flows\FlowStore;
 use YorvoID\IntentSigning\IntentSigning;
@@ -253,6 +256,7 @@ return static function (ContainerConfigurator $container): void {
         DecisionLogStore::class => DbalDecisionLogStore::class,
         // One for every store that bumps a version, and for the evaluator, which reads them at once.
         VersionStore::class => DbalVersionStore::class,
+        DelegationStore::class => DbalDelegationStore::class,
     ] as $interface => $implementation) {
         $services->set(Stores::IDS[$interface].'.dbal', $implementation);
         $services->alias(Stores::IDS[$interface], Stores::IDS[$interface].'.dbal');
@@ -343,6 +347,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(Relations::class)->public();
     $services->set(PolicyVersion::class)->tag('yorvoid.version_source');
     $services->set(RelationsVersion::class)->tag('yorvoid.version_source');
+    $services->set(DelegationsVersion::class)->tag('yorvoid.version_source');
     $services->set(RelationPermit::class)->tag('yorvoid.policy_element');
     $services->set(RelationChanges::class);
     $services->set(GroupChanges::class);

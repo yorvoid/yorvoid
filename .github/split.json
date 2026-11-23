@@ -1,6 +1,7 @@
 [
     {"path": "packages/authn", "repository": "yorvoid/authn"},
     {"path": "packages/core", "repository": "yorvoid/core"},
+    {"path": "packages/delegation", "repository": "yorvoid/delegation"},
     {"path": "packages/flows", "repository": "yorvoid/flows"},
     {"path": "packages/intent-signing", "repository": "yorvoid/intent-signing"},
     {"path": "packages/intent-verifier", "repository": "yorvoid/intent-verifier"},

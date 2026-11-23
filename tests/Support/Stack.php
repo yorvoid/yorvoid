@@ -41,6 +41,10 @@ use YorvoID\Core\Storage\Dbal\DbalTransactions;
 use YorvoID\Core\Storage\Dbal\TransactionMiddleware;
 use YorvoID\Core\Storage\Migration\Migrator;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Delegation\DelegationStore;
+use YorvoID\Delegation\Migrations\DelegationMigrations;
+use YorvoID\Delegation\Storage\DbalDelegationStore;
+use YorvoID\Delegation\Storage\InMemoryDelegationStore;
 use YorvoID\Passkeys\CeremonyStore;
 use YorvoID\Passkeys\Migrations\PasskeysMigrations;
 use YorvoID\Passkeys\PasskeyStore;
@@ -85,6 +89,7 @@ final readonly class Stack
         public ?Database $database = null,
         public DecisionLogStore $decisions = new InMemoryDecisionLogStore(),
         public VersionStore $versions = new InMemoryVersionStore(),
+        public DelegationStore $delegations = new InMemoryDelegationStore(),
     ) {
     }
 
@@ -102,7 +107,7 @@ final readonly class Stack
             self::migrate($database);
         }
 
-        return new self($implementation, new DbalTransactions($database->connection, $middleware, $events, $logger, location: $database->location), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database, $versions = new DbalVersionStore($database)), new DbalRelationStore($database, $versions), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database), $versions);
+        return new self($implementation, new DbalTransactions($database->connection, $middleware, $events, $logger, location: $database->location), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database, $versions = new DbalVersionStore($database)), new DbalRelationStore($database, $versions), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database), $versions, new DbalDelegationStore($database, $versions));
     }
 
     /**
@@ -110,6 +115,6 @@ final readonly class Stack
      */
     public static function migrate(Database $database): void
     {
-        new Migrator($database, [...CoreMigrations::all(), ...AuthnMigrations::all(), ...PasskeysMigrations::all(), ...PolicyMigrations::all(), ...RelationsMigrations::all(), ...ThrottleMigrations::all()])->migrate();
+        new Migrator($database, [...CoreMigrations::all(), ...AuthnMigrations::all(), ...PasskeysMigrations::all(), ...PolicyMigrations::all(), ...RelationsMigrations::all(), ...ThrottleMigrations::all(), ...DelegationMigrations::all()])->migrate();
     }
 }
