@@ -79,6 +79,8 @@ use YorvoID\Core\Storage\Installation;
 use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Core\Storage\VersionedCache;
+use YorvoID\Delegation\DelegationEffects;
+use YorvoID\Delegation\Delegations;
 use YorvoID\Delegation\DelegationStore;
 use YorvoID\Delegation\DelegationsVersion;
 use YorvoID\Delegation\Storage\DbalDelegationStore;
@@ -146,6 +148,7 @@ use YorvoID\Symfony\Command\TemplatesPublishCommand;
 use YorvoID\Symfony\Controller\CeremonyController;
 use YorvoID\Symfony\Controller\FlowController;
 use YorvoID\Symfony\Controller\TemplateGalleryController;
+use YorvoID\Symfony\Delegation\DelegationDeclarations;
 use YorvoID\Symfony\DependencyInjection\Stores;
 use YorvoID\Symfony\Doctor\AssuranceCheck;
 use YorvoID\Symfony\Doctor\AuditCheck;
@@ -360,6 +363,10 @@ return static function (ContainerConfigurator $container): void {
     $services->set(RolePermit::class)->tag('yorvoid.policy_element');
     // What each change of authority gives and takes, from every package that has such changes (D-51).
     $services->set(PolicyEffects::class)->tag('yorvoid.effects');
+    // Delegation: its abilities, its handler and what its commands give, with the actions built when first asked.
+    $services->set(DelegationDeclarations::class)->tag('yorvoid.policy_declarations');
+    $services->set(Delegations::class)->arg('$actions', service_closure(Actions::class));
+    $services->set(DelegationEffects::class)->arg('$actions', service_closure(Actions::class))->tag('yorvoid.effects');
     $services->set(DeclaredEffects::class)->args([tagged_iterator('yorvoid.effects')]);
     $services->set(StepUpForSensitiveChanges::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]))->arg('$effects', service(DeclaredEffects::class))->tag('yorvoid.policy_element');
     $services->set(NoEscalation::class)->arg('$effects', service(DeclaredEffects::class))->tag('yorvoid.policy_element');

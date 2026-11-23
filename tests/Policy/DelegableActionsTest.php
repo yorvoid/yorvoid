@@ -77,6 +77,29 @@ final class DelegableActionsTest extends TestCase
         self::assertSame(Delegable::NotToAgents, $actions->operation('yorvoid.page.publish'));
     }
 
+    public function testTwoCataloguesThatDisagreeOnAnAbilityAreRefused(): void
+    {
+        $nobody = new class implements \YorvoID\Core\Authorization\ListsActions {
+            public function actions(): array
+            {
+                return ['acme.pages.edit' => Delegable::Nobody];
+            }
+        };
+        $agreeing = new class implements \YorvoID\Core\Authorization\ListsActions {
+            public function actions(): array
+            {
+                return ['acme.pages.edit' => Delegable::Everyone];
+            }
+        };
+        $abilities = new AbilityActions(PolicyCatalogue::of([new Declarations()]));
+
+        self::assertSame(Delegable::Everyone, new Actions(new OperationCatalogue([]), [$abilities, $agreeing])->ability('acme.pages.edit'), 'The same rule twice is one.');
+
+        $this->expectException(\YorvoID\Core\Exception\IntegratorError::class);
+        $this->expectExceptionMessage('Two catalogues list the ability "acme.pages.edit", one delegable to everyone, the other to nobody.');
+        new Actions(new OperationCatalogue([]), [$abilities, $nobody]);
+    }
+
     public function testDelegableSaysWhoToByKind(): void
     {
         foreach (PrincipalKind::cases() as $kind) {

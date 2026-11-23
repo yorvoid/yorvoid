@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Authorization;
 
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationDescription;
 
@@ -29,6 +30,9 @@ final readonly class Actions
     /** @var array<string, Delegable> By name */
     private array $abilities;
 
+    /** @var array<string, string|null> By operation's name, the ability it needs */
+    private array $needs;
+
     /**
      * @param iterable<ListsActions> $abilities
      */
@@ -37,16 +41,26 @@ final readonly class Actions
         $listed = [];
 
         foreach ($abilities as $catalogue) {
-            $listed = [...$listed, ...$catalogue->actions()];
+            foreach ($catalogue->actions() as $name => $rule) {
+                if (isset($listed[$name]) && $listed[$name] !== $rule) {
+                    throw new IntegratorError(\sprintf('Two catalogues list the ability "%s", one delegable to %s, the other to %s.', $name, $listed[$name]->value, $rule->value), 'Declare each ability once, or with the same delegable: on both.', 'concepts/authorization.md#abilities');
+                }
+
+                $listed[$name] = $rule;
+            }
         }
 
         // Apart from the abilities: an operation named like an ability never changes how the ability is
         // delegated, nor the other way round.
         $kept = [];
+        $needs = [];
 
         foreach ($operations->all() as $operation) {
             $kept[$operation->name] = self::ruleOf($operation, $listed);
+            $needs[$operation->name] = $operation->ability;
         }
+
+        $this->needs = $needs;
 
         ksort($listed, \SORT_STRING);
         $this->abilities = $listed;
@@ -71,6 +85,14 @@ final readonly class Actions
     public function ability(string $name): ?Delegable
     {
         return $this->abilities[$name] ?? null;
+    }
+
+    /**
+     * The ability an operation needs, if it needs one: what holding it means for someone who'd pass it on.
+     */
+    public function abilityOf(string $operation): ?string
+    {
+        return $this->needs[$operation] ?? null;
     }
 
     /**

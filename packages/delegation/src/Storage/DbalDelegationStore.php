@@ -83,6 +83,8 @@ final readonly class DbalDelegationStore implements DelegationStore, KeepsVersio
 
     public function revoke(Delegation $before, Delegation $after): bool
     {
+        // The version first, as every change. A revocation that finds it revoked already has moved the
+        // version for nothing, which only makes the next decision read again.
         $this->versions->bump($before->realm, self::SOURCE);
 
         return 1 === $this->database->connection->update(

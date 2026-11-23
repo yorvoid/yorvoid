@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy;
 
+use YorvoID\Core\Authorization\AttenuatedByParent;
 use YorvoID\Core\Authorization\ChangesAuthority;
 use YorvoID\Core\Authorization\ChecksCatalogue;
 use YorvoID\Core\Authorization\DeclaredEffects;
@@ -64,7 +65,12 @@ final readonly class NoEscalation implements ForbidElement, ChecksCatalogue
      */
     public function matches(Request $request): bool
     {
+        // A re-delegation is within its parent, which its handler checks: what it gives is the parent's, not
+        // the actor's own roles'. Only when it names one: a root delegation is weighed as any change.
+        $attenuated = $request->command instanceof AttenuatedByParent && null !== $request->command->attenuatedBy();
+
         return !$request->actor instanceof Operator
+            && !$attenuated
             && $request->command instanceof ChangesAuthority
             && (!($effect = $this->effects->effectOf($request)) instanceof Effect || $effect->changes());
     }

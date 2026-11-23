@@ -7104,11 +7104,13 @@
             "dist": {
                 "type": "path",
                 "url": "packages/delegation",
-                "reference": "458ff36ed5a4ed1c85854cb77c6146b4bf623431"
+                "reference": "0f8d797421a20ac442194062c01b8adf7b1f4087"
             },
             "require": {
                 "doctrine/dbal": "^4.3",
                 "php": ">=8.4",
+                "psr/clock": "^1.0",
+                "symfony/clock": "^7.4 || ^8.1",
                 "yorvoid/core": "^0.5"
             },
             "type": "library",
