@@ -63,7 +63,6 @@ use YorvoID\Policy\ViewAs\Views;
 use YorvoID\Policy\YorvoIDDeclarations;
 use YorvoID\PolicyTesting\Mutation\Mutants;
 use YorvoID\Relations\RelationChanges;
-use YorvoID\Relations\RelationGrants;
 use YorvoID\Relations\RelationPermit;
 use YorvoID\Relations\Relations;
 use YorvoID\Relations\RelationSchema;
@@ -154,7 +153,7 @@ final class PolicyWorld
         $this->roles = new Roles($catalogue, $this->policyStore, $sources, $this->relations);
         $this->attributes = new Attributes([new AcmeAttributes()], $attributes, $resolvers, $scope);
         $log = new SecurityLog($stack->log ?? $this->memory->log, $transactions, clock: $this->clock);
-        $effects = $delegations ? new DeclaredEffects([new PolicyEffects($this->roles), new DelegationEffects(fn (): Actions => $this->actions(), $stack->delegations ?? $this->memory->delegations, new RelationGrants($schema))]) : null;
+        $effects = $delegations ? new DeclaredEffects([new PolicyEffects($this->roles), new DelegationEffects(fn (): Actions => $this->actions(), $stack->delegations ?? $this->memory->delegations)]) : null;
         $elements = [new RolePermit($this->roles), new NoEscalation($this->roles, $effects), new StepUpForSensitiveChanges($this->roles, $stepUp, $window, $effects), new RelationPermit($this->relations)];
 
         foreach ([...$rules, ...(null === $rulesOf ? [] : $rulesOf($this->attributes))] as $rule) {

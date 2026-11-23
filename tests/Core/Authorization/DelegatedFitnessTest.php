@@ -199,6 +199,19 @@ final class DelegatedFitnessTest extends TestCase
         self::assertSame(Verdict::Indeterminate, $this->ask($unchecked, 'acme.read')->verdict, 'A proof nothing can check.');
     }
 
+    /**
+     * The root is judged on the same request, so its basis is the request's: a permit on another basis
+     * isn't weighed for the root, and the delegated path refuses one all the same, never permitting on a
+     * basis nothing decided.
+     */
+    public function testARootPermittedOnABasisTheRequestDoesntHavePermitsNothing(): void
+    {
+        $decision = new Evaluator([new RootReads($this->root, basis: AuthorizedBy::Operator)], new StubAuthority(Truth::holds('valid')), new MockClock(), actors: [new TrustedActors()], chains: new FixedChains($this->scope(['acme.read'])))->decideAbility(new UnderDelegation($this->agent, $this->leaf), 'acme.read', $this->realm, new ResourceRef('page', 'p-1'), new Origin(OriginKind::Web));
+
+        self::assertSame(Verdict::Deny, $decision->verdict, 'Not weighed for the root, so nothing for the delegate.');
+        self::assertStringContainsString('Its root may not now', $decision->reason);
+    }
+
     public function testNothingIsDoneOnTheRootsOwnAccount(): void
     {
         $evaluator = $this->evaluator(new FixedChains($this->scope(['acme.badge.issue'])));
@@ -237,6 +250,7 @@ final readonly class RootReads implements PermitElement
     public function __construct(
         private PrincipalId $root,
         private ?StepUpRemedy $needs = null,
+        private AuthorizedBy $basis = AuthorizedBy::Ability,
     ) {
     }
 
@@ -247,7 +261,7 @@ final readonly class RootReads implements PermitElement
 
     public function basis(): AuthorizedBy
     {
-        return AuthorizedBy::Ability;
+        return $this->basis;
     }
 
     public function matches(Request $request): bool

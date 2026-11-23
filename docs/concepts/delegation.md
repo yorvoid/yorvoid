@@ -67,6 +67,8 @@ Each decision checks, in core's evaluator:
 
 So the actor never does more than the root may now. The record names the chain's links and its root.
 
+A request about no resource, such as an ability in the whole realm or creating a new page, is outside every delegation for now: a delegation names the resources it's about, and a new one isn't one of them yet.
+
 ## Limits
 
 `DelegationLimits` bounds what's issued: a year at most, 30 days to an agent, a chain of 3, 100 actions and 100 IDs. A delegation past them is refused.

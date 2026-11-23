@@ -8,9 +8,9 @@ use YorvoID\Core\Authorization\Actions;
 use YorvoID\Core\Authorization\DeclaresEffects;
 use YorvoID\Core\Authorization\Effect;
 use YorvoID\Core\Authorization\EffectPart;
-use YorvoID\Core\Authorization\GrantsThroughRelations;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\Selector;
 use YorvoID\Core\Authorization\Selector\RelatedTo;
 use YorvoID\Delegation\Change\IssueDelegation;
 use YorvoID\Delegation\Change\RevokeDelegation;
@@ -32,7 +32,6 @@ final readonly class DelegationEffects implements DeclaresEffects
     public function __construct(
         private Actions|\Closure $actions,
         private ?DelegationStore $store = null,
-        private ?GrantsThroughRelations $relations = null,
     ) {
     }
 
@@ -70,38 +69,30 @@ final readonly class DelegationEffects implements DeclaresEffects
     }
 
     /**
-     * What issuing gives. A root delegation of the resources the delegator has a relation to, which the
-     * relation's definition gives abilities on, gives those as held by that definition: no-escalation
-     * doesn't weigh them, the decision at each use does, on each resource. Step-up still sees them.
+     * What issuing gives. A root delegation of the resources the delegator has a relation to says so, for
+     * no-escalation to verify against the relations' definitions; the decision at each use checks each
+     * resource. Step-up sees every part.
      *
      * @return list<EffectPart>
      */
     private function given(IssueDelegation $command, Request $request): array
     {
         $parts = $this->parts($command->actions, $command->resources);
-        $delegator = $request->actor->principalId;
 
-        if (null !== $command->parent || null !== $command->resources->ids() || null === $this->relations || null === $delegator) {
+        if (null !== $command->parent || null !== $command->resources->ids()) {
             return $parts;
         }
 
-        $held = [];
+        $relations = array_values(array_map(static fn (RelatedTo $atom): string => $atom->relation, array_filter($command->resources->atoms, static fn (Selector\Atom $atom): bool => $atom instanceof RelatedTo && 'principal' === $atom->subject->type)));
+        $subjects = array_values(array_unique(array_map(static fn (RelatedTo $atom): string => (string) $atom->subject, array_filter($command->resources->atoms, static fn (Selector\Atom $atom): bool => $atom instanceof RelatedTo && 'principal' === $atom->subject->type))));
 
-        foreach ($command->resources->atoms as $atom) {
-            if ($atom instanceof RelatedTo && 'principal' === $atom->subject->type && $atom->subject->id === (string) $delegator) {
-                array_push($held, ...$this->relations->abilitiesGivenBy($command->resources->type, $atom->relation));
-            }
-        }
-
-        if ([] === $held) {
+        if ([] === $relations || 1 !== \count($subjects)) {
             return $parts;
         }
 
-        $abilities = $parts[0]->abilities;
-        $byDefinition = array_values(array_intersect($abilities, $held));
-        $rest = array_values(array_diff($abilities, $held));
+        $subject = array_values(array_filter($command->resources->atoms, static fn (Selector\Atom $atom): bool => $atom instanceof RelatedTo))[0]->subject;
 
-        return [...([] === $rest ? [] : [new EffectPart(abilities: $rest)]), ...([] === $byDefinition ? [] : [new EffectPart(abilities: $byDefinition, heldByDefinition: true)])];
+        return array_map(static fn (EffectPart $part): EffectPart => new EffectPart($part->roles, $part->abilities, $part->on, $part->byRelation, $relations, $command->resources->type, $subject), $parts);
     }
 
     /**
@@ -111,7 +102,7 @@ final readonly class DelegationEffects implements DeclaresEffects
      *
      * @return list<EffectPart>
      */
-    private function parts(array $actions, \YorvoID\Core\Authorization\Selector\Selector $resources): array
+    private function parts(array $actions, Selector\Selector $resources): array
     {
         $abilities = $this->named($actions);
         $ids = $resources->ids();

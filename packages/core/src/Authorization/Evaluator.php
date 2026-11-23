@@ -895,9 +895,13 @@ final readonly class Evaluator implements Authorization, DecidesForRoot
             null === $check => Truth::unknown(IndeterminateReason::EvaluationError, 'Nothing checks the proof the delegation asks.'),
             default => self::safely(static fn (): Truth => $check->check($actor->as, $asked)),
         };
-        $basis = \in_array($root->basis, $request->authorizedBy(), true) ? $root->basis : $request->authorizedBy()[0];
+        // The root is judged on the same request, so its basis is one of the request's; if it isn't, no
+        // permit is made on a basis nothing decided.
+        if (!\in_array($root->basis, $request->authorizedBy(), true)) {
+            return [Truth::unknown(IndeterminateReason::ConflictingRecords, 'Its root was permitted on a basis this request isn\'t authorized by.')->grounded(Ground::authority('inconsistent_basis')), null];
+        }
 
-        return [$authority, [new DelegatedPermit($basis), $proof]];
+        return [$authority, [new DelegatedPermit($root->basis), $proof]];
     }
 
     /**

@@ -245,7 +245,6 @@ final class WritesWithoutPermit
         'YorvoID\\Policy\\StepUpForSensitiveChanges::name' => ['read', 'reads'],
         'YorvoID\\Policy\\YorvoIDDeclarations::abilities' => ['read', 'reads'],
         'YorvoID\\Policy\\YorvoIDDeclarations::roles' => ['read', 'reads'],
-        'YorvoID\\Relations\\RelationGrants::abilitiesGivenBy' => ['read', 'reads'],
         'YorvoID\\Relations\\RelationSelectors::answers' => ['read', 'reads'],
         'YorvoID\\Relations\\RelationSelectors::match' => ['read', 'reads'],
         'YorvoID\\Relations\\ForgetRelationsOfDeletedPrincipals::__invoke' => ['event', 'a listener: YorvoID makes the event, inside the operation that causes it', 'YorvoID\\Core\\Principal\\Event\\PrincipalStatusChanging'],
