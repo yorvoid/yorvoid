@@ -106,7 +106,7 @@ final class WhatMovedIsCheckedTest extends TestCase
         }
 
         self::assertSame(1, substr_count($source, 'ReadSet::pinned('), 'A pinned read set is made in one place: the memo\'s, for an ability\'s permit.');
-        self::assertMatchesRegularExpression('/Verdict::Permit => true,\s+Verdict::PermitOffline, Verdict::Deny, Verdict::Indeterminate => false,\s+};\s+return \$permits \? self::identified\(.*ReadSet::pinned\(\$memo\)\) : null;/', $source, 'Only a permit is pinned.');
+        self::assertMatchesRegularExpression('/Verdict::Permit => true,\s+Verdict::PermitOffline, Verdict::Deny, Verdict::Indeterminate => false,\s+};\s+if \(!\$permits\) \{\s+return null;\s+}\s+\/\/[^\n]*\n\s+\$read = ReadSet::pinned\(\$memo\);/', $source, 'Only a permit is pinned.');
         self::assertSame(1, substr_count($source, 'new ReadSet('), 'The evaluator makes read sets only by between() and unchecked(), apart from the empty one of a decision not identified yet.');
         self::assertStringContainsString('ReadSet $read = new ReadSet()', $source);
     }

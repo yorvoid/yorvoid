@@ -59,8 +59,11 @@ yorvoid:
         on_failure:           continue # One of "continue"; "refuse"
     authorization:
 
-        # request: an ability's permit for showing, e.g. is_granted() for a link, is decided at the versions the request first read, rather than reading them again each time. Never an operation's, a view-as's, a batch's or a refusal; such a permit is recorded as pinned, and can be as old as the request
+        # request: an ability's permit for showing, e.g. is_granted() for a link, is decided at the versions the request first read, rather than reading them again each time. Never an operation's, a view-as's, a batch's or a refusal; such a permit is recorded as pinned, and can be as old as version_memo_max_age
         version_memo:         none # One of "none"; "request"
+
+        # How long the memo keeps the versions it read, at most: what a page shows is never older than that, in a long command or worker too
+        version_memo_max_age: 2s
     cache:
 
         # The PSR-6 pool that servers share for what decisions read: roles, assignments, relations. yorvoid.cache is on cache.app; null keeps them for the request only

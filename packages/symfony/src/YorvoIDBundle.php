@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Symfony;
 
+use Psr\Clock\ClockInterface;
 use Symfony\Component\Config\Definition\Builder\NodeBuilder;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
@@ -25,6 +26,7 @@ use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\PolicyElement;
 use YorvoID\Core\Authorization\VersionMemo;
 use YorvoID\Core\Crypto\CryptoPolicy;
+use YorvoID\Core\Duration;
 use YorvoID\Core\Operation\OperationHandler;
 use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Dbal\DbalTransactions;
@@ -109,7 +111,8 @@ final class YorvoIDBundle extends AbstractBundle
         $children->arrayNode('audit')->addDefaultsIfNotSet()->children()
             ->enumNode('on_failure')->values(['continue', 'refuse'])->defaultValue('continue')->info('What a decision whose record can\'t be written does: continue, or refuse, so that nothing is permitted without its record (AUD-006). The alert is raised either way')->end();
         $children->arrayNode('authorization')->addDefaultsIfNotSet()->children()
-            ->enumNode('version_memo')->values(['none', 'request'])->defaultValue('none')->info('request: an ability\'s permit for showing, e.g. is_granted() for a link, is decided at the versions the request first read, rather than reading them again each time. Never an operation\'s, a view-as\'s, a batch\'s or a refusal; such a permit is recorded as pinned, and can be as old as the request')->end();
+            ->enumNode('version_memo')->values(['none', 'request'])->defaultValue('none')->info('request: an ability\'s permit for showing, e.g. is_granted() for a link, is decided at the versions the request first read, rather than reading them again each time. Never an operation\'s, a view-as\'s, a batch\'s or a refusal; such a permit is recorded as pinned, and can be as old as version_memo_max_age')->end()
+            ->scalarNode('version_memo_max_age')->defaultValue('2s')->info('How long the memo keeps the versions it read, at most: what a page shows is never older than that, in a long command or worker too')->end();
         $children->arrayNode('cache')->addDefaultsIfNotSet()->children()
             ->scalarNode('pool')->defaultValue(self::CACHE_POOL)->info('The PSR-6 pool that servers share for what decisions read: roles, assignments, relations. yorvoid.cache is on cache.app; null keeps them for the request only')->end();
         $children->arrayNode('api')->addDefaultsIfNotSet()->children()
@@ -251,7 +254,9 @@ final class YorvoIDBundle extends AbstractBundle
         $builder->getDefinition(VersionedCache::class)->setArgument(0, \is_string($pool) ? new Reference($pool, self::CACHE_POOL === $pool ? ContainerInterface::NULL_ON_INVALID_REFERENCE : ContainerInterface::EXCEPTION_ON_INVALID_REFERENCE) : null);
 
         if ('request' === $settings['authorization.version_memo']) {
-            $builder->register(VersionMemo::class, VersionMemo::class)->addTag('kernel.reset', ['method' => 'reset']);
+            $maxAge = new Definition(Duration::class);
+            $maxAge->setFactory([Factories::class, 'duration'])->setArguments([$settings['authorization.version_memo_max_age']]);
+            $builder->register(VersionMemo::class, VersionMemo::class)->setArguments([new Reference(ClockInterface::class), $maxAge])->addTag('kernel.reset', ['method' => 'reset']);
             $builder->getDefinition(Evaluator::class)->replaceArgument(14, new Reference(VersionMemo::class));
         }
 

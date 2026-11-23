@@ -76,6 +76,24 @@ final class VersionMemoTest extends TestCase
     }
 
     /**
+     * A job-like loop that never resets the memo sees a revocation from another process once the
+     * versions are older than the max age (M3FIT-01 under the memo).
+     */
+    public function testALongJobSeesARevocationOnceTheMaxAgePasses(): void
+    {
+        $clock = new MockClock('2026-11-23 18:00:00');
+        $evaluator = $this->evaluator(atVersion: 1, memo: new VersionMemo($clock, \YorvoID\Core\Duration::seconds(2)));
+        self::assertSame(Verdict::Permit, $this->ability($evaluator)->verdict);
+
+        $this->policy->version = 2;
+        $clock->sleep(1);
+        self::assertSame(Verdict::Permit, $this->ability($evaluator)->verdict, 'Within the max age, the memo\'s.');
+
+        $clock->sleep(1);
+        self::assertSame(Verdict::Deny, $this->ability($evaluator)->verdict, 'At the max age, read again: revoked.');
+    }
+
+    /**
      * A refusal is recorded and acted on: never pinned, decided again on what's committed now.
      */
     public function testARefusalIsNeverPinned(): void
@@ -104,6 +122,7 @@ final class VersionMemoTest extends TestCase
         $record = $store->find($this->realm, (string) $decision->id) ?? self::fail('Not recorded.');
 
         self::assertTrue($record->pinned);
+        self::assertSame([], $record->attributes, 'A recorded pinned permit holds the attributes it read, here none.');
         $read = $record->toArray()['read'];
         self::assertTrue(\is_array($read) && true === ($read['pinned'] ?? null));
         self::assertTrue(DecisionRecord::fromJson($record->json())->pinned);

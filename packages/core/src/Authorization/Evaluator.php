@@ -516,7 +516,7 @@ final readonly class Evaluator implements Authorization
         }
 
         $memo = $this->memo->versions($request->realm, fn (): array => $this->versionsOf($request));
-        [$decision] = $this->scope->within($request->realm, $memo, fn (): array => $this->scope->judging($judge));
+        [$decision, $attributes] = $this->scope->within($request->realm, $memo, fn (): array => $this->scope->judging($judge));
 
         // Only a Permit is pinned: Permit-offline, Deny and Indeterminate are decided again.
         $permits = match ($decision->verdict) {
@@ -524,7 +524,14 @@ final readonly class Evaluator implements Authorization
             Verdict::PermitOffline, Verdict::Deny, Verdict::Indeterminate => false,
         };
 
-        return $permits ? self::identified($decision, (string) $this->ids->next(), $request->at, ReadSet::pinned($memo)) : null;
+        if (!$permits) {
+            return null;
+        }
+
+        // A pinned permit the log records holds the attributes it read, as a checked one does.
+        $read = ReadSet::pinned($memo);
+
+        return self::identified($decision, (string) $this->ids->next(), $request->at, true === $this->decisions?->recordsPermit($request) ? $this->withAttributes($request, $read, $attributes) : $read);
     }
 
     /**

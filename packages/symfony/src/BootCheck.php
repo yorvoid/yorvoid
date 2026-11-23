@@ -33,7 +33,7 @@ final class BootCheck
         $value = static fn (string $name): mixed => $settings[$name] ?? null;
         $known = static fn (string ...$names): bool => [] === array_filter($names, static fn (string $name): bool => $isPlaceholder($value($name)));
 
-        foreach (['connection', 'realm', 'cookies.device', 'storage.prefix', 'passkeys.timeout', 'step_up.window', 'flows.script', 'intents.summaries_domain', 'decision_log.digest_grace', 'decision_log.keep'] as $name) {
+        foreach (['connection', 'realm', 'cookies.device', 'storage.prefix', 'passkeys.timeout', 'step_up.window', 'flows.script', 'intents.summaries_domain', 'decision_log.digest_grace', 'decision_log.keep', 'authorization.version_memo_max_age'] as $name) {
             if (!\is_string($value($name)) || ('' === $value($name) && 'storage.prefix' !== $name)) {
                 throw new InvalidConfigurationException(\sprintf('yorvoid.%s must be text.', $name));
             }
@@ -78,7 +78,7 @@ final class BootCheck
             $build('passkeys', static fn () => Factories::passkeyPolicy($text('passkeys.relying_party_id'), array_values(array_filter($origins, \is_string(...))), $text('passkeys.user_verification'), $text('passkeys.clone_policy'), $text('passkeys.timeout')));
         }
 
-        foreach (['decision_log.digest_grace', 'decision_log.keep'] as $duration) {
+        foreach (['decision_log.digest_grace', 'decision_log.keep', 'authorization.version_memo_max_age'] as $duration) {
             if ($known($duration)) {
                 $build($duration, static fn () => Duration::parse($text($duration)));
             }
