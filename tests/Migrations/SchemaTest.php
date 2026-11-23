@@ -30,6 +30,8 @@ final class SchemaTest extends DatabaseTestCase
             'status_changed_at' => ['datetimetz', null, false],
             'status_version' => ['integer', null, false],
             'lock_count' => ['bigint', null, false],
+            'owner_id' => ['guid', null, true],
+            'profile' => ['text', null, true],
         ],
         'realm_lock' => [
             'realm' => ['string', 63, false],
@@ -167,6 +169,7 @@ final class SchemaTest extends DatabaseTestCase
         'principal' => [
             'primary' => [['id'], true],
             'principal_realm' => [['realm', 'id'], false],
+            'principal_owner' => [['realm', 'owner_id'], false],
         ],
         'principal_identifier' => [
             'primary' => [['realm', 'kind', 'normalized'], true],

@@ -11,6 +11,7 @@ use Symfony\Component\Clock\NativeClock;
 use YorvoID\Core\Authorization\BuiltIn\AbilityPermit;
 use YorvoID\Core\Authorization\BuiltIn\AuthenticationPermit;
 use YorvoID\Core\Authorization\BuiltIn\OperatorPermit;
+use YorvoID\Core\Authorization\BuiltIn\OwnersKeepTheirAgents;
 use YorvoID\Core\Authorization\BuiltIn\SelfServiceForOwnAccount;
 use YorvoID\Core\Authorization\BuiltIn\SelfServicePermit;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
@@ -33,6 +34,7 @@ use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\SelfServicePolicy;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Operation\ViewingAs;
+use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StoreUnreachable;
 
@@ -225,6 +227,8 @@ final readonly class Evaluator implements Authorization
      * @param DecisionScope|null      $scope       The one the cached stores read in
      * @param AttributeMacs|null      $macs        How the attributes a decision read are recorded
      * @param VersionMemo|null        $memo        Opt-in: abilities' permits for showing decided at the request's versions
+     * @param PrincipalStore|null     $principals  For the forbid that keeps an owner of agents from being deleted: the
+     *                                             authority check's, if it's PrincipalAuthority, when not given
      */
     public static function builtIn(
         AuthorityCheck $authority,
@@ -242,6 +246,7 @@ final readonly class Evaluator implements Authorization
         ?DecisionScope $scope = null,
         ?AttributeMacs $macs = null,
         ?VersionMemo $memo = null,
+        ?PrincipalStore $principals = null,
     ): self {
         $builtIn = [
             new AuthenticationPermit(),
@@ -251,6 +256,13 @@ final readonly class Evaluator implements Authorization
 
         if (null !== $abilities) {
             $builtIn[] = new AbilityPermit($abilities);
+        }
+
+        // An owner of agents isn't deleted: refused by the decision, before anything is written.
+        $principals ??= $authority instanceof PrincipalAuthority ? $authority->principals() : null;
+
+        if (null !== $principals) {
+            $builtIn[] = new OwnersKeepTheirAgents($principals);
         }
 
         return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors, $scope, $macs, $memo);

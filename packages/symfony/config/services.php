@@ -36,6 +36,7 @@ use YorvoID\Authn\StepUp\Storage\DbalCoolDownStore;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
+use YorvoID\Core\Authorization\Actions;
 use YorvoID\Core\Authorization\AttributeMacs;
 use YorvoID\Core\Authorization\DecisionLog\AuditFailure;
 use YorvoID\Core\Authorization\DecisionLog\DecisionConfirmations;
@@ -92,6 +93,7 @@ use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Passkeys\RemovePasskeyWithCredential;
 use YorvoID\Passkeys\Storage\DbalCeremonyStore;
 use YorvoID\Passkeys\Storage\DbalPasskeyStore;
+use YorvoID\Policy\AbilityActions;
 use YorvoID\Policy\Attribute\AttributeChanges;
 use YorvoID\Policy\Attribute\Attributes;
 use YorvoID\Policy\Attribute\AttributeStore;
@@ -333,6 +335,9 @@ return static function (ContainerConfigurator $container): void {
     $services->set(OperationCatalogue::class)->factory([OperationCatalogue::class, 'of'])->args([tagged_iterator('yorvoid.operation_handler')])->public();
     $services->set(YorvoIDDeclarations::class)->tag('yorvoid.policy_declarations');
     $services->set(PolicyCatalogue::class)->factory([PolicyCatalogue::class, 'of'])->args([tagged_iterator('yorvoid.policy_declarations')])->public();
+    // What a delegation may name, and to whom each may be delegated: operations, and the catalogues' abilities.
+    $services->set(AbilityActions::class)->args([service(PolicyCatalogue::class)])->tag('yorvoid.lists_actions');
+    $services->set(Actions::class)->args([service(OperationCatalogue::class), tagged_iterator('yorvoid.lists_actions')]);
     $services->set(GroupRelations::class)->tag('yorvoid.relation_declarations');
     $services->set(RelationSchema::class)->factory([RelationSchema::class, 'of'])->args([tagged_iterator('yorvoid.relation_declarations')])->public();
     $services->set(Relations::class)->public();
@@ -378,6 +383,8 @@ return static function (ContainerConfigurator $container): void {
         service(AttributeMacs::class),
         // The opt-in memo (authorization.version_memo: request), set by the bundle.
         null,
+        // An owner of agents isn't deleted (OwnersKeepTheirAgents).
+        service(Stores::IDS[PrincipalStore::class]),
     ]);
     $services->set(StoredSessions::class)->args([service(Stores::IDS[SessionStore::class]), service(ClockInterface::class)])->tag('yorvoid.actor_prover');
     $services->alias(Authorization::class, Evaluator::class);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
+use YorvoID\Core\Authorization\Delegable;
 use YorvoID\Core\Exception\IntegratorError;
 
 /**
@@ -40,6 +41,8 @@ final readonly class Operation
      *                                                        twice to run it twice
      * @param bool                            $acceptsOffline Whether it runs on Permit-offline, which an OfflineDecider may give
      *                                                        while a store is unreachable (XP-03, P1′); no operation does by default
+     * @param Delegable|null                  $delegable      To whom it may be delegated; as its ability if not given, and
+     *                                                        not to agents without one (experimental)
      */
     public function __construct(
         public string $name,
@@ -49,6 +52,7 @@ final readonly class Operation
         public ?string $inverse = null,
         public array $causes = [],
         public bool $acceptsOffline = false,
+        public ?Delegable $delegable = null,
     ) {
         foreach (['name' => $name, 'inverse' => $inverse] as $field => $value) {
             if (null !== $value && 1 !== preg_match(self::NAME, $value)) {

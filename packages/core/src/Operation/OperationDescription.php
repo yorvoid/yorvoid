@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
+use YorvoID\Core\Authorization\Delegable;
+
 /**
  * An operation as the catalogue describes it: its metadata and the parameters of its command.
  *
@@ -17,6 +19,7 @@ final readonly class OperationDescription
      * @param list<Parameter>              $parameters     In the constructor's order
      * @param list<string>                 $causes         The operations it may run as its consequences
      * @param bool                         $acceptsOffline Whether it runs on Permit-offline (P1′)
+     * @param Delegable|null               $delegable      To whom it may be delegated, as it declares (experimental)
      */
     public function __construct(
         public string $name,
@@ -28,6 +31,7 @@ final readonly class OperationDescription
         public array $parameters,
         public array $causes = [],
         public bool $acceptsOffline = false,
+        public ?Delegable $delegable = null,
     ) {
     }
 }

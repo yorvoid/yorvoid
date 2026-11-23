@@ -51,6 +51,23 @@ $principal = $operations->run(
 
 If either is taken or invalid, nothing is created.
 
+## Agents
+
+An agent is a principal of the kind `agent`: software that acts, e.g. an assistant that drafts release notes. It's registered by its **owner**, an active principal of the realm that isn't an agent itself, who answers for it:
+
+```php
+use YorvoID\Core\Principal\AgentProfile;
+use YorvoID\Core\Principal\CreatePrincipal;
+use YorvoID\Core\Principal\PrincipalKind;
+
+$agent = $operations->run(new CreatePrincipal($realm, PrincipalKind::Agent, owner: $ana->id, profile: new AgentProfile('Release notes assistant', 'acme-agent', '2.4.1', 'Docs team')), $session, $origin);
+```
+
+- An agent without an owner, with an owner that isn't one, or another kind with an owner or a profile, is refused (`InvalidOwner`).
+- The **profile** (name, software, version, operator) is a description for people. Nothing decides on it (experimental).
+- **An agent holds nothing of its owner's.** It's decided like any principal, by the roles and relations it was given itself, none by default. What it does for its owner comes with delegations.
+- **An owner of agents isn't deleted.** Deleting one is refused by the decision, `owns_agents`, before anything is written, whoever asks, the owner for their own account too. Move the agents to another owner first (`ChangeAgentOwner`, `yorvoid.principal.change_owner`), or delete them.
+
 ## Lifecycle
 
 A principal's status changes like this:

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use YorvoID\Core\Principal\AgentProfile;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -83,6 +84,45 @@ trait PrincipalStoreContract
 
             self::assertEquals($principal, $store->get(new Realm('acme'), $principal->id));
         }
+    }
+
+    /**
+     * An agent's owner and profile are kept, an owner's agents found, and a deleted one no longer counts.
+     */
+    #[DataProvider('implementations')]
+    public function testKeepsAnAgentsOwnerAndProfileAndFindsAnOwnersAgents(string $implementation): void
+    {
+        $store = $this->principalStore($implementation);
+        $acme = new Realm('acme');
+        $owner = self::principal($acme);
+        $store->add($owner);
+        $now = new \DateTimeImmutable('2026-11-23 18:00:00 UTC');
+        $agent = new Principal(new PrincipalId(Ids::next()), $acme, PrincipalKind::Agent, PrincipalStatus::Active, $now, $now, $now, 1, $owner->id, new AgentProfile('Assistant', 'acme-agent', '1.0', 'Docs'));
+        $bare = new Principal(new PrincipalId(Ids::next()), $acme, PrincipalKind::Agent, PrincipalStatus::Active, $now, $now, $now, 1, $owner->id, new AgentProfile('Ünïcode / "quoted"'));
+
+        self::assertFalse($store->ownsAgents($acme, $owner->id));
+        $store->add($agent);
+        $store->add($bare);
+
+        self::assertEquals($agent, $store->get($acme, $agent->id));
+        self::assertEquals($bare, $store->get($acme, $bare->id));
+        self::assertTrue($store->ownsAgents($acme, $owner->id));
+        self::assertFalse($store->ownsAgents(new Realm('globex'), $owner->id), 'Only in its realm.');
+
+        // Moved only from the owner it was read with.
+        $other = self::principal($acme);
+        $store->add($other);
+        $moved = $agent->withOwner($other->id, $now);
+        self::assertTrue($store->changeOwner($agent, $moved));
+        self::assertFalse($store->changeOwner($agent, $agent->withOwner($owner->id, $now)), 'Read before the move: refused.');
+        self::assertEquals($other->id, $store->get($acme, $agent->id)?->owner);
+        self::assertTrue($store->ownsAgents($acme, $other->id));
+
+        // A deleted agent doesn't count.
+        $deleted = $bare->withStatus(PrincipalStatus::Deleted, $now);
+        self::assertTrue($store->changeStatus($bare, $deleted));
+        self::assertFalse($store->ownsAgents($acme, $owner->id));
+        self::assertEquals($owner->id, $store->get($acme, $bare->id)?->owner, 'A tombstone keeps its owner.');
     }
 
     #[DataProvider('implementations')]

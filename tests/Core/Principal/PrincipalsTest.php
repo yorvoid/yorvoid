@@ -62,9 +62,9 @@ final class PrincipalsTest extends DatabaseTestCase
         $actor = new PrincipalId(new UuidV7Generator()->next());
         $origin = new Origin(OriginKind::Console, 'yorvoid:principal:create', 'req-1');
 
-        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Agent, PrincipalStatus::Invited), $origin, $actor);
+        $principal = Permits::call($principals->create(...), new CreatePrincipal(new Realm('acme'), PrincipalKind::Service, PrincipalStatus::Invited), $origin, $actor);
 
-        self::assertSame(PrincipalKind::Agent, $principal->kind);
+        self::assertSame(PrincipalKind::Service, $principal->kind);
         self::assertSame(PrincipalStatus::Invited, $principal->status);
         self::assertEquals(new \DateTimeImmutable('2026-10-27 18:45:30 UTC'), $principal->createdAt);
         self::assertEquals($principal->createdAt, $principal->updatedAt);
@@ -80,7 +80,7 @@ final class PrincipalsTest extends DatabaseTestCase
         self::assertEquals($actor, $entries[0]->actor);
         self::assertSame('principal', $entries[0]->subjectType);
         self::assertSame((string) $principal->id, $entries[0]->subjectId);
-        self::assertSame(['identifiers' => [], 'kind' => 'agent', 'status' => 'invited'], $entries[0]->details);
+        self::assertSame(['identifiers' => [], 'kind' => 'service', 'status' => 'invited'], $entries[0]->details);
         self::assertSame('req-1', $entries[0]->origin->correlationId);
 
         self::assertTrue(new SecurityLog($stack->log, $stack->transactions)->verify(new Realm('acme'))->isIntact());
@@ -119,7 +119,7 @@ final class PrincipalsTest extends DatabaseTestCase
         });
 
         try {
-            Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Agent), new Origin(OriginKind::Api));
+            Permits::call($principals->create(...), new CreatePrincipal(Realm::default(), PrincipalKind::Service), new Origin(OriginKind::Api));
             self::fail('The creation went ahead.');
         } catch (OperationCancelled $exception) {
             self::assertSame('yorvoid.principal.create', $exception->operation);
@@ -556,7 +556,7 @@ final class PrincipalsTest extends DatabaseTestCase
 
         self::assertSame('yorvoid.principals.manage', $operation->ability);
         self::assertSame('yorvoid.principal.delete', $operation->inverse);
-        self::assertSame(['realm', 'kind', 'status', 'email', 'username', 'emailVerified'], array_map(static fn ($parameter): string => $parameter->name, $operation->parameters));
+        self::assertSame(['realm', 'kind', 'status', 'email', 'username', 'emailVerified', 'owner', 'profile'], array_map(static fn ($parameter): string => $parameter->name, $operation->parameters));
         self::assertSame('yorvoid.principal.activate', $catalogue->get('yorvoid.principal.suspend')->inverse);
         self::assertSame('yorvoid.principal.suspend', $catalogue->get('yorvoid.principal.activate')->inverse);
         self::assertNull($catalogue->get('yorvoid.principal.delete')->inverse);

@@ -60,6 +60,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.passkey.sign_in' => ['authentication'],
         'yorvoid.passkey.step_up' => ['authentication'],
         'yorvoid.principal.activate' => ['ability', 'operator'],
+        'yorvoid.principal.change_owner' => ['ability', 'operator'],
         'yorvoid.principal.create' => ['ability', 'operator'],
         'yorvoid.principal.delete' => ['ability', 'operator'],
         'yorvoid.principal.suspend' => ['ability', 'operator'],
@@ -168,7 +169,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
             }
         }
 
-        self::assertCount(59, $commands, 'The operations moved.');
+        self::assertCount(60, $commands, 'The operations moved.');
 
         return $commands;
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy;
 
+use YorvoID\Core\Authorization\Delegable;
 use YorvoID\Core\Exception\IntegratorError;
 
 /**
@@ -25,11 +26,13 @@ final readonly class Ability
     public array $defaultRoles;
 
     /**
-     * @param string       $owner          Who declares it: an application, an extension, "yorvoid"
-     * @param list<string> $defaultRoles   The roles that have it by default; "everyone" for every actor
-     * @param bool         $strict         Whether a super role has it only when it's granted to that role
-     * @param bool         $recordsPermits Whether the decision log records its permits whatever it's configured to, e.g.
-     *                                     for explaining someone else's access: their own refusals are recorded anyway
+     * @param string         $owner          Who declares it: an application, an extension, "yorvoid"
+     * @param list<string>   $defaultRoles   The roles that have it by default; "everyone" for every actor
+     * @param bool           $strict         Whether a super role has it only when it's granted to that role
+     * @param bool           $recordsPermits Whether the decision log records its permits whatever it's configured to, e.g.
+     *                                       for explaining someone else's access: their own refusals are recorded anyway
+     * @param Delegable|null $delegable      To whom it may be delegated: if not given, not to agents when it's strict, to
+     *                                       anyone otherwise (06 §5.4, experimental)
      *
      * @throws IntegratorError When the name or the label isn't valid
      */
@@ -41,6 +44,7 @@ final readonly class Ability
         public ?string $group = null,
         public bool $strict = false,
         public bool $recordsPermits = false,
+        public ?Delegable $delegable = null,
     ) {
         if (1 !== preg_match(self::NAME, $name)) {
             throw new IntegratorError(\sprintf('The ability name "%s" is invalid.', $name), 'Use lowercase words separated by dots, the owner\'s namespace first, e.g. "acme.badges.issue".', 'concepts/authorization.md#abilities');
@@ -51,5 +55,13 @@ final readonly class Ability
         }
 
         $this->defaultRoles = array_values(array_unique($defaultRoles));
+    }
+
+    /**
+     * To whom it may be delegated, as declared, or by its strictness.
+     */
+    public function delegation(): Delegable
+    {
+        return $this->delegable ?? ($this->strict ? Delegable::NotToAgents : Delegable::Everyone);
     }
 }

@@ -88,6 +88,16 @@ $slow = new readonly class(new DbalPrincipalStore($database), $start.'.ready') i
         usleep(500_000);
     }
 
+    public function ownsAgents(Realm $realm, PrincipalId $owner): bool
+    {
+        return $this->store->ownsAgents($realm, $owner);
+    }
+
+    public function changeOwner(Principal $before, Principal $after): bool
+    {
+        return $this->store->changeOwner($before, $after);
+    }
+
     public function changeStatus(Principal $before, Principal $after): bool
     {
         return $this->store->changeStatus($before, $after);
