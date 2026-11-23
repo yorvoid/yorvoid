@@ -310,7 +310,7 @@ final class DecisionLog implements AttemptLog
         // A recorded decision has its ID and its time (DecisionRecord::of()).
         \assert(null !== $decision->id && null !== $decision->at);
 
-        return Decision::indeterminate([IndeterminateReason::AuditUnavailable], 'its record couldn\'t be written', $decision->reasons, $decision->precedence)->identified($decision->id, $decision->at, $decision->versions);
+        return Decision::indeterminate([IndeterminateReason::AuditUnavailable], 'its record couldn\'t be written', $decision->reasons, $decision->precedence)->identified($decision->id, $decision->at, $decision->read);
     }
 
     private function records(Request $request, Decision $decision): bool

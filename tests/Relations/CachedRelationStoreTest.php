@@ -6,6 +6,7 @@ namespace YorvoID\Tests\Relations;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use YorvoID\Core\Authorization\DecisionScope;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -88,14 +89,16 @@ final class CachedRelationStoreTest extends TestCase
         self::assertEquals([$this->bob], $this->editorsOf($request, $beta, $page), 'In a request.');
         self::assertEquals([$this->bob], $this->editorsOf($this->cached(), $beta, $page), 'In the pool.');
 
-        // A request at version n, still reading; the change makes n + 1.
-        $old = $this->cached();
+        // A decision at version n, still judging; the change makes n + 1.
+        $scope = new DecisionScope();
+        $old = new CachedRelationStore($this->store, $this->cache(), $scope);
         self::assertEquals([$this->ada], $this->editorsOf($old, $this->realm, $page));
         $n = $this->store->version($this->realm);
         $this->store->add(new RelationTuple($this->realm, $page, 'editor', $this->bob));
 
         self::assertEquals([$this->ada, $this->bob], $this->editorsOf($this->cached(), $this->realm, $page), 'The next request reads the new version.');
-        self::assertEquals([$this->ada], $this->editorsOf($old, $this->realm, $page), 'The one at n still reads n, in its request.');
+        self::assertEquals([$this->ada], $scope->within($this->realm, ['relations' => $n], fn (): array => $this->editorsOf($old, $this->realm, $page)), 'A decision that read n reads n while it judges.');
+        self::assertEquals([$this->ada, $this->bob], $this->editorsOf($old, $this->realm, $page), 'The same store\'s next read, outside it, reads n + 1: no version is kept for a request (D-44).');
         self::assertEquals([$this->ada, $this->bob], $this->editorsOf($this->cached(), $this->realm, $page), 'And the pool holds n + 1.');
 
         $atOld = new CachedRelationStore(new PoolOnlyRelationStore($n), $this->cache());

@@ -17,7 +17,9 @@ use YorvoID\Tests\Support\TestPrincipal;
 /**
  * Decisions (OPS-042): an editor of a server publishes one of its sites' pages, the role found three
  * levels up (page → site → server). Cached: as the request's second decision, with the shared pool
- * warm. Uncached: nothing cached, every read from PostgreSQL. And a batch of 100 pages at once.
+ * warm. Uncached: nothing cached, every read from PostgreSQL. A batch of 100 pages at once. And 100
+ * cached decisions one by one in one request, as a page that shows 100 links decides them: each reads
+ * the versions, since none is kept for the request.
  */
 final class DecisionBench
 {
@@ -35,7 +37,7 @@ final class DecisionBench
 
     public function setUp(string $subject): void
     {
-        $cached = 'benchCachedDecision' === $subject;
+        $cached = \in_array($subject, ['benchCachedDecision', 'benchHundredCachedDecisions'], true);
         [$this->world, $this->ada, $this->pages] = self::$worlds[$cached ? 'cached' : 'uncached'] ??= self::world($cached);
     }
 
@@ -43,6 +45,13 @@ final class DecisionBench
     public function benchCachedDecision(): void
     {
         $this->world->allows($this->ada, 'acme.pages.publish', $this->pages[0]) || throw new \LogicException('Refused.');
+    }
+
+    public function benchHundredCachedDecisions(): void
+    {
+        foreach ($this->pages as $page) {
+            $this->world->allows($this->ada, 'acme.pages.publish', $page) || throw new \LogicException('Refused.');
+        }
     }
 
     public function benchUncachedDecision(): void

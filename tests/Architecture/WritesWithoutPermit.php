@@ -63,6 +63,7 @@ final class WritesWithoutPermit
         'YorvoID\\Core\\Authorization\\DecisionLog\\DecisionLog::record' => ['logs', 'the decision log itself', 'YorvoID\\Tests\\Core\\Authorization\\DecisionLog\\DecisionLogTest::testAnAbilitysRefusalWaitsForTheEndOfTheRequest'],
         'YorvoID\\Core\\Authorization\\DecisionLog\\DecisionLog::recordAll' => ['logs', 'the decision log itself', 'YorvoID\\Tests\\Core\\Authorization\\DecisionLog\\DecisionLogTest::testAHundredWaitingAreWrittenAtOnce'],
         'YorvoID\\Core\\Authorization\\DecisionLog\\DecisionLog::reset' => ['bookkeeping', 'drops what the request kept (kernel.reset)'],
+        'YorvoID\\Core\\Authorization\\DecisionScope::version' => ['read', 'reads the decision being judged'],
         'YorvoID\\Core\\Authorization\\DeclaredEffects::check' => ['read', 'reads'],
         'YorvoID\\Core\\Authorization\\DeclaredEffects::effectOf' => ['read', 'reads'],
         'YorvoID\\Core\\Authorization\\DeclaredEffects::forget' => ['bookkeeping', 'forgets a cached effect, so it\'s computed again'],

@@ -6,6 +6,7 @@ namespace YorvoID\Core\Operation;
 
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Precedence;
+use YorvoID\Core\Authorization\ReadSet;
 use YorvoID\Core\Authorization\Reason;
 use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Exception\IntegratorError;
@@ -22,6 +23,9 @@ use YorvoID\Core\Exception\IntegratorError;
  */
 final readonly class Decision
 {
+    /** @var array<string, int> The versions of what it read, by source, e.g. ["policy" => 12, "relations" => 4] (AUZ-009): its read set's */
+    public array $versions;
+
     /**
      * @param AuthorizedBy|null         $basis         What permitted it; null unless it's a Permit or Permit-offline
      * @param string                    $reason        A summary for the log and for developers, e.g. "no permit applies"; never shown to people as is
@@ -30,7 +34,7 @@ final readonly class Decision
      * @param list<IndeterminateReason> $indeterminate Why it couldn't decide: at least one exactly when it's Indeterminate
      * @param string|null               $id            Its ID, from the evaluator, which the operation's permit and its log entries carry
      * @param \DateTimeImmutable|null   $at            When it was decided
-     * @param array<string, int>        $versions      The versions of what it read, by source, e.g. ["policy" => 12, "relations" => 4] (AUZ-009)
+     * @param ReadSet                   $read          What it read: each source's version before it judged, and what moved meanwhile (D-44)
      * @param string|null               $hash          Its record's hash in the decision log, when it's recorded there
      * @param Precedence|null           $precedence    The row of the precedence that decided, from the evaluator (experimental)
      * @param Decision|null             $viewer        Viewing as someone else, the viewer's own decision: this one is both
@@ -49,13 +53,14 @@ final readonly class Decision
         public array $indeterminate = [],
         public ?string $id = null,
         public ?\DateTimeImmutable $at = null,
-        public array $versions = [],
+        public ReadSet $read = new ReadSet(),
         public ?string $hash = null,
         public ?Precedence $precedence = null,
         public ?self $viewer = null,
         private ?Command $for = null,
         private ?Actor $by = null,
     ) {
+        $this->versions = $read->versions;
         $fits = match ($verdict) {
             Verdict::Permit, Verdict::PermitOffline => null !== $basis && [] === $remedies && [] === $indeterminate,
             Verdict::Deny => null === $basis && [] === $indeterminate,
@@ -86,16 +91,14 @@ final readonly class Decision
     }
 
     /**
-     * The same refusal, with its ID, its time and the versions it read. Only the Evaluator identifies a
-     * decision that permits (D-50).
-     *
-     * @param array<string, int> $versions
+     * The same refusal, with its ID, its time and what it read. Only the Evaluator identifies a decision
+     * that permits (D-50).
      *
      * @throws IntegratorError For a decision that permits
      */
-    public function identified(string $id, \DateTimeImmutable $at, array $versions): self
+    public function identified(string $id, \DateTimeImmutable $at, ReadSet $read): self
     {
-        return $this->refusal('identified')->withIdentity($id, $at, $versions);
+        return $this->refusal('identified')->withIdentity($id, $at, $read);
     }
 
     /**
@@ -140,17 +143,14 @@ final readonly class Decision
     {
     }
 
-    /**
-     * @param array<string, int> $versions
-     */
-    private function withIdentity(string $id, \DateTimeImmutable $at, array $versions): self
+    private function withIdentity(string $id, \DateTimeImmutable $at, ReadSet $read): self
     {
-        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $id, $at, $versions, $this->hash, $this->precedence, $this->viewer, $this->for, $this->by);
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $id, $at, $read, $this->hash, $this->precedence, $this->viewer, $this->for, $this->by);
     }
 
     private function withHash(string $hash): self
     {
-        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $hash, $this->precedence, $this->viewer, $this->for, $this->by);
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->read, $hash, $this->precedence, $this->viewer, $this->for, $this->by);
     }
 
     /**
@@ -163,7 +163,7 @@ final readonly class Decision
      */
     private function boundTo(Command $command, Actor $actor): self
     {
-        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->versions, $this->hash, $this->precedence, $this->viewer, $command, $actor);
+        return new self($this->verdict, $this->basis, $this->reason, $this->reasons, $this->remedies, $this->indeterminate, $this->id, $this->at, $this->read, $this->hash, $this->precedence, $this->viewer, $command, $actor);
     }
 
     private function refusal(string $what): self

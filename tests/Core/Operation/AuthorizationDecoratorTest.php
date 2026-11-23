@@ -211,7 +211,7 @@ final class AuthorizationDecoratorTest extends TestCase
         $permit = $passing->last;
         self::assertNotNull($permit);
 
-        foreach (['identified' => static fn (): Decision => $permit->identified('another', new \DateTimeImmutable(), []), 'recorded' => static fn (): Decision => $permit->recorded('another')] as $what => $replay) {
+        foreach (['identified' => static fn (): Decision => $permit->identified('another', new \DateTimeImmutable(), new \YorvoID\Core\Authorization\ReadSet()), 'recorded' => static fn (): Decision => $permit->recorded('another')] as $what => $replay) {
             try {
                 $replay();
                 self::fail(\sprintf('A permit was %s.', $what));
@@ -221,7 +221,7 @@ final class AuthorizationDecoratorTest extends TestCase
         }
 
         // A refusal may be, e.g. for a page's sample.
-        self::assertSame('d-1', Decision::deny('No.')->identified('d-1', new \DateTimeImmutable(), [])->recorded('h')->id);
+        self::assertSame('d-1', Decision::deny('No.')->identified('d-1', new \DateTimeImmutable(), new \YorvoID\Core\Authorization\ReadSet())->recorded('h')->id);
 
         self::assertFalse(new \ReflectionClass(Decision::class)->isCloneable(), 'A copy would be a second decision no permit was issued on.');
 
@@ -285,8 +285,8 @@ final class AuthorizationDecoratorTest extends TestCase
         $evaluator = $this->evaluator();
         $operation = OperationCatalogue::describe(RecordBadge::class);
         $refusals = [
-            Decision::deny('No.')->identified('d-1', new \DateTimeImmutable(), []),
-            Decision::indeterminate([\YorvoID\Core\Authorization\IndeterminateReason::EvaluationError], 'Unknown.')->identified('d-2', new \DateTimeImmutable(), []),
+            Decision::deny('No.')->identified('d-1', new \DateTimeImmutable(), new \YorvoID\Core\Authorization\ReadSet()),
+            Decision::indeterminate([\YorvoID\Core\Authorization\IndeterminateReason::EvaluationError], 'Unknown.')->identified('d-2', new \DateTimeImmutable(), new \YorvoID\Core\Authorization\ReadSet()),
             \YorvoID\Tests\Support\Decisions::permit(\YorvoID\Core\Operation\AuthorizedBy::Self, 'Never identified.'),
         ];
 

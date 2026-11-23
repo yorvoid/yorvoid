@@ -36,16 +36,14 @@ Details hold facts, never secrets, tokens, passwords or copies of personal data:
 
 An entry is written in the same transaction as the change it describes, so the log holds exactly what was committed, no more and no less. Appends to a realm's log are serialized: two processes can never give two entries the same number. After commit, each entry is dispatched as a `SecurityLogEntryRecorded` event, for your own audit log or a SIEM.
 
-Because every change to a realm records an entry, the log's lock is also how changes that depend on what the realm holds take turns. `lock()` takes it without recording, until the transaction ends: lock first, then read, then change. A setup code does it before checking that the realm has no active principal, so an invitation accepted at the same moment waits for the claim, or the claim waits and sees it.
+Changes that depend on what the realm holds take turns through the realm's lock, not the log's: `$transactions->lockRealm($realm)`, first in the transaction, then read, then change. A setup code takes it before checking that the realm has no active principal, so an invitation accepted at the same moment waits for the claim, or the claim waits and sees it. The log's own lock is taken only at the commit, when the buffered entries are appended, so it orders appends and nothing else. [Storage](storage.md) gives the order of every lock.
 
 ```php
-$transactions->run(function () use ($log, $realm): void {
-    $log->lock($realm);
+$transactions->run(function () use ($transactions, $realm): void {
+    $transactions->lockRealm($realm);
     // Read what the change depends on, then change it.
 });
 ```
-
-A `SecurityLogStore` of your own implements `lock()` as an append locks: on a database, the realm's row that appends update, locked until the transaction ends.
 
 ## What the chain proves, and what it doesn't
 
@@ -94,7 +92,9 @@ In Symfony, set `yorvoid.log.checkpoint_file` (or `checkpoint_logger`) next to `
 
 ## The decision log
 
-Decisions are recorded apart from the security log, in `yorvoid_authorization_decision`. Each record holds the decision's ID, time, realm, the operation or ability, the acting principal, the resource, the verdict and its basis, the summary reason, why it couldn't decide, the remedies' names, each element's name and truth value (never their texts, which can hold data), the versions it read and the origin. It's hashed over a versioned canonical form.
+Decisions are recorded apart from the security log, in `yorvoid_authorization_decision`. Each record holds the decision's ID, time, realm, the operation or ability, the acting principal, the resource, the verdict and its basis, the summary reason, why it couldn't decide, the remedies' names, each element's name and truth value (never their texts, which can hold data), what it read and the origin. It's hashed over a versioned canonical form.
+
+What it read is its **read set**: each source's version (`policy`, `relations`) as read just before its elements judged, which they read at, and the sources that changed while they judged (`moved`). A decision that read a moved source read data at least as new as its versions, never older. To reconstruct a decision, read the policy at its versions; if a source moved, the record says that its data may be newer than the version it names. Records written since 0.5 are format 4; older formats are read, and verified, as they were written.
 
 It isn't a chain, and recording takes no lock: every request asks for decisions, reads included, and none waits for the realm's log or for each other.
 

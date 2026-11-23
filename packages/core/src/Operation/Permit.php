@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
+use YorvoID\Core\Authorization\ReadSet;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Principal\PrincipalId;
@@ -38,6 +39,11 @@ final class Permit
 {
     public Realm $realm {
         get => $this->command->realm;
+    }
+
+    /** What its decision read (D-44): a consequence's permit, its own decision's */
+    public ReadSet $read {
+        get => $this->decision->read ?? new ReadSet();
     }
 
     private bool $used = false;

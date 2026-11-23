@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy\Fixtures;
 
 use Symfony\Component\Clock\MockClock;
+use YorvoID\Core\Authorization\DecisionScope;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\ResourceRef;
@@ -111,8 +112,10 @@ final class PolicyWorld
         $attributes = $stack->attributes ?? $this->memory->attributes;
         $policyStore = $stack->policy ?? $this->memory->policy;
         $relationStore = $stack->relations ?? $this->memory->relations;
-        $policyStore = null === $cache ? $policyStore : new CachedPolicyStore($policyStore, $cache);
-        $relationStore = null === $cache ? $relationStore : new CachedRelationStore($relationStore, $cache);
+        // One scope for the evaluator and the cached stores, as the container has it.
+        $scope = new DecisionScope();
+        $policyStore = null === $cache ? $policyStore : new CachedPolicyStore($policyStore, $cache, $scope);
+        $relationStore = null === $cache ? $relationStore : new CachedRelationStore($relationStore, $cache, $scope);
         $this->policyStore = $mutants?->policyStore($policyStore) ?? $policyStore;
         $this->relationStore = $mutants?->relationStore($relationStore) ?? $relationStore;
         $this->clock = new MockClock('2026-11-07 20:00:00');
@@ -132,7 +135,7 @@ final class PolicyWorld
         }
 
         $authority = new PrincipalAuthority($principals);
-        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)], actors: [new TrustedActors()]);
+        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)], actors: [new TrustedActors()], scope: $scope);
         $handlers = [
             new Principals($principals, $identifiers, $log, $transactions, clock: $this->clock),
             new PolicyChanges($catalogue, $this->policyStore, $principals, $log, $transactions, $this->clock),

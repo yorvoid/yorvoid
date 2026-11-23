@@ -88,7 +88,7 @@ final class DecisionCitationsTest extends TestCase
     public function testACitationOfADecisionThatRefusedIsFound(): void
     {
         [$realm, $log, $digests, $decisions] = $this->setUpLog();
-        $refusal = Decision::deny('No.')->identified((string) new UuidV7(), new \DateTimeImmutable(), []);
+        $refusal = Decision::deny('No.')->identified((string) new UuidV7(), new \DateTimeImmutable(), new \YorvoID\Core\Authorization\ReadSet());
         $decisions->add([DecisionRecord::of(Request::forAbility('acme.pages.edit', $realm, null, new Member($realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web), new \DateTimeImmutable()), $refusal)]);
 
         $log->citing($refusal, static function () use ($log, $realm): void {
