@@ -100,7 +100,7 @@ The read set also holds the **attributes** the decision read from an `AttributeR
 
 - `v:` and the value's JSON, for a boolean, and for a value whose resolver declares the attribute public (`ResolvesPublicValues`): a page's status, not a person's department or age;
 - `m:`, the MAC key's ID and the MAC of any other value, integers too, under the realm's [MAC key](keys.md#mac-keys);
-- `w:`, withheld, when the realm has no MAC key.
+- `w:`, withheld, when the realm has no MAC key, or the value is text that isn't valid UTF-8, which has no one form to prove.
 
 Stored attributes (`AttributeStore`) aren't listed: the `policy` version covers them. Only a checked read set holds them; an unchecked one has `attributes: null`, as do records written before they were recorded. A decision reads each attribute once: a second read in the same decision is given the first value.
 

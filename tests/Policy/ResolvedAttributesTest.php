@@ -57,6 +57,38 @@ final class ResolvedAttributesTest extends TestCase
         self::assertSame(Confirmation::Matches, $macs->confirm($realm, 'acme.status', $read['acme.status'], 'draft'));
     }
 
+    /**
+     * Text that isn't valid UTF-8 has no one form: withheld, so two such values can't both confirm against
+     * one record, and one offered never matches.
+     */
+    public function testTextThatIsntUtf8IsWithheldAndNeverConfirms(): void
+    {
+        $realm = new Realm('acme');
+        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1')])));
+
+        self::assertSame('w:', $macs->record($realm, 'acme.department', "a\xff", false));
+        self::assertSame('w:', $macs->record($realm, 'acme.department', "a\xff", true), 'Not shown either.');
+        self::assertSame('w:', $macs->record($realm, 'acme.teams', ['ok', "a\xfe"], false));
+
+        foreach (["a\xff", "a\xfe"] as $offered) {
+            self::assertSame(Confirmation::NotRecorded, $macs->confirm($realm, 'acme.department', 'w:', $offered));
+            self::assertSame(Confirmation::Differs, $macs->confirm($realm, 'acme.department', $macs->record($realm, 'acme.department', 'a?', false), $offered));
+            self::assertSame(Confirmation::Differs, $macs->confirm($realm, 'acme.department', 'v:"a\u{FFFD}"', $offered), 'Never as a replaced character.');
+        }
+    }
+
+    /**
+     * Each field of the MAC's message is length-prefixed: a name and a value can't trade bytes.
+     */
+    public function testANameAndAValueCantTradeBytes(): void
+    {
+        $realm = new Realm('acme');
+        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1')])));
+
+        self::assertNotSame($macs->record($realm, "a\0\"b", 'c', false), $macs->record($realm, 'a', "b\0c", false));
+        self::assertSame(Confirmation::Differs, $macs->confirm($realm, 'a', $macs->record($realm, "a\0x", 'y', false), "x\0y"));
+    }
+
     public function testWithoutAMacKeyWhatIsntPublicIsWithheld(): void
     {
         $world = new PolicyWorld(resolvers: [new PageFacts()], rulesOf: static fn (Attributes $attributes): array => [new ReadsFacts($attributes)]);

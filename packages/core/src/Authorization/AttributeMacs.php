@@ -19,7 +19,9 @@ use YorvoID\Core\Storage\ForgetsWhatItRead;
  * to another realm or attribute, and no JWS or other HMAC is ever one. It's the same for the same value,
  * so a reader of the records sees which decisions read equal values, but not the value.
  *
- * Recorded forms: "v:" and the value's JSON, "m:<key ID>:<MAC>" (base64url), and "w:".
+ * Recorded forms: "v:" and the value's JSON, "m:<key ID>:<MAC>" (base64url), and "w:". Text that isn't
+ * valid UTF-8 is withheld: it has no one JSON form, so no MAC or value of it could prove which bytes
+ * were read.
  *
  * @api
  */
@@ -45,6 +47,10 @@ final class AttributeMacs implements ForgetsWhatItRead
      */
     public function record(Realm $realm, string $name, string|int|bool|array $value, bool $public): string
     {
+        if (!self::utf8($value)) {
+            return 'w:';
+        }
+
         if ($public || \is_bool($value)) {
             return 'v:'.self::json($value);
         }
@@ -67,6 +73,11 @@ final class AttributeMacs implements ForgetsWhatItRead
     {
         if (null === $recorded) {
             return Confirmation::NotRecorded;
+        }
+
+        if (!self::utf8($value)) {
+            // Never recorded as such: it's withheld wherever it was read.
+            return 'w:' === $recorded ? Confirmation::NotRecorded : Confirmation::Differs;
         }
 
         if ('w:' === $recorded) {
@@ -113,11 +124,27 @@ final class AttributeMacs implements ForgetsWhatItRead
     }
 
     /**
+     * Each field length-prefixed, so no field's content can be read as another's.
+     *
      * @param string|int|bool|list<string> $value
      */
     private static function message(Realm $realm, string $name, string|int|bool|array $value): string
     {
-        return implode("\0", [self::DOMAIN, $realm->name, $name, self::json($value)]);
+        return implode('', array_map(static fn (string $field): string => \strlen($field).':'.$field, [self::DOMAIN, $realm->name, $name, self::json($value)]));
+    }
+
+    /**
+     * @param string|int|bool|list<string> $value
+     */
+    private static function utf8(string|int|bool|array $value): bool
+    {
+        foreach (\is_array($value) ? $value : [$value] as $one) {
+            if (\is_string($one) && !mb_check_encoding($one, 'UTF-8')) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -125,8 +152,8 @@ final class AttributeMacs implements ForgetsWhatItRead
      */
     private static function json(string|int|bool|array $value): string
     {
-        // Text that isn't UTF-8 is recorded with its invalid bytes replaced, rather than not at all.
-        return json_encode($value, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_INVALID_UTF8_SUBSTITUTE | \JSON_THROW_ON_ERROR);
+        // Valid UTF-8 only (utf8()): one form for one value.
+        return json_encode($value, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR);
     }
 
     private static function base64url(string $bytes): string
