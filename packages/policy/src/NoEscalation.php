@@ -12,6 +12,7 @@ use YorvoID\Core\Authorization\Effect;
 use YorvoID\Core\Authorization\ForbidElement;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\RevokesDelegation;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Operation\OperationCatalogue;
@@ -67,7 +68,8 @@ final readonly class NoEscalation implements ForbidElement, ChecksCatalogue
     {
         // A re-delegation is within its parent, which its handler checks: what it gives is the parent's, not
         // the actor's own roles'. Only when it names one: a root delegation is weighed as any change.
-        $attenuated = $request->command instanceof AttenuatedByParent && null !== $request->command->attenuatedBy();
+        // Nor a revocation of delegations: who may revoke is the chain's, and revoking is never held back.
+        $attenuated = ($request->command instanceof AttenuatedByParent && null !== $request->command->attenuatedBy()) || $request->command instanceof RevokesDelegation;
 
         return !$request->actor instanceof Operator
             && !$attenuated

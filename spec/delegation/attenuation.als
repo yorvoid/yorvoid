@@ -274,3 +274,43 @@ assert BrokenWithoutDepthCheck {
     all d: Delegation, r: Request, pol: Policy | validWithoutDepthCheck[d, r, pol] implies #chain[d] <= plus[root[d].depth, 1]
 }
 check BrokenWithoutDepthCheck for 4 but 5 Time, 2 Action, 2 Purpose, 5 Int expect 1
+
+/* Fixtures for the PHP check of one link (yorvoid/delegation's Attenuation): a root delegation and one
+  passed on from it, over a small scope, and whether the model has the child within its parent. Each
+  selector has one type and at most one id atom, as the PHP one does; both records are well formed, as
+  the store keeps them; no execution, requirement or condition, which the PHP tests cover apart. Read by
+  delegation/fixtures.mjs, replayed by tests/Delegation/AttenuationFixturesTest.php; the second run is the
+  same with a purpose under another, which the first's sample doesn't reach. */
+abstract sig Verdict {}
+one sig Within, Outside extends Verdict {}
+
+one sig Link { child: one Delegation, given: one Delegation, verdict: one Verdict }
+
+pred fixture {
+    Link.child.parent = Link.given
+    no Link.given.parent
+    Link.child != Link.given
+    #Delegation = 2
+    one Type
+    #Principal = 3
+    Link.given.delegate = Link.child.delegator
+    Link.given.delegator != Link.child.delegate
+    Link.given.delegate != Link.child.delegate
+    all d: Delegation {
+        wellFormed[d]
+        lone d.selector.atoms & IdsAtom
+        all a: d.selector.atoms & IdsAtom | some a.ids
+        no d.execution and no d.requirements and no d.conditions and no d.revoked
+        d.issuedAt = T/first
+        T/lt[d.notBefore, d.expires]
+        some d.actions
+    }
+    Link.given.depth = 1
+    Link.child.depth in 0 + 1
+    no NonDelegable
+    all a: Action | a.addedAt = T/first
+    Link.verdict = (withinParent[Link.child] implies Within else Outside)
+}
+
+run fixtures { fixture } for 2 but exactly 2 Delegation, exactly 3 Principal, exactly 2 Action, 2 Atom, 1 Id, 2 Selector, 2 Purpose, 3 Time, 0 Execution, 0 Requirement, 0 Condition, 0 Resource, 0 Request, 0 Policy, 4 Int
+run fixturesTree { fixture and some above } for 2 but exactly 2 Delegation, exactly 3 Principal, exactly 2 Action, 2 Atom, 1 Id, 2 Selector, exactly 2 Purpose, 3 Time, 0 Execution, 0 Requirement, 0 Condition, 0 Resource, 0 Request, 0 Policy, 4 Int

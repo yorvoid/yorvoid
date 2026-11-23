@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Delegation;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use YorvoID\Core\Authorization\EffectPart;
+use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\Selector\AttributeIs;
 use YorvoID\Core\Authorization\Selector\IdIn;
 use YorvoID\Core\Authorization\Selector\Selector;
@@ -19,9 +21,11 @@ use YorvoID\Delegation\Change\IssueDelegation;
 use YorvoID\Delegation\Change\RevokeDelegation;
 use YorvoID\Delegation\Change\RevokeDelegationsOf;
 use YorvoID\Delegation\Delegation;
+use YorvoID\Delegation\DelegationEffects;
 use YorvoID\Delegation\DelegationRefused;
 use YorvoID\Delegation\DelegationStatus;
 use YorvoID\Policy\Change\GrantAbilities;
+use YorvoID\Policy\Change\UnassignRole;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\TestPrincipal;
@@ -198,6 +202,28 @@ final class DelegationsTest extends DatabaseTestCase
         self::assertFalse($world->as($bea, new RevokeDelegation($world->realm, $child->id, 'again')), 'Revoked already.');
         self::assertSame(DelegationStatus::Revoked, $world->delegationStore?->get($world->realm, $child->id)?->status);
         self::assertTrue($world->asOperator(new RevokeDelegation($world->realm, $parent->id, 'the operator')));
+    }
+
+    /**
+     * Revoking takes what the delegation gave, truthfully, and is never held back: a delegator whose role
+     * is gone still revokes what they gave.
+     */
+    #[DataProvider('implementations')]
+    public function testADelegatorWhoLostTheRoleStillRevokes(string $implementation): void
+    {
+        $world = $this->world($implementation);
+        [$ana, $bot] = $this->people($world);
+        $delegation = $this->issue($world, $ana, new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page', [new IdIn(['p-1'])]), new \DateTimeImmutable(self::EXPIRES)));
+        \assert($delegation instanceof Delegation);
+        $world->asOperator(new UnassignRole($world->realm, self::id($ana), 'editor'));
+        self::assertFalse($world->allows($ana, 'acme.pages.publish', new ResourceRef('page', 'p-1')), 'The role is gone.');
+
+        $revoke = new RevokeDelegation($world->realm, $delegation->id, 'left the team');
+        $effect = new DelegationEffects($world->actions(), $world->delegationStore)->effectOf(\YorvoID\Core\Authorization\Request::forOperation($world->catalogue->get('yorvoid.delegation.revoke'), $revoke, $ana, new \YorvoID\Core\Event\Origin(\YorvoID\Core\Event\OriginKind::Web), new \DateTimeImmutable()));
+        self::assertEquals([new EffectPart(abilities: ['acme.pages.publish'], on: new ResourceRef('page', 'p-1'))], $effect->takes, 'It takes what it gave.');
+        self::assertSame([], $effect->gives);
+
+        self::assertTrue($world->as($ana, $revoke), 'Revoked, though they no longer hold it.');
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Delegation\Change;
 
 use YorvoID\Core\Authorization\ChangesAuthority;
+use YorvoID\Core\Authorization\RevokesDelegation;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Operation;
@@ -23,7 +24,7 @@ use YorvoID\Delegation\DelegationAbilities;
  * @experimental
  */
 #[Operation('yorvoid.delegation.revoke_all', 'Revoke every delegation of a principal', [AuthorizedBy::Ability, AuthorizedBy::Operator], ability: DelegationAbilities::MANAGE)]
-final readonly class RevokeDelegationsOf implements ChangesAuthority, ConcernsPrincipal
+final readonly class RevokeDelegationsOf implements ChangesAuthority, ConcernsPrincipal, RevokesDelegation
 {
     public function __construct(
         public Realm $realm,

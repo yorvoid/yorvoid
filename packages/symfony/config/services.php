@@ -366,7 +366,7 @@ return static function (ContainerConfigurator $container): void {
     // Delegation: its abilities, its handler and what its commands give, with the actions built when first asked.
     $services->set(DelegationDeclarations::class)->tag('yorvoid.policy_declarations');
     $services->set(Delegations::class)->arg('$actions', service_closure(Actions::class));
-    $services->set(DelegationEffects::class)->arg('$actions', service_closure(Actions::class))->tag('yorvoid.effects');
+    $services->set(DelegationEffects::class)->arg('$actions', service_closure(Actions::class))->arg('$store', service(Stores::IDS[DelegationStore::class]))->tag('yorvoid.effects');
     $services->set(DeclaredEffects::class)->args([tagged_iterator('yorvoid.effects')]);
     $services->set(StepUpForSensitiveChanges::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]))->arg('$effects', service(DeclaredEffects::class))->tag('yorvoid.policy_element');
     $services->set(NoEscalation::class)->arg('$effects', service(DeclaredEffects::class))->tag('yorvoid.policy_element');

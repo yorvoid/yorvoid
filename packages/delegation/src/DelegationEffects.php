@@ -18,8 +18,8 @@ use YorvoID\Delegation\Change\RevokeDelegationsOf;
  * What the delegation commands give and take (D-51). Issuing gives its actions: on each resource it
  * names by ID, or in the whole realm, so no-escalation weighs whether a root delegator holds them there
  * (a delegation passed on is within its parent instead, AttenuatedByParent), and step-up asks a proof
- * for a strict one. Revoking gives nothing: taking delegated authority back never escalates, and never
- * waits for a proof.
+ * for a strict one. Revoking takes what the delegations gave, from their delegates; no-escalation doesn't
+ * weigh it (RevokesDelegation), and taking never waits for a proof.
  *
  * @api
  *
@@ -29,6 +29,7 @@ final readonly class DelegationEffects implements DeclaresEffects
 {
     public function __construct(
         private Actions|\Closure $actions,
+        private ?DelegationStore $store = null,
     ) {
     }
 
@@ -41,18 +42,47 @@ final readonly class DelegationEffects implements DeclaresEffects
     {
         $command = $request->command;
 
-        if (!$command instanceof IssueDelegation) {
-            return Effect::none();
+        if ($command instanceof IssueDelegation) {
+            return new Effect(gives: $this->parts($command->actions, $command->resources));
         }
 
-        $abilities = $this->named($command->actions);
-        $ids = $command->resources->ids();
+        if (null === $this->store) {
+            throw new \LogicException('What a revocation takes needs the delegation store: give DelegationEffects one.');
+        }
+
+        $revoked = match (true) {
+            $command instanceof RevokeDelegation => array_filter([$this->store->get($command->realm, $command->delegation)]),
+            $command instanceof RevokeDelegationsOf => $this->store->involving($command->realm, $command->principalId),
+            default => [],
+        };
+        $takes = [];
+
+        foreach ($revoked as $delegation) {
+            if ($delegation->isActive()) {
+                array_push($takes, ...$this->parts($delegation->actions, $delegation->resources));
+            }
+        }
+
+        return new Effect(takes: $takes);
+    }
+
+    /**
+     * The actions, as abilities, on each resource named by ID, or in the whole realm.
+     *
+     * @param list<string> $actions
+     *
+     * @return list<EffectPart>
+     */
+    private function parts(array $actions, \YorvoID\Core\Authorization\Selector\Selector $resources): array
+    {
+        $abilities = $this->named($actions);
+        $ids = $resources->ids();
 
         if (null === $ids) {
-            return new Effect(gives: [new EffectPart(abilities: $abilities)]);
+            return [new EffectPart(abilities: $abilities)];
         }
 
-        return new Effect(gives: array_map(static fn (string $id): EffectPart => new EffectPart(abilities: $abilities, on: new ResourceRef($command->resources->type, $id)), $ids->ids));
+        return array_map(static fn (string $id): EffectPart => new EffectPart(abilities: $abilities, on: new ResourceRef($resources->type, $id)), $ids->ids);
     }
 
     /**
