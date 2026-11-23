@@ -334,8 +334,8 @@ final class DecisionLogTest extends TestCase
     public function testOldDecisionsArePurged(): void
     {
         $log = new DecisionLog($this->store, clock: $this->clock);
-        $old = $log->record($this->ability(), Decision::deny('No.')->identified('old', $this->clock->now()->modify('-31 days'), []));
-        $recent = $log->record($this->ability(), Decision::deny('No.')->identified('recent', $this->clock->now()->modify('-29 days'), []));
+        $old = $log->record($this->ability(), Decision::deny('No.')->identified('old', $this->clock->now()->modify('-31 days'), new \YorvoID\Core\Authorization\ReadSet()));
+        $recent = $log->record($this->ability(), Decision::deny('No.')->identified('recent', $this->clock->now()->modify('-29 days'), new \YorvoID\Core\Authorization\ReadSet()));
         $log->flush();
 
         self::assertSame(1, $log->purge(Duration::days(30)));

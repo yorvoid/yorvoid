@@ -149,7 +149,7 @@ Every contract but the flow store's runs the store inside the transactions you g
 
 The throttle's counts are the exception: they outlive a rollback, or the store refuses to count inside a transaction. So are decision records, which a store with a connection of its own writes apart: a digest lists them.
 
-In Symfony, each store is a service under an ID of its own, `yorvoid.store.<name>`: `yorvoid.store.principal`, `yorvoid.store.identifier`, `yorvoid.store.security_log`, `yorvoid.store.session`, `yorvoid.store.known_device`, `yorvoid.store.one_time_token`, `yorvoid.store.setup`, `yorvoid.store.credential`, `yorvoid.store.recovery_code`, `yorvoid.store.cool_down`, `yorvoid.store.passkey`, `yorvoid.store.ceremony`, `yorvoid.store.throttle`, `yorvoid.store.policy`, `yorvoid.store.relation`, `yorvoid.store.attribute`, `yorvoid.store.decision_log` and `yorvoid.store.flow`. Use yours by aliasing its ID:
+In Symfony, each store is a service under an ID of its own, `yorvoid.store.<name>`: `yorvoid.store.principal`, `yorvoid.store.identifier`, `yorvoid.store.security_log`, `yorvoid.store.session`, `yorvoid.store.known_device`, `yorvoid.store.one_time_token`, `yorvoid.store.setup`, `yorvoid.store.credential`, `yorvoid.store.recovery_code`, `yorvoid.store.cool_down`, `yorvoid.store.passkey`, `yorvoid.store.ceremony`, `yorvoid.store.throttle`, `yorvoid.store.policy`, `yorvoid.store.relation`, `yorvoid.store.attribute`, `yorvoid.store.decision_log`, `yorvoid.store.flow` and `yorvoid.store.version`. Use yours by aliasing its ID:
 
 ```yaml
 # config/services.yaml

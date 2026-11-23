@@ -78,6 +78,8 @@ final readonly class Evaluator implements Authorization
     /** @var \ArrayObject<string, true> The actor classes warned about, once each */
     private \ArrayObject $warned;
 
+    private DecisionScope $scope;
+
     /**
      * @param iterable<PolicyElement> $elements  The policy: permits and forbids
      * @param OfflineDecider|null     $offline   Asked while a store is unreachable, for the operations that accept it
@@ -85,6 +87,8 @@ final readonly class Evaluator implements Authorization
      * @param IdGenerator             $ids       Each decision's ID
      * @param DecisionLog|null        $decisions Where decisions are recorded (AUZ-040); without it, nowhere
      * @param iterable<ProvesActors>  $actors    What proves actors beyond core's own, e.g. sessions (StoredSessions, D-45)
+     * @param DecisionScope|null      $scope     The one the cached stores read in, so that they read at the versions a
+     *                                           decision read before judging (D-44); its own, if not given
      *
      * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, a
      *                         permit authorizes by Consequence, which only another operation's permit gives,
@@ -100,7 +104,9 @@ final readonly class Evaluator implements Authorization
         private IdGenerator $ids = new UuidV7Generator(),
         private ?DecisionLog $decisions = null,
         iterable $actors = [],
+        ?DecisionScope $scope = null,
     ) {
+        $this->scope = $scope ?? new DecisionScope();
         $provers = [];
 
         foreach ($actors as $prover) {
@@ -204,6 +210,7 @@ final readonly class Evaluator implements Authorization
      * @param iterable<VersionSource> $versions    What each decision records the version of
      * @param DecisionLog|null        $decisions   Where decisions are recorded
      * @param iterable<ProvesActors>  $actors      What proves actors beyond core's own, e.g. sessions (StoredSessions)
+     * @param DecisionScope|null      $scope       The one the cached stores read in
      */
     public static function builtIn(
         AuthorityCheck $authority,
@@ -218,6 +225,7 @@ final readonly class Evaluator implements Authorization
         IdGenerator $ids = new UuidV7Generator(),
         ?DecisionLog $decisions = null,
         iterable $actors = [],
+        ?DecisionScope $scope = null,
     ): self {
         $builtIn = [
             new AuthenticationPermit(),
@@ -229,7 +237,7 @@ final readonly class Evaluator implements Authorization
             $builtIn[] = new AbilityPermit($abilities);
         }
 
-        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors);
+        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors, $scope);
     }
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
@@ -259,7 +267,7 @@ final readonly class Evaluator implements Authorization
 
         $request = Request::forOperation($operation, $command, $actor, $origin, $this->clock->now());
         $request = $this->provenAs($request, $this->proveActor($request->actor));
-        $decision = self::identified($this->consequence($request, $parent), (string) $this->ids->next(), $request->at, $this->versionsOf($request));
+        $decision = $this->judged($request, fn (): Decision => $this->consequence($request, $parent));
 
         return self::bound(null === $this->decisions ? $decision : $this->decisions->record($request, $decision, $parent->id), $command, $actor);
     }
@@ -311,11 +319,18 @@ final readonly class Evaluator implements Authorization
             }
         }
 
-        $this->preload($sides);
-        // One realm, one moment: the versions are read once.
-        $versions = $this->versionsOf($requests[0]);
+        // One realm, one moment: the versions are read once, before anything is read for the batch, and
+        // the batch reads at them.
+        $before = $this->versionsOf($requests[0]);
+        $judged = $this->scope->within($requests[0]->realm, $before, function () use ($sides, $requests): array {
+            $this->preload($sides);
 
-        $decided = array_map(fn (Request $request): array => [$request, $this->identify($request, $versions)], $requests);
+            return array_map($this->judge(...), $requests);
+        });
+        $checks = array_map($this->checksWhatMoved(...), $requests, $judged);
+        $read = \in_array(true, $checks, true) ? ReadSet::between($before, $this->versionsOf($requests[0])) : null;
+        $unchecked = ReadSet::unchecked($before);
+        $decided = array_map(fn (Request $request, Decision $decision, bool $checks): array => [$request, self::identified($decision, (string) $this->ids->next(), $request->at, $checks && null !== $read ? $read : $unchecked)], $requests, $judged, $checks);
 
         return null === $this->decisions ? array_map(static fn (array $one): Decision => $one[1], $decided) : $this->decisions->recordAll($decided);
     }
@@ -425,25 +440,89 @@ final readonly class Evaluator implements Authorization
 
     /**
      * Decides and identifies the decision.
-     *
-     * @param array<string, int>|null $versions As read for the batch it's in
      */
-    private function identify(Request $request, ?array $versions = null): Decision
+    private function identify(Request $request): Decision
     {
-        return self::identified($this->judge($request), (string) $this->ids->next(), $request->at, $versions ?? $this->versionsOf($request));
+        return $this->judged($request, fn (): Decision => $this->judge($request));
     }
 
     /**
-     * The versions of what the decision read, as they are now: a source that can't tell is left out,
-     * and the decision itself comes from the elements, which report what they couldn't read.
+     * Judges at the versions read before (D-44): the stores read at them, and what moved while it judged
+     * is read after. Identified, with that read set.
+     *
+     * @param \Closure(): Decision $judge
+     */
+    private function judged(Request $request, \Closure $judge): Decision
+    {
+        $before = $this->versionsOf($request);
+        $decision = $this->scope->within($request->realm, $before, $judge);
+        $read = $this->checksWhatMoved($request, $decision) ? ReadSet::between($before, $this->versionsOf($request)) : ReadSet::unchecked($before);
+
+        return self::identified($decision, (string) $this->ids->next(), $request->at, $read);
+    }
+
+    /**
+     * Whether what moved while the decision judged is checked, by reading the versions again (D-44): the
+     * one place that says so. It is, wherever something uses the decision beyond showing it: an
+     * operation's decision, which a permit and its consequences carry; a refusal and a Permit-offline,
+     * which are always recorded; a view as someone else; an ability's Permit the log records. Only an
+     * ability's Permit that's neither recorded nor acted on, e.g. isGranted() for a link, isn't.
+     */
+    private function checksWhatMoved(Request $request, Decision $decision): bool
+    {
+        if (null !== $request->operation || $request->actor instanceof ViewingAs) {
+            return true;
+        }
+
+        return match ($decision->verdict) {
+            Verdict::Permit => $this->decisions?->recordsPermit($request) ?? false,
+            Verdict::PermitOffline, Verdict::Deny, Verdict::Indeterminate => true,
+        };
+    }
+
+    /**
+     * The versions of what the decision reads, as they are now, as no decision reads them: a source that
+     * can't tell is left out, and the decision itself comes from the elements, which report what they
+     * couldn't read.
      *
      * @return array<string, int>
      */
     private function versionsOf(Request $request): array
     {
+        return $this->scope->outside(fn (): array => $this->versionsNow($request));
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function versionsNow(Request $request): array
+    {
         $versions = [];
+        /** @var array<int, array{VersionStore, list<string>}> $stored The sources kept in each VersionStore, read at once */
+        $stored = [];
+        /** @var list<VersionSource> $own The others, each read on its own */
+        $own = [];
 
         foreach ($this->versions as $source) {
+            $store = $source instanceof KeepsVersionsIn ? $source->versionStore() : null;
+
+            if (null === $store) {
+                $own[] = $source;
+            } else {
+                $stored[spl_object_id($store)][0] = $store;
+                $stored[spl_object_id($store)][1][] = $source->name();
+            }
+        }
+
+        foreach ($stored as [$store, $names]) {
+            try {
+                $versions = [...$versions, ...$store->versions($request->realm, $names)];
+            } catch (\Throwable $e) {
+                $this->logger->warning('YorvoID couldn\'t read the {source} version: {message}', ['source' => implode(', ', $names), 'message' => $e->getMessage()]);
+            }
+        }
+
+        foreach ($own as $source) {
             try {
                 $versions[$source->name()] = $source->version($request->realm);
             } catch (\Throwable $e) {
@@ -814,24 +893,21 @@ final readonly class Evaluator implements Authorization
      * @param list<Reason>              $reasons
      * @param list<Remedy>              $remedies
      * @param list<IndeterminateReason> $indeterminate
-     * @param array<string, int>        $versions
      */
-    private static function decision(Verdict $verdict, ?AuthorizedBy $basis, string $reason, array $reasons = [], array $remedies = [], array $indeterminate = [], ?string $id = null, ?\DateTimeImmutable $at = null, array $versions = [], ?string $hash = null, ?Precedence $precedence = null, ?Decision $viewer = null): Decision
+    private static function decision(Verdict $verdict, ?AuthorizedBy $basis, string $reason, array $reasons = [], array $remedies = [], array $indeterminate = [], ?string $id = null, ?\DateTimeImmutable $at = null, ReadSet $read = new ReadSet(), ?string $hash = null, ?Precedence $precedence = null, ?Decision $viewer = null): Decision
     {
-        $make = \Closure::bind(static fn (): Decision => new Decision($verdict, $basis, $reason, $reasons, $remedies, $indeterminate, $id, $at, $versions, $hash, $precedence, $viewer), null, Decision::class);
+        $make = \Closure::bind(static fn (): Decision => new Decision($verdict, $basis, $reason, $reasons, $remedies, $indeterminate, $id, $at, $read, $hash, $precedence, $viewer), null, Decision::class);
 
         return $make();
     }
 
     /**
-     * The decision with its ID, its time and the versions it read: only here and in the decision log,
-     * for a decision that permits.
-     *
-     * @param array<string, int> $versions
+     * The decision with its ID, its time and what it read: only here and in the decision log, for a
+     * decision that permits.
      */
-    private static function identified(Decision $decision, string $id, \DateTimeImmutable $at, array $versions): Decision
+    private static function identified(Decision $decision, string $id, \DateTimeImmutable $at, ReadSet $read): Decision
     {
-        $identify = \Closure::bind(static fn (): Decision => $decision->withIdentity($id, $at, $versions), null, Decision::class);
+        $identify = \Closure::bind(static fn (): Decision => $decision->withIdentity($id, $at, $read), null, Decision::class);
 
         return $identify();
     }

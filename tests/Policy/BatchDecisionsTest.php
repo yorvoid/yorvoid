@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Tests\Policy;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -79,11 +80,12 @@ final class BatchDecisionsTest extends DatabaseTestCase
             self::assertCount($size, $decisions);
         }
 
-        self::assertSame([1 => $counts[1], 10 => $counts[1], 100 => $counts[1]], $counts, 'Statements for 1, 10 and 100 pages.');
-        self::assertLessThanOrEqual(10, $counts[1], 'Versions, the principal, assignments, groups, two levels of parents and the editors.');
+        self::assertSame($counts[10], $counts[100], 'Statements for 10 and 100 pages.');
+        self::assertSame($counts[1] + 1, $counts[10], 'Page 1 is permitted and nothing records it, so its versions aren\'t read again; 10 pages have refusals, which are (D-44).');
+        self::assertLessThanOrEqual(10, $counts[10], 'The versions before and after judging, each in one statement, the principal, assignments, groups, two levels of parents and the editors.');
     }
 
-    public function testARequestReadsThePolicyOnce(): void
+    public function testARequestReadsThePolicyOnceForEachVersion(): void
     {
         $statements = new StatementLog();
         $stack = $this->stack('sqlite', $statements);
@@ -100,16 +102,43 @@ final class BatchDecisionsTest extends DatabaseTestCase
             self::assertFalse($world->allows($ada, 'acme.sites.update', $pages[0]));
         }
 
-        self::assertSame([], self::policyReads($statements->take()), 'Forty more decisions read nothing of it again.');
+        self::assertSame([], self::versionless($statements->take()), 'Forty more decisions read only the versions again (D-44), nothing else of it.');
 
-        // Another server makes her a manager: this request goes on with what it read, the next reads it.
+        // One cached decision that nothing records: its versions in one statement, once, and nothing
+        // else of the policy or relations.
+        self::assertTrue($world->allows($ada, 'acme.pages.publish', $pages[0]));
+        $one = $statements->take();
+        self::assertSame(['SELECT source, version FROM "yorvoid_versions" WHERE realm = ? AND source IN (?, ?)'], array_values(array_filter($one, static fn (string $sql): bool => str_contains($sql, 'yorvoid_versions') || 1 === preg_match('/yorvoid_(policy|relation)_/', $sql))), 'One read of every version, with one VersionStore shared.');
+        self::assertCount(2, $one, 'And the actor\'s principal, which every decision reads to prove it: two statements in all, one more than when versions were kept for the request.');
+
+        // Another server makes her a manager: the next decision reads the new version, in this request
+        // too, since no version is kept for a request or a job (D-44, M3FIT-01).
         $other = new DbalPolicyStore($this->database('sqlite'));
         $other->bump($world->realm);
         $other->assign(new RoleAssignment($world->realm, self::id($ada), 'manager', new \DateTimeImmutable('2026-11-01')));
 
-        self::assertFalse($world->allows($ada, 'acme.sites.update', $pages[0]), 'One request, one state of the policy.');
+        self::assertTrue($world->allows($ada, 'acme.sites.update', $pages[0]), 'The next decision reads the new version, in the same request.');
+    }
+
+    /**
+     * M3FIT-01: a long job decides on what's committed now, not on what it read first. A role revoked by
+     * another server refuses the job's next decision, with no reset between them.
+     */
+    #[DataProvider('platforms')]
+    public function testALongJobSeesARevocationAtItsNextDecision(string $platform): void
+    {
+        $world = new PolicyWorld(stack: $this->stack($platform), cache: new VersionedCache());
+        [$ada, $pages] = $this->site($world, 1);
         $world->newRequest();
-        self::assertTrue($world->allows($ada, 'acme.sites.update', $pages[0]), 'The next request reads the new version.');
+        $world->asOperator(new AssignRole($world->realm, self::id($ada), 'manager'));
+        $world->newRequest();
+        self::assertTrue($world->allows($ada, 'acme.sites.update', $pages[0]));
+
+        $other = new DbalPolicyStore($this->database($platform));
+        $other->bump($world->realm);
+        self::assertTrue($other->unassign($world->realm, self::id($ada), 'manager', null));
+
+        self::assertFalse($world->allows($ada, 'acme.sites.update', $pages[0]), 'Revoked on another connection: the job\'s next decision refuses.');
     }
 
     public function testARequestThatChangesThePolicyReadsItsChanges(): void
@@ -157,6 +186,16 @@ final class BatchDecisionsTest extends DatabaseTestCase
         \assert(null !== $principal->principalId);
 
         return $principal->principalId;
+    }
+
+    /**
+     * @param list<string> $statements
+     *
+     * @return list<string>
+     */
+    private static function versionless(array $statements): array
+    {
+        return array_values(array_filter(self::policyReads($statements), static fn (string $sql): bool => 1 !== preg_match('/FROM "?yorvoid_(policy|relation)_version/i', $sql)));
     }
 
     /**

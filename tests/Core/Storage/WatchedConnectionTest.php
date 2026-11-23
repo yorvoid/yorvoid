@@ -22,7 +22,7 @@ use YorvoID\Tests\Support\RecordingDispatcher;
  */
 final class WatchedConnectionTest extends TestCase
 {
-    private const string VERSION_BUMP = 'UPDATE "yorvoid_policy_version" SET version = version + 1';
+    private const string VERSION_BUMP = 'UPDATE "yorvoid_versions" SET version = version + 1';
 
     private RecordingDispatcher $alerts;
 

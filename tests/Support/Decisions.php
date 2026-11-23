@@ -6,6 +6,7 @@ namespace YorvoID\Tests\Support;
 
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Precedence;
+use YorvoID\Core\Authorization\ReadSet;
 use YorvoID\Core\Authorization\Reason;
 use YorvoID\Core\Authorization\Remedy;
 use YorvoID\Core\Operation\Actor;
@@ -30,7 +31,7 @@ final class Decisions
      */
     public static function of(Verdict $verdict, ?AuthorizedBy $basis, string $reason, array $reasons = [], array $remedies = [], array $indeterminate = [], ?string $id = null, ?\DateTimeImmutable $at = null, array $versions = [], ?string $hash = null, ?Precedence $precedence = null, ?Decision $viewer = null): Decision
     {
-        $make = \Closure::bind(static fn (): Decision => new Decision($verdict, $basis, $reason, $reasons, $remedies, $indeterminate, $id, $at, $versions, $hash, $precedence, $viewer), null, Decision::class);
+        $make = \Closure::bind(static fn (): Decision => new Decision($verdict, $basis, $reason, $reasons, $remedies, $indeterminate, $id, $at, new ReadSet($versions), $hash, $precedence, $viewer), null, Decision::class);
 
         return $make();
     }
@@ -62,7 +63,7 @@ final class Decisions
      */
     public static function identified(Decision $decision, string $id, \DateTimeImmutable $at, array $versions = []): Decision
     {
-        $identify = \Closure::bind(static fn (): Decision => $decision->withIdentity($id, $at, $versions), null, Decision::class);
+        $identify = \Closure::bind(static fn (): Decision => $decision->withIdentity($id, $at, new ReadSet($versions)), null, Decision::class);
 
         return $identify();
     }

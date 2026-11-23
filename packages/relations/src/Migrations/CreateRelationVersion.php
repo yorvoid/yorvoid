@@ -11,7 +11,6 @@ use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Storage\Migration\LockProfile;
 use YorvoID\Core\Storage\Migration\Migration;
 use YorvoID\Core\Storage\Migration\MigrationContext;
-use YorvoID\Relations\Storage\DbalRelationStore;
 
 /**
  * @internal
@@ -35,7 +34,7 @@ final class CreateRelationVersion implements Migration
 
     public function up(MigrationContext $context): void
     {
-        $context->createTable(DbalRelationStore::VERSION_TABLE, static function (TableEditor $table): void {
+        $context->createTable('relation_version', static function (TableEditor $table): void {
             $table->addColumn(Column::editor()->setUnquotedName('realm')->setTypeName(Types::STRING)->setLength(63)->create());
             $table->addColumn(Column::editor()->setUnquotedName('version')->setTypeName(Types::BIGINT)->create());
             $table->addPrimaryKeyConstraint(PrimaryKeyConstraint::editor()->setUnquotedColumnNames('realm')->create());

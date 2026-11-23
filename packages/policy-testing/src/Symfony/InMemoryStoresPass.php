@@ -20,6 +20,7 @@ use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Core\Authorization\AuthorityCheck;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Principal\IdentifierStore;
@@ -68,6 +69,7 @@ final readonly class InMemoryStoresPass implements CompilerPassInterface
         AttributeStore::class => ['yorvoid.store.attribute', 'attributes'],
         ThrottleStore::class => ['yorvoid.store.throttle', 'throttle'],
         DecisionLogStore::class => ['yorvoid.store.decision_log', 'decisions'],
+        VersionStore::class => ['yorvoid.store.version', 'versions'],
     ];
 
     /** The stores mutants change what's read from */

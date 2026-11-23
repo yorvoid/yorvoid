@@ -80,7 +80,7 @@ final class Samples
 
     private static function refusal(Decision $decision): Decision
     {
-        return $decision->identified('019a6e2c-8a00-7000-8000-000000000001', new \DateTimeImmutable('2026-11-10T12:00:00Z'), []);
+        return $decision->identified('019a6e2c-8a00-7000-8000-000000000001', new \DateTimeImmutable('2026-11-10T12:00:00Z'), new \YorvoID\Core\Authorization\ReadSet());
     }
 
     public static function find(string $template, string $state): ?Sample

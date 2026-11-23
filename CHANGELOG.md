@@ -31,6 +31,8 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `Transactions::lockRealm()`: locks a realm until the transaction ends, for a check over the realm as a whole, e.g. that it keeps an administrator, and every change that can break one. Changes of status, claiming a setup, creating an active principal, and every change of roles, groups, abilities, relations and attributes take it first ([locks](docs/concepts/storage.md#locks)).
 - `Transactions::beforeCommit()`: runs a callback just before the outermost transaction commits, inside it; if it fails, nothing commits.
 - `YORVOID_LOCK_ORDER=check`: in your tests, every transaction on a connection with `TransactionMiddleware` throws when it takes YorvoID's locks out of their order ([locks](docs/concepts/storage.md#locks)). The version rows it knows are YorvoID's: a `HoldsAuthority` store of your own isn't checked for the realm's lock.
+- `ReadSet`, `Decision::$read` and `Permit::$read`: what a decision read, each source's version just before its elements judged, and the sources that changed while they judged (`moved`; `null` where that wasn't checked, for an ability's Permit nothing records). `DecisionScope` (`@experimental`): given to the evaluator and the cached stores, so a decision's elements read at the versions it read.
+- `VersionStore`, `DbalVersionStore`, `InMemoryVersionStore` and `VersionStoreContract`: the versions of what decisions read, one table for every source (`yorvoid_versions`), read at once. `KeepsVersionsIn`: a version source or store whose version is kept in one. In Symfony, `yorvoid.store.version`.
 
 ### Breaking
 
@@ -69,6 +71,10 @@ All of YorvoID's packages are released together, with the same version ([compati
 - Inside a transaction you opened through DBAL's `transactional()`, a failure appending the security log at your commit may reach you as `NoActiveTransaction`, with the cause as its previous. It isn't retried.
 - YorvoID's IDs are its own `YorvoID\Core\Id\Id`, a UUID's canonical text, rather than Symfony's `Uuid`: no `symfony/uid` type is in the API any more. `PrincipalId`, `SessionId` and `CredentialId` take an `Id`, and `->uuid` is `->id`: write `$principalId->id->toString()` or `(string) $principalId` where you wrote `->uuid->toRfc4122()`, and `PrincipalId::fromString()` or `new PrincipalId(Id::fromString(...))` where you built one from a `Uuid`. `IdGenerator::next()` returns an `Id`. `LogEntry::$id` and `Ceremony::$id` are `Id`s, and so is `CeremonyStore::take()`'s, for a store of your own. `Passkey::$aaguid` is the AAGUID's text. In tests, `YorvoID\Testing\Ids::next()` gives a new `Id`. What's stored doesn't change.
 - `PrincipalUser` keeps only its identifier in a Symfony session; the firewall loads the principal again, as it already did on every request. Sessions written before 0.5 aren't read: users sign in again.
+- No version is kept for a request or a job: every decision reads the policy and relations versions, before its elements judge and again after. A long console command or a worker loop decides on what's committed now, not on what it read first. `CachedPolicyStore` and `CachedRelationStore` take the `DecisionScope` the evaluator has (`Evaluator::builtIn(scope:)`); the Symfony bundle wires both.
+- `Decision::identified()` takes a `ReadSet` instead of the versions.
+- `DecisionRecord` is format 4: its read set holds what moved and the resolved attributes (`null` until they're recorded), and a slot for the delegation chain. Records of formats 1 to 3 still read and verify as they were written.
+- The policy and relations versions move to `yorvoid_versions`: the migrations create it and drop `yorvoid_policy_version` and `yorvoid_relation_version`. Run them. `DbalPolicyStore` and `DbalRelationStore` take the `VersionStore` (`versions:`) to share with the evaluator's sources.
 
 ### Security
 
@@ -83,6 +89,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `Sessions::refresh()` records each new token in the security log (`yorvoid.session.refresh`), as a sign-in and a step-up do: it issues a credential (AR-01).
 - A passkey or a set of recovery codes disabled during a sign-in that uses it, e.g. by a "This wasn't me" report, stays disabled. Before, the sign-in wrote back its own copy of the credential, active, and went on. Now the sign-in is refused and recorded, and a recovery code it would have used is kept (ARC-0057).
 - A change of status no longer runs its guard rules against a role, group, relation or attribute change made at the same moment, which could leave a realm without its last administrator: both take the realm's lock. Changes of one principal (tokens, recovery codes and links, adding, removing and disabling credentials, starting a session) take turns on the principal's lock, and a disable no longer slips in between a sign-in's read and its use of the credential. A realm's security log is locked only while its entries are appended at the commit, so changes in one realm no longer wait for each other's whole unit of work.
+- A role or relation revoked elsewhere stops the next decision in the same request or job: the versions were read once a request, so a long command kept deciding on a revoked role. And a decision's record no longer names versions read after it judged, which a change committed meanwhile could make newer than what it read.
 
 ### Fixed
 
@@ -91,6 +98,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - After a commit the application started (`$connection->commit()`, `transactional()`, Doctrine's `wrapInTransaction()`, Messenger's `doctrine_transaction`), YorvoID's after-commit callbacks can open transactions: each runs in one of its own (ARC-0059, D-43). Before, they failed while DBAL still counted the committed transaction (PostgreSQL 25P01): a security notification after such a sign-in wasn't sent, and the application's `commit()` threw after its data had committed (`NoActiveTransaction`). A callback that leaves a transaction open is rolled back and reported, and the connection stays usable.
 - The stores convert values through the connection (`Connection::convertToPHPValue()`), not `Type::getType()`, which Doctrine DBAL 4.6 deprecates: no deprecations with DBAL 4.6.
 - `yorvoid/policy-testing` suggests `symfony/config` with the other packages its Symfony bundle needs: Symfony's `Bundle` doesn't load without it.
+- `Request::on()` and `Request::by()` keep the request's execution and purpose.
 
 ## [0.4.0] - 2026-11-13
 

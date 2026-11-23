@@ -6,6 +6,7 @@ namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use YorvoID\Core\Authorization\DecisionScope;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
@@ -131,15 +132,18 @@ final class CachedPolicyStoreTest extends TestCase
             $inner->deleteRole($this->realm, 'kept');
         }
 
-        $store = $this->policy($inner);
+        $scope = new DecisionScope();
+        $store = new CachedPolicyStore($inner, $this->cache(), $scope);
         $version = $inner->version($other);
         self::assertSame($version, $store->version($other));
         $inner->bump($other);
-        self::assertSame($version, $store->version($other), 'The version is read once a request.');
-        $store->reset();
-        self::assertSame($version + 1, $store->version($other));
+        self::assertSame($version + 1, $store->version($other), 'Read as it is now, never kept for a request (D-44).');
+        self::assertSame($version, $scope->within($other, ['policy' => $version], static fn (): int => $store->version($other)), 'Inside a decision, the version it read before judging.');
+        self::assertSame($version + 1, $scope->within($this->realm, ['policy' => $version], static fn (): int => $store->version($other)), 'Only in its realm.');
+        self::assertSame($version + 1, $scope->within($other, ['relations' => $version], static fn (): int => $store->version($other)), 'Only for the sources it read.');
+        self::assertSame($version + 1, $scope->within($other, ['policy' => $version], static fn (): int => $scope->outside(static fn (): int => $store->version($other))), 'Not outside it.');
         $store->bump($other);
-        self::assertSame($version + 2, $store->version($other), 'Its own change is read at once.');
+        self::assertSame($version + 2, $scope->within($other, ['policy' => $version], static fn (): int => $store->version($other)), 'Its own change is read at once, in a decision too.');
         $inner->bump($other);
         self::assertSame($version + 3, $store->version($other), 'And from then on the store\'s.');
     }
@@ -175,9 +179,7 @@ final class CachedPolicyStoreTest extends TestCase
         }
 
         $inner->add($tuple);
-        self::assertSame(0, $store->version($this->realm), 'Read once a request.');
-        $store->reset();
-        self::assertSame($inner->version($this->realm), $store->version($this->realm));
+        self::assertSame($inner->version($this->realm), $store->version($this->realm), 'Read as it is now, never kept for a request (D-44).');
 
         foreach ([
             static fn (CachedRelationStore $store) => $store->add($tuple),

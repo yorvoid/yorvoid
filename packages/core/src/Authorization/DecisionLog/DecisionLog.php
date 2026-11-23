@@ -310,7 +310,7 @@ final class DecisionLog implements AttemptLog
         // A recorded decision has its ID and its time (DecisionRecord::of()).
         \assert(null !== $decision->id && null !== $decision->at);
 
-        return Decision::indeterminate([IndeterminateReason::AuditUnavailable], 'its record couldn\'t be written', $decision->reasons, $decision->precedence)->identified($decision->id, $decision->at, $decision->versions);
+        return Decision::indeterminate([IndeterminateReason::AuditUnavailable], 'its record couldn\'t be written', $decision->reasons, $decision->precedence)->identified($decision->id, $decision->at, $decision->read);
     }
 
     private function records(Request $request, Decision $decision): bool
@@ -321,10 +321,18 @@ final class DecisionLog implements AttemptLog
             Verdict::PermitOffline, Verdict::Deny, Verdict::Indeterminate => false,
         };
 
-        if (!$permitted) {
-            return true;
-        }
+        return !$permitted || $this->recordsPermit($request);
+    }
 
+    /**
+     * Whether an ability's Permit for this request is recorded: by the ability's own declaration
+     * (recordsPermits), or by the configuration. The evaluator asks it to know whether the decision's
+     * read set is checked after judging (D-44).
+     *
+     * @internal
+     */
+    public function recordsPermit(Request $request): bool
+    {
         if (isset($this->alwaysRecord[$request->name()])) {
             return true;
         }

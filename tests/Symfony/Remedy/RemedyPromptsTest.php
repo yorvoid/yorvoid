@@ -147,7 +147,7 @@ final class RemedyPromptsTest extends TestCase
         self::assertSame('Das können Sie nicht tun', $this->prompts->summary(Decision::deny('No.'), 'de')['title']);
 
         self::assertNull($this->prompts->reference(Decision::deny('No.'), 'en'), 'A decision that wasn\'t recorded has no reference.');
-        self::assertSame('Reference: 019a6e2c-8a00-7000-8000-000000000001', $this->prompts->reference(Decision::deny('No.')->identified('019a6e2c-8a00-7000-8000-000000000001', $this->clock->now(), []), 'en'));
+        self::assertSame('Reference: 019a6e2c-8a00-7000-8000-000000000001', $this->prompts->reference(Decision::deny('No.')->identified('019a6e2c-8a00-7000-8000-000000000001', $this->clock->now(), new \YorvoID\Core\Authorization\ReadSet()), 'en'));
     }
 
     public function testOnlyARefusalIsForbiddenWhatCouldntBeDecidedIsUnavailable(): void

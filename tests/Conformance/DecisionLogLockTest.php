@@ -59,7 +59,7 @@ final class DecisionLogLockTest extends DatabaseTestCase
                 $request = 0 === $i % 2
                     ? Request::forOperation($operation, new IssueBadge($realm, new PrincipalId(Ids::next())), new Operator(), new Origin(OriginKind::Console), new \DateTimeImmutable())
                     : Request::forAbility('acme.pages.edit', $realm, new ResourceRef('page', (string) $i), new Member($realm, new PrincipalId(Ids::next())), new Origin(OriginKind::Web), new \DateTimeImmutable());
-                $ids[] = (string) $decisions->record($request, Decision::deny('No.')->identified((string) new UuidV7(), new \DateTimeImmutable(), ['policy' => 1]))->id;
+                $ids[] = (string) $decisions->record($request, Decision::deny('No.')->identified((string) new UuidV7(), new \DateTimeImmutable(), new \YorvoID\Core\Authorization\ReadSet(['policy' => 1])))->id;
             }
 
             $decisions->flush();

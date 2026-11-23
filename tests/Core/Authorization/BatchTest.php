@@ -28,7 +28,8 @@ use YorvoID\Tests\Support\TrustedActors;
 
 /**
  * A batch of ability decisions (AUZ-030, AUZ-032): each decided as on its own, at one moment, with the
- * versions read once, after the elements and the authority check that preload have read for it.
+ * versions read once before the elements and the authority check that preload read for it, and once
+ * after they judged (D-44).
  */
 final class BatchTest extends TestCase
 {
@@ -59,15 +60,16 @@ final class BatchTest extends TestCase
         self::assertSame('No permit applies to "acme.pages.edit".', $decisions[1]->reason, 'Not matched, so not preloaded either.');
         self::assertCount(1, $permit->batches);
         self::assertSame([$pages[0], $pages[2], null], array_map(static fn ($request) => $request->resource, $permit->batches[0]), 'Only the requests it matches.');
-        self::assertSame(1, $versions->reads, 'The versions are read once for the batch.');
-        self::assertSame([['policy' => 1]], array_values(array_unique(array_map(static fn (Decision $decision): array => $decision->versions, $decisions), \SORT_REGULAR)));
+        self::assertSame(2, $versions->reads, 'The versions are read once for the batch before judging, and once after, since its refusal is recorded (D-44).');
+        self::assertSame([['policy' => 1]], array_values(array_unique(array_map(static fn (Decision $decision): array => $decision->versions, $decisions), \SORT_REGULAR)), 'The ones read before.');
+        self::assertSame([null, ['policy'], null, null], array_map(static fn (Decision $decision): ?array => $decision->read->moved, $decisions), 'It changed while they judged: the refusal, which is recorded, says so; the permits nothing records aren\'t checked.');
         self::assertSame(['2026-11-08 20:00:00'], array_values(array_unique(array_map(static fn (Decision $decision): string => ($decision->at ?? new \DateTimeImmutable())->format('Y-m-d H:i:s'), $decisions))));
         self::assertCount(4, array_unique(array_map(static fn (Decision $decision): ?string => $decision->id, $decisions)), 'Each decision has its own ID.');
         $log->flush();
         self::assertNotNull($store->find(new Realm('acme'), (string) $decisions[1]->id), 'Each is recorded as on its own.');
 
         self::assertSame([], $evaluator->decideAbilities(self::member(), 'acme.pages.edit', new Realm('acme'), [], new Origin(OriginKind::Web)));
-        self::assertSame(1, $versions->reads, 'An empty batch reads nothing.');
+        self::assertSame(2, $versions->reads, 'An empty batch reads nothing.');
     }
 
     public function testTheAuthorityCheckPreloadsTheWholeBatch(): void

@@ -7,7 +7,10 @@ namespace YorvoID\Policy\Storage;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Types;
+use YorvoID\Core\Authorization\KeepsVersionsIn;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\Storage\DbalVersionStore;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
@@ -23,7 +26,7 @@ use YorvoID\Policy\RoleAssignment;
  *
  * @api
  */
-final readonly class DbalPolicyStore implements PolicyStore
+final readonly class DbalPolicyStore implements PolicyStore, KeepsVersionsIn
 {
     public const string ROLE_TABLE = 'policy_role';
 
@@ -31,17 +34,23 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public const string ASSIGNMENT_TABLE = 'policy_role_assignment';
 
-    public const string VERSION_TABLE = 'policy_version';
-
     public const string GROUP_TABLE = 'policy_group';
 
     public const string GROUP_ASSIGNMENT_TABLE = 'policy_group_role_assignment';
 
     private const array TIMES = ['assigned_at' => Types::DATETIMETZ_IMMUTABLE, 'expires_at' => Types::DATETIMETZ_IMMUTABLE];
 
+    private VersionStore $versions;
+
+    /**
+     * @param VersionStore|null $versions Where its version is kept: the one the evaluator's sources read, so a
+     *                                    decision reads every version at once; its own on the database, if not given
+     */
     public function __construct(
         private Database $database,
+        ?VersionStore $versions = null,
     ) {
+        $this->versions = $versions ?? new DbalVersionStore($database);
     }
 
     public function roles(Realm $realm): array
@@ -246,17 +255,18 @@ final readonly class DbalPolicyStore implements PolicyStore
 
     public function version(Realm $realm): int
     {
-        $row = $this->database->connection->fetchAssociative(\sprintf('SELECT version FROM %s WHERE realm = ?', $this->table(self::VERSION_TABLE)), [$realm->name]);
-
-        return false === $row ? 0 : Row::int($row, 'version');
+        return $this->versions->versions($realm, ['policy'])['policy'];
     }
 
     public function bump(Realm $realm): int
     {
         // The update holds the row until the transaction ends: the realm's changes go one after another.
-        $this->database->increment(self::VERSION_TABLE, 'realm', $realm->name);
+        return $this->versions->bump($realm, 'policy');
+    }
 
-        return $this->version($realm);
+    public function versionStore(): VersionStore
+    {
+        return $this->versions;
     }
 
     private function table(string $name): string

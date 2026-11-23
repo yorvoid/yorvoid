@@ -104,7 +104,7 @@ final readonly class Request
      */
     public function on(?ResourceRef $resource): self
     {
-        return new self($this->name, $this->realm, $this->ability, $resource, $this->operation, $this->command, $this->actor, $this->origin, $this->at, $this->subject);
+        return new self($this->name, $this->realm, $this->ability, $resource, $this->operation, $this->command, $this->actor, $this->origin, $this->at, $this->subject, $this->execution, $this->purpose);
     }
 
     /**
@@ -112,7 +112,7 @@ final readonly class Request
      */
     public function by(Actor $actor): self
     {
-        return new self($this->name, $this->realm, $this->ability, $this->resource, $this->operation, $this->command, $actor, $this->origin, $this->at, $this->subject);
+        return new self($this->name, $this->realm, $this->ability, $this->resource, $this->operation, $this->command, $actor, $this->origin, $this->at, $this->subject, $this->execution, $this->purpose);
     }
 
     /**

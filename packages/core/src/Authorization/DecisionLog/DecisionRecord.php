@@ -27,8 +27,12 @@ use YorvoID\Core\Text;
  */
 final readonly class DecisionRecord
 {
-    /** Format 3 (0.5, D-50): a consequence's parent. Format 2 (D-42): attempts, with their details, and the read set */
-    public const int FORMAT = 3;
+    /**
+     * Format 4 (0.5, D-44): the read set in full, what moved while it judged and the resolved attributes,
+     * and a slot for the delegation chain. Format 3 (D-50): a consequence's parent. Format 2 (D-42):
+     * attempts, with their details, and the read set's sources.
+     */
+    public const int FORMAT = 4;
 
     public const string ALGORITHM = 'sha256';
 
@@ -46,6 +50,9 @@ final readonly class DecisionRecord
      *                                                                                                                           (none for an operation, which is refused); the actor is then the target
      * @param array<string, mixed>                                                                                $details       An attempt's facts, as its log entry had them (format 2)
      * @param string|null                                                                                         $parent        A consequence's: the decision of the operation that caused it (format 3)
+     * @param list<string>|null                                                                                   $moved         The sources that changed while it judged; null if that wasn't checked (format 4)
+     * @param array<string, string>|null                                                                          $attributes    The resolved attributes it read, by name; null while they aren't recorded (format 4)
+     * @param array<string, mixed>|null                                                                           $delegation    The chain it was decided under, if any (format 4; filled with delegations)
      * @param int                                                                                                 $format        The canonical form it's hashed over: 1 for records written before 0.5
      */
     public function __construct(
@@ -67,6 +74,9 @@ final readonly class DecisionRecord
         public ?array $viewer = null,
         public array $details = [],
         public ?string $parent = null,
+        public ?array $moved = null,
+        public ?array $attributes = null,
+        public ?array $delegation = null,
         public int $format = self::FORMAT,
     ) {
     }
@@ -98,6 +108,8 @@ final readonly class DecisionRecord
             [$request->origin->kind->value, $request->origin->correlationId],
             self::viewer($request, $decision),
             parent: $parent,
+            moved: $decision->read->moved,
+            attributes: $decision->read->attributes,
         );
     }
 
@@ -170,10 +182,19 @@ final readonly class DecisionRecord
             'viewer' => $this->viewer,
         ];
 
-        // Format 1 is hashed over exactly what it held; format 2 adds the details and the read set (G-3 fills it).
+        // Format 1 is hashed over exactly what it held; format 2 adds the details and the read set's
+        // sources; format 4 the read set in full. Each format is hashed as it was written.
         if ($this->format >= 2) {
+            $attributes = $this->attributes;
+
+            if (null !== $attributes) {
+                ksort($attributes, \SORT_STRING);
+            }
+
             $form['details'] = $this->details;
-            $form['read'] = ['sources' => $versions];
+            $form['read'] = $this->format >= 4
+                ? ['sources' => $versions, 'moved' => $this->moved, 'attributes' => $attributes, 'delegation' => $this->delegation]
+                : ['sources' => $versions];
         }
 
         if ($this->format >= 3) {
@@ -206,7 +227,7 @@ final readonly class DecisionRecord
             throw new \UnexpectedValueException('A stored decision isn\'t valid JSON.', previous: $e);
         }
 
-        if (!\is_array($data) || !\in_array($data['format'] ?? null, [1, 2, 3], true)) {
+        if (!\is_array($data) || !\in_array($data['format'] ?? null, [1, 2, 3, 4], true)) {
             throw new \UnexpectedValueException('A stored decision has an unknown format.');
         }
 
@@ -239,8 +260,54 @@ final readonly class DecisionRecord
             self::viewerOf($data),
             $format >= 2 ? self::detailsOf($data) : [],
             $format >= 3 ? self::nullableString($data, 'parent') : null,
-            $format,
+            ...($format >= 4 ? self::readOf($data) : []),
+            format: $format,
         );
+    }
+
+    /**
+     * Format 4's read set, beyond its sources (which are the versions).
+     *
+     * @param array<mixed> $data
+     *
+     * @return array{moved: list<string>|null, attributes: array<string, string>|null, delegation: array<string, mixed>|null}
+     */
+    private static function readOf(array $data): array
+    {
+        $read = $data['read'] ?? null;
+
+        if (!\is_array($read) || !\array_key_exists('moved', $read) || !\array_key_exists('attributes', $read)) {
+            throw new \UnexpectedValueException('A stored decision\'s read set is malformed.');
+        }
+
+        foreach (['attributes', 'delegation'] as $map) {
+            if (null !== ($read[$map] ?? null) && !\is_array($read[$map])) {
+                throw new \UnexpectedValueException('A stored decision\'s read set is malformed.');
+            }
+        }
+
+        $attributes = null;
+
+        if (\is_array($read['attributes'])) {
+            $attributes = [];
+
+            foreach ($read['attributes'] as $name => $value) {
+                $attributes[\is_string($name) && \is_string($value) ? $name : throw new \UnexpectedValueException('A stored decision\'s attributes are malformed.')] = $value;
+            }
+        }
+
+        $chain = $read['delegation'] ?? null;
+        $delegation = null;
+
+        if (\is_array($chain)) {
+            $delegation = [];
+
+            foreach ($chain as $key => $value) {
+                $delegation[\is_string($key) ? $key : throw new \UnexpectedValueException('A stored decision\'s delegation is malformed.')] = $value;
+            }
+        }
+
+        return ['moved' => null === $read['moved'] ? null : self::strings($read, 'moved'), 'attributes' => $attributes, 'delegation' => $delegation];
     }
 
     /**

@@ -63,7 +63,7 @@ final class CreatePolicy implements Migration
             $table->addIndex(Index::editor()->setUnquotedName($context->name('policy_role_assignment_scope'))->setUnquotedColumnNames('realm', 'scope')->create());
         });
 
-        $context->createTable(DbalPolicyStore::VERSION_TABLE, static function (TableEditor $table): void {
+        $context->createTable('policy_version', static function (TableEditor $table): void {
             $table->addColumn(self::string('realm', 63));
             $table->addColumn(Column::editor()->setUnquotedName('version')->setTypeName(Types::BIGINT)->create());
             $table->addPrimaryKeyConstraint(PrimaryKeyConstraint::editor()->setUnquotedColumnNames('realm')->create());

@@ -443,14 +443,43 @@ Every Indeterminate names what couldn't be established (`IndeterminateReason`): 
 
 ## What a request reads
 
-A request reads the realm's versions once, and the policy and relations once at those versions, however many decisions it makes: `CachedPolicyStore` and `CachedRelationStore` keep what they read in a `VersionedCache`. The whole request decides by one state of the policy. A change it makes itself counts at once; one made elsewhere counts from its next request.
+Each decision reads the realm's versions, `policy` and `relations`, just before its elements judge, and its elements read the policy and relations at those versions: `CachedPolicyStore` and `CachedRelationStore` keep what they read in a `VersionedCache`, so the data itself is read once for each version, however many decisions read it. A decision decides by one state of the policy. Nothing is kept for a request or a job, so a role revoked elsewhere stops the next decision, in any process: a long console command or a worker loop decides on what's committed now. A change the request makes itself counts at once.
+
+The versions are kept in one table, `yorvoid_versions`, a row per realm and source, and a decision reads all of them in one statement (`VersionStore`). The stores that hold authority bump their source's row in the transaction of each change.
+
+Where something uses the decision beyond showing it, the versions are read again once the elements have judged: an operation's decision and its consequences, a refusal, a view as someone else, and an ability's Permit that the decision log records. A source that changed meanwhile is in the decision's read set as moved (`Decision::$read`, a `ReadSet`; an operation's `Permit::$read` too): its data may be newer than its version, never older. An ability's Permit that nothing records, e.g. `isGranted()` deciding whether to show a link, isn't checked again: its `moved` is `null`, unchecked, never empty.
+
+So a cached decision costs one read of the versions, or two when it's checked. A page that decides many resources should decide them as one batch, `decideMany()` (`Evaluator::decideAbilities()`): it reads the versions once for all of them, however many there are.
+
+Give the evaluator and the cached stores one `DecisionScope`, so the stores read at the versions of the decision being judged, and the DBAL stores one `VersionStore`, so their versions are read together; in Symfony, the bundle does both. Without them, the stores read each version on its own: still correct, with more reads.
+
+```php
+use YorvoID\Core\Authorization\DecisionScope;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\Storage\DbalVersionStore;
+use YorvoID\Core\Storage\VersionedCache;
+use YorvoID\Policy\PolicyVersion;
+use YorvoID\Policy\Storage\CachedPolicyStore;
+use YorvoID\Policy\Storage\DbalPolicyStore;
+use YorvoID\Relations\RelationsVersion;
+use YorvoID\Relations\Storage\CachedRelationStore;
+use YorvoID\Relations\Storage\DbalRelationStore;
+
+$versions = new DbalVersionStore($database);  // one, for both stores
+$scope = new DecisionScope();                 // one, for the stores and the evaluator
+$cache = new VersionedCache($pool, $installation);
+$policyStore = new CachedPolicyStore(new DbalPolicyStore($database, $versions), $cache, $scope);
+$relationStore = new CachedRelationStore(new DbalRelationStore($database, $versions), $cache, $scope);
+
+$evaluator = Evaluator::builtIn($authority, $abilities, versions: [new PolicyVersion($policyStore), new RelationsVersion($relationStore)], scope: $scope);
+```
 
 Given a shared PSR-6 pool, the cache keeps what was read for the other servers too, against the version it was read at. A change increments the version, so what was read before it is never read again, on any server; nothing waits for an entry to expire (D-10). Only data is kept, never decisions: those depend on the moment, the session's evidence and the attributes.
 
 - **Keys** start with the installation's ID, then the realm: `yorvoid.v2.{installation}.{realm}.policy.{version}.assignments-{hash}`, where the hash is of the read's arguments, here the principal, so no two reads share an entry whatever their IDs hold. The ID is random, made by the migration and kept in the database (`Installation`), so installations sharing a pool never read each other's entries, though each has a realm "default" at version 1.
 - **A pool that fails** is passed over until the request ends, with a warning: the stores are read instead, slower and as correct.
 - **The pool is trusted as the database is**: what's in it decides who holds which role. Give it a store only YorvoID's servers reach.
-- **Between requests**, and between a worker's messages, the cache and the stores forget (`reset()`; in Symfony, `kernel.reset` does it). A long console command decides by the state it started with, apart from its own changes.
+- **Between requests**, and between a worker's messages, the cache and the stores forget what the request read and changed (`reset()`; in Symfony, `kernel.reset` does it). Freshness doesn't depend on it: every decision reads the versions.
 
 In Symfony, the stores are the cached ones, with the pool `yorvoid.cache`, which the bundle defines on `cache.app`. `cache.pool` names another, or with `null` keeps reads for the request only.
 

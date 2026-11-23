@@ -42,11 +42,14 @@ use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
+use YorvoID\Core\Authorization\DecisionScope;
 use YorvoID\Core\Authorization\DeclaredEffects;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\OfflineDecider;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\StepUpCheck;
+use YorvoID\Core\Authorization\Storage\DbalVersionStore;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Crypto\CryptoMode;
 use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Id\IdGenerator;
@@ -242,19 +245,23 @@ return static function (ContainerConfigurator $container): void {
         RelationStore::class => DbalRelationStore::class,
         AttributeStore::class => DbalAttributeStore::class,
         DecisionLogStore::class => DbalDecisionLogStore::class,
+        // One for every store that bumps a version, and for the evaluator, which reads them at once.
+        VersionStore::class => DbalVersionStore::class,
     ] as $interface => $implementation) {
         $services->set(Stores::IDS[$interface].'.dbal', $implementation);
         $services->alias(Stores::IDS[$interface], Stores::IDS[$interface].'.dbal');
     }
 
-    // What decisions read, kept against the realm's versions: once a request, and in the shared pool
-    // the configuration names (cache.pool, set by the bundle).
+    // What decisions read, kept against the realm's versions: once for each version, and in the shared
+    // pool the configuration names (cache.pool, set by the bundle). The version is read for each decision
+    // (D-44): the decision being judged gives it to the stores (DecisionScope).
     // On the application's connection unless yorvoid.decision_log.connection names one of its own (YorvoIDBundle).
     $services->get(Stores::IDS[DecisionLogStore::class].'.dbal')->arg('$writes', null);
+    $services->set(DecisionScope::class);
     $services->set(Installation::class)->factory([Installation::class, 'stored'])->args([service(Database::class)]);
     $services->set(VersionedCache::class)->args([null, service(Installation::class), service('logger')->nullOnInvalid()])->tag('kernel.reset', ['method' => 'reset']);
     foreach ([PolicyStore::class => CachedPolicyStore::class, RelationStore::class => CachedRelationStore::class] as $interface => $cached) {
-        $services->set(Stores::IDS[$interface].'.cached', $cached)->args([service(Stores::IDS[$interface].'.dbal'), service(VersionedCache::class)])->tag('kernel.reset', ['method' => 'reset']);
+        $services->set(Stores::IDS[$interface].'.cached', $cached)->args([service(Stores::IDS[$interface].'.dbal'), service(VersionedCache::class), service(DecisionScope::class)])->tag('kernel.reset', ['method' => 'reset']);
         $services->alias(Stores::IDS[$interface], Stores::IDS[$interface].'.cached');
     }
 
@@ -361,6 +368,7 @@ return static function (ContainerConfigurator $container): void {
         service(DecisionLog::class),
         // Every decision reads its session from the store (D-45).
         tagged_iterator('yorvoid.actor_prover'),
+        service(DecisionScope::class),
     ]);
     $services->set(StoredSessions::class)->args([service(Stores::IDS[SessionStore::class]), service(ClockInterface::class)])->tag('yorvoid.actor_prover');
     $services->alias(Authorization::class, Evaluator::class);

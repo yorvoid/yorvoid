@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy\Storage;
 
+use YorvoID\Core\Authorization\DecisionScope;
+use YorvoID\Core\Authorization\KeepsVersionsIn;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\ForgetsWhatItRead;
@@ -15,24 +18,23 @@ use YorvoID\Policy\PolicyStore;
 use YorvoID\Policy\RoleAssignment;
 
 /**
- * A policy store whose reads are kept against the realm's policy version (AUZ-031): read once in a
- * request, however many decisions read them, and from a shared pool if the cache has one. The version
- * is read once in a request too, so a request decides by one state of the policy. Once the request
- * changes a realm's policy, it reads it from the store until reset.
+ * A policy store whose reads are kept against the realm's policy version (AUZ-031): read once for each
+ * version, however many decisions read them, and from a shared pool if the cache has one. The version
+ * is read for each decision, never kept for a request or a job (D-44): a decision reads at the version
+ * it read before judging (DecisionScope), so it decides by one state of the policy, and the next one
+ * sees a change. Once the request changes a realm's policy, it reads it from the store until reset.
  *
  * @api
  */
-final class CachedPolicyStore implements PolicyStore, ForgetsWhatItRead
+final class CachedPolicyStore implements PolicyStore, ForgetsWhatItRead, KeepsVersionsIn
 {
-    /** @var array<string, int> By realm */
-    private array $versions = [];
-
     /** @var array<string, true> The realms this request changed */
     private array $changed = [];
 
     public function __construct(
         private readonly PolicyStore $store,
         private readonly VersionedCache $cache,
+        private readonly ?DecisionScope $scope = null,
     ) {
     }
 
@@ -132,7 +134,9 @@ final class CachedPolicyStore implements PolicyStore, ForgetsWhatItRead
             return $this->store->version($realm);
         }
 
-        return $this->versions[$realm->name] ??= $this->store->version($realm);
+        // Inside a decision, the version it read before judging; otherwise as it is now, never one kept
+        // for the request, so a revocation stops the next decision (D-44).
+        return $this->scope?->version($realm, 'policy') ?? $this->store->version($realm);
     }
 
     public function bump(Realm $realm): int
@@ -141,11 +145,10 @@ final class CachedPolicyStore implements PolicyStore, ForgetsWhatItRead
     }
 
     /**
-     * Forgets the versions read and the changes made: between requests, and between a worker's messages.
+     * Forgets the changes made: between requests, and between a worker's messages.
      */
     public function reset(): void
     {
-        $this->versions = [];
         $this->changed = [];
     }
 
@@ -189,5 +192,10 @@ final class CachedPolicyStore implements PolicyStore, ForgetsWhatItRead
     private static function isListOf(mixed $list, \Closure $each): bool
     {
         return \is_array($list) && array_is_list($list) && [] === array_filter($list, static fn (mixed $item): bool => !$each($item));
+    }
+
+    public function versionStore(): ?VersionStore
+    {
+        return $this->store instanceof KeepsVersionsIn ? $this->store->versionStore() : null;
     }
 }

@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Relations\Storage;
 
+use YorvoID\Core\Authorization\DecisionScope;
+use YorvoID\Core\Authorization\KeepsVersionsIn;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\ForgetsWhatItRead;
 use YorvoID\Core\Storage\VersionedCache;
@@ -13,24 +16,23 @@ use YorvoID\Relations\RelationTuple;
 use YorvoID\Relations\Subject;
 
 /**
- * A relation store whose reads are kept against the realm's relations version (AUZ-031): read once in
- * a request, and from a shared pool if the cache has one. The version is read once in a request too,
- * so a request decides by one state of the relations. Once the request changes a realm's relations,
- * it reads them from the store until reset.
+ * A relation store whose reads are kept against the realm's relations version (AUZ-031): read once for
+ * each version, and from a shared pool if the cache has one. The version is read for each decision,
+ * never kept for a request or a job (D-44): a decision reads at the version it read before judging
+ * (DecisionScope), so it decides by one state of the relations, and the next one sees a change. Once
+ * the request changes a realm's relations, it reads them from the store until reset.
  *
  * @api
  */
-final class CachedRelationStore implements RelationStore, ForgetsWhatItRead
+final class CachedRelationStore implements RelationStore, ForgetsWhatItRead, KeepsVersionsIn
 {
-    /** @var array<string, int> By realm */
-    private array $versions = [];
-
     /** @var array<string, true> The realms this request changed */
     private array $changed = [];
 
     public function __construct(
         private readonly RelationStore $store,
         private readonly VersionedCache $cache,
+        private readonly ?DecisionScope $scope = null,
     ) {
     }
 
@@ -79,15 +81,16 @@ final class CachedRelationStore implements RelationStore, ForgetsWhatItRead
             return $this->store->version($realm);
         }
 
-        return $this->versions[$realm->name] ??= $this->store->version($realm);
+        // Inside a decision, the version it read before judging; otherwise as it is now, never one kept
+        // for the request, so a revocation stops the next decision (D-44).
+        return $this->scope?->version($realm, 'relations') ?? $this->store->version($realm);
     }
 
     /**
-     * Forgets the versions read and the changes made: between requests, and between a worker's messages.
+     * Forgets the changes made: between requests, and between a worker's messages.
      */
     public function reset(): void
     {
-        $this->versions = [];
         $this->changed = [];
     }
 
@@ -107,5 +110,10 @@ final class CachedRelationStore implements RelationStore, ForgetsWhatItRead
         // The version first: what's read after it is at least as new as it, never older.
         return $this->cache->get($realm, 'relations', $this->version($realm), $read, $of, $load, static fn (mixed $tuples): bool => \is_array($tuples) && array_is_list($tuples)
             && [] === array_filter($tuples, static fn (mixed $tuple): bool => !$tuple instanceof RelationTuple || !$tuple->realm->equals($realm) || !$answers($tuple)));
+    }
+
+    public function versionStore(): ?VersionStore
+    {
+        return $this->store instanceof KeepsVersionsIn ? $this->store->versionStore() : null;
     }
 }

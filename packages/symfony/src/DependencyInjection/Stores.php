@@ -12,6 +12,7 @@ use YorvoID\Authn\Setup\SetupStore;
 use YorvoID\Authn\StepUp\CoolDownStore;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Principal\IdentifierStore;
 use YorvoID\Core\Principal\PrincipalStore;
@@ -54,6 +55,7 @@ final class Stores
         AttributeStore::class => 'yorvoid.store.attribute',
         DecisionLogStore::class => 'yorvoid.store.decision_log',
         FlowStore::class => 'yorvoid.store.flow',
+        VersionStore::class => 'yorvoid.store.version',
     ];
 
     private function __construct()

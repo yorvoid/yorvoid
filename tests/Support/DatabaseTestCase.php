@@ -88,7 +88,7 @@ abstract class DatabaseTestCase extends TestCase
 
             $memory = new InMemoryStorage();
 
-            return new Stack($implementation, $memory->transactions, $memory->principals, $memory->identifiers, $memory->log, $memory->sessions, $memory->tokens, $memory->setup, $memory->credentials, $memory->passkeys, $memory->ceremonies, $memory->recoveryCodes, $memory->coolDowns, $memory->throttle, $memory->devices, $memory->policy, $memory->relations, $memory->attributes, decisions: $memory->decisions);
+            return new Stack($implementation, $memory->transactions, $memory->principals, $memory->identifiers, $memory->log, $memory->sessions, $memory->tokens, $memory->setup, $memory->credentials, $memory->passkeys, $memory->ceremonies, $memory->recoveryCodes, $memory->coolDowns, $memory->throttle, $memory->devices, $memory->policy, $memory->relations, $memory->attributes, decisions: $memory->decisions, versions: $memory->versions);
         }
 
         $migrated = $this->migrated($implementation);
