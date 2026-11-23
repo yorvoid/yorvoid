@@ -28,7 +28,7 @@ final class AttenuationFixturesTest extends TestCase
         $json = (string) file_get_contents(\dirname(__DIR__, 2).'/spec/delegation/fixtures.json');
         /** @var list<array{array<string, string|null>, array<string, mixed>, array<string, mixed>, bool}> $fixtures */
         $fixtures = json_decode($json, true, 16, \JSON_THROW_ON_ERROR);
-        self::assertCount(4617, $fixtures, 'The model\'s sample moved: run node delegation/fixtures.mjs.');
+        self::assertCount(7365, $fixtures, 'The model\'s sample moved: run node delegation/fixtures.mjs.');
         $within = 0;
         $realm = new Realm('acme');
         [$root, $middle, $leaf] = [new PrincipalId(Ids::next()), new PrincipalId(Ids::next()), new PrincipalId(Ids::next())];
@@ -45,6 +45,7 @@ final class AttenuationFixturesTest extends TestCase
         }
 
         self::assertGreaterThan(100, $within, 'Few links within: the sample lost its point.');
+        self::assertNotSame([], array_filter($fixtures, static fn (array $f): bool => $f[3] && \is_int($f[2]['depth']) && \is_int($f[1]['depth']) && $f[2]['depth'] < $f[1]['depth'] - 1), 'No link within its parent with less to pass on than it allows: the scope hides the difference.');
     }
 
     /**

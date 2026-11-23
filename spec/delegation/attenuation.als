@@ -98,7 +98,7 @@ pred withinParent[d: Delegation] {
         d.purpose in within[p.purpose]
         T/lte[p.notBefore, d.notBefore]
         T/lte[d.expires, p.expires]
-        d.depth = minus[p.depth, 1]
+        d.depth <= minus[p.depth, 1]       -- less to pass on is narrower too
         T/lte[p.issuedAt, d.issuedAt]
         some p.execution implies d.execution = p.execution
         p.requirements in d.requirements
@@ -305,8 +305,8 @@ pred fixture {
         T/lt[d.notBefore, d.expires]
         some d.actions
     }
-    Link.given.depth = 1
-    Link.child.depth in 0 + 1
+    Link.given.depth in 1 + 2
+    Link.child.depth in 0 + 1 + 2
     no NonDelegable
     all a: Action | a.addedAt = T/first
     Link.verdict = (withinParent[Link.child] implies Within else Outside)
