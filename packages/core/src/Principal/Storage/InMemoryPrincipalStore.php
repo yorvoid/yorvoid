@@ -73,7 +73,7 @@ final class InMemoryPrincipalStore implements PrincipalStore, InMemoryStore
     {
         $stored = $this->get($before->realm, $before->id);
 
-        if (null === $stored || null === $stored->owner || null === $before->owner || !$stored->owner->equals($before->owner)) {
+        if (null === $stored || null === $stored->owner || null === $before->owner || null === $after->owner || !$stored->owner->equals($before->owner)) {
             return false;
         }
 

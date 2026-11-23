@@ -222,6 +222,37 @@ trait PrincipalStoreContract
         self::assertNull($store->get(new Realm('acme'), $unknown->id));
     }
 
+    /**
+     * An agent is moved only as it was read: in its realm, from the owner it has, to an owner.
+     */
+    #[DataProvider('implementations')]
+    public function testMovesAnAgentOnlyAsItWasRead(string $implementation): void
+    {
+        $store = $this->principalStore($implementation);
+        $acme = new Realm('acme');
+        $owner = self::principal($acme);
+        $other = self::principal($acme);
+        $human = self::principal($acme);
+        $now = new \DateTimeImmutable('2026-11-23 18:00:00 UTC');
+        $agent = new Principal(new PrincipalId(Ids::next()), $acme, PrincipalKind::Agent, PrincipalStatus::Active, $now, $now, $now, 1, $owner->id, new AgentProfile('Assistant'));
+
+        foreach ([$owner, $other, $human, $agent] as $principal) {
+            $store->add($principal);
+        }
+
+        $elsewhere = new Principal($agent->id, new Realm('globex'), $agent->kind, $agent->status, $agent->createdAt, $agent->updatedAt, $agent->statusChangedAt, $agent->statusVersion, $agent->owner, $agent->profile);
+        $unknown = new Principal(new PrincipalId(Ids::next()), $acme, PrincipalKind::Agent, PrincipalStatus::Active, $now, $now, $now, 1, $owner->id);
+        $ownedHuman = new Principal($human->id, $acme, $human->kind, $human->status, $human->createdAt, $human->updatedAt, $human->statusChangedAt, $human->statusVersion, $owner->id);
+        $unowned = new Principal($agent->id, $acme, $agent->kind, $agent->status, $agent->createdAt, $now, $agent->statusChangedAt, $agent->statusVersion, null, $agent->profile);
+
+        self::assertFalse($store->changeOwner($elsewhere, $elsewhere->withOwner($other->id, $now)), 'In another realm.');
+        self::assertFalse($store->changeOwner($unknown, $unknown->withOwner($other->id, $now)), 'Unknown.');
+        self::assertFalse($store->changeOwner($ownedHuman, $ownedHuman->withOwner($other->id, $now)), 'Stored without an owner.');
+        self::assertFalse($store->changeOwner($agent, $unowned), 'To no owner.');
+        self::assertEquals($agent, $store->get($acme, $agent->id));
+        self::assertNull($store->get($acme, $human->id)?->owner);
+    }
+
     private static function principal(Realm $realm): Principal
     {
         $now = new \DateTimeImmutable('2026-10-27 18:40:00 UTC');

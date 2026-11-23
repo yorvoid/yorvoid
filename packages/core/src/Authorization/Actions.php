@@ -49,8 +49,8 @@ final readonly class Actions
         }
 
         ksort($listed, \SORT_STRING);
-        ksort($kept, \SORT_STRING);
         $this->abilities = $listed;
+        // The catalogue's are sorted already.
         $this->operations = $kept;
     }
 

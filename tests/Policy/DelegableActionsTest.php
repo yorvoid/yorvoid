@@ -62,6 +62,21 @@ final class DelegableActionsTest extends TestCase
         self::assertSame(Delegable::Everyone, $actions->forRequest(Request::forOperation(new OperationCatalogue([DeletePagesNow::class])->get('acme.pages.delete'), new DeletePagesNow($realm), $actor, $origin, $now)), 'The operation, as it declares.');
     }
 
+    public function testTheAbilitiesOfEveryCatalogueAreListed(): void
+    {
+        $actions = new Actions(new OperationCatalogue([]), [self::listing(['acme.pages.edit' => Delegable::Everyone]), self::listing(['acme.billing.pay' => Delegable::Nobody])]);
+
+        self::assertSame(['acme.billing.pay', 'acme.pages.edit'], $actions->abilities());
+    }
+
+    public function testYorvoIDsOwnOperationIsNeverDelegatedToAnAgentWhateverItsAbility(): void
+    {
+        $actions = new Actions(new OperationCatalogue([NamedLikeYorvoIDs::class]), [new AbilityActions(PolicyCatalogue::of([new Declarations()]))]);
+
+        self::assertSame(Delegable::Everyone, $actions->ability('acme.pages.edit'));
+        self::assertSame(Delegable::NotToAgents, $actions->operation('yorvoid.page.publish'));
+    }
+
     public function testDelegableSaysWhoToByKind(): void
     {
         foreach (PrincipalKind::cases() as $kind) {
@@ -69,6 +84,26 @@ final class DelegableActionsTest extends TestCase
             self::assertSame(PrincipalKind::Agent !== $kind, Delegable::NotToAgents->to($kind), $kind->value);
             self::assertFalse(Delegable::Nobody->to($kind));
         }
+    }
+
+    /**
+     * @param array<string, Delegable> $actions
+     */
+    private static function listing(array $actions): \YorvoID\Core\Authorization\ListsActions
+    {
+        return new class($actions) implements \YorvoID\Core\Authorization\ListsActions {
+            /**
+             * @param array<string, Delegable> $listed
+             */
+            public function __construct(private readonly array $listed)
+            {
+            }
+
+            public function actions(): array
+            {
+                return $this->listed;
+            }
+        };
     }
 }
 
@@ -127,6 +162,17 @@ final readonly class DeletePagesNow implements Command
  */
 #[Operation('acme.page.purge', 'Purge pages', AuthorizedBy::Operator)]
 final readonly class PurgePages implements Command
+{
+    public function __construct(public Realm $realm)
+    {
+    }
+}
+
+/**
+ * @implements Command<null>
+ */
+#[Operation('yorvoid.page.publish', 'Publish a page, named as YorvoID\'s', AuthorizedBy::Ability, ability: 'acme.pages.edit')]
+final readonly class NamedLikeYorvoIDs implements Command
 {
     public function __construct(public Realm $realm)
     {

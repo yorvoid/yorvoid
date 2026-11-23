@@ -182,7 +182,7 @@ final readonly class Principals implements OperationHandler
             $this->store->lock($command->realm, $command->agent);
             $before = $this->living($command->realm, $command->agent);
 
-            if (PrincipalKind::Agent !== $before->kind || null === $before->owner) {
+            if (null === $before->owner) {
                 throw new InvalidOwner(\sprintf('The principal %s isn\'t an agent: only an agent has an owner.', $before->id));
             }
 

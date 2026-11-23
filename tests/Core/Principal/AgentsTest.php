@@ -34,6 +34,7 @@ use YorvoID\Core\Realm;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\Stack;
+use YorvoID\Tests\Support\StatementLog;
 use YorvoID\Tests\Support\TestOperations;
 use YorvoID\Tests\Support\TestPrincipal;
 
@@ -166,7 +167,35 @@ final class AgentsTest extends DatabaseTestCase
         $this->create($operations, new CreatePrincipal($this->realm, PrincipalKind::Agent, owner: $owner->id));
 
         $this->expectException(OwnsAgents::class);
+        $this->expectExceptionMessage(\sprintf('The principal %s owns agents: move them to another owner, or delete them, first.', $owner->id));
         Permits::call($principals->delete(...), new DeletePrincipal($this->realm, $owner->id), new Origin(OriginKind::Console));
+    }
+
+    /**
+     * The handler moves an agent under the realm's lock, then the agent's, as deleting an owner takes
+     * them: neither reads what the other is changing.
+     */
+    #[DataProvider('implementations')]
+    public function testTheHandlerMovesAnAgentUnderTheRealmsLockThenItsOwn(string $implementation): void
+    {
+        $statements = 'memory' === $implementation ? null : new StatementLog();
+        $stack = $this->stack($implementation, $statements);
+        [$operations, $principals] = $this->operations($stack);
+        $owner = $this->create($operations, new CreatePrincipal($this->realm, PrincipalKind::Human));
+        $agent = $this->create($operations, new CreatePrincipal($this->realm, PrincipalKind::Agent, owner: $owner->id));
+        $other = $this->create($operations, new CreatePrincipal($this->realm, PrincipalKind::Human));
+        $statements?->take();
+
+        $moved = Permits::call($principals->changeOwner(...), new ChangeAgentOwner($this->realm, $agent->id, $other->id), new Origin(OriginKind::Console));
+
+        self::assertEquals($other->id, $moved->owner);
+        self::assertEquals($other->id, $stack->principals->get($this->realm, $agent->id)?->owner);
+
+        if (null !== $statements) {
+            $locks = $statements->takeLocks();
+            self::assertStringContainsString('realm_lock', $locks[0] ?? '', 'The realm\'s lock first.');
+            self::assertStringContainsString('lock_count = lock_count + 1', $locks[1] ?? '', 'Then the agent\'s.');
+        }
     }
 
     #[DataProvider('implementations')]
@@ -187,6 +216,36 @@ final class AgentsTest extends DatabaseTestCase
         }
 
         self::assertEquals($owner->id, $this->runAs($operations, new ChangeAgentOwner($this->realm, $agent->id, $owner->id))->owner, 'To its own owner again: nothing changes.');
+    }
+
+    /**
+     * @return iterable<string, array{string, string, string}>
+     */
+    public static function storedProfiles(): iterable
+    {
+        foreach (self::platforms() as $name => [$platform]) {
+            yield $name.', a field that holds an object' => [$platform, '{"name":{"first":"A"}}', 'A stored agent profile\'s "name" isn\'t text.'];
+            yield $name.', deeper than a profile goes' => [$platform, '{"name":{"first":{"letter":"A"}}}', 'A stored agent profile isn\'t valid JSON.'];
+            yield $name.', not an object' => [$platform, '5', 'A stored agent profile isn\'t an object.'];
+        }
+    }
+
+    /**
+     * A profile the database holds that isn't one is refused when read, not taken as one.
+     */
+    #[DataProvider('storedProfiles')]
+    public function testRefusesAStoredProfileThatIsntOne(string $platform, string $json, string $message): void
+    {
+        $stack = $this->stack($platform);
+        [$operations] = $this->operations($stack);
+        $owner = $this->create($operations, new CreatePrincipal($this->realm, PrincipalKind::Human));
+        $agent = $this->create($operations, new CreatePrincipal($this->realm, PrincipalKind::Agent, owner: $owner->id, profile: new AgentProfile('Assistant')));
+        $database = $stack->database ?? throw new \LogicException();
+        $database->connection->executeStatement(\sprintf('UPDATE %s SET profile = ? WHERE id = ?', $database->table('principal')), [$json, $agent->id->id->toString()]);
+
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage($message);
+        $stack->principals->get($this->realm, $agent->id);
     }
 
     /**
