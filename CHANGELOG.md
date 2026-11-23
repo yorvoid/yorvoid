@@ -33,6 +33,9 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `YORVOID_LOCK_ORDER=check`: in your tests, every transaction on a connection with `TransactionMiddleware` throws when it takes YorvoID's locks out of their order ([locks](docs/concepts/storage.md#locks)). The version rows it knows are YorvoID's: a `HoldsAuthority` store of your own isn't checked for the realm's lock.
 - `ReadSet`, `Decision::$read` and `Permit::$read`: what a decision read, each source's version just before its elements judged, and the sources that changed while they judged (`moved`; `null` where that wasn't checked, for an ability's Permit nothing records). `DecisionScope` (`@experimental`): given to the evaluator and the cached stores, so a decision's elements read at the versions it read.
 - `VersionStore`, `DbalVersionStore`, `InMemoryVersionStore` and `VersionStoreContract`: the versions of what decisions read, one table for every source (`yorvoid_versions`), read at once. `KeepsVersionsIn`: a version source or store whose version is kept in one. In Symfony, `yorvoid.store.version`.
+- A decision's read set holds the attributes it read from an `AttributeResolver`: a boolean, and a value whose resolver declares it public (`ResolvesPublicValues`), as it is; any other as an HMAC under the realm's MAC key; withheld without one. `DecisionConfirmations` and `yorvoid:decisions:confirm` confirm a value against a record, logging each confirmation without the value. `Confirmation`, `AttributeMacs`. `Attributes` and `Evaluator::builtIn()` take the `DecisionScope` and `AttributeMacs` (`scope:`, `macs:`) for it; without a MAC key, what isn't public is withheld.
+- MAC keys in the key ring (`MacKey`, `KeyRing::mac()`, `macKey()`, `withMac()`, `withoutMac()`), apart from the signing keys: `yorvoid:keys:rotate --mac` and `--mac --prune`; a new ring has one. `yorvoid:doctor` reports a ring without one, an active one older than a year, and a retired one kept past the decision log's retention. `Mac`: HMAC-SHA256 over OpenSSL's SHA-256.
+- `yorvoid.decision_log.keep`: how long the decision log keeps a decision, `yorvoid:purge`'s default (90 days, as before).
 
 ### Breaking
 
@@ -75,6 +78,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `Decision::identified()` takes a `ReadSet` instead of the versions.
 - `DecisionRecord` is format 4: its read set holds what moved and the resolved attributes (`null` until they're recorded), and a slot for the delegation chain. Records of formats 1 to 3 still read and verify as they were written.
 - The policy and relations versions move to `yorvoid_versions`: the migrations create it and drop `yorvoid_policy_version` and `yorvoid_relation_version`. Run them. `DbalPolicyStore` and `DbalRelationStore` take the `VersionStore` (`versions:`) to share with the evaluator's sources.
+- `CryptoProvider` takes whether the attribute MAC passes its self-test (`hmac`), and `CryptoPolicy::fips()` refuses to start when it doesn't.
 
 ### Security
 
@@ -90,6 +94,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - A passkey or a set of recovery codes disabled during a sign-in that uses it, e.g. by a "This wasn't me" report, stays disabled. Before, the sign-in wrote back its own copy of the credential, active, and went on. Now the sign-in is refused and recorded, and a recovery code it would have used is kept (ARC-0057).
 - A change of status no longer runs its guard rules against a role, group, relation or attribute change made at the same moment, which could leave a realm without its last administrator: both take the realm's lock. Changes of one principal (tokens, recovery codes and links, adding, removing and disabling credentials, starting a session) take turns on the principal's lock, and a disable no longer slips in between a sign-in's read and its use of the credential. A realm's security log is locked only while its entries are appended at the commit, so changes in one realm no longer wait for each other's whole unit of work.
 - A role or relation revoked elsewhere stops the next decision in the same request or job: the versions were read once a request, so a long command kept deciding on a revoked role. And a decision's record no longer names versions read after it judged, which a change committed meanwhile could make newer than what it read.
+- The attributes a decision read are recorded MACed, never in clear unless declared public, under a key kept with the signing keys and never in the database. A MAC key can't be used, or passed off, as a signing key.
 
 ### Fixed
 

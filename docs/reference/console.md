@@ -2,6 +2,22 @@
 
 The Symfony bundle's commands, as `bin/console help` describes them. [Symfony](../concepts/symfony.md#console-commands) says when to use each.
 
+## `yorvoid:decisions:confirm`
+
+Confirm whether a recorded decision read an attribute with a value.
+
+```bash
+php bin/console yorvoid:decisions:confirm [options] [--] <decision> <attribute> <value>
+```
+
+| Argument or option | | Default |
+|---|---|---|
+| `decision` | The decision's ID |  |
+| `attribute` | The attribute's name, e.g. "acme.department" |  |
+| `value` | The value to confirm: text, or JSON with --json (a number, true, false, a list of text) |  |
+| `--json` | Read the value as JSON |  |
+| `--realm` | The decision's realm | `default` |
+
 ## `yorvoid:doctor`
 
 Check YorvoID's setup, and how to fix each problem.
@@ -40,6 +56,8 @@ php bin/console yorvoid:keys:rotate [options]
 | `--public` | Print the public key set to deploy where signatures are checked, and change nothing |  |
 | `--realm` | The realm whose keys to rotate, with yorvoid.keys.per_realm | `default` |
 | `--algorithm` | The new key's algorithm, ES256 or EdDSA: the crypto policy's by default |  |
+| `--mac` | Rotate the MAC key instead, in one step: a new one active, the old one verify-only |  |
+| `--prune` | With --mac: remove the MAC keys retired longer than yorvoid.decision_log.keep, which confirm nothing any more |  |
 
 ## `yorvoid:log:anchor`
 
@@ -104,7 +122,7 @@ php bin/console yorvoid:purge [options]
 |---|---|---|
 | `--keep-sessions` | How long ended sessions stay listed, e.g. "30d" | `30d` |
 | `--keep-devices` | How long an unused device stays known: longer than its cookie lives | `400d` |
-| `--keep-decisions` | How long the decision log keeps a decision; the security log keeps the hashes of those it cites | `90d` |
+| `--keep-decisions` | How long the decision log keeps a decision; the security log keeps the hashes of those it cites: yorvoid.decision_log.keep by default | `90d` |
 
 ## `yorvoid:recovery-link`
 

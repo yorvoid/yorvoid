@@ -283,6 +283,6 @@ final class AnchorsTest extends TestCase
      */
     private static function withoutEdDsa(): CryptoPolicy
     {
-        return CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.7', true, true, false, null));
+        return CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.7', true, true, false, null, true));
     }
 }

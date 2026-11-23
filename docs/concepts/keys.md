@@ -61,6 +61,28 @@ $ring = $rings->forRealm($realm);
 - A realm without its file can't sign: `forRealm()` says how to create it. Each file is a key file like any other, only its owner may read it, and it rotates by itself.
 - With the Symfony bundle, set `keys.per_realm: true` and `keys.directory`; `yorvoid:keys:rotate --realm acme` creates and rotates the realm's ring, and `yorvoid:doctor` reports a realm without keys.
 
+## MAC keys
+
+The ring holds MAC keys too: 32 random bytes each, which MAC the attributes a decision read before they're recorded ([what a record holds](security-log.md#the-decision-log)). They're kept apart from the signing keys by type: nothing signs or verifies a signature with one, a key's ID is its own across both kinds, and an HMAC key can't pass for a signing key. A MAC key has no public part, so the public key set never holds one.
+
+```json
+{"kid": "mac-2026-11-23", "kty": "oct", "alg": "HS256", "key_ops": ["sign", "verify"], "status": "active", "created": "2026-11-23T18:00:00+00:00", "since": null, "k": "…"}
+```
+
+- At most one is **active**: it MACs. A retired one is verify-only, with `since`, when it stopped being active; it confirms what it MACed.
+- A ring without a MAC key records the attributes that aren't public as **withheld**. `yorvoid:doctor` says so.
+- `yorvoid:keys:rotate --mac` rotates it in one step: a new one active, the old one verify-only. There's no public set to deploy. In plain PHP: `$ring->withMac(MacKey::generate('mac-2026-12-01', $now), $now)`. A new ring has one from the start.
+- **Keep a retired key as long as the decision log keeps records** (`yorvoid.decision_log.keep`, 90 days by default). After that it confirms nothing: the doctor says so, and `yorvoid:keys:rotate --mac --prune` removes it.
+- **No schedule.** The doctor warns when the active one is older than a year.
+
+What rotation and removal do, and don't:
+
+- Rotation doesn't MAC old records again: each keeps its key's ID, and confirms with that key while it's kept.
+- Removing a key makes what it MACed unconfirmable at once (`unknown_key`): that's how to forget a realm's recorded values. After a key is stolen, removing it stops confirmations, but whoever has it can still guess the values of the records it MACed.
+- Removing it doesn't reach copies of the key file in backups.
+
+With a ring for each realm, each realm has its own MAC key, and `--realm` rotates it.
+
 ## Algorithms
 
 A key is Ed25519 (`EdDSA`, the default) or ECDSA on P-256 (`ES256`), for a FIPS provider without EdDSA ([cryptography](cryptography.md)). Both give 64-byte signatures. A signature names its key's ID, and the key decides the algorithm, so one algorithm's signature is never taken for the other's.

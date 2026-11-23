@@ -21,12 +21,16 @@ final readonly class CryptoProvider
         '92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00',
     ];
 
+    /** RFC 4231 §4.3, test case 2: its key, data and HMAC-SHA256 */
+    private const array HMAC = ['4a656665', '7768617420646f2079612077616e7420666f72206e6f7468696e673f', '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843'];
+
     /**
      * @param string    $openssl    OpenSSL's version, as it gives it
      * @param bool      $fipsOnly   Whether it refused MD5: only a FIPS provider is active
      * @param bool      $sha256     Whether it computes SHA-256
      * @param bool      $ed25519    Whether it signs and verifies Ed25519 as RFC 8032 says
      * @param bool|null $kernelFips Whether the kernel runs in FIPS mode (Linux), null when it can't tell
+     * @param bool      $hmac       Whether the MAC YorvoID composes over its SHA-256 (Mac) gives RFC 4231's
      */
     public function __construct(
         public string $openssl,
@@ -34,6 +38,7 @@ final readonly class CryptoProvider
         public bool $sha256,
         public bool $ed25519,
         public ?bool $kernelFips,
+        public bool $hmac,
     ) {
     }
 
@@ -52,7 +57,15 @@ final readonly class CryptoProvider
             hash('sha256', 'abc') === self::quietly(static fn (): string|false => openssl_digest('abc', 'sha256')),
             self::quietly(self::ed25519(...)),
             \is_string($fips) && \in_array(trim($fips), ['0', '1'], true) ? '1' === trim($fips) : null,
+            self::quietly(self::hmac(...)),
         );
+    }
+
+    private static function hmac(): bool
+    {
+        [$key, $data, $mac] = array_map(static fn (string $hex): string => (string) hex2bin($hex), self::HMAC);
+
+        return hash_equals($mac, Mac::sha256(\YorvoID\Core\Secret::fromString($key), $data));
     }
 
     private static function ed25519(): bool

@@ -142,7 +142,7 @@ final class Es256RotationTest extends TestCase
     {
         $store = new InMemorySecurityLogStore();
         $log = new SecurityLog($store, new InMemoryTransactions());
-        $fips = CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.7', true, true, false, null));
+        $fips = CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.7', true, true, false, null, true));
         $tester = new CommandTester(new LogAnchorCommand(new ConfiguredCheckpoints($store, $log, new KeyFiles($this->keys()), $this->checkpoints(), false, new MockClock(), $fips, new RecordingDispatcher())));
 
         self::assertSame(Command::FAILURE, $tester->execute([], ['decorated' => false]));
