@@ -22,17 +22,29 @@ namespace YorvoID\Core\Authorization;
 final readonly class ReadSet
 {
     /**
-     * @param array<string, int>         $versions   By source, read before judging, e.g. ["policy" => 12, "relations" => 4]
-     * @param list<string>|null          $moved      The sources whose version changed while it judged; null when that wasn't checked
-     * @param array<string, string>|null $attributes Resolved attributes, by name: a value or its MAC; null while they aren't recorded
-     * @param bool                       $pinned     Whether its versions are the request's, kept by the memo, not read for it
+     * @param array<string, int>                            $versions   By source, read before judging, e.g. ["policy" => 12, "relations" => 4]
+     * @param list<string>|null                             $moved      The sources whose version changed while it judged; null when that wasn't checked
+     * @param array<string, string>|null                    $attributes Resolved attributes, by name: a value or its MAC; null while they aren't recorded
+     * @param bool                                          $pinned     Whether its versions are the request's, kept by the memo, not read for it
+     * @param array{links: list<string>, root: string}|null $delegation The chain it was decided under, if any: its links, the leaf first, and its root
      */
     public function __construct(
         public array $versions = [],
         public ?array $moved = [],
         public ?array $attributes = null,
         public bool $pinned = false,
+        public ?array $delegation = null,
     ) {
+    }
+
+    /**
+     * The same read set, decided under this chain.
+     *
+     * @param array{links: list<string>, root: string} $delegation
+     */
+    public function withDelegation(array $delegation): self
+    {
+        return new self($this->versions, $this->moved, $this->attributes, $this->pinned, $delegation);
     }
 
     /**
@@ -86,7 +98,7 @@ final readonly class ReadSet
     {
         ksort($attributes, \SORT_STRING);
 
-        return new self($this->versions, $this->moved, $attributes, $this->pinned);
+        return new self($this->versions, $this->moved, $attributes, $this->pinned, $this->delegation);
     }
 
     /**

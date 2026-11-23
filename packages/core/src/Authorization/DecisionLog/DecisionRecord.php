@@ -113,6 +113,7 @@ final readonly class DecisionRecord
             moved: $decision->read->moved,
             attributes: $decision->read->attributes,
             pinned: $decision->read->pinned,
+            delegation: $decision->read->delegation,
         );
     }
 

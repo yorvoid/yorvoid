@@ -47,6 +47,26 @@ It's `yorvoid.delegation.issue`, which needs the ability `yorvoid.delegations.is
 
 A delegate who isn't an agent passes a delegation on by naming it as `parent:`. It's within its parent on every dimension: actions the parent may pass on, its resources narrowed, its purpose the parent's or below it, its window inside the parent's, less depth to pass on, the parent's task, at least the parent's proof. Its parent's chain must hold now. No-escalation doesn't weigh it, since what it gives is the parent's, not the delegate's own roles.
 
+## Using a delegation
+
+The actor that authenticated, e.g. an agent's session, acts under a delegation it was given:
+
+```php
+use YorvoID\Core\Operation\UnderDelegation;
+
+$policy->allows(new UnderDelegation($agentSession, $delegation->id), 'content.report.read', $realm, $report, $origin);
+```
+
+Each decision checks, in core's evaluator:
+
+- **The actor as itself:** its session is read from its store, as for any decision. An `UnderDelegation` inside another, or inside a view as someone else, is refused, and so is any other class that claims to act under a delegation, whatever proves it.
+- **Its chain, now** (`ValidatesChains`, from this package): every link active, inside its window, within its parent, its delegator and delegate active principals, and the delegation's delegate is this actor. A known failure refuses (Deny); a link missing or inconsistent is Indeterminate.
+- **The request within the leaf's scope:** its own action (an operation's name for an operation, never its ability) still delegable to the delegate; its purpose among the leaf's (a request without one doesn't match a delegation that has one); its task the leaf's when the leaf has one; its resource's type and ID; and the selector's other conditions, which policy (attributes) and relations match (`MatchesSelectors`).
+- **The root, now:** the same request decided for the root principal. The root's own evidence, such as a step-up, can't be shown under a delegation, so a root permit that needs one doesn't permit, and none of its remedies is passed on. The delegation's own proof, shown by the actor that authenticated, is the only evidence.
+- **Forbids,** as for any request. The actor's own roles and relations permit nothing under a delegation, and nothing is done on the root's own account.
+
+So the actor never does more than the root may now. The record names the chain's links and its root.
+
 ## Limits
 
 `DelegationLimits` bounds what's issued: a year at most, 30 days to an agent, a chain of 3, 100 actions and 100 IDs. A delegation past them is refused.

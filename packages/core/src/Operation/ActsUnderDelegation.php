@@ -6,8 +6,9 @@ namespace YorvoID\Core\Operation;
 
 /**
  * An actor acting under a delegation, e.g. an agent (06 §5): the evaluator checks the chain of
- * delegations up to its root (M3-2), and the actor may do no more than the root may (D-47). The shape
- * only, until then.
+ * delegations up to its root, and the actor may do no more than the root may (D-47). Core's own
+ * UnderDelegation is the only one the evaluator decides; an actor class of yours that claims to act under
+ * one is refused, whatever proves it.
  *
  * @api
  *
@@ -16,5 +17,5 @@ namespace YorvoID\Core\Operation;
 interface ActsUnderDelegation extends Actor
 {
     /** The delegation it acts under */
-    public string $delegation { get; }
+    public DelegationId $delegation { get; }
 }

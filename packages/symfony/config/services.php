@@ -79,6 +79,7 @@ use YorvoID\Core\Storage\Installation;
 use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Core\Storage\VersionedCache;
+use YorvoID\Delegation\ChainValidator;
 use YorvoID\Delegation\DelegationEffects;
 use YorvoID\Delegation\Delegations;
 use YorvoID\Delegation\DelegationStore;
@@ -101,6 +102,7 @@ use YorvoID\Passkeys\Storage\DbalPasskeyStore;
 use YorvoID\Policy\AbilityActions;
 use YorvoID\Policy\Attribute\AttributeChanges;
 use YorvoID\Policy\Attribute\Attributes;
+use YorvoID\Policy\Attribute\AttributeSelectors;
 use YorvoID\Policy\Attribute\AttributeStore;
 use YorvoID\Policy\Attribute\ForgetAttributesOfDeletedPrincipals;
 use YorvoID\Policy\ForgetRolesOfDeletedPrincipals;
@@ -127,6 +129,7 @@ use YorvoID\Relations\RelationChanges;
 use YorvoID\Relations\RelationPermit;
 use YorvoID\Relations\Relations;
 use YorvoID\Relations\RelationSchema;
+use YorvoID\Relations\RelationSelectors;
 use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationsVersion;
 use YorvoID\Relations\Storage\CachedRelationStore;
@@ -397,7 +400,16 @@ return static function (ContainerConfigurator $container): void {
         null,
         // An owner of agents isn't deleted (OwnersKeepTheirAgents).
         service(Stores::IDS[PrincipalStore::class]),
+        // Actors under a delegation: its chain, the conditions core can't match, no outside anchor (M3-6),
+        // and the proof a delegation asks.
+        service(ChainValidator::class),
+        tagged_iterator('yorvoid.selector_matcher'),
+        null,
+        service(StepUpCheck::class),
     ]);
+    $services->set(ChainValidator::class)->arg('$actions', service_closure(Actions::class));
+    $services->set(AttributeSelectors::class)->tag('yorvoid.selector_matcher');
+    $services->set(RelationSelectors::class)->tag('yorvoid.selector_matcher');
     $services->set(StoredSessions::class)->args([service(Stores::IDS[SessionStore::class]), service(ClockInterface::class)])->tag('yorvoid.actor_prover');
     $services->alias(Authorization::class, Evaluator::class);
     $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->arg('$transactions', service(Transactions::class))->public();
