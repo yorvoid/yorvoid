@@ -12,6 +12,7 @@ use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
 use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
 use YorvoID\Core\Authorization\DecisionScope;
 use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\PermitElement;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\Truth;
@@ -82,7 +83,7 @@ final class VersionMemoTest extends TestCase
     public function testALongJobSeesARevocationOnceTheMaxAgePasses(): void
     {
         $clock = new MockClock('2026-11-23 18:00:00');
-        $evaluator = $this->evaluator(atVersion: 1, memo: new VersionMemo($clock, \YorvoID\Core\Duration::seconds(2)));
+        $evaluator = $this->evaluator(atVersion: 1, memo: new VersionMemo($clock));
         self::assertSame(Verdict::Permit, $this->ability($evaluator)->verdict);
 
         $this->policy->version = 2;
@@ -90,7 +91,21 @@ final class VersionMemoTest extends TestCase
         self::assertSame(Verdict::Permit, $this->ability($evaluator)->verdict, 'Within the max age, the memo\'s.');
 
         $clock->sleep(1);
-        self::assertSame(Verdict::Deny, $this->ability($evaluator)->verdict, 'At the max age, read again: revoked.');
+        self::assertSame(Verdict::Deny, $this->ability($evaluator)->verdict, 'At the max age, 2 seconds by default, read again: revoked.');
+    }
+
+    public function testTheMaxAgeIsTheOneGiven(): void
+    {
+        $clock = new MockClock('2026-11-23 18:00:00');
+        $evaluator = $this->evaluator(atVersion: 1, memo: new VersionMemo($clock, \YorvoID\Core\Duration::seconds(5)));
+        self::assertSame(Verdict::Permit, $this->ability($evaluator)->verdict);
+
+        $this->policy->version = 2;
+        $clock->sleep(4);
+        self::assertSame(Verdict::Permit, $this->ability($evaluator)->verdict, 'Within the 5 seconds given, the memo\'s.');
+
+        $clock->sleep(1);
+        self::assertSame(Verdict::Deny, $this->ability($evaluator)->verdict);
     }
 
     /**
@@ -110,6 +125,16 @@ final class VersionMemoTest extends TestCase
         $this->policy->version = 3;
         $refused = $this->ability($evaluator);
         self::assertSame([Verdict::Deny, false, []], [$refused->verdict, $refused->read->pinned, $refused->read->moved], 'Refused on version 3, checked, not pinned.');
+    }
+
+    public function testAnIndeterminateDecisionIsNeverPinned(): void
+    {
+        $evaluator = $this->evaluator(atVersion: 2, memo: new VersionMemo(), unknownAt: 1);
+        self::assertSame(Verdict::Indeterminate, $this->ability($evaluator)->verdict, 'At version 1, the memo\'s.');
+
+        $this->policy->version = 2;
+        $decided = $this->ability($evaluator);
+        self::assertSame([Verdict::Permit, false], [$decided->verdict, $decided->read->pinned], 'Decided again on what\'s committed.');
     }
 
     public function testARecordedPermitSaysItsPinned(): void
@@ -146,10 +171,10 @@ final class VersionMemoTest extends TestCase
     /**
      * A permit that holds at one version of the policy only, read as the cached stores read it.
      */
-    private function evaluator(int $atVersion, ?VersionMemo $memo = null, ?DecisionLog $log = null): Evaluator
+    private function evaluator(int $atVersion, ?VersionMemo $memo = null, ?DecisionLog $log = null, ?int $unknownAt = null): Evaluator
     {
-        $permit = new class($this->policy, $atVersion) implements PermitElement {
-            public function __construct(private readonly CountingVersion $policy, private readonly int $at)
+        $permit = new class($this->policy, $atVersion, $unknownAt) implements PermitElement {
+            public function __construct(private readonly CountingVersion $policy, private readonly int $at, private readonly ?int $unknownAt)
             {
             }
 
@@ -170,6 +195,10 @@ final class VersionMemoTest extends TestCase
 
             public function evaluate(Request $request): Truth
             {
+                if ($this->unknownAt === $this->policy->version($request->realm)) {
+                    return Truth::unknown(IndeterminateReason::StoreUnreachable, 'Not reachable at this version.');
+                }
+
                 return $this->at === $this->policy->version($request->realm) ? Truth::holds('At its version.') : Truth::fails('Not at its version.');
             }
         };
