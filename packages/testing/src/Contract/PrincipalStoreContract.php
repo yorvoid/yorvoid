@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Principal\AgentProfile;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
@@ -79,7 +80,7 @@ trait PrincipalStoreContract
 
         foreach (PrincipalKind::cases() as $i => $kind) {
             $status = PrincipalStatus::cases()[$i % \count(PrincipalStatus::cases())];
-            $principal = new Principal(new PrincipalId(Ids::next()), new Realm('acme'), $kind, $status, new \DateTimeImmutable('2026-10-27 18:40:01 UTC'), new \DateTimeImmutable('2026-10-28 09:15:30 UTC'), new \DateTimeImmutable('2026-10-28 09:15:29 UTC'), 3 + $i);
+            $principal = new Principal(new PrincipalId(Ids::next()), new Realm('acme'), $kind, $status, new \DateTimeImmutable('2026-10-27 18:40:01 UTC'), new \DateTimeImmutable('2026-10-28 09:15:30 UTC'), new \DateTimeImmutable('2026-10-28 09:15:29 UTC'), 3 + $i, PrincipalKind::Agent === $kind ? new PrincipalId(Ids::next()) : null);
             $store->add($principal);
 
             self::assertEquals($principal, $store->get(new Realm('acme'), $principal->id));
@@ -162,7 +163,7 @@ trait PrincipalStoreContract
         $this->expectException(StorageException::class);
         $this->expectExceptionMessage('exists');
 
-        $store->add(new Principal($principal->id, new Realm('globex'), PrincipalKind::Agent, PrincipalStatus::Active, $principal->createdAt, $principal->updatedAt, $principal->statusChangedAt));
+        $store->add(new Principal($principal->id, new Realm('globex'), PrincipalKind::Service, PrincipalStatus::Active, $principal->createdAt, $principal->updatedAt, $principal->statusChangedAt));
     }
 
     #[DataProvider('implementations')]
@@ -242,15 +243,23 @@ trait PrincipalStoreContract
 
         $elsewhere = new Principal($agent->id, new Realm('globex'), $agent->kind, $agent->status, $agent->createdAt, $agent->updatedAt, $agent->statusChangedAt, $agent->statusVersion, $agent->owner, $agent->profile);
         $unknown = new Principal(new PrincipalId(Ids::next()), $acme, PrincipalKind::Agent, PrincipalStatus::Active, $now, $now, $now, 1, $owner->id);
-        $ownedHuman = new Principal($human->id, $acme, $human->kind, $human->status, $human->createdAt, $human->updatedAt, $human->statusChangedAt, $human->statusVersion, $owner->id);
-        $unowned = new Principal($agent->id, $acme, $agent->kind, $agent->status, $agent->createdAt, $now, $agent->statusChangedAt, $agent->statusVersion, null, $agent->profile);
+        // As if another kind: the stored one isn't an agent, or the moved one isn't any more.
+        $humanAsAgent = new Principal($human->id, $acme, PrincipalKind::Agent, $human->status, $human->createdAt, $human->updatedAt, $human->statusChangedAt, $human->statusVersion, $owner->id);
+        $unowned = new Principal($agent->id, $acme, PrincipalKind::Human, $agent->status, $agent->createdAt, $now, $agent->statusChangedAt, $agent->statusVersion);
 
         self::assertFalse($store->changeOwner($elsewhere, $elsewhere->withOwner($other->id, $now)), 'In another realm.');
         self::assertFalse($store->changeOwner($unknown, $unknown->withOwner($other->id, $now)), 'Unknown.');
-        self::assertFalse($store->changeOwner($ownedHuman, $ownedHuman->withOwner($other->id, $now)), 'Stored without an owner.');
+        self::assertFalse($store->changeOwner($humanAsAgent, $humanAsAgent->withOwner($other->id, $now)), 'Stored without an owner.');
         self::assertFalse($store->changeOwner($agent, $unowned), 'To no owner.');
         self::assertEquals($agent, $store->get($acme, $agent->id));
         self::assertNull($store->get($acme, $human->id)?->owner);
+
+        try {
+            new Principal($human->id, $acme, PrincipalKind::Human, $human->status, $now, $now, $now, 1, $owner->id);
+            self::fail('A human with an owner.');
+        } catch (IntegratorError) {
+            // Only an agent has one: no store is given a human that has.
+        }
     }
 
     private static function principal(Realm $realm): Principal

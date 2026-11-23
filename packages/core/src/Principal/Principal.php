@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Principal;
 
+use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Time;
 
@@ -22,6 +23,8 @@ final readonly class Principal
      *                                         version later, so it doesn't outlive a suspension, even one that was undone
      * @param PrincipalId|null  $owner         An agent's: who registered it and answers for it (AGT-001); null for any other kind
      * @param AgentProfile|null $profile       An agent's description, for people (experimental)
+     *
+     * @throws IntegratorError When an agent has no owner, or any other kind has an owner or a profile
      */
     public function __construct(
         public PrincipalId $id,
@@ -35,6 +38,9 @@ final readonly class Principal
         public ?PrincipalId $owner = null,
         public ?AgentProfile $profile = null,
     ) {
+        if (PrincipalKind::Agent === $kind ? null === $owner : (null !== $owner || null !== $profile)) {
+            throw new IntegratorError(\sprintf('The principal %s is %s: only an agent has an owner and a profile, and every agent has an owner.', $id, PrincipalKind::Agent === $kind ? 'an agent without an owner' : 'not an agent, with an owner or a profile'), 'Give an agent its owner, and any other kind neither.', 'concepts/principals.md#agents');
+        }
     }
 
     /**
