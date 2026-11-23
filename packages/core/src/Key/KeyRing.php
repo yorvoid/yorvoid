@@ -12,8 +12,11 @@ use YorvoID\Core\Secret;
  * (OPS-001). Rotating is: add a new verify-only key, make it active and the old one verify-only, and
  * remove the old one once nothing it signed needs checking.
  *
+ * It holds MAC keys too (MacKey), apart by type: at most one is active and MACs, every one confirms what
+ * it MACed, and none ever signs or verifies a signature. A key's ID is its own across both kinds.
+ *
  * Keys are kept as a JSON Web Key Set (RFC 7517: Ed25519 keys as in RFC 8037, P-256 keys as in RFC 7518
- * §6.2), with a "status" member
+ * §6.2, MAC keys as "oct" keys with "alg": "HS256", RFC 7518 §6.4), with a "status" member
  * for each key, in an environment variable or a file only its owner can read (OPS-002); never in the
  * database next to what they sign.
  *
@@ -24,15 +27,41 @@ final readonly class KeyRing
     /** @var array<string, SigningKey> By ID */
     private array $keys;
 
+    /** @var array<string, MacKey> By ID */
+    private array $macKeys;
+
     /**
      * @param iterable<SigningKey> $keys
+     * @param iterable<MacKey>     $macKeys
      */
-    public function __construct(iterable $keys)
+    public function __construct(iterable $keys, iterable $macKeys = [])
     {
         $byId = [];
         $active = [];
+        $macs = [];
+        $activeMacs = [];
+
+        foreach ($macKeys as $mac) {
+            if (isset($macs[$mac->id])) {
+                throw new IntegratorError(\sprintf('Two keys have the ID "%s".', $mac->id), 'Give each key its own ID.', 'concepts/keys.md');
+            }
+
+            $macs[$mac->id] = $mac;
+
+            if (KeyStatus::Active === $mac->status) {
+                $activeMacs[] = $mac->id;
+            }
+        }
+
+        if (\count($activeMacs) > 1) {
+            throw new IntegratorError(\sprintf('The key ring has %d active MAC keys (%s).', \count($activeMacs), implode(', ', $activeMacs)), 'At most one MAC key is active: it MACs. Make the others verify-only.', 'concepts/keys.md#mac-keys');
+        }
 
         foreach ($keys as $key) {
+            if (isset($macs[$key->id])) {
+                throw new IntegratorError(\sprintf('Two keys have the ID "%s".', $key->id), 'Give each key its own ID, across signing and MAC keys: a MAC key\'s ID must never name a signing key.', 'concepts/keys.md#mac-keys');
+            }
+
             if (isset($byId[$key->id])) {
                 throw new IntegratorError(\sprintf('Two keys have the ID "%s".', $key->id), 'Give each key its own ID.', 'concepts/keys.md');
             }
@@ -52,6 +81,62 @@ final readonly class KeyRing
         }
 
         $this->keys = $byId;
+        $this->macKeys = $macs;
+    }
+
+    /**
+     * The MAC key that MACs, if the ring has one.
+     */
+    public function mac(): ?MacKey
+    {
+        foreach ($this->macKeys as $key) {
+            if (KeyStatus::Active === $key->status) {
+                return $key;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The MAC key with that ID, active or not: never a signing key.
+     */
+    public function macKey(string $id): ?MacKey
+    {
+        return $this->macKeys[$id] ?? null;
+    }
+
+    /**
+     * @return list<MacKey>
+     */
+    public function macKeys(): array
+    {
+        return array_values($this->macKeys);
+    }
+
+    /**
+     * The ring with a new active MAC key, and the one that was active verify-only from now: there's no
+     * public part to deploy first, so a MAC key rotates in one step.
+     */
+    public function withMac(MacKey $key, \DateTimeImmutable $now): self
+    {
+        $kept = array_map(static fn (MacKey $other): MacKey => KeyStatus::Active === $other->status ? $other->retired($now) : $other, $this->macKeys);
+
+        return new self($this->keys, [...array_values($kept), $key]);
+    }
+
+    /**
+     * The ring without a MAC key: what it MACed can't be confirmed any more.
+     */
+    public function withoutMac(string $id): self
+    {
+        $key = $this->macKeys[$id] ?? throw new IntegratorError(\sprintf('The key ring has no MAC key "%s".', $id), \sprintf('Use one of: %s.', implode(', ', array_keys($this->macKeys))), 'concepts/keys.md#mac-keys');
+
+        if (KeyStatus::Active === $key->status) {
+            throw new IntegratorError(\sprintf('The MAC key "%s" is active: it can\'t be removed.', $id), 'Rotate first (yorvoid:keys:rotate --mac); then remove it once the records it MACed are pruned.', 'concepts/keys.md#mac-keys');
+        }
+
+        return new self($this->keys, array_filter($this->macKeys, static fn (MacKey $other): bool => $other->id !== $id));
     }
 
     /**
@@ -96,7 +181,7 @@ final readonly class KeyRing
      */
     public function with(SigningKey $key): self
     {
-        return new self([...$this->keys, $key]);
+        return new self([...$this->keys, $key], $this->macKeys);
     }
 
     /**
@@ -106,7 +191,7 @@ final readonly class KeyRing
     {
         $key = $this->known($id);
 
-        return new self(array_map(static fn (SigningKey $other): SigningKey => new SigningKey($other->id, $other === $key ? KeyStatus::Active : KeyStatus::VerifyOnly, $other->publicKey, $other->seed, $other->algorithm), $this->keys));
+        return new self(array_map(static fn (SigningKey $other): SigningKey => new SigningKey($other->id, $other === $key ? KeyStatus::Active : KeyStatus::VerifyOnly, $other->publicKey, $other->seed, $other->algorithm), $this->keys), $this->macKeys);
     }
 
     /**
@@ -118,7 +203,7 @@ final readonly class KeyRing
             throw new IntegratorError(\sprintf('The key "%s" is active: it can\'t be removed.', $id), 'Make another key active first; then remove this one once nothing it signed still needs checking.', 'concepts/keys.md#rotating-keys');
         }
 
-        return new self(array_filter($this->keys, static fn (SigningKey $key): bool => $key->id !== $id));
+        return new self(array_filter($this->keys, static fn (SigningKey $key): bool => $key->id !== $id), $this->macKeys);
     }
 
     /**
@@ -173,7 +258,18 @@ final readonly class KeyRing
             throw new IntegratorError('The key set has no list of keys.', 'Provide the key set as YorvoID generates it: {"keys": [ … ]}.', 'concepts/keys.md#where-keys-are-kept');
         }
 
-        return new self(array_map(self::fromJwk(...), $set['keys']));
+        $signing = [];
+        $macs = [];
+
+        foreach ($set['keys'] as $jwk) {
+            if (\is_array($jwk) && 'oct' === ($jwk['kty'] ?? null)) {
+                $macs[] = self::fromOctJwk($jwk);
+            } else {
+                $signing[] = self::fromJwk($jwk);
+            }
+        }
+
+        return new self($signing, $macs);
     }
 
     /**
@@ -219,6 +315,11 @@ final readonly class KeyRing
             $keys[] = $jwk;
         }
 
+        // A MAC key has no public part: only the key file holds one.
+        foreach ($withPrivateParts ? $this->macKeys : [] as $mac) {
+            $keys[] = ['kid' => $mac->id, 'kty' => 'oct', 'alg' => MacKey::ALGORITHM, 'key_ops' => ['sign', 'verify'], 'status' => $mac->status->value, 'created' => $mac->created?->format(\DATE_ATOM), 'since' => $mac->since?->format(\DATE_ATOM), 'k' => self::base64url($mac->key->reveal())];
+        }
+
         // Pretty, for people who look after key files.
         return Secret::fromString(json_encode(['keys' => $keys], \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
     }
@@ -231,6 +332,12 @@ final readonly class KeyRing
 
         $kid = $jwk['kid'] ?? null;
         $kid = \is_string($kid) ? $kid : '';
+
+        // A signing key never has a MAC's algorithm: an HMAC key read as one would let a MAC pass for a
+        // signature (the JOSE algorithm confusion).
+        if (\is_string($jwk['alg'] ?? null) && str_starts_with($jwk['alg'], 'HS')) {
+            throw new IntegratorError(\sprintf('The signing key "%s" has the MAC algorithm %s.', $kid, $jwk['alg']), 'A MAC key is an "oct" key ("kty": "oct", "alg": "HS256"); a signing key is Ed25519 or ES256.', 'concepts/keys.md#mac-keys');
+        }
 
         // The key's type, curve and algorithm agree, or it isn't one YorvoID signs with.
         $algorithm = match ([$jwk['kty'] ?? null, $jwk['crv'] ?? null, $jwk['alg'] ?? null]) {
@@ -252,12 +359,44 @@ final readonly class KeyRing
         return new SigningKey($kid, $status, $public, null === $d ? null : Secret::fromString(self::decode($d, $kid)), $algorithm);
     }
 
+    /**
+     * @param array<mixed> $jwk
+     */
+    private static function fromOctJwk(array $jwk): MacKey
+    {
+        $kid = \is_string($jwk['kid'] ?? null) ? $jwk['kid'] : '';
+
+        if (MacKey::ALGORITHM !== ($jwk['alg'] ?? null) || \array_key_exists('use', $jwk) || (\array_key_exists('key_ops', $jwk) && ['sign', 'verify'] !== $jwk['key_ops'])) {
+            throw new IntegratorError(\sprintf('The key "%s" is an "oct" key, but not a MAC key as YorvoID keeps them.', $kid), 'A MAC key is {"kty": "oct", "alg": "HS256", "key_ops": ["sign", "verify"]}, with no "use": an "oct" key never signs.', 'concepts/keys.md#mac-keys');
+        }
+
+        $status = KeyStatus::tryFrom(\is_string($jwk['status'] ?? null) ? $jwk['status'] : '') ?? throw new IntegratorError(\sprintf('The key "%s" has no valid status.', $kid), 'Set "status" to "active" or "verify-only".', 'concepts/keys.md#mac-keys');
+
+        return new MacKey($kid, $status, Secret::fromString(self::decode($jwk['k'] ?? null, $kid)), self::time($jwk, 'since', $kid), self::time($jwk, 'created', $kid));
+    }
+
+    /**
+     * @param array<mixed> $jwk
+     */
+    private static function time(array $jwk, string $member, string $kid): ?\DateTimeImmutable
+    {
+        $value = $jwk[$member] ?? null;
+
+        if (null === $value) {
+            return null;
+        }
+
+        $at = \is_string($value) ? \DateTimeImmutable::createFromFormat(\DATE_ATOM, $value) : false;
+
+        return $at instanceof \DateTimeImmutable ? $at : throw new IntegratorError(\sprintf('The MAC key "%s" has a "%s" that isn\'t a time.', $kid, $member), \sprintf('"%s" is a time as YorvoID writes it (e.g. 2026-11-23T18:00:00+00:00), or null.', $member), 'concepts/keys.md#mac-keys');
+    }
+
     private static function decode(mixed $value, string $kid): string
     {
         $decoded = \is_string($value) && 1 === preg_match('/^[A-Za-z0-9_-]+$/D', $value) ? base64_decode(strtr($value, '-_', '+/'), true) : false;
 
         if (false === $decoded) {
-            throw new IntegratorError(\sprintf('A part of the key "%s" isn\'t base64url.', $kid), '"x", "y" and "d" are base64url without padding, as YorvoID writes them.', 'concepts/keys.md#where-keys-are-kept');
+            throw new IntegratorError(\sprintf('A part of the key "%s" isn\'t base64url.', $kid), '"x", "y", "d" and "k" are base64url without padding, as YorvoID writes them.', 'concepts/keys.md#where-keys-are-kept');
         }
 
         return $decoded;

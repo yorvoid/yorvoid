@@ -80,6 +80,8 @@ final readonly class Evaluator implements Authorization
 
     private DecisionScope $scope;
 
+    private AttributeMacs $macs;
+
     /**
      * @param iterable<PolicyElement> $elements  The policy: permits and forbids
      * @param OfflineDecider|null     $offline   Asked while a store is unreachable, for the operations that accept it
@@ -89,6 +91,8 @@ final readonly class Evaluator implements Authorization
      * @param iterable<ProvesActors>  $actors    What proves actors beyond core's own, e.g. sessions (StoredSessions, D-45)
      * @param DecisionScope|null      $scope     The one the cached stores read in, so that they read at the versions a
      *                                           decision read before judging (D-44); its own, if not given
+     * @param AttributeMacs|null      $macs      How the attributes a decision read are recorded (M-9); without one, those
+     *                                           that aren't public are withheld
      *
      * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, a
      *                         permit authorizes by Consequence, which only another operation's permit gives,
@@ -105,8 +109,10 @@ final readonly class Evaluator implements Authorization
         private ?DecisionLog $decisions = null,
         iterable $actors = [],
         ?DecisionScope $scope = null,
+        ?AttributeMacs $macs = null,
     ) {
         $this->scope = $scope ?? new DecisionScope();
+        $this->macs = $macs ?? new AttributeMacs();
         $provers = [];
 
         foreach ($actors as $prover) {
@@ -211,6 +217,7 @@ final readonly class Evaluator implements Authorization
      * @param DecisionLog|null        $decisions   Where decisions are recorded
      * @param iterable<ProvesActors>  $actors      What proves actors beyond core's own, e.g. sessions (StoredSessions)
      * @param DecisionScope|null      $scope       The one the cached stores read in
+     * @param AttributeMacs|null      $macs        How the attributes a decision read are recorded
      */
     public static function builtIn(
         AuthorityCheck $authority,
@@ -226,6 +233,7 @@ final readonly class Evaluator implements Authorization
         ?DecisionLog $decisions = null,
         iterable $actors = [],
         ?DecisionScope $scope = null,
+        ?AttributeMacs $macs = null,
     ): self {
         $builtIn = [
             new AuthenticationPermit(),
@@ -237,7 +245,7 @@ final readonly class Evaluator implements Authorization
             $builtIn[] = new AbilityPermit($abilities);
         }
 
-        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors, $scope);
+        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors, $scope, $macs);
     }
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
@@ -322,15 +330,16 @@ final readonly class Evaluator implements Authorization
         // One realm, one moment: the versions are read once, before anything is read for the batch, and
         // the batch reads at them.
         $before = $this->versionsOf($requests[0]);
+        // Each request's attributes are its own: resolved, and recorded, for it.
         $judged = $this->scope->within($requests[0]->realm, $before, function () use ($sides, $requests): array {
             $this->preload($sides);
 
-            return array_map($this->judge(...), $requests);
+            return array_map(fn (Request $request): array => $this->scope->judging(fn (): Decision => $this->judge($request)), $requests);
         });
-        $checks = array_map($this->checksWhatMoved(...), $requests, $judged);
+        $checks = array_map(fn (Request $request, array $one): bool => $this->checksWhatMoved($request, $one[0]), $requests, $judged);
         $read = \in_array(true, $checks, true) ? ReadSet::between($before, $this->versionsOf($requests[0])) : null;
         $unchecked = ReadSet::unchecked($before);
-        $decided = array_map(fn (Request $request, Decision $decision, bool $checks): array => [$request, self::identified($decision, (string) $this->ids->next(), $request->at, $checks && null !== $read ? $read : $unchecked)], $requests, $judged, $checks);
+        $decided = array_map(fn (Request $request, array $one, bool $checks): array => [$request, self::identified($one[0], (string) $this->ids->next(), $request->at, $checks && null !== $read ? $this->withAttributes($request, $read, $one[1]) : $unchecked)], $requests, $judged, $checks);
 
         return null === $this->decisions ? array_map(static fn (array $one): Decision => $one[1], $decided) : $this->decisions->recordAll($decided);
     }
@@ -455,10 +464,27 @@ final readonly class Evaluator implements Authorization
     private function judged(Request $request, \Closure $judge): Decision
     {
         $before = $this->versionsOf($request);
-        $decision = $this->scope->within($request->realm, $before, $judge);
-        $read = $this->checksWhatMoved($request, $decision) ? ReadSet::between($before, $this->versionsOf($request)) : ReadSet::unchecked($before);
+        [$decision, $attributes] = $this->scope->within($request->realm, $before, fn (): array => $this->scope->judging($judge));
+        $read = $this->checksWhatMoved($request, $decision) ? $this->withAttributes($request, ReadSet::between($before, $this->versionsOf($request)), $attributes) : ReadSet::unchecked($before);
 
         return self::identified($decision, (string) $this->ids->next(), $request->at, $read);
+    }
+
+    /**
+     * A checked read set, with the attributes the decision read as its record holds them (M-9): only a
+     * checked one, since nothing reads an unchecked one's.
+     *
+     * @param array<string, array{string|int|bool|list<string>, bool}> $attributes By name, the value and whether it's public
+     */
+    private function withAttributes(Request $request, ReadSet $read, array $attributes): ReadSet
+    {
+        $recorded = [];
+
+        foreach ($attributes as $name => [$value, $public]) {
+            $recorded[$name] = $this->macs->record($request->realm, $name, $value, $public);
+        }
+
+        return $read->withAttributes($recorded);
     }
 
     /**

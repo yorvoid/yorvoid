@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Policy\Fixtures;
 
 use Symfony\Component\Clock\MockClock;
+use YorvoID\Core\Authorization\AttributeMacs;
 use YorvoID\Core\Authorization\DecisionScope;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\PrincipalAuthority;
@@ -102,8 +103,9 @@ final class PolicyWorld
      * @param Stack|null                              $stack        Its stores instead of in-memory ones
      * @param InMemoryStorage|null                    $memory       The in-memory stores, if given
      * @param Mutants|null                            $mutants      What it's built through for mutation testing, as production would pass it
+     * @param AttributeMacs|null                      $macs         How decisions record the attributes they read
      */
-    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null, ?Stack $stack = null, private readonly ?VersionedCache $cache = null, ?InMemoryStorage $memory = null, ?Mutants $mutants = null)
+    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null, ?Stack $stack = null, private readonly ?VersionedCache $cache = null, ?InMemoryStorage $memory = null, ?Mutants $mutants = null, ?AttributeMacs $macs = null)
     {
         $this->memory = $memory ?? new InMemoryStorage();
         $principals = $stack->principals ?? $this->memory->principals;
@@ -126,7 +128,7 @@ final class PolicyWorld
         $mutants?->schema($schema);
         $this->relations = new Relations($schema, $this->relationStore, $maxDepth);
         $this->roles = new Roles($catalogue, $this->policyStore, $sources, $this->relations);
-        $this->attributes = new Attributes([new AcmeAttributes()], $attributes, $resolvers);
+        $this->attributes = new Attributes([new AcmeAttributes()], $attributes, $resolvers, $scope);
         $log = new SecurityLog($stack->log ?? $this->memory->log, $transactions, clock: $this->clock);
         $elements = [new RolePermit($this->roles), new NoEscalation($this->roles), new StepUpForSensitiveChanges($this->roles, $stepUp, $window), new RelationPermit($this->relations)];
 
@@ -135,7 +137,7 @@ final class PolicyWorld
         }
 
         $authority = new PrincipalAuthority($principals);
-        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)], actors: [new TrustedActors()], scope: $scope);
+        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)], actors: [new TrustedActors()], scope: $scope, macs: $macs);
         $handlers = [
             new Principals($principals, $identifiers, $log, $transactions, clock: $this->clock),
             new PolicyChanges($catalogue, $this->policyStore, $principals, $log, $transactions, $this->clock),

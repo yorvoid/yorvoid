@@ -62,6 +62,18 @@ final readonly class ReadSet
     }
 
     /**
+     * The same read set, with the attributes it read as recorded.
+     *
+     * @param array<string, string> $attributes
+     */
+    public function withAttributes(array $attributes): self
+    {
+        ksort($attributes, \SORT_STRING);
+
+        return new self($this->versions, $this->moved, $attributes);
+    }
+
+    /**
      * Whether what moved while it judged was checked.
      */
     public function checked(): bool

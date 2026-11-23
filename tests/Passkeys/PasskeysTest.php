@@ -581,7 +581,7 @@ final class PasskeysTest extends DatabaseTestCase
         Permits::call($passkeys->finishRegistration(...), new RegisterPasskey($session->realm, $ceremony->id, $edwards->register($ceremony->options), 'Ed25519'), new Origin(OriginKind::Web), $session);
 
         // The same passkeys, under a FIPS provider without Ed25519.
-        $fips = $this->passkeys($implementation, store: $this->stack->passkeys, crypto: CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.4', true, true, false, true)));
+        $fips = $this->passkeys($implementation, store: $this->stack->passkeys, crypto: CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.4', true, true, false, true, true)));
         self::assertSame([-7, -257], array_column((array) self::json($fips->beginRegistration($session)->options)['pubKeyCredParams'], 'alg'));
 
         $again = $fips->beginRegistration($session);

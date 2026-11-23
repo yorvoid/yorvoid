@@ -12,10 +12,12 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use YorvoID\Core\Crypto\CryptoMode;
+use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Key\KeyAlgorithm;
 use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Key\KeyStatus;
+use YorvoID\Core\Key\MacKey;
 use YorvoID\Core\Key\SigningKey;
 use YorvoID\Core\Realm;
 use YorvoID\Symfony\Key\ConfiguredCheckpoints;
@@ -25,6 +27,10 @@ use YorvoID\Symfony\Key\KeyFiles;
  * Rotates the signing keys without downtime (OPS-003), one step per run, saying what comes next: a
  * new verify-only key, deployed everywhere signatures are checked; then that key active and the old
  * one verify-only; then, with --remove, the old one gone. The first run creates the key ring.
+ *
+ * MAC keys (for the attributes decisions read) rotate on their own, in one step: --mac makes a new one
+ * active and the old one verify-only; --prune removes those retired longer than the decision log keeps
+ * records. A new ring has a MAC key from the start.
  *
  * A new key is the crypto policy's algorithm unless --algorithm says: ES256 in the FIPS mode, Ed25519
  * otherwise. Making a key of the other algorithm active anchors the realm's log (yorvoid:log:anchor),
@@ -39,6 +45,7 @@ final class KeysRotateCommand extends Command
         private readonly KeyFiles $keys,
         private readonly ClockInterface $clock,
         private readonly ConfiguredCheckpoints $checkpoints,
+        private readonly string $keepDecisions = '90d',
     ) {
         parent::__construct();
     }
@@ -49,6 +56,8 @@ final class KeysRotateCommand extends Command
         $this->addOption('public', null, InputOption::VALUE_NONE, 'Print the public key set to deploy where signatures are checked, and change nothing');
         $this->addOption('realm', null, InputOption::VALUE_REQUIRED, 'The realm whose keys to rotate, with yorvoid.keys.per_realm', Realm::default()->name);
         $this->addOption('algorithm', null, InputOption::VALUE_REQUIRED, 'The new key\'s algorithm, ES256 or EdDSA: the crypto policy\'s by default');
+        $this->addOption('mac', null, InputOption::VALUE_NONE, 'Rotate the MAC key instead, in one step: a new one active, the old one verify-only');
+        $this->addOption('prune', null, InputOption::VALUE_NONE, 'With --mac: remove the MAC keys retired longer than yorvoid.decision_log.keep, which confirm nothing any more');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -80,6 +89,10 @@ final class KeysRotateCommand extends Command
             }
 
             return Command::SUCCESS;
+        }
+
+        if (true === $input->getOption('mac')) {
+            return $this->rotateMac($io, $file, true === $input->getOption('prune'));
         }
 
         $algorithm = $input->getOption('algorithm');
@@ -150,7 +163,9 @@ final class KeysRotateCommand extends Command
         if (!file_exists($file)) {
             $key = SigningKey::generate($this->newId([]), algorithm: $algorithm);
 
-            return [new KeyRing([$key]), \sprintf('Created the key ring in %s, with %s active.', $file, $key->id)];
+            $mac = MacKey::generate($this->newId([$key->id], 'mac-'), $this->clock->now());
+
+            return [new KeyRing([$key], [$mac]), \sprintf('Created the key ring in %s, with %s active, and the MAC key %s.', $file, $key->id, $mac->id)];
         }
 
         $ring = KeyRing::fromFile($file);
@@ -179,13 +194,55 @@ final class KeysRotateCommand extends Command
     }
 
     /**
+     * A new active MAC key, or with --prune the retired ones that confirm nothing any more removed.
+     */
+    private function rotateMac(SymfonyStyle $io, string $file, bool $prune): int
+    {
+        try {
+            $ring = KeyRing::fromFile($file);
+            $now = $this->clock->now();
+
+            if ($prune) {
+                $keep = Duration::parse($this->keepDecisions);
+                $pruned = [];
+
+                foreach ($ring->macKeys() as $key) {
+                    if (null !== $key->since && $keep->after($key->since) < $now) {
+                        $ring = $ring->withoutMac($key->id);
+                        $pruned[] = $key->id;
+                    }
+                }
+
+                $done = [] === $pruned ? \sprintf('No MAC key was retired longer than %s ago.', $keep) : \sprintf('Removed %s: what they MACed can\'t be confirmed any more.', implode(', ', $pruned));
+            } else {
+                $taken = [...array_map(static fn (SigningKey $key): string => $key->id, $ring->keys()), ...array_map(static fn (MacKey $key): string => $key->id, $ring->macKeys())];
+                $old = $ring->mac();
+                $ring = $ring->withMac(MacKey::generate($this->newId($taken, 'mac-'), $now), $now);
+                $done = null === $old ? \sprintf('%s MACs now.', $ring->mac()?->id) : \sprintf('%s MACs now, and %s only confirms what it MACed. Once the decision log no longer keeps those records, run: yorvoid:keys:rotate --mac --prune', $ring->mac()?->id, $old->id);
+            }
+
+            $ring->toFile($file);
+        } catch (IntegratorError $error) {
+            $io->error([$error->problem, 'How to fix it: '.$error->fix]);
+
+            return Command::FAILURE;
+        }
+
+        $io->table(['MAC key', 'Status', 'Retired'], array_map(static fn (MacKey $key): array => [$key->id, $key->status->value, $key->since?->format('Y-m-d') ?? ''], $ring->macKeys()));
+        $io->success($done);
+
+        return Command::SUCCESS;
+    }
+
+    /**
      * Today's date, numbered if a key has it already: "2026-10-29", "2026-10-29.2".
      *
      * @param list<string> $taken
+     * @param string       $prefix E.g. "mac-" for a MAC key
      */
-    private function newId(array $taken): string
+    private function newId(array $taken, string $prefix = ''): string
     {
-        $date = $this->clock->now()->format('Y-m-d');
+        $date = $prefix.$this->clock->now()->format('Y-m-d');
 
         $id = $date;
 

@@ -58,7 +58,9 @@ final class WritePathsTest extends TestCase
     {
         foreach (WritesWithoutPermit::METHODS as $method => $entry) {
             if ('event' === $entry[0]) {
-                $constructor = new \ReflectionClass($entry[2])->getConstructor();
+                $event = $entry[2];
+                \assert(class_exists($event));
+                $constructor = new \ReflectionClass($event)->getConstructor();
                 self::assertNotNull($constructor, $entry[2]);
                 self::assertStringContainsString('@internal', (string) $constructor->getDocComment(), $method.': '.$entry[2].'\'s constructor isn\'t @internal.');
             }

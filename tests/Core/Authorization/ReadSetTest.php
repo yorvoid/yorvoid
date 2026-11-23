@@ -88,7 +88,7 @@ final class ReadSetTest extends TestCase
         $decision = $this->evaluator([$permit], [$policy, $relations], log: $log)->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
 
         self::assertSame(Verdict::Deny, $decision->verdict, 'A refusal, which the log records.');
-        self::assertEquals(new ReadSet(['policy' => 3, 'relations' => 8], ['policy']), $decision->read);
+        self::assertEquals(new ReadSet(['policy' => 3, 'relations' => 8], ['policy'], []), $decision->read);
         self::assertSame(['policy' => 3, 'relations' => 8], $decision->versions, 'The versions are the read set\'s, read before.');
         self::assertFalse($decision->read->settled());
         $log->flush();
@@ -101,7 +101,7 @@ final class ReadSetTest extends TestCase
     {
         $decision = $this->evaluator([new StubPermit('acme.holds', Truth::holds('Held.'))], [new CountingVersion('policy', 1)], log: self::recordingAll())->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
 
-        self::assertEquals(new ReadSet(['policy' => 1]), $decision->read);
+        self::assertEquals(new ReadSet(['policy' => 1], [], []), $decision->read);
         self::assertTrue($decision->read->settled());
     }
 
@@ -141,7 +141,7 @@ final class ReadSetTest extends TestCase
 
         $decision = $this->evaluator([$failing], [$policy], log: self::recordingAll())->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
 
-        self::assertEquals(new ReadSet(['policy' => 4], ['policy']), $decision->read);
+        self::assertEquals(new ReadSet(['policy' => 4], ['policy'], []), $decision->read);
     }
 
     /**
@@ -189,7 +189,7 @@ final class ReadSetTest extends TestCase
         $decision = $this->evaluator([$reads], [$policy], $scope, self::recordingAll())->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
 
         self::assertSame([5], $seen->getArrayCopy(), 'While it judged, the version it read before.');
-        self::assertEquals(new ReadSet(['policy' => 5], ['policy']), $decision->read, 'And what moved, read outside the scope.');
+        self::assertEquals(new ReadSet(['policy' => 5], ['policy'], []), $decision->read, 'And what moved, read outside the scope.');
         self::assertNull($scope->version(new Realm('acme'), 'policy'), 'Nothing is kept once it\'s decided.');
     }
 
@@ -206,7 +206,7 @@ final class ReadSetTest extends TestCase
         self::assertCount(2, $badges->permits, 'The issue, and the record it causes.');
 
         foreach ($badges->permits as $permit) {
-            self::assertEquals(new ReadSet(['policy' => 9]), $permit->read);
+            self::assertEquals(new ReadSet(['policy' => 9], [], []), $permit->read);
         }
     }
 

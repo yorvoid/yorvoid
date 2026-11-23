@@ -8,6 +8,7 @@ YorvoID signs and hashes through OpenSSL, in every configuration. The crypto mod
 |---|---|---|
 | Signing keys: the security log's checkpoints ([keys](keys.md)) | Ed25519 (EdDSA, RFC 8032), or ECDSA on P-256 (ES256) | OpenSSL |
 | Tokens, codes, the security log's chain, decision records, intents | SHA-256 | OpenSSL (`Digest`) |
+| The attributes a decision read, in its record ([MAC keys](keys.md#mac-keys)) | HMAC-SHA256 (RFC 2104) | composed by YorvoID over OpenSSL's SHA-256 (`Mac`) |
 | Passkeys, and the intent verifier's keys | ES256 (P-256), EdDSA (Ed25519), RS256 (RSA ≥ 2048 bits) | OpenSSL; the WebAuthn library verifies EdDSA with libsodium |
 | Random values | the kernel's CSPRNG | `random_bytes()` |
 
@@ -31,10 +32,11 @@ yorvoid:
 
 In plain PHP, `CryptoPolicy::fips()`, passed to `PasskeyPolicy` (`crypto:`).
 
-In FIPS mode, YorvoID uses only what OpenSSL's provider offers, and it refuses to start unless that provider is a FIPS provider and no other is active. At boot it **probes** OpenSSL:
+In FIPS mode, YorvoID uses only what OpenSSL's provider offers, with one exception, and it refuses to start unless that provider is a FIPS provider and no other is active. At boot it **probes** OpenSSL:
 
 - **MD5 must fail.** No FIPS provider has it, so an OpenSSL that computes it has another provider active. YorvoID then refuses to start (`IntegratorError`).
 - **SHA-256 must work.**
+- **The attribute MAC must give RFC 4231's.** It's the exception: PHP offers no HMAC of OpenSSL's, so YorvoID composes HMAC-SHA256 as RFC 2104 defines it over the provider's SHA-256. The hash is the provider's; the composition is YorvoID's, outside the module boundary, so it isn't covered by the module's certificate. Where only the module's own functions may be used, give the key ring no MAC key: decisions then record those attributes as withheld (`w:`) rather than MACed ([MAC keys](keys.md#mac-keys)).
 - **Ed25519 decides EdDSA.** A known RFC 8032 vector must sign and verify. EdDSA is in FIPS 186-5, but not every FIPS provider has it. Without it:
   - passkeys and the verifier offer only ES256 and RS256;
   - passkeys already made with EdDSA can't sign in, so their owners need to add another;

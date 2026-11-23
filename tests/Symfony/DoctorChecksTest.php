@@ -275,7 +275,7 @@ final class DoctorChecksTest extends DatabaseTestCase
 
     public function testReportsTheCryptoModeAndWhatTheProviderLacks(): void
     {
-        $provider = static fn (bool $fipsOnly, bool $ed25519, ?bool $kernel): CryptoProvider => new CryptoProvider('OpenSSL 3.5.4', $fipsOnly, true, $ed25519, $kernel);
+        $provider = static fn (bool $fipsOnly, bool $ed25519, ?bool $kernel): CryptoProvider => new CryptoProvider('OpenSSL 3.5.4', $fipsOnly, true, $ed25519, $kernel, true);
         $check = static fn (CryptoMode $mode, CryptoProvider $found): CryptoCheck => new CryptoCheck($mode, static fn (): CryptoPolicy => CryptoMode::Fips === $mode ? CryptoPolicy::fips($found) : CryptoPolicy::standard($found));
 
         $fips = $check(CryptoMode::Fips, $provider(true, true, true));
@@ -307,7 +307,7 @@ final class DoctorChecksTest extends DatabaseTestCase
             $log = new SecurityLog($store, new InMemoryTransactions());
             $check = static fn (CryptoPolicy $crypto): KeyAlgorithmsCheck => new KeyAlgorithmsCheck(new ConfiguredCheckpoints($store, $log, new KeyFiles(null, true, $directory), null, false, new MockClock(), $crypto, new RecordingDispatcher()), $directory);
 
-            $findings = iterator_to_array($check(CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.7', true, true, false, null)))->findings(), false);
+            $findings = iterator_to_array($check(CryptoPolicy::fips(new CryptoProvider('OpenSSL 3.5.7', true, true, false, null, true)))->findings(), false);
             self::assertSame(['The active signing key of the realm "acme" is Ed25519, which this FIPS provider doesn\'t have: its checkpoints can\'t be taken.'], array_map(static fn (Finding $finding): string => $finding->what, $findings));
             self::assertTrue($findings[0]->problem);
             self::assertSame([], $this->whats($check(CryptoPolicy::standard())), 'In the standard mode, Ed25519 signs.');

@@ -47,7 +47,7 @@ final readonly class CryptoPolicy
     /**
      * @param CryptoProvider|null $provider What OpenSSL offers; probed if not given
      *
-     * @throws IntegratorError When more than a FIPS provider is active, or it lacks SHA-256
+     * @throws IntegratorError When more than a FIPS provider is active, it lacks SHA-256, or the MAC fails its self-test
      */
     public static function fips(?CryptoProvider $provider = null): self
     {
@@ -59,6 +59,10 @@ final readonly class CryptoPolicy
 
         if (!$provider->sha256) {
             throw new IntegratorError(\sprintf('The FIPS crypto mode is configured, but %s doesn\'t compute SHA-256.', $provider->openssl), 'Check that the FIPS provider is installed as its security policy says (openssl fipsinstall) and loaded.', 'concepts/cryptography.md#fips-mode');
+        }
+
+        if (!$provider->hmac) {
+            throw new IntegratorError(\sprintf('The FIPS crypto mode is configured, but %s\'s SHA-256 gives an HMAC that failed its self-test (RFC 4231).', $provider->openssl), 'Check that the FIPS provider is installed as its security policy says (openssl fipsinstall) and loaded.', 'concepts/cryptography.md#fips-mode');
         }
 
         return new self(CryptoMode::Fips, $provider);

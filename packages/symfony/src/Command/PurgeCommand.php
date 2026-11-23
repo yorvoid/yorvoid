@@ -34,6 +34,7 @@ final class PurgeCommand extends Command
         private readonly Throttle $throttle,
         private readonly StepUp $stepUp,
         private readonly DecisionLog $decisions,
+        private readonly string $keepDecisions = '90d',
     ) {
         parent::__construct();
     }
@@ -42,7 +43,7 @@ final class PurgeCommand extends Command
     {
         $this->addOption('keep-sessions', null, InputOption::VALUE_REQUIRED, 'How long ended sessions stay listed, e.g. "30d"', '30d');
         $this->addOption('keep-devices', null, InputOption::VALUE_REQUIRED, 'How long an unused device stays known: longer than its cookie lives', '400d');
-        $this->addOption('keep-decisions', null, InputOption::VALUE_REQUIRED, 'How long the decision log keeps a decision; the security log keeps the hashes of those it cites', '90d');
+        $this->addOption('keep-decisions', null, InputOption::VALUE_REQUIRED, 'How long the decision log keeps a decision; the security log keeps the hashes of those it cites: yorvoid.decision_log.keep by default', $this->keepDecisions);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int

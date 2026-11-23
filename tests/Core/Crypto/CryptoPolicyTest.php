@@ -36,9 +36,9 @@ final class CryptoPolicyTest extends TestCase
         self::assertSame([-7, -257], CryptoPolicy::fips(self::provider(fipsOnly: true, ed25519: false))->coseAlgorithms(), 'Without it, no EdDSA.');
         self::assertFalse(CryptoPolicy::fips(self::provider(fipsOnly: true, ed25519: false))->allowsEdDsa());
 
-        foreach ([[false, true, 'it computed MD5'], [true, false, 'doesn\'t compute SHA-256']] as [$fipsOnly, $sha256, $why]) {
+        foreach ([[false, true, true, 'it computed MD5'], [true, false, true, 'doesn\'t compute SHA-256'], [true, true, false, 'gives an HMAC that failed its self-test (RFC 4231)']] as [$fipsOnly, $sha256, $hmac, $why]) {
             try {
-                CryptoPolicy::fips(self::provider(fipsOnly: $fipsOnly, sha256: $sha256));
+                CryptoPolicy::fips(self::provider(fipsOnly: $fipsOnly, sha256: $sha256, hmac: $hmac));
                 self::fail('It started.');
             } catch (IntegratorError $e) {
                 self::assertStringContainsString('The FIPS crypto mode is configured, but OpenSSL 3.5.4', $e->getMessage());
@@ -88,9 +88,9 @@ final class CryptoPolicyTest extends TestCase
         }
     }
 
-    private static function provider(bool $fipsOnly = true, bool $sha256 = true, bool $ed25519 = true): CryptoProvider
+    private static function provider(bool $fipsOnly = true, bool $sha256 = true, bool $ed25519 = true, bool $hmac = true): CryptoProvider
     {
-        return new CryptoProvider('OpenSSL 3.5.4', $fipsOnly, $sha256, $ed25519, true);
+        return new CryptoProvider('OpenSSL 3.5.4', $fipsOnly, $sha256, $ed25519, true, $hmac);
     }
 
     /**

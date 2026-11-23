@@ -20,6 +20,9 @@ use YorvoID\Authn\Session\Sessions;
 use YorvoID\Authn\Session\StartSession;
 use YorvoID\Authn\Token\IssueToken;
 use YorvoID\Authn\Token\OneTimeTokens;
+use YorvoID\Core\Authorization\AttributeMacs;
+use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
+use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -68,7 +71,7 @@ final class KeyRotationTest extends TestCase
 
         [$status, $display] = $this->command('yorvoid:keys:rotate');
         self::assertSame(Command::SUCCESS, $status);
-        self::assertStringContainsString('Created the key ring in '.$this->file().', with 2026-10-29 active.', $display);
+        self::assertStringContainsString('Created the key ring in '.$this->file().', with 2026-10-29 active, and the MAC key mac-2026-10-29.', $display);
         self::assertSame(0o600, fileperms($this->file()) & 0o777);
 
         // In flight: a signature by the first key, a session, a one-time token.
@@ -155,6 +158,70 @@ final class KeyRotationTest extends TestCase
         self::assertStringContainsString('✘ Keys', $display);
         self::assertStringContainsString('can be read by others than its owner (mode 644)', $display);
         self::assertStringContainsString('How to fix it: Run: chmod 600 '.$this->file(), $display);
+    }
+
+    /**
+     * The MAC key rotates in one step, and a retired one is kept as long as the decision log keeps
+     * records: the doctor says when it confirms nothing any more, and --prune removes it.
+     */
+    public function testTheMacKeyRotatesInOneStepAndIsPrunedOnceItConfirmsNothing(): void
+    {
+        $container = $this->boot();
+        $this->command('yorvoid:migrate');
+        $clock = $container->get('clock');
+        \assert($clock instanceof MockClock);
+        $clock->modify('2026-10-29 18:00:00');
+        $this->command('yorvoid:keys:rotate');
+        $clock->modify('+1 day');
+
+        [$status, $display] = $this->command('yorvoid:keys:rotate', ['--mac' => true]);
+        self::assertSame(Command::SUCCESS, $status);
+        self::assertStringContainsString('mac-2026-10-30 MACs now, and mac-2026-10-29 only confirms what it MACed. Once the decision log no longer keeps those records, run: yorvoid:keys:rotate --mac --prune', $display);
+        $ring = KeyRing::fromFile($this->file());
+        self::assertSame(['mac-2026-10-30', '2026-10-29'], [$ring->mac()?->id, $ring->signer()->id], 'The signing keys are untouched.');
+
+        [, $display] = $this->command('yorvoid:keys:rotate', ['--mac' => true, '--prune' => true]);
+        self::assertStringContainsString('No MAC key was retired longer than 90d ago.', $display);
+        self::assertStringContainsString('✔ Keys', $this->command('yorvoid:doctor')[1]);
+
+        $clock->modify('+91 days');
+        [, $display] = $this->command('yorvoid:doctor');
+        self::assertStringContainsString('The MAC key mac-2026-10-29 of "default" was retired longer ago than the decision log keeps records (90d): it confirms nothing any more.', $display);
+        [, $display] = $this->command('yorvoid:keys:rotate', ['--mac' => true, '--prune' => true]);
+        self::assertStringContainsString('Removed mac-2026-10-29: what they MACed can\'t be confirmed any more.', $display);
+        self::assertNull(KeyRing::fromFile($this->file())->macKey('mac-2026-10-29'));
+
+        $clock->modify('+1 year');
+        self::assertStringContainsString('The MAC key mac-2026-10-30 of "default" has been active for more than a year.', $this->command('yorvoid:doctor')[1]);
+
+        new KeyRing(KeyRing::fromFile($this->file())->keys())->toFile($this->file());
+        self::assertStringContainsString('has no MAC key: the attributes decisions read that aren\'t public are withheld from their records.', $this->command('yorvoid:doctor')[1]);
+    }
+
+    /**
+     * yorvoid:decisions:confirm: what a record holds, compared with a value, and nothing printed but the
+     * result.
+     */
+    public function testConfirmsWhatADecisionReadWithoutPrintingIt(): void
+    {
+        $container = $this->boot();
+        $this->command('yorvoid:migrate');
+        $this->command('yorvoid:keys:rotate');
+        $macs = $container->get(AttributeMacs::class);
+        $store = $container->get('yorvoid.store.decision_log');
+        \assert($macs instanceof AttributeMacs && $store instanceof DecisionLogStore);
+        $recorded = $macs->record(Realm::default(), 'acme.department', 'finance', false);
+        $store->add([new DecisionRecord('d-1', Realm::default(), new \DateTimeImmutable('2026-11-23 18:00:00', new \DateTimeZone('UTC')), 'ability', 'acme.pages.edit', null, null, 'deny', null, 'No.', [], [], [], ['policy' => 1], ['web', 'r'], moved: [], attributes: ['acme.department' => $recorded, 'acme.level' => 'v:7'])]);
+
+        self::assertSame([Command::SUCCESS, 'matches'], [$this->command('yorvoid:decisions:confirm', ['decision' => 'd-1', 'attribute' => 'acme.department', 'value' => 'finance'])[0], trim($this->command('yorvoid:decisions:confirm', ['decision' => 'd-1', 'attribute' => 'acme.department', 'value' => 'finance'])[1])]);
+        self::assertSame([Command::FAILURE, 'differs'], [$this->command('yorvoid:decisions:confirm', ['decision' => 'd-1', 'attribute' => 'acme.department', 'value' => 'sales'])[0], trim($this->command('yorvoid:decisions:confirm', ['decision' => 'd-1', 'attribute' => 'acme.department', 'value' => 'sales'])[1])]);
+        self::assertSame('matches', trim($this->command('yorvoid:decisions:confirm', ['decision' => 'd-1', 'attribute' => 'acme.level', 'value' => '7', '--json' => true])[1]), 'A number, as JSON.');
+        self::assertSame('differs', trim($this->command('yorvoid:decisions:confirm', ['decision' => 'd-1', 'attribute' => 'acme.level', 'value' => '7'])[1]), 'Not its text.');
+        self::assertStringNotContainsString(substr($recorded, 2), $this->command('yorvoid:decisions:confirm', ['decision' => 'd-1', 'attribute' => 'acme.department', 'value' => 'x'])[1], 'The MAC isn\'t printed.');
+
+        [$status, $display] = $this->command('yorvoid:decisions:confirm', ['decision' => 'd-9', 'attribute' => 'acme.department', 'value' => 'finance']);
+        self::assertSame(Command::FAILURE, $status);
+        self::assertStringContainsString('The realm "default" has no decision d-9', $display);
     }
 
     public function testEachRealmRotatesItsOwnKeys(): void

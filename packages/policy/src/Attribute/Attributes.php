@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Policy\Attribute;
 
+use YorvoID\Core\Authorization\DecisionScope;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Exception\IntegratorError;
 
@@ -32,6 +33,7 @@ final readonly class Attributes
     /**
      * @param iterable<AttributeDeclarations> $declarations
      * @param iterable<AttributeResolver>     $resolvers
+     * @param DecisionScope|null              $scope        The evaluator's: what a decision reads is recorded with it, and read once in it
      *
      * @throws IntegratorError When an attribute is declared twice
      */
@@ -39,6 +41,7 @@ final readonly class Attributes
         iterable $declarations,
         private AttributeStore $store,
         iterable $resolvers = [],
+        private ?DecisionScope $scope = null,
     ) {
         $declared = [];
 
@@ -101,9 +104,19 @@ final readonly class Attributes
      */
     public function resolve(Request $request, string $name): string|int|bool|array
     {
+        // A decision reads one value of each: the first, also for its record.
+        $read = $this->scope?->attribute($name);
+
+        if (null !== $read) {
+            return $read;
+        }
+
         foreach ($this->resolvers as $resolver) {
             if ($resolver->resolves($name)) {
-                return $resolver->resolve($request, $name) ?? throw new MissingAttribute($name, 'request');
+                $value = $resolver->resolve($request, $name) ?? throw new MissingAttribute($name, 'request');
+                $this->scope?->read($name, $value, $resolver instanceof ResolvesPublicValues && $resolver->publicValue($name));
+
+                return $value;
             }
         }
 

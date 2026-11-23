@@ -50,10 +50,12 @@ What YorvoID protects, against whom, how, and what it leaves to others. It's kep
 | Database writer rewrites the whole chain, or cuts off its end | Signed checkpoints kept outside the database; verification against them | In place up to the last checkpoint, when they're configured and taken regularly; `yorvoid:doctor` warns outside development while there are none |
 | Attacker-controlled text breaks the log (and so the operation, or the record of an attack) | Invalid UTF-8 and NUL replaced before hashing and storing, an origin's detail cut to its column; the log is structured, never formatted text | In place, on PostgreSQL, SQLite and in memory |
 | Two processes write the log at once and fork it | Appends serialized per realm; the primary key refuses a second entry with the same number | In place, tested with concurrent processes |
+| Decision records disclose the attributes a decision read | Values recorded only where their resolver declares them public, and booleans; any other as an HMAC under the realm's MAC key, kept in the key file, never in the database; every confirmation logged, never with the value | In place. A database reader learns no value, but sees which decisions read equal ones; whoever holds the key file can guess values with few possibilities; removing a key stops confirmations but not a thief's guesses, nor copies in backups |
+| A MAC key used as a signing key, or a MAC passed off as a signature | MAC keys apart from signing keys by type: no signing or verifying with one, IDs unique across both, `oct` keys and `HS*` algorithms refused as signing keys; the MAC's own domain, so it's never a JWS's | In place |
 | Signing key leaks | Key ring with rotation; keys outside the database; key files readable only by their owner | In place; hardware or cloud key stores planned (M7) |
 | Predictable secrets | Only the operating system's CSPRNG, at least 128 bits; predictable generators refused by static analysis | In place |
 | Timing of comparisons reveals secrets | Secrets compared only with `hash_equals()`, enforced by static analysis | In place |
-| Weak or downgraded hash algorithms | SHA-256; Ed25519 or ES256 (P-256) signing keys; every hash and key names its algorithm; unknown algorithms refused; in FIPS mode only what OpenSSL's FIPS provider allows, checked at boot | In place |
+| Weak or downgraded hash algorithms | SHA-256; Ed25519 or ES256 (P-256) signing keys; every hash and key names its algorithm; unknown algorithms refused; in FIPS mode only what OpenSSL's FIPS provider allows, checked at boot, except the attribute MAC, composed by YorvoID over the provider's SHA-256 and self-tested at boot | In place |
 
 ### Authentication and sessions (M1, M4)
 

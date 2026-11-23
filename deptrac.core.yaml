@@ -112,6 +112,8 @@ deptrac:
       - Event
       - Exception
       - Id
+      # The realm's MAC key, for the attributes a decision read (AttributeMacs, M-9).
+      - Key
       - Log
       - Operation
       - Principal
@@ -120,6 +122,8 @@ deptrac:
     Clock: ~
     Crypto:
       - Exception
+      # A MAC's key is a Secret (Mac).
+      - Root
     Evaluator:
       - Authorization
       - Event
@@ -135,6 +139,8 @@ deptrac:
     Id:
       - Exception
     Key:
+      # A MAC key MACs through Crypto's HMAC (MacKey).
+      - Crypto
       - Exception
       - Root
     Log:

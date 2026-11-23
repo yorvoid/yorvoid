@@ -36,7 +36,9 @@ use YorvoID\Authn\StepUp\Storage\DbalCoolDownStore;
 use YorvoID\Authn\Token\OneTimeTokens;
 use YorvoID\Authn\Token\OneTimeTokenStore;
 use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
+use YorvoID\Core\Authorization\AttributeMacs;
 use YorvoID\Core\Authorization\DecisionLog\AuditFailure;
+use YorvoID\Core\Authorization\DecisionLog\DecisionConfirmations;
 use YorvoID\Core\Authorization\DecisionLog\DecisionDigests;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
@@ -122,6 +124,7 @@ use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationsVersion;
 use YorvoID\Relations\Storage\CachedRelationStore;
 use YorvoID\Relations\Storage\DbalRelationStore;
+use YorvoID\Symfony\Command\DecisionsConfirmCommand;
 use YorvoID\Symfony\Command\DoctorCommand;
 use YorvoID\Symfony\Command\IdentifiersNormalizeCommand;
 use YorvoID\Symfony\Command\KeysRotateCommand;
@@ -161,6 +164,7 @@ use YorvoID\Symfony\Factories;
 use YorvoID\Symfony\Flow\FlowContexts;
 use YorvoID\Symfony\Flow\SessionFlowStore;
 use YorvoID\Symfony\Key\ConfiguredCheckpoints;
+use YorvoID\Symfony\Key\ConfiguredKeyRings;
 use YorvoID\Symfony\Key\KeyFiles;
 use YorvoID\Symfony\Limits;
 use YorvoID\Symfony\Remedy\NotPermittedListener;
@@ -280,6 +284,8 @@ return static function (ContainerConfigurator $container): void {
 
     // The signing keys: one file for every realm, or one for each (D-40).
     $services->set(KeyFiles::class)->args([param('yorvoid.keys.file'), param('yorvoid.keys.per_realm'), param('yorvoid.keys.directory')]);
+    // The attributes decisions read, MACed under each realm's MAC key (M-9); read per request.
+    $services->set(AttributeMacs::class)->args([inline_service(ConfiguredKeyRings::class)->args([service(KeyFiles::class)])])->tag('kernel.reset', ['method' => 'reset']);
 
     // The services.
     // Failed attempts and refusals go to the decision log, outside the chain (D-42).
@@ -335,7 +341,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(RelationPermit::class)->tag('yorvoid.policy_element');
     $services->set(RelationChanges::class);
     $services->set(GroupChanges::class);
-    $services->set(Attributes::class)->args([tagged_iterator('yorvoid.attribute_declarations'), service(Stores::IDS[AttributeStore::class]), tagged_iterator('yorvoid.attribute_resolver')])->public();
+    $services->set(Attributes::class)->args([tagged_iterator('yorvoid.attribute_declarations'), service(Stores::IDS[AttributeStore::class]), tagged_iterator('yorvoid.attribute_resolver'), service(DecisionScope::class)])->public();
     $services->set(AttributeChanges::class);
     $services->set(OrderedConditions::class)->args([param('yorvoid.ordered_conditions.pessimistic')])->public();
     $services->set(Roles::class)->arg('$sources', tagged_iterator('yorvoid.role_source'))->arg('$relations', service(Relations::class))->public();
@@ -369,6 +375,7 @@ return static function (ContainerConfigurator $container): void {
         // Every decision reads its session from the store (D-45).
         tagged_iterator('yorvoid.actor_prover'),
         service(DecisionScope::class),
+        service(AttributeMacs::class),
     ]);
     $services->set(StoredSessions::class)->args([service(Stores::IDS[SessionStore::class]), service(ClockInterface::class)])->tag('yorvoid.actor_prover');
     $services->alias(Authorization::class, Evaluator::class);
@@ -439,7 +446,7 @@ return static function (ContainerConfigurator $container): void {
         array_map(service_closure(...), [PasskeyPolicy::class, SessionPolicy::class, AttemptLimits::class, Database::class]),
         param('kernel.debug'),
     ])->tag('yorvoid.doctor_check', ['name' => 'Configuration']);
-    $services->set(KeysCheck::class)->args([service(KeyFiles::class), service(Realm::class)])->tag('yorvoid.doctor_check', ['name' => 'Keys']);
+    $services->set(KeysCheck::class)->args([service(KeyFiles::class), service(Realm::class), service(ClockInterface::class), param('yorvoid.decision_log.keep')])->tag('yorvoid.doctor_check', ['name' => 'Keys']);
     $services->set(MigrationsCheck::class)->args([service_closure(Database::class)])->tag('yorvoid.doctor_check', ['name' => 'Database and migrations']);
     $services->set(LogCheckpointsCheck::class)->args([service(KeyFiles::class), param('yorvoid.log.checkpoint_file'), param('yorvoid.log.checkpoint_logger'), service(Realm::class), service(ClockInterface::class), param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Security log checkpoints']);
     $services->set(CryptoCheck::class)->args([inline_service(CryptoMode::class)->factory([CryptoMode::class, 'from'])->args([param('yorvoid.crypto.mode')]), service_closure(CryptoPolicy::class)])->tag('yorvoid.doctor_check', ['name' => 'Cryptography']);
@@ -456,7 +463,9 @@ return static function (ContainerConfigurator $container): void {
     $services->set(TestHelpersCheck::class)->args([param('kernel.debug')])->tag('yorvoid.doctor_check', ['name' => 'Test helpers']);
     $services->set(VotersCheck::class)->args([param('yorvoid.voters.wrapped')])->tag('yorvoid.doctor_check', ['name' => 'Symfony voters']);
     $services->set(EnvironmentCheck::class)->args([param('kernel.environment'), param('kernel.debug'), param('kernel.secret')])->tag('yorvoid.doctor_check', ['name' => 'Environment']);
-    $services->set(KeysRotateCommand::class)->tag('console.command');
+    $services->set(DecisionConfirmations::class)->public();
+    $services->set(DecisionsConfirmCommand::class)->tag('console.command');
+    $services->set(KeysRotateCommand::class)->arg('$keepDecisions', param('yorvoid.decision_log.keep'))->tag('console.command');
     $services->set(ConfiguredCheckpoints::class)->arg('$file', param('yorvoid.log.checkpoint_file'))->arg('$toLogger', param('yorvoid.log.checkpoint_logger'))->arg('$events', service('event_dispatcher'))->arg('$logger', service('logger')->nullOnInvalid());
     // Each checkpoint first digests the decision records since the last (D-42).
     $services->set(DecisionDigests::class)->arg('$grace', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.decision_log.digest_grace')]));
@@ -469,6 +478,8 @@ return static function (ContainerConfigurator $container): void {
     foreach ([MigrateCommand::class, PurgeCommand::class, SetupCodeCommand::class, RecoveryLinkCommand::class, IdentifiersNormalizeCommand::class, TemplatesPublishCommand::class, TemplatesDiffCommand::class, TemplatesLintCommand::class] as $command) {
         $services->set($command)->tag('console.command');
     }
+
+    $services->get(PurgeCommand::class)->arg('$keepDecisions', param('yorvoid.decision_log.keep'));
 
     // The application uses these.
     foreach ([Principals::class, Sessions::class, StepUp::class, Credentials::class, OneTimeTokens::class, Throttle::class, Attempts::class, SetupCodes::class, Invitations::class, RecoveryLinks::class, RecoveryCodes::class, NotMe::class, Passkeys::class, IntentSummaries::class, IntentSigning::class, SecurityLog::class] as $public) {

@@ -44,6 +44,9 @@ yorvoid:
         # A DoctrineBundle connection of its own to the same database, which writes decisions, refusals and failed attempts among them, outside the application's transactions: give one with audit.on_failure: refuse. Not on SQLite: there it waits for the application's write lock; without one, they're written once the application's transaction ends
         connection:           null
 
+        # How long the decision log keeps a decision: yorvoid:purge's default, and how long a retired MAC key is kept to confirm what it MACed
+        keep:                 90d
+
         # How long a decision record may take to be written after it's decided, e.g. a request's buffered records: yorvoid:log:checkpoint digests records older than that
         digest_grace:         1m
     crypto:
