@@ -11,6 +11,7 @@ use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Key\KeyAlgorithm;
 use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Key\MacKey;
 use YorvoID\Core\Key\SharedKeyRings;
@@ -33,7 +34,7 @@ final class ResolvedAttributesTest extends TestCase
 {
     public function testEachValueIsRecordedAsItsKindAllows(): void
     {
-        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1')])));
+        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [MacKey::generate('m-1')])));
         $resolver = new PageFacts();
         $world = new PolicyWorld(resolvers: [$resolver], rulesOf: static fn (Attributes $attributes): array => [new ReadsFacts($attributes)], macs: $macs);
         $decision = $this->decide($world, 'p-1');
@@ -64,7 +65,7 @@ final class ResolvedAttributesTest extends TestCase
     public function testTextThatIsntUtf8IsWithheldAndNeverConfirms(): void
     {
         $realm = new Realm('acme');
-        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1')])));
+        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [MacKey::generate('m-1')])));
 
         self::assertSame('w:', $macs->record($realm, 'acme.department', "a\xff", false));
         self::assertSame('w:', $macs->record($realm, 'acme.department', "a\xff", true), 'Not shown either.');
@@ -83,7 +84,7 @@ final class ResolvedAttributesTest extends TestCase
     public function testANameAndAValueCantTradeBytes(): void
     {
         $realm = new Realm('acme');
-        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1')])));
+        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [MacKey::generate('m-1')])));
 
         self::assertNotSame($macs->record($realm, "a\0\"b", 'c', false), $macs->record($realm, 'a', "b\0c", false));
         self::assertSame(Confirmation::Differs, $macs->confirm($realm, 'a', $macs->record($realm, "a\0x", 'y', false), "x\0y"));
@@ -103,7 +104,7 @@ final class ResolvedAttributesTest extends TestCase
      */
     public function testEachRequestOfABatchReadsItsOwn(): void
     {
-        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1')])));
+        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [MacKey::generate('m-1')])));
         $world = new PolicyWorld(resolvers: [new PageFacts()], rulesOf: static fn (Attributes $attributes): array => [new ReadsFacts($attributes)], macs: $macs);
         $member = $world->principal('member');
         $pages = [new ResourceRef('page', 'p-1'), new ResourceRef('page', 'p-2')];

@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Core\Key;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Key\KeyAlgorithm;
 use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Key\KeyStatus;
 use YorvoID\Core\Key\MacKey;
@@ -22,14 +23,14 @@ final class MacKeysTest extends TestCase
 {
     public function testTheRingMacsWithItsActiveMacKeyOnly(): void
     {
-        $ring = new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1')]);
+        $ring = new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [MacKey::generate('m-1')]);
 
         self::assertSame('m-1', $ring->mac()?->id);
         self::assertSame('m-1', $ring->macKey('m-1')?->id);
         self::assertNull($ring->get('m-1'), 'A MAC key is never a signing key.');
         self::assertNull($ring->macKey('s-1'), 'Nor a signing key a MAC key.');
         self::assertSame(['s-1'], array_map(static fn (SigningKey $key): string => $key->id, $ring->keys()));
-        self::assertNull(new KeyRing([SigningKey::generate('s-1')])->mac(), 'A ring may have none.');
+        self::assertNull(new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)])->mac(), 'A ring may have none.');
     }
 
     /**
@@ -38,7 +39,7 @@ final class MacKeysTest extends TestCase
     public function testAMacKeysIdVerifiesNoSignature(): void
     {
         $mac = MacKey::generate('m-1');
-        $ring = new KeyRing([SigningKey::generate('s-1')], [$mac]);
+        $ring = new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [$mac]);
 
         self::assertFalse($ring->verify('m-1', 'message', $mac->mac('message')));
         self::assertFalse($ring->verify('m-1', 'message', $mac->mac('message').$mac->mac('message')));
@@ -47,7 +48,7 @@ final class MacKeysTest extends TestCase
     public function testMacKeysRoundTripOnlyInTheKeyFile(): void
     {
         $retired = MacKey::generate('m-1')->retired(new \DateTimeImmutable('2026-11-01T00:00:00+00:00'));
-        $ring = new KeyRing([SigningKey::generate('s-1')], [$retired, MacKey::generate('m-2')]);
+        $ring = new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [$retired, MacKey::generate('m-2')]);
         $copy = KeyRing::fromJwks($ring->toJwks(withPrivateParts: true));
 
         self::assertSame('m-2', $copy->mac()?->id);
@@ -61,11 +62,11 @@ final class MacKeysTest extends TestCase
     public function testAMacKeyRotatesInOneStepAndIsRemovedOnlyOnceRetired(): void
     {
         $now = new \DateTimeImmutable('2026-11-23T18:00:00+00:00');
-        $ring = new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1')])->withMac(MacKey::generate('m-2'), $now);
+        $ring = new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [MacKey::generate('m-1')])->withMac(MacKey::generate('m-2'), $now);
 
         self::assertSame('m-2', $ring->mac()?->id);
         self::assertSame([KeyStatus::VerifyOnly, $now], [$ring->macKey('m-1')?->status, $ring->macKey('m-1')?->since]);
-        self::assertSame(['m-1', 'm-2'], array_map(static fn (MacKey $key): string => $key->id, $ring->with(SigningKey::generate('s-2', KeyStatus::VerifyOnly))->activating('s-2')->without('s-1')->macKeys()), 'Rotating the signing keys keeps the MAC keys.');
+        self::assertSame(['m-1', 'm-2'], array_map(static fn (MacKey $key): string => $key->id, $ring->with(SigningKey::generate('s-2', KeyStatus::VerifyOnly, KeyAlgorithm::ES256))->activating('s-2')->without('s-1')->macKeys()), 'Rotating the signing keys keeps the MAC keys.');
         self::assertNull($ring->withoutMac('m-1')->macKey('m-1'));
 
         $this->expectException(IntegratorError::class);
@@ -101,9 +102,9 @@ final class MacKeysTest extends TestCase
     public function testAKeyIdIsItsOwnAcrossBothKindsAndOneMacKeyIsActive(): void
     {
         foreach ([
-            'Two keys have the ID "k-1".' => static fn (): KeyRing => new KeyRing([SigningKey::generate('k-1')], [MacKey::generate('k-1')]),
+            'Two keys have the ID "k-1".' => static fn (): KeyRing => new KeyRing([SigningKey::generate('k-1', algorithm: KeyAlgorithm::ES256)], [MacKey::generate('k-1')]),
             'Two keys have the ID "m-1".' => static fn (): KeyRing => new KeyRing([], [MacKey::generate('m-1'), MacKey::generate('m-1')->retired(new \DateTimeImmutable())]),
-            'The key ring has 2 active MAC keys (m-1, m-2).' => static fn (): KeyRing => new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1'), MacKey::generate('m-2')]),
+            'The key ring has 2 active MAC keys (m-1, m-2).' => static fn (): KeyRing => new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [MacKey::generate('m-1'), MacKey::generate('m-2')]),
         ] as $message => $ring) {
             try {
                 $ring();

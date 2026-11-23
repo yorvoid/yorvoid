@@ -11,6 +11,7 @@ use YorvoID\Core\Authorization\DecisionLog\DecisionConfirmations;
 use YorvoID\Core\Authorization\DecisionLog\DecisionRecord;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Key\KeyAlgorithm;
 use YorvoID\Core\Key\KeyRing;
 use YorvoID\Core\Key\MacKey;
 use YorvoID\Core\Key\SharedKeyRings;
@@ -31,7 +32,7 @@ final class DecisionConfirmationsTest extends TestCase
     public function testEachConfirmationIsLoggedWithoutTheValue(): void
     {
         $realm = new Realm('acme');
-        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1')], [MacKey::generate('m-1')])));
+        $macs = new AttributeMacs(new SharedKeyRings(new KeyRing([SigningKey::generate('s-1', algorithm: KeyAlgorithm::ES256)], [MacKey::generate('m-1')])));
         $record = new DecisionRecord('d-1', $realm, new \DateTimeImmutable('2026-11-23 18:00:00', new \DateTimeZone('UTC')), 'ability', 'acme.pages.edit', null, null, 'deny', null, 'No.', [], [], [], ['policy' => 1], ['web', 'r'], moved: [], attributes: ['acme.department' => $macs->record($realm, 'acme.department', 'finance', false), 'acme.flagged' => 'v:true']);
         $store = new InMemorySecurityLogStore();
         $transactions = new InMemoryTransactions();
