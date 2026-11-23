@@ -30,6 +30,8 @@ final readonly class Chains
     {
         $links = [];
         $seen = [];
+        /** @var array<string, bool> $active Each principal read once: a link's delegate is the next one's delegator */
+        $active = [];
 
         for ($link = $leaf;; $link = $parent) {
             $links[] = $link;
@@ -49,7 +51,7 @@ final readonly class Chains
             }
 
             foreach ([$link->delegator, $link->delegate] as $principal) {
-                if (true !== $this->principals->get($link->realm, $principal)?->isActive()) {
+                if (!($active[(string) $principal] ??= true === $this->principals->get($link->realm, $principal)?->isActive())) {
                     return ChainCheck::invalid(\sprintf('the principal %s isn\'t active', $principal), $links);
                 }
             }

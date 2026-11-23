@@ -74,7 +74,7 @@ holds "delegation chains: recomputing every time is safe and well-formed (Quint,
 for broken in unversioned noExpiry leafOnly; do
 	violated "delegation chains: $broken breaks SAFE (Quint, simulation)" "\[violation\]" quint run --main=$broken --invariant=SAFE --max-samples=20000 --max-steps=25 --seed=42 delegation/chains.qnt
 done
-# The executions M3-2's PHP tests will replay: "node traces.mjs delegation/chains.qnt checked 100 14 0xc4a1d5 > delegation/traces.itf.json".
+# The executions the PHP tests replay (ChainTracesTest): "node traces.mjs delegation/chains.qnt checked 100 14 0xc4a1d5 > delegation/traces.itf.json".
 TRACES_CHAINS='node traces.mjs delegation/chains.qnt checked 100 14 0xc4a1d5'
 holds "delegation chains: the executions to replay are the model's" sh -c "$TRACES_CHAINS | cmp -s - delegation/traces.itf.json"
 
