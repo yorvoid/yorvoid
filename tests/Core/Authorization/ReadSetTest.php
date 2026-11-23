@@ -7,6 +7,7 @@ namespace YorvoID\Tests\Core\Authorization;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLog;
+use YorvoID\Core\Authorization\DecisionLog\PermitRecording;
 use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
 use YorvoID\Core\Authorization\DecisionScope;
 use YorvoID\Core\Authorization\Evaluator;
@@ -98,7 +99,7 @@ final class ReadSetTest extends TestCase
 
     public function testADecisionNothingChangedUnderIsSettled(): void
     {
-        $decision = $this->evaluator([new StubPermit('acme.holds', Truth::holds('Held.'))], [new CountingVersion('policy', 1)])->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
+        $decision = $this->evaluator([new StubPermit('acme.holds', Truth::holds('Held.'))], [new CountingVersion('policy', 1)], log: self::recordingAll())->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
 
         self::assertEquals(new ReadSet(['policy' => 1]), $decision->read);
         self::assertTrue($decision->read->settled());
@@ -138,7 +139,7 @@ final class ReadSetTest extends TestCase
             }
         };
 
-        $decision = $this->evaluator([$failing], [$policy])->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
+        $decision = $this->evaluator([$failing], [$policy], log: self::recordingAll())->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
 
         self::assertEquals(new ReadSet(['policy' => 4], ['policy']), $decision->read);
     }
@@ -185,7 +186,7 @@ final class ReadSetTest extends TestCase
             }
         };
 
-        $decision = $this->evaluator([$reads], [$policy], $scope)->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
+        $decision = $this->evaluator([$reads], [$policy], $scope, self::recordingAll())->decideAbility(self::member(), 'acme.pages.edit', new Realm('acme'), null, new Origin(OriginKind::Web));
 
         self::assertSame([5], $seen->getArrayCopy(), 'While it judged, the version it read before.');
         self::assertEquals(new ReadSet(['policy' => 5], ['policy']), $decision->read, 'And what moved, read outside the scope.');
@@ -227,6 +228,11 @@ final class ReadSetTest extends TestCase
     private function evaluator(array $elements, array $versions, ?DecisionScope $scope = null, ?DecisionLog $log = null): Evaluator
     {
         return new Evaluator($elements, new StubAuthority(Truth::holds('valid')), new MockClock('2026-11-23 18:00:00'), versions: $versions, decisions: $log, actors: [new TrustedActors()], scope: $scope);
+    }
+
+    private static function recordingAll(): DecisionLog
+    {
+        return new DecisionLog(new InMemoryDecisionLogStore(), PermitRecording::All);
     }
 
     private static function member(): Member

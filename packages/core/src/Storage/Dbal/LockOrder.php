@@ -41,8 +41,7 @@ final class LockOrder
 
     private const array RANKS = [
         DbalTransactions::REALM_LOCK_TABLE => self::REALM,
-        'policy_version' => self::VERSION,
-        'relation_version' => self::VERSION,
+        'versions' => self::VERSION,
         'security_log_head' => self::HEAD,
         'security_log' => self::HEAD,
     ];

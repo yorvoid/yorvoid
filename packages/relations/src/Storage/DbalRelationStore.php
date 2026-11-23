@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace YorvoID\Relations\Storage;
 
+use YorvoID\Core\Authorization\KeepsVersionsIn;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\Storage\DbalVersionStore;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Core\Storage\Row;
@@ -18,20 +21,26 @@ use YorvoID\Relations\Subject;
  *
  * @api
  */
-final readonly class DbalRelationStore implements RelationStore
+final readonly class DbalRelationStore implements RelationStore, KeepsVersionsIn
 {
     public const string TABLE = 'relation_tuple';
-
-    public const string VERSION_TABLE = 'relation_version';
 
     /** Pairs per query: well within every platform's limit on parameters */
     private const int BATCH = 100;
 
     private const string COLUMNS = 'object_type, object_id, relation, subject_type, subject_id, subject_relation';
 
+    private VersionStore $versions;
+
+    /**
+     * @param VersionStore|null $versions Where its version is kept: the one the evaluator's sources read, so a
+     *                                    decision reads every version at once; its own on the database, if not given
+     */
     public function __construct(
         private Database $database,
+        ?VersionStore $versions = null,
     ) {
+        $this->versions = $versions ?? new DbalVersionStore($database);
     }
 
     public function add(RelationTuple $tuple): void
@@ -111,9 +120,12 @@ final readonly class DbalRelationStore implements RelationStore
 
     public function version(Realm $realm): int
     {
-        $row = $this->database->connection->fetchAssociative(\sprintf('SELECT version FROM %s WHERE realm = ?', $this->database->table(self::VERSION_TABLE)), [$realm->name]);
+        return $this->versions->versions($realm, ['relations'])['relations'];
+    }
 
-        return false === $row ? 0 : Row::int($row, 'version');
+    public function versionStore(): VersionStore
+    {
+        return $this->versions;
     }
 
     /**
@@ -121,7 +133,7 @@ final readonly class DbalRelationStore implements RelationStore
      */
     private function bump(Realm $realm): void
     {
-        $this->database->increment(self::VERSION_TABLE, 'realm', $realm->name);
+        $this->versions->bump($realm, 'relations');
     }
 
     /**

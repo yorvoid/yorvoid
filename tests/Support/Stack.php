@@ -25,6 +25,9 @@ use YorvoID\Authn\Token\Storage\DbalOneTimeTokenStore;
 use YorvoID\Core\Authorization\DecisionLog\DecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\Storage\DbalDecisionLogStore;
 use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
+use YorvoID\Core\Authorization\Storage\DbalVersionStore;
+use YorvoID\Core\Authorization\Storage\InMemoryVersionStore;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Log\Storage\DbalSecurityLogStore;
@@ -81,6 +84,7 @@ final readonly class Stack
         public AttributeStore $attributes,
         public ?Database $database = null,
         public DecisionLogStore $decisions = new InMemoryDecisionLogStore(),
+        public VersionStore $versions = new InMemoryVersionStore(),
     ) {
     }
 
@@ -98,7 +102,7 @@ final readonly class Stack
             self::migrate($database);
         }
 
-        return new self($implementation, new DbalTransactions($database->connection, $middleware, $events, $logger, location: $database->location), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database), new DbalRelationStore($database), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database));
+        return new self($implementation, new DbalTransactions($database->connection, $middleware, $events, $logger, location: $database->location), new DbalPrincipalStore($database), new DbalIdentifierStore($database), new DbalSecurityLogStore($database), new DbalSessionStore($database), new DbalOneTimeTokenStore($database), new DbalSetupStore($database), new DbalCredentialStore($database), new DbalPasskeyStore($database), new DbalCeremonyStore($database), new DbalRecoveryCodeStore($database), new DbalCoolDownStore($database), new DbalThrottleStore($database), new DbalKnownDeviceStore($database), new DbalPolicyStore($database, $versions = new DbalVersionStore($database)), new DbalRelationStore($database, $versions), new DbalAttributeStore($database), $database, new DbalDecisionLogStore($database), $versions);
     }
 
     /**

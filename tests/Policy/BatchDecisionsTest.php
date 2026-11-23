@@ -80,8 +80,9 @@ final class BatchDecisionsTest extends DatabaseTestCase
             self::assertCount($size, $decisions);
         }
 
-        self::assertSame([1 => $counts[1], 10 => $counts[1], 100 => $counts[1]], $counts, 'Statements for 1, 10 and 100 pages.');
-        self::assertLessThanOrEqual(12, $counts[1], 'The versions before and after judging (D-44), the principal, assignments, groups, two levels of parents and the editors.');
+        self::assertSame($counts[10], $counts[100], 'Statements for 10 and 100 pages.');
+        self::assertSame($counts[1] + 1, $counts[10], 'Page 1 is permitted and nothing records it, so its versions aren\'t read again; 10 pages have refusals, which are (D-44).');
+        self::assertLessThanOrEqual(10, $counts[10], 'The versions before and after judging, each in one statement, the principal, assignments, groups, two levels of parents and the editors.');
     }
 
     public function testARequestReadsThePolicyOnceForEachVersion(): void

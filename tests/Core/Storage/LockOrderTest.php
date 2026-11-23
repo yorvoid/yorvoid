@@ -28,17 +28,17 @@ final class LockOrderTest extends TestCase
      */
     public static function outOfOrder(): iterable
     {
-        yield 'a version row without the realm\'s lock' => [[], 'UPDATE "yorvoid_policy_version" SET version = version + 1 WHERE realm = ?'];
-        yield 'a relations version row without it' => [['UPDATE "yorvoid_principal" SET lock_count = lock_count + 1 WHERE id = ?'], 'INSERT INTO "s"."yorvoid_relation_version" (realm, version) VALUES (?, 1)'];
+        yield 'a version row without the realm\'s lock' => [[], 'UPDATE "yorvoid_versions" SET version = version + 1 WHERE realm = ?'];
+        yield 'a relations version row without it' => [['UPDATE "yorvoid_principal" SET lock_count = lock_count + 1 WHERE id = ?'], 'INSERT INTO "s"."yorvoid_versions" (realm, version) VALUES (?, 1)'];
         yield 'the realm\'s lock after a principal\'s' => [['UPDATE "yorvoid_principal" SET lock_count = lock_count + 1 WHERE id = ?'], 'INSERT INTO "yorvoid_realm_lock" AS held (realm, n) VALUES (?, 1) ON CONFLICT (realm) DO UPDATE SET n = held.n + 1'];
         yield 'the realm\'s lock after a row read for update' => [['SELECT id FROM "yorvoid_passkey_ceremony" WHERE id = ? FOR UPDATE'], 'INSERT INTO "yorvoid_realm_lock" (realm, n) VALUES (?, 1) ON CONFLICT (realm) DO UPDATE SET n = n + 1'];
         yield 'a row after the head' => [['SELECT sequence, hash FROM "yorvoid_security_log_head" WHERE realm = ? FOR UPDATE'], 'DELETE FROM "yorvoid_passkey_ceremony" WHERE id = ?'];
         yield 'the realm\'s lock after the head' => [['UPDATE "yorvoid_security_log_head" SET sequence = ? WHERE realm = ?'], 'INSERT INTO "yorvoid_realm_lock" (realm, n) VALUES (?, 1) ON CONFLICT (realm) DO UPDATE SET n = n + 1'];
         yield 'a lock on a table it can\'t tell' => [[], 'UPDATE (SELECT 1) SET x = 1'];
-        yield 'a version row written in a query' => [[], 'WITH b AS (UPDATE "yorvoid_policy_version" SET version = version + 1 RETURNING version) SELECT version FROM b'];
-        yield 'a version row merged' => [[], 'MERGE INTO "yorvoid_policy_version" v USING (SELECT 1) s ON true WHEN MATCHED THEN UPDATE SET version = v.version + 1'];
-        yield 'a version row after a comment' => [[], '/* bump */ UPDATE "yorvoid_policy_version" SET version = version + 1'];
-        yield 'a version row read for update, in parentheses' => [[], '(SELECT version FROM "yorvoid_policy_version" WHERE realm = ? FOR UPDATE)'];
+        yield 'a version row written in a query' => [[], 'WITH b AS (UPDATE "yorvoid_versions" SET version = version + 1 RETURNING version) SELECT version FROM b'];
+        yield 'a version row merged' => [[], 'MERGE INTO "yorvoid_versions" v USING (SELECT 1) s ON true WHEN MATCHED THEN UPDATE SET version = v.version + 1'];
+        yield 'a version row after a comment' => [[], '/* bump */ UPDATE "yorvoid_versions" SET version = version + 1'];
+        yield 'a version row read for update, in parentheses' => [[], '(SELECT version FROM "yorvoid_versions" WHERE realm = ? FOR UPDATE)'];
         yield 'a statement it doesn\'t know' => [[], 'CALL bump_versions()'];
     }
 
@@ -66,7 +66,7 @@ final class LockOrderTest extends TestCase
             'INSERT INTO "yorvoid_realm_lock" AS held (realm, n) VALUES (?, 1) ON CONFLICT (realm) DO UPDATE SET n = held.n + 1',
             // Under the realm's lock, rows and version rows in either order; the realm's lock again.
             'UPDATE "yorvoid_principal" SET lock_count = lock_count + 1 WHERE id = ?',
-            'UPDATE "yorvoid_policy_version" SET version = version + 1 WHERE realm = ?',
+            'UPDATE "yorvoid_versions" SET version = version + 1 WHERE realm = ?',
             'DELETE FROM "yorvoid_policy_role_assignment" WHERE principal_id = ?',
             'INSERT INTO "yorvoid_realm_lock" AS held (realm, n) VALUES (?, 1) ON CONFLICT (realm) DO UPDATE SET n = held.n + 1',
             // Reads, savepoints, another application's tables and YorvoID's bookkeeping lock nothing it orders.
@@ -105,7 +105,7 @@ final class LockOrderTest extends TestCase
 
     public function testOutsideATransactionNothingIsOrdered(): void
     {
-        new LockOrder(new StorageLocation())->saw('UPDATE "yorvoid_policy_version" SET version = version + 1');
+        new LockOrder(new StorageLocation())->saw('UPDATE "yorvoid_versions" SET version = version + 1');
         $this->addToAssertionCount(1);
     }
 
@@ -121,17 +121,16 @@ final class LockOrderTest extends TestCase
         $configuration->setMiddlewares([$middleware]);
         $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true], $configuration);
         new Migrator(new Database($connection), CoreMigrations::all())->migrate();
-        $connection->executeStatement('CREATE TABLE yorvoid_policy_version (realm TEXT PRIMARY KEY, version INTEGER)');
         $transactions = new DbalTransactions($connection, $middleware);
 
         $transactions->run(static function () use ($transactions, $connection): void {
             $transactions->lockRealm(new Realm('acme'));
-            $connection->executeStatement('INSERT INTO yorvoid_policy_version (realm, version) VALUES (?, 1)', ['acme']);
+            $connection->executeStatement('INSERT INTO yorvoid_versions (realm, source, version) VALUES (?, ?, 1)', ['acme', 'policy']);
         });
 
         $this->expectException(\LogicException::class);
         $this->expectExceptionMessage('A version row written without the realm\'s lock');
-        $transactions->run(static fn () => $connection->executeStatement('UPDATE yorvoid_policy_version SET version = version + 1 WHERE realm = ?', ['acme']));
+        $transactions->run(static fn () => $connection->executeStatement('UPDATE yorvoid_versions SET version = version + 1 WHERE realm = ? AND source = ?', ['acme', 'policy']));
     }
 
     private function order(): LockOrder

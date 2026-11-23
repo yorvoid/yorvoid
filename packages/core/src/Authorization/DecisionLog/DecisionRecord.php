@@ -50,8 +50,8 @@ final readonly class DecisionRecord
      *                                                                                                                           (none for an operation, which is refused); the actor is then the target
      * @param array<string, mixed>                                                                                $details       An attempt's facts, as its log entry had them (format 2)
      * @param string|null                                                                                         $parent        A consequence's: the decision of the operation that caused it (format 3)
-     * @param list<string>                                                                                        $moved         The sources that changed while it judged (format 4)
-     * @param array<string, string>                                                                               $attributes    The resolved attributes it read, by name (format 4)
+     * @param list<string>|null                                                                                   $moved         The sources that changed while it judged; null if that wasn't checked (format 4)
+     * @param array<string, string>|null                                                                          $attributes    The resolved attributes it read, by name; null while they aren't recorded (format 4)
      * @param array<string, mixed>|null                                                                           $delegation    The chain it was decided under, if any (format 4; filled with delegations)
      * @param int                                                                                                 $format        The canonical form it's hashed over: 1 for records written before 0.5
      */
@@ -74,8 +74,8 @@ final readonly class DecisionRecord
         public ?array $viewer = null,
         public array $details = [],
         public ?string $parent = null,
-        public array $moved = [],
-        public array $attributes = [],
+        public ?array $moved = null,
+        public ?array $attributes = null,
         public ?array $delegation = null,
         public int $format = self::FORMAT,
     ) {
@@ -186,7 +186,11 @@ final readonly class DecisionRecord
         // sources; format 4 the read set in full. Each format is hashed as it was written.
         if ($this->format >= 2) {
             $attributes = $this->attributes;
-            ksort($attributes, \SORT_STRING);
+
+            if (null !== $attributes) {
+                ksort($attributes, \SORT_STRING);
+            }
+
             $form['details'] = $this->details;
             $form['read'] = $this->format >= 4
                 ? ['sources' => $versions, 'moved' => $this->moved, 'attributes' => $attributes, 'delegation' => $this->delegation]
@@ -266,20 +270,30 @@ final readonly class DecisionRecord
      *
      * @param array<mixed> $data
      *
-     * @return array{moved: list<string>, attributes: array<string, string>, delegation: array<string, mixed>|null}
+     * @return array{moved: list<string>|null, attributes: array<string, string>|null, delegation: array<string, mixed>|null}
      */
     private static function readOf(array $data): array
     {
         $read = $data['read'] ?? null;
 
-        if (!\is_array($read) || !\is_array($read['attributes'] ?? null) || (null !== ($read['delegation'] ?? null) && !\is_array($read['delegation']))) {
+        if (!\is_array($read) || !\array_key_exists('moved', $read) || !\array_key_exists('attributes', $read)) {
             throw new \UnexpectedValueException('A stored decision\'s read set is malformed.');
         }
 
-        $attributes = [];
+        foreach (['attributes', 'delegation'] as $map) {
+            if (null !== ($read[$map] ?? null) && !\is_array($read[$map])) {
+                throw new \UnexpectedValueException('A stored decision\'s read set is malformed.');
+            }
+        }
 
-        foreach ($read['attributes'] as $name => $value) {
-            $attributes[\is_string($name) && \is_string($value) ? $name : throw new \UnexpectedValueException('A stored decision\'s attributes are malformed.')] = $value;
+        $attributes = null;
+
+        if (\is_array($read['attributes'])) {
+            $attributes = [];
+
+            foreach ($read['attributes'] as $name => $value) {
+                $attributes[\is_string($name) && \is_string($value) ? $name : throw new \UnexpectedValueException('A stored decision\'s attributes are malformed.')] = $value;
+            }
         }
 
         $chain = $read['delegation'] ?? null;
@@ -293,7 +307,7 @@ final readonly class DecisionRecord
             }
         }
 
-        return ['moved' => self::strings($read, 'moved'), 'attributes' => $attributes, 'delegation' => $delegation];
+        return ['moved' => null === $read['moved'] ? null : self::strings($read, 'moved'), 'attributes' => $attributes, 'delegation' => $delegation];
     }
 
     /**

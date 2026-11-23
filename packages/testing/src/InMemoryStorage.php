@@ -12,6 +12,7 @@ use YorvoID\Authn\Setup\Storage\InMemorySetupStore;
 use YorvoID\Authn\StepUp\Storage\InMemoryCoolDownStore;
 use YorvoID\Authn\Token\Storage\InMemoryOneTimeTokenStore;
 use YorvoID\Core\Authorization\DecisionLog\Storage\InMemoryDecisionLogStore;
+use YorvoID\Core\Authorization\Storage\InMemoryVersionStore;
 use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Principal\Storage\InMemoryIdentifierStore;
 use YorvoID\Core\Principal\Storage\InMemoryPrincipalStore;
@@ -72,6 +73,8 @@ final readonly class InMemoryStorage
     /** Not undone with a failed unit of work: decisions are recorded apart from what they permit */
     public InMemoryDecisionLogStore $decisions;
 
+    public InMemoryVersionStore $versions;
+
     public function __construct()
     {
         $this->transactions = new InMemoryTransactions();
@@ -103,6 +106,7 @@ final readonly class InMemoryStorage
         $this->transactions->register($this->policy = new InMemoryPolicyStore());
         $this->transactions->register($this->relations = new InMemoryRelationStore());
         $this->transactions->register($this->attributes = new InMemoryAttributeStore());
+        $this->transactions->register($this->versions = new InMemoryVersionStore());
         $this->throttle = new InMemoryThrottleStore();
         $this->decisions = new InMemoryDecisionLogStore();
     }

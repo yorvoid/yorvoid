@@ -327,8 +327,10 @@ final readonly class Evaluator implements Authorization
 
             return array_map($this->judge(...), $requests);
         });
-        $read = ReadSet::between($before, $this->versionsOf($requests[0]));
-        $decided = array_map(fn (Request $request, Decision $decision): array => [$request, self::identified($decision, (string) $this->ids->next(), $request->at, $read)], $requests, $judged);
+        $checks = array_map($this->checksWhatMoved(...), $requests, $judged);
+        $read = \in_array(true, $checks, true) ? ReadSet::between($before, $this->versionsOf($requests[0])) : null;
+        $unchecked = ReadSet::unchecked($before);
+        $decided = array_map(fn (Request $request, Decision $decision, bool $checks): array => [$request, self::identified($decision, (string) $this->ids->next(), $request->at, $checks && null !== $read ? $read : $unchecked)], $requests, $judged, $checks);
 
         return null === $this->decisions ? array_map(static fn (array $one): Decision => $one[1], $decided) : $this->decisions->recordAll($decided);
     }
@@ -454,8 +456,28 @@ final readonly class Evaluator implements Authorization
     {
         $before = $this->versionsOf($request);
         $decision = $this->scope->within($request->realm, $before, $judge);
+        $read = $this->checksWhatMoved($request, $decision) ? ReadSet::between($before, $this->versionsOf($request)) : ReadSet::unchecked($before);
 
-        return self::identified($decision, (string) $this->ids->next(), $request->at, ReadSet::between($before, $this->versionsOf($request)));
+        return self::identified($decision, (string) $this->ids->next(), $request->at, $read);
+    }
+
+    /**
+     * Whether what moved while the decision judged is checked, by reading the versions again (D-44): the
+     * one place that says so. It is, wherever something uses the decision beyond showing it: an
+     * operation's decision, which a permit and its consequences carry; a refusal and a Permit-offline,
+     * which are always recorded; a view as someone else; an ability's Permit the log records. Only an
+     * ability's Permit that's neither recorded nor acted on, e.g. isGranted() for a link, isn't.
+     */
+    private function checksWhatMoved(Request $request, Decision $decision): bool
+    {
+        if (null !== $request->operation || $request->actor instanceof ViewingAs) {
+            return true;
+        }
+
+        return match ($decision->verdict) {
+            Verdict::Permit => $this->decisions?->recordsPermit($request) ?? false,
+            Verdict::PermitOffline, Verdict::Deny, Verdict::Indeterminate => true,
+        };
     }
 
     /**
@@ -476,8 +498,31 @@ final readonly class Evaluator implements Authorization
     private function versionsNow(Request $request): array
     {
         $versions = [];
+        /** @var array<int, array{VersionStore, list<string>}> $stored The sources kept in each VersionStore, read at once */
+        $stored = [];
+        /** @var list<VersionSource> $own The others, each read on its own */
+        $own = [];
 
         foreach ($this->versions as $source) {
+            $store = $source instanceof KeepsVersionsIn ? $source->versionStore() : null;
+
+            if (null === $store) {
+                $own[] = $source;
+            } else {
+                $stored[spl_object_id($store)][0] = $store;
+                $stored[spl_object_id($store)][1][] = $source->name();
+            }
+        }
+
+        foreach ($stored as [$store, $names]) {
+            try {
+                $versions = [...$versions, ...$store->versions($request->realm, $names)];
+            } catch (\Throwable $e) {
+                $this->logger->warning('YorvoID couldn\'t read the {source} version: {message}', ['source' => implode(', ', $names), 'message' => $e->getMessage()]);
+            }
+        }
+
+        foreach ($own as $source) {
             try {
                 $versions[$source->name()] = $source->version($request->realm);
             } catch (\Throwable $e) {

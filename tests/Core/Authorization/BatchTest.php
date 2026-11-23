@@ -60,9 +60,9 @@ final class BatchTest extends TestCase
         self::assertSame('No permit applies to "acme.pages.edit".', $decisions[1]->reason, 'Not matched, so not preloaded either.');
         self::assertCount(1, $permit->batches);
         self::assertSame([$pages[0], $pages[2], null], array_map(static fn ($request) => $request->resource, $permit->batches[0]), 'Only the requests it matches.');
-        self::assertSame(2, $versions->reads, 'The versions are read once for the batch, before and after judging (D-44).');
+        self::assertSame(2, $versions->reads, 'The versions are read once for the batch before judging, and once after, since its refusal is recorded (D-44).');
         self::assertSame([['policy' => 1]], array_values(array_unique(array_map(static fn (Decision $decision): array => $decision->versions, $decisions), \SORT_REGULAR)), 'The ones read before.');
-        self::assertSame([['policy']], array_values(array_unique(array_map(static fn (Decision $decision): array => $decision->read->moved, $decisions), \SORT_REGULAR)), 'It changed while they judged: each says so.');
+        self::assertSame([null, ['policy'], null, null], array_map(static fn (Decision $decision): ?array => $decision->read->moved, $decisions), 'It changed while they judged: the refusal, which is recorded, says so; the permits nothing records aren\'t checked.');
         self::assertSame(['2026-11-08 20:00:00'], array_values(array_unique(array_map(static fn (Decision $decision): string => ($decision->at ?? new \DateTimeImmutable())->format('Y-m-d H:i:s'), $decisions))));
         self::assertCount(4, array_unique(array_map(static fn (Decision $decision): ?string => $decision->id, $decisions)), 'Each decision has its own ID.');
         $log->flush();

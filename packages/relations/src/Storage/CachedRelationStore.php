@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace YorvoID\Relations\Storage;
 
 use YorvoID\Core\Authorization\DecisionScope;
+use YorvoID\Core\Authorization\KeepsVersionsIn;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\ForgetsWhatItRead;
 use YorvoID\Core\Storage\VersionedCache;
@@ -22,7 +24,7 @@ use YorvoID\Relations\Subject;
  *
  * @api
  */
-final class CachedRelationStore implements RelationStore, ForgetsWhatItRead
+final class CachedRelationStore implements RelationStore, ForgetsWhatItRead, KeepsVersionsIn
 {
     /** @var array<string, true> The realms this request changed */
     private array $changed = [];
@@ -108,5 +110,10 @@ final class CachedRelationStore implements RelationStore, ForgetsWhatItRead
         // The version first: what's read after it is at least as new as it, never older.
         return $this->cache->get($realm, 'relations', $this->version($realm), $read, $of, $load, static fn (mixed $tuples): bool => \is_array($tuples) && array_is_list($tuples)
             && [] === array_filter($tuples, static fn (mixed $tuple): bool => !$tuple instanceof RelationTuple || !$tuple->realm->equals($realm) || !$answers($tuple)));
+    }
+
+    public function versionStore(): ?VersionStore
+    {
+        return $this->store instanceof KeepsVersionsIn ? $this->store->versionStore() : null;
     }
 }

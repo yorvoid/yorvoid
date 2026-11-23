@@ -48,6 +48,8 @@ use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\OfflineDecider;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\StepUpCheck;
+use YorvoID\Core\Authorization\Storage\DbalVersionStore;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Crypto\CryptoMode;
 use YorvoID\Core\Crypto\CryptoPolicy;
 use YorvoID\Core\Id\IdGenerator;
@@ -243,6 +245,8 @@ return static function (ContainerConfigurator $container): void {
         RelationStore::class => DbalRelationStore::class,
         AttributeStore::class => DbalAttributeStore::class,
         DecisionLogStore::class => DbalDecisionLogStore::class,
+        // One for every store that bumps a version, and for the evaluator, which reads them at once.
+        VersionStore::class => DbalVersionStore::class,
     ] as $interface => $implementation) {
         $services->set(Stores::IDS[$interface].'.dbal', $implementation);
         $services->alias(Stores::IDS[$interface], Stores::IDS[$interface].'.dbal');

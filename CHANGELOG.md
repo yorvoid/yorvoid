@@ -31,7 +31,8 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `Transactions::lockRealm()`: locks a realm until the transaction ends, for a check over the realm as a whole, e.g. that it keeps an administrator, and every change that can break one. Changes of status, claiming a setup, creating an active principal, and every change of roles, groups, abilities, relations and attributes take it first ([locks](docs/concepts/storage.md#locks)).
 - `Transactions::beforeCommit()`: runs a callback just before the outermost transaction commits, inside it; if it fails, nothing commits.
 - `YORVOID_LOCK_ORDER=check`: in your tests, every transaction on a connection with `TransactionMiddleware` throws when it takes YorvoID's locks out of their order ([locks](docs/concepts/storage.md#locks)). The version rows it knows are YorvoID's: a `HoldsAuthority` store of your own isn't checked for the realm's lock.
-- `ReadSet`, `Decision::$read` and `Permit::$read`: what a decision read, each source's version just before its elements judged, and the sources that changed while they judged (`moved`). `DecisionScope` (`@experimental`): given to the evaluator and the cached stores, so a decision's elements read at the versions it read.
+- `ReadSet`, `Decision::$read` and `Permit::$read`: what a decision read, each source's version just before its elements judged, and the sources that changed while they judged (`moved`; `null` where that wasn't checked, for an ability's Permit nothing records). `DecisionScope` (`@experimental`): given to the evaluator and the cached stores, so a decision's elements read at the versions it read.
+- `VersionStore`, `DbalVersionStore`, `InMemoryVersionStore` and `VersionStoreContract`: the versions of what decisions read, one table for every source (`yorvoid_versions`), read at once. `KeepsVersionsIn`: a version source or store whose version is kept in one. In Symfony, `yorvoid.store.version`.
 
 ### Breaking
 
@@ -72,7 +73,8 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `PrincipalUser` keeps only its identifier in a Symfony session; the firewall loads the principal again, as it already did on every request. Sessions written before 0.5 aren't read: users sign in again.
 - No version is kept for a request or a job: every decision reads the policy and relations versions, before its elements judge and again after. A long console command or a worker loop decides on what's committed now, not on what it read first. `CachedPolicyStore` and `CachedRelationStore` take the `DecisionScope` the evaluator has (`Evaluator::builtIn(scope:)`); the Symfony bundle wires both.
 - `Decision::identified()` takes a `ReadSet` instead of the versions.
-- `DecisionRecord` is format 4: its read set holds what moved and the resolved attributes, and a slot for the delegation chain. Records of formats 1 to 3 still read and verify as they were written.
+- `DecisionRecord` is format 4: its read set holds what moved and the resolved attributes (`null` until they're recorded), and a slot for the delegation chain. Records of formats 1 to 3 still read and verify as they were written.
+- The policy and relations versions move to `yorvoid_versions`: the migrations create it and drop `yorvoid_policy_version` and `yorvoid_relation_version`. Run them. `DbalPolicyStore` and `DbalRelationStore` take the `VersionStore` (`versions:`) to share with the evaluator's sources.
 
 ### Security
 

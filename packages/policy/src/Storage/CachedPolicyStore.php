@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace YorvoID\Policy\Storage;
 
 use YorvoID\Core\Authorization\DecisionScope;
+use YorvoID\Core\Authorization\KeepsVersionsIn;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\ForgetsWhatItRead;
@@ -24,7 +26,7 @@ use YorvoID\Policy\RoleAssignment;
  *
  * @api
  */
-final class CachedPolicyStore implements PolicyStore, ForgetsWhatItRead
+final class CachedPolicyStore implements PolicyStore, ForgetsWhatItRead, KeepsVersionsIn
 {
     /** @var array<string, true> The realms this request changed */
     private array $changed = [];
@@ -190,5 +192,10 @@ final class CachedPolicyStore implements PolicyStore, ForgetsWhatItRead
     private static function isListOf(mixed $list, \Closure $each): bool
     {
         return \is_array($list) && array_is_list($list) && [] === array_filter($list, static fn (mixed $item): bool => !$each($item));
+    }
+
+    public function versionStore(): ?VersionStore
+    {
+        return $this->store instanceof KeepsVersionsIn ? $this->store->versionStore() : null;
     }
 }

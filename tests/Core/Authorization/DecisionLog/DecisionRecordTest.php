@@ -63,7 +63,7 @@ final class DecisionRecordTest extends TestCase
             'origin' => ['web', 'request-1'],
             'viewer' => null,
             'details' => [],
-            'read' => ['sources' => ['policy' => 7, 'relations' => 2], 'moved' => ['relations'], 'attributes' => [], 'delegation' => null],
+            'read' => ['sources' => ['policy' => 7, 'relations' => 2], 'moved' => ['relations'], 'attributes' => null, 'delegation' => null],
             'parent' => null,
         ], $record->toArray(), 'The elements\' texts aren\'t kept.');
         self::assertSame(hash('sha256', $record->json()), $record->hash());
@@ -90,7 +90,7 @@ final class DecisionRecordTest extends TestCase
         $json = '{"format":3,"id":"d-3","realm":"acme","decided_at":"2026-11-20T18:00:00.000000Z","kind":"operation","name":"acme.badge.issue","actor":"019a6e2c-8a00-7000-8000-000000000001","resource":null,"verdict":"permit","basis":"ability","reason":"Permitted.","indeterminate":[],"remedies":[],"elements":[["yorvoid.policy.roles","permit","holds"],["authority","authority","holds"]],"versions":{"policy":7,"relations":2},"origin":["web","r"],"viewer":null,"details":[],"read":{"sources":{"policy":7,"relations":2}},"parent":"d-2"}';
         $record = DecisionRecord::fromJson($json);
 
-        self::assertSame([3, 'd-2', [], [], null], [$record->format, $record->parent, $record->moved, $record->attributes, $record->delegation]);
+        self::assertSame([3, 'd-2', null, null, null], [$record->format, $record->parent, $record->moved, $record->attributes, $record->delegation], 'What it didn\'t record is unknown, not none.');
         self::assertSame($json, $record->json(), 'Written back exactly as it was.');
         self::assertSame(hash('sha256', $json), $record->hash(), 'So its hash, which its digest and citations hold, is the same.');
     }
@@ -105,6 +105,9 @@ final class DecisionRecordTest extends TestCase
 
         self::assertSame([['policy'], ['a' => '1', 'b' => '2'], ['links' => ['x'], 'root' => 'p']], [$read->moved, $read->attributes, $read->delegation], 'The attributes sorted by name.');
         self::assertSame($record->hash(), $read->hash());
+        $unchecked = new DecisionRecord('d-6', new Realm('acme'), new \DateTimeImmutable('2026-11-23 18:00:00', new \DateTimeZone('UTC')), 'ability', 'n', null, null, 'permit', 'ability', 'Yes.', [], [], [], ['policy' => 1], ['web', 'r']);
+        self::assertSame(['sources' => ['policy' => 1], 'moved' => null, 'attributes' => null, 'delegation' => null], $unchecked->toArray()['read'], 'Unchecked and unrecorded are null, never empty.');
+        self::assertSame([null, null], [DecisionRecord::fromJson($unchecked->json())->moved, DecisionRecord::fromJson($unchecked->json())->attributes]);
         self::assertSame([], DecisionRecord::fromJson((new DecisionRecord('d-5', new Realm('acme'), new \DateTimeImmutable('2026-11-23 18:00:00', new \DateTimeZone('UTC')), 'ability', 'n', null, null, 'deny', null, 'No.', [], [], [], [], ['web', 'r'], delegation: []))->json())->delegation, 'An empty chain stays empty, not none.');
     }
 
@@ -174,6 +177,8 @@ final class DecisionRecordTest extends TestCase
         yield 'another format' => [$with(['format' => 5]), 'A stored decision has an unknown format.'];
         yield 'format 4 without its read set' => [$with(['format' => 4, 'details' => []]), 'A stored decision\'s read set is malformed.'];
         yield 'format 4 with attributes that aren\'t text' => [$with(['format' => 4, 'details' => [], 'read' => ['sources' => [], 'moved' => [], 'attributes' => ['a' => 1], 'delegation' => null]]), 'A stored decision\'s attributes are malformed.'];
+        yield 'format 4 with attributes that aren\'t a map' => [$with(['format' => 4, 'details' => [], 'read' => ['sources' => [], 'moved' => [], 'attributes' => 'a', 'delegation' => null]]), 'A stored decision\'s read set is malformed.'];
+        yield 'format 4 without what moved' => [$with(['format' => 4, 'details' => [], 'read' => ['sources' => [], 'attributes' => null, 'delegation' => null]]), 'A stored decision\'s read set is malformed.'];
         yield 'format 4 with a chain that isn\'t a map' => [$with(['format' => 4, 'details' => [], 'read' => ['sources' => [], 'moved' => [], 'attributes' => [], 'delegation' => 'x']]), 'A stored decision\'s read set is malformed.'];
         yield 'format 4 with a chain keyed by number' => [$with(['format' => 4, 'details' => [], 'read' => ['sources' => [], 'moved' => [], 'attributes' => [], 'delegation' => ['x']]]), 'A stored decision\'s delegation is malformed.'];
         yield 'format 4 with moved sources that aren\'t a list' => [$with(['format' => 4, 'details' => [], 'read' => ['sources' => [], 'moved' => 'policy', 'attributes' => [], 'delegation' => null]]), 'A stored decision\'s "moved" isn\'t a list.'];
