@@ -104,6 +104,13 @@ final class BatchDecisionsTest extends DatabaseTestCase
 
         self::assertSame([], self::versionless($statements->take()), 'Forty more decisions read only the versions again (D-44), nothing else of it.');
 
+        // One cached decision that nothing records: its versions in one statement, once, and nothing
+        // else of the policy or relations.
+        self::assertTrue($world->allows($ada, 'acme.pages.publish', $pages[0]));
+        $one = $statements->take();
+        self::assertSame(['SELECT source, version FROM "yorvoid_versions" WHERE realm = ? AND source IN (?, ?)'], array_values(array_filter($one, static fn (string $sql): bool => str_contains($sql, 'yorvoid_versions') || 1 === preg_match('/yorvoid_(policy|relation)_/', $sql))), 'One read of every version, with one VersionStore shared.');
+        self::assertCount(2, $one, 'And the actor\'s principal, which every decision reads to prove it: two statements in all, one more than when versions were kept for the request.');
+
         // Another server makes her a manager: the next decision reads the new version, in this request
         // too, since no version is kept for a request or a job (D-44, M3FIT-01).
         $other = new DbalPolicyStore($this->database('sqlite'));

@@ -453,6 +453,27 @@ So a cached decision costs one read of the versions, or two when it's checked. A
 
 Give the evaluator and the cached stores one `DecisionScope`, so the stores read at the versions of the decision being judged, and the DBAL stores one `VersionStore`, so their versions are read together; in Symfony, the bundle does both. Without them, the stores read each version on its own: still correct, with more reads.
 
+```php
+use YorvoID\Core\Authorization\DecisionScope;
+use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\Storage\DbalVersionStore;
+use YorvoID\Core\Storage\VersionedCache;
+use YorvoID\Policy\PolicyVersion;
+use YorvoID\Policy\Storage\CachedPolicyStore;
+use YorvoID\Policy\Storage\DbalPolicyStore;
+use YorvoID\Relations\RelationsVersion;
+use YorvoID\Relations\Storage\CachedRelationStore;
+use YorvoID\Relations\Storage\DbalRelationStore;
+
+$versions = new DbalVersionStore($database);  // one, for both stores
+$scope = new DecisionScope();                 // one, for the stores and the evaluator
+$cache = new VersionedCache($pool, $installation);
+$policyStore = new CachedPolicyStore(new DbalPolicyStore($database, $versions), $cache, $scope);
+$relationStore = new CachedRelationStore(new DbalRelationStore($database, $versions), $cache, $scope);
+
+$evaluator = Evaluator::builtIn($authority, $abilities, versions: [new PolicyVersion($policyStore), new RelationsVersion($relationStore)], scope: $scope);
+```
+
 Given a shared PSR-6 pool, the cache keeps what was read for the other servers too, against the version it was read at. A change increments the version, so what was read before it is never read again, on any server; nothing waits for an entry to expire (D-10). Only data is kept, never decisions: those depend on the moment, the session's evidence and the attributes.
 
 - **Keys** start with the installation's ID, then the realm: `yorvoid.v2.{installation}.{realm}.policy.{version}.assignments-{hash}`, where the hash is of the read's arguments, here the principal, so no two reads share an entry whatever their IDs hold. The ID is random, made by the migration and kept in the database (`Installation`), so installations sharing a pool never read each other's entries, though each has a realm "default" at version 1.
