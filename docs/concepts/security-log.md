@@ -102,7 +102,7 @@ The read set also holds the **attributes** the decision read from an `AttributeR
 - `m:`, the MAC key's ID and the MAC of any other value, integers too, under the realm's [MAC key](keys.md#mac-keys);
 - `w:`, withheld, when the realm has no MAC key, or the value is text that isn't valid UTF-8, which has no one form to prove.
 
-Stored attributes (`AttributeStore`) aren't listed: the `policy` version covers them. Only a checked read set holds them; an unchecked one has `attributes: null`, as do records written before they were recorded. A decision reads each attribute once: a second read in the same decision is given the first value.
+Stored attributes (`AttributeStore`) aren't listed: the `policy` version covers them. Only a checked read set holds them, and a pinned one the log records; an unchecked one has `attributes: null`, as do records written before they were recorded. A decision reads each attribute once: a second read in the same decision is given the first value.
 
 A MAC confirms a value given to it and discloses none. Ask with `DecisionConfirmations::confirm()`, or `yorvoid:decisions:confirm <decision> <attribute> <value>` (`--json` for a number, a boolean or a list): it says `matches`, `differs`, `not_recorded`, `withheld` or `unknown_key`, never the MAC. Every confirmation writes `yorvoid.decision.confirm` to the security log, with the record, the attribute's name and the result, never the value, since repeated confirmations are how a value is guessed. It's an administrator's API: who may confirm comes with the decision log's read side, and limiting how often is yours.
 

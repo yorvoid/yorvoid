@@ -53,6 +53,7 @@ final readonly class DecisionRecord
      * @param list<string>|null                                                                                   $moved         The sources that changed while it judged; null if that wasn't checked (format 4)
      * @param array<string, string>|null                                                                          $attributes    The resolved attributes it read, by name; null while they aren't recorded (format 4)
      * @param array<string, mixed>|null                                                                           $delegation    The chain it was decided under, if any (format 4; filled with delegations)
+     * @param bool                                                                                                $pinned        Whether its versions were the request's, kept by the opt-in memo (format 4)
      * @param int                                                                                                 $format        The canonical form it's hashed over: 1 for records written before 0.5
      */
     public function __construct(
@@ -77,6 +78,7 @@ final readonly class DecisionRecord
         public ?array $moved = null,
         public ?array $attributes = null,
         public ?array $delegation = null,
+        public bool $pinned = false,
         public int $format = self::FORMAT,
     ) {
     }
@@ -110,6 +112,7 @@ final readonly class DecisionRecord
             parent: $parent,
             moved: $decision->read->moved,
             attributes: $decision->read->attributes,
+            pinned: $decision->read->pinned,
         );
     }
 
@@ -195,6 +198,11 @@ final readonly class DecisionRecord
             $form['read'] = $this->format >= 4
                 ? ['sources' => $versions, 'moved' => $this->moved, 'attributes' => $attributes, 'delegation' => $this->delegation]
                 : ['sources' => $versions];
+
+            // Only when it is: a record that isn't hashes as before it could be.
+            if ($this->format >= 4 && $this->pinned) {
+                $form['read']['pinned'] = true;
+            }
         }
 
         if ($this->format >= 3) {
@@ -270,7 +278,7 @@ final readonly class DecisionRecord
      *
      * @param array<mixed> $data
      *
-     * @return array{moved: list<string>|null, attributes: array<string, string>|null, delegation: array<string, mixed>|null}
+     * @return array{moved: list<string>|null, attributes: array<string, string>|null, delegation: array<string, mixed>|null, pinned: bool}
      */
     private static function readOf(array $data): array
     {
@@ -307,7 +315,14 @@ final readonly class DecisionRecord
             }
         }
 
-        return ['moved' => null === $read['moved'] ? null : self::strings($read, 'moved'), 'attributes' => $attributes, 'delegation' => $delegation];
+        // Written only as true, when it is: anything else isn't a record YorvoID wrote.
+        if (\array_key_exists('pinned', $read) && true !== $read['pinned']) {
+            throw new \UnexpectedValueException('A stored decision\'s read set is malformed.');
+        }
+
+        $pinned = \array_key_exists('pinned', $read);
+
+        return ['moved' => null === $read['moved'] ? null : self::strings($read, 'moved'), 'attributes' => $attributes, 'delegation' => $delegation, 'pinned' => $pinned];
     }
 
     /**

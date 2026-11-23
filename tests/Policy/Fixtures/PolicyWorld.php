@@ -11,6 +11,7 @@ use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\PrincipalAuthority;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\StepUpCheck;
+use YorvoID\Core\Authorization\VersionMemo;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -104,8 +105,9 @@ final class PolicyWorld
      * @param InMemoryStorage|null                    $memory       The in-memory stores, if given
      * @param Mutants|null                            $mutants      What it's built through for mutation testing, as production would pass it
      * @param AttributeMacs|null                      $macs         How decisions record the attributes they read
+     * @param VersionMemo|null                        $memo         The opt-in memo of versions for showing
      */
-    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null, ?Stack $stack = null, private readonly ?VersionedCache $cache = null, ?InMemoryStorage $memory = null, ?Mutants $mutants = null, ?AttributeMacs $macs = null)
+    public function __construct(array $declarations = [], array $rules = [], array $sources = [], ?StepUpCheck $stepUp = null, ?Duration $window = null, int $maxDepth = Relations::MAX_DEPTH, array $resolvers = [], ?\Closure $rulesOf = null, ?Stack $stack = null, private readonly ?VersionedCache $cache = null, ?InMemoryStorage $memory = null, ?Mutants $mutants = null, ?AttributeMacs $macs = null, public readonly ?VersionMemo $memo = null)
     {
         $this->memory = $memory ?? new InMemoryStorage();
         $principals = $stack->principals ?? $this->memory->principals;
@@ -137,7 +139,7 @@ final class PolicyWorld
         }
 
         $authority = new PrincipalAuthority($principals);
-        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)], actors: [new TrustedActors()], scope: $scope, macs: $macs);
+        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)], actors: [new TrustedActors()], scope: $scope, macs: $macs, memo: $memo);
         $handlers = [
             new Principals($principals, $identifiers, $log, $transactions, clock: $this->clock),
             new PolicyChanges($catalogue, $this->policyStore, $principals, $log, $transactions, $this->clock),

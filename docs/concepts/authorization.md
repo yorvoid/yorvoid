@@ -451,6 +451,22 @@ Where something uses the decision beyond showing it, the versions are read again
 
 So a cached decision costs one read of the versions, or two when it's checked. A page that decides many resources should decide them as one batch, `decideMany()` (`Evaluator::decideAbilities()`): it reads the versions once for all of them, however many there are.
 
+Where a page decides them one by one, e.g. `is_granted()` for each of its links, an opt-in memo reads them once in the request:
+
+```yaml
+yorvoid:
+    authorization:
+        version_memo: request
+```
+
+In plain PHP, `Evaluator::builtIn(memo: new VersionMemo($clock))`, reset between requests (`reset()`; in Symfony, `kernel.reset` does it). The memo keeps versions for 2 seconds at most (`version_memo_max_age`), and reads them again after that, so a long command or a worker that never resets it still sees a change within that time. With it:
+
+- An ability's Permit is decided at the versions the request's first such decision read. Its read set is **pinned** (`ReadSet::$pinned`), and a recorded one says so.
+- A decision that refuses is decided again, at the versions committed now: a refusal is recorded and acted on, so it's never pinned.
+- An operation, its consequences, a view as someone else and a batch never use it.
+
+So a role revoked by another process stops the next operation at once, and the next link shown within the max age: what a page shows can be that much older than what's committed. That's for showing only; an effect goes through an operation, or the guard (M3-3).
+
 Give the evaluator and the cached stores one `DecisionScope`, so the stores read at the versions of the decision being judged, and the DBAL stores one `VersionStore`, so their versions are read together; in Symfony, the bundle does both. Without them, the stores read each version on its own: still correct, with more reads.
 
 ```php

@@ -120,7 +120,10 @@
                 "YorvoID\\Passkeys\\PublicKeyCheck::accepts",
                 // Equivalent: a policy's ability decisions are never Permit-offline, which only an
                 // operation that accepts it gets; the arm is there so the match covers every verdict.
-                "YorvoID\\PolicyTesting\\PolicyTests::verdict"
+                "YorvoID\\PolicyTesting\\PolicyTests::verdict",
+                // Equivalent: only an operation can be permitted offline, and an operation is never
+                // pinned; the arm is there so the match covers every verdict.
+                "YorvoID\\Core\\Authorization\\Evaluator::pinned"
             ]
         },
         "ReturnRemoval": {

@@ -6,6 +6,7 @@ namespace YorvoID\Tests\Policy;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\VersionMemo;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Operation\Decision;
@@ -118,6 +119,28 @@ final class BatchDecisionsTest extends DatabaseTestCase
         $other->assign(new RoleAssignment($world->realm, self::id($ada), 'manager', new \DateTimeImmutable('2026-11-01')));
 
         self::assertTrue($world->allows($ada, 'acme.sites.update', $pages[0]), 'The next decision reads the new version, in the same request.');
+    }
+
+    /**
+     * With the opt-in memo, a page's hundred links read the versions once in the request; an operation in
+     * the same request still reads them.
+     */
+    public function testWithTheMemoAHundredLinksReadTheVersionsOnce(): void
+    {
+        $statements = new StatementLog();
+        $world = new PolicyWorld(stack: $this->stack('sqlite', $statements), cache: new VersionedCache(), memo: new VersionMemo());
+        [$ada, $pages] = $this->site($world, 1);
+        $world->newRequest();
+        $statements->take();
+
+        for ($i = 0; $i < 100; ++$i) {
+            self::assertTrue($world->allows($ada, 'acme.pages.publish', $pages[0]));
+        }
+
+        self::assertCount(1, array_filter($statements->take(), static fn (string $sql): bool => str_contains($sql, 'yorvoid_versions')), 'One version read for the hundred.');
+
+        $world->asOperator(new AssignRole($world->realm, self::id($ada), 'manager'));
+        self::assertNotSame([], array_filter($statements->take(), static fn (string $sql): bool => str_starts_with($sql, 'SELECT source, version FROM')), 'The operation read them for itself.');
     }
 
     /**

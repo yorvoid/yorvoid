@@ -82,6 +82,8 @@ final readonly class Evaluator implements Authorization
 
     private AttributeMacs $macs;
 
+    private ?VersionMemo $memo;
+
     /**
      * @param iterable<PolicyElement> $elements  The policy: permits and forbids
      * @param OfflineDecider|null     $offline   Asked while a store is unreachable, for the operations that accept it
@@ -93,6 +95,8 @@ final readonly class Evaluator implements Authorization
      *                                           decision read before judging (D-44); its own, if not given
      * @param AttributeMacs|null      $macs      How the attributes a decision read are recorded (M-9); without one, those
      *                                           that aren't public are withheld
+     * @param VersionMemo|null        $memo      Opt-in: an ability's permit, for showing, decided at the versions the request
+     *                                           first read (pinned); off without one
      *
      * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, a
      *                         permit authorizes by Consequence, which only another operation's permit gives,
@@ -110,9 +114,11 @@ final readonly class Evaluator implements Authorization
         iterable $actors = [],
         ?DecisionScope $scope = null,
         ?AttributeMacs $macs = null,
+        ?VersionMemo $memo = null,
     ) {
         $this->scope = $scope ?? new DecisionScope();
         $this->macs = $macs ?? new AttributeMacs();
+        $this->memo = $memo;
         $provers = [];
 
         foreach ($actors as $prover) {
@@ -218,6 +224,7 @@ final readonly class Evaluator implements Authorization
      * @param iterable<ProvesActors>  $actors      What proves actors beyond core's own, e.g. sessions (StoredSessions)
      * @param DecisionScope|null      $scope       The one the cached stores read in
      * @param AttributeMacs|null      $macs        How the attributes a decision read are recorded
+     * @param VersionMemo|null        $memo        Opt-in: abilities' permits for showing decided at the request's versions
      */
     public static function builtIn(
         AuthorityCheck $authority,
@@ -234,6 +241,7 @@ final readonly class Evaluator implements Authorization
         iterable $actors = [],
         ?DecisionScope $scope = null,
         ?AttributeMacs $macs = null,
+        ?VersionMemo $memo = null,
     ): self {
         $builtIn = [
             new AuthenticationPermit(),
@@ -245,7 +253,7 @@ final readonly class Evaluator implements Authorization
             $builtIn[] = new AbilityPermit($abilities);
         }
 
-        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors, $scope, $macs);
+        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors, $scope, $macs, $memo);
     }
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
@@ -463,6 +471,12 @@ final readonly class Evaluator implements Authorization
      */
     private function judged(Request $request, \Closure $judge): Decision
     {
+        $pinned = $this->pinned($request, $judge);
+
+        if (null !== $pinned) {
+            return $pinned;
+        }
+
         $before = $this->versionsOf($request);
         [$decision, $attributes] = $this->scope->within($request->realm, $before, fn (): array => $this->scope->judging($judge));
         $read = $this->checksWhatMoved($request, $decision) ? $this->withAttributes($request, ReadSet::between($before, $this->versionsOf($request)), $attributes) : ReadSet::unchecked($before);
@@ -485,6 +499,39 @@ final readonly class Evaluator implements Authorization
         }
 
         return $read->withAttributes($recorded);
+    }
+
+    /**
+     * With the opt-in memo, an ability's permit for showing, decided at the versions the request first read,
+     * and pinned. Never an operation's (consequences are operations too) or a view as someone else's; and a
+     * decision that refuses is left to be decided again on what's committed now, since a refusal is
+     * recorded, and acted on.
+     *
+     * @param \Closure(): Decision $judge
+     */
+    private function pinned(Request $request, \Closure $judge): ?Decision
+    {
+        if (null === $this->memo || null !== $request->operation || $request->actor instanceof ViewingAs) {
+            return null;
+        }
+
+        $memo = $this->memo->versions($request->realm, fn (): array => $this->versionsOf($request));
+        [$decision, $attributes] = $this->scope->within($request->realm, $memo, fn (): array => $this->scope->judging($judge));
+
+        // Only a Permit is pinned: Permit-offline, Deny and Indeterminate are decided again.
+        $permits = match ($decision->verdict) {
+            Verdict::Permit => true,
+            Verdict::PermitOffline, Verdict::Deny, Verdict::Indeterminate => false,
+        };
+
+        if (!$permits) {
+            return null;
+        }
+
+        // A pinned permit the log records holds the attributes it read, as a checked one does.
+        $read = ReadSet::pinned($memo);
+
+        return self::identified($decision, (string) $this->ids->next(), $request->at, true === $this->decisions?->recordsPermit($request) ? $this->withAttributes($request, $read, $attributes) : $read);
     }
 
     /**
