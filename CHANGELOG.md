@@ -42,6 +42,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Breaking
 
+- An agent created before this release has no owner, and can't be read after upgrading, even deleted: `Principal` refuses an agent without one. After migrating, and before the application reads it, set each one's owner in `principal.owner_id`: an active principal of its realm that isn't an agent.
 - `Transactions` adds `retrying()`: a `Transactions` of your own implements it. A deadlock in YorvoID's work is a `RetryableConflict`, with DBAL's `DeadlockException` as its previous, rather than the `DeadlockException` itself. `Operations` takes the `Transactions` it retries in (`transactions:`).
 - `NoEscalation` and `StepUpForSensitiveChanges` weigh a change by its declared effect: a command that changes authority but whose effect nothing declares makes them Indeterminate, and `Operations` refuses to be built with one in its catalogue. Each takes the effects to read (`$effects`), the policy package's if not given. `PolicyStore`, `RelationStore` and `AttributeStore` extend `HoldsAuthority`, which has no methods.
 - `Operation\Authorization` adds `decideConsequence()`, `requireForbids()`, `checkCatalogue()` and `decidesOffline()`: `Operations` asks them of any `Authorization`, and no longer checks for the Evaluator. An `Authorization` of your own implements them, or extends `AuthorizationDecorator`.
