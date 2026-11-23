@@ -851,7 +851,7 @@ final readonly class Evaluator implements Authorization
 
         $this->scopes[$request] = $scope;
 
-        foreach ([$this->within($request, $scope), $this->ownAccountOfRoot($request, $scope), $this->anchored($scope, $request)] as $truth) {
+        foreach ([$this->ownAccountOfRoot($request, $scope), $this->within($request, $scope), $this->anchored($scope, $request)] as $truth) {
             if (null !== $truth && TruthValue::Holds !== $truth->value) {
                 return [$truth, null];
             }
