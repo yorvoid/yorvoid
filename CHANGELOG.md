@@ -87,6 +87,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Security
 
+- `yorvoid/passkeys` and `yorvoid/intent-verifier` require `web-auth/webauthn-lib` 5.3.13 or later, which fixes its published advisories: a denial of service from the lengths CBOR data declares, forged packed and TPM attestations, decoy credentials that tell usernames apart, and metadata checks that let revoked or untrusted authenticators through.
 - A refusal survives the application's rollback and takes no realm lock, and a decision log that can't be written gives `NotPermitted` and the audit alert, not a storage error (AR-03).
 - A copied passkey stays disabled when the application's transaction rolls back with the refusal (ARC-0058). It's disabled once that transaction has ended, committed or rolled back, in a transaction of its own; if that fails, the audit alert says which passkey is still active.
 - A deletion's listeners run on its permit and only for the principal it deletes, and the events YorvoID's listeners act on can't be made by an application: a made-up event no longer removes someone's roles, relations, attributes or passkey, or sends them a security notification.
