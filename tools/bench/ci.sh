@@ -4,7 +4,8 @@
 #   sh tools/bench/ci.sh pr <base>   a pull request: the base and the head on this runner, subject by
 #                                    subject in eight turns (ABBABAAB, C2), so that the runner's drift and
 #                                    bursts fall on both alike; then compared turn by turn, each base turn
-#                                    with the head turn next to it (bench.php)
+#                                    with the head turn next to it (bench.php), and a subject over the gate
+#                                    measured again on its own before it fails
 #   sh tools/bench/ci.sh main [<tag>] a push to main: the head's table, and, against the last release's
 #                                    tag if it has benchmarks, the change since, which gates nothing
 #   sh tools/bench/ci.sh aa          the gate's false failures: the head against itself, in the same
@@ -54,15 +55,18 @@ subjects() {
 	done
 }
 
-# Base and head, each subject in turns: their dumps, in turn order per side, in $out/a.list and
-# $out/b.list. The k-th of a side's turns of a subject is next to the k-th of the other's.
+# Base and head, each subject in turns: their dumps, in turn order per side, in $out/<prefix>a.list and
+# $out/<prefix>b.list. The k-th of a side's turns of a subject is next to the k-th of the other's. Every
+# subject of the head, or those given; each turn is a process of its own.
 turns() {
 	a=$1
 	b=$2
-	: >"$out/a.list"
-	: >"$out/b.list"
+	list=${3:-$(subjects)}
+	prefix=${4:-}
+	: >"$out/${prefix}a.list"
+	: >"$out/${prefix}b.list"
 
-	for subject in $(subjects); do
+	for subject in $list; do
 		name=$(echo "$subject" | tr ':' '_')
 		turn=0
 
@@ -71,8 +75,8 @@ turns() {
 
 			if [ "$side" = a ]; then dir=$a; else dir=$b; fi
 
-			run "$dir" "$out/$name-$side$turn.json" "$subject"
-			printf '%s,' "$out/$name-$side$turn.json" >>"$out/$side.list"
+			run "$dir" "$out/$prefix$name-$side$turn.json" "$subject"
+			printf '%s,' "$out/$prefix$name-$side$turn.json" >>"$out/$prefix$side.list"
 		done
 	done
 }
@@ -102,6 +106,30 @@ compare() {
 	php "$root/tools/bench/bench.php" compare "$1" "$2" "$out/changed.txt" "$out/changes.json" >>"$summary"
 }
 
+# The gate: base and head compared; a gated subject over it is measured again on its own, in eight fresh
+# turns of both, never pooled with the first, and the gate fails only if it's over again. Both tables are
+# in the summary; changes.json ends with the second change, and changes.remeasured lists the subjects.
+gate() {
+	a=$1
+	b=$2
+	rm -f "$out/changes.remeasured"
+
+	if compare "$(cat "$out/a.list")" "$(cat "$out/b.list")"; then
+		return 0
+	fi
+
+	over=$(php "$root/tools/bench/bench.php" over "$out/changes.json")
+
+	if [ -z "$over" ]; then
+		return 1
+	fi
+
+	printf '\n### Measured again, on their own\n\n' >>"$summary"
+	turns "$a" "$b" "$over" again-
+	php "$root/tools/bench/bench.php" compare "$(cat "$out/again-a.list")" "$(cat "$out/again-b.list")" "$out/changed.txt" "$out/again.json" >>"$summary" || true
+	php "$root/tools/bench/bench.php" confirm "$out/changes.json" "$out/again.json"
+}
+
 case "${1:-}" in
 	pr)
 		php "$root/tools/bench/durability.php" off
@@ -109,7 +137,7 @@ case "${1:-}" in
 		changed "$2" HEAD
 		echo "## Benchmarks: the head against the base ($(git -C "$root" rev-parse --short "$2"))" >>"$summary"
 		turns "$base" "$root"
-		compare "$(cat "$out/a.list")" "$(cat "$out/b.list")"
+		gate "$base" "$root"
 		;;
 	main)
 		php "$root/tools/bench/durability.php" on
@@ -133,7 +161,7 @@ case "${1:-}" in
 		echo '## Benchmarks: the head against itself' >>"$summary"
 		turns "$root" "$root"
 		status=0
-		compare "$(cat "$out/a.list")" "$(cat "$out/b.list")" || status=1
+		gate "$root" "$root" || status=1
 		echo "failed=$status" >"$out/aa.txt"
 		exit $status
 		;;
