@@ -354,7 +354,13 @@ final readonly class Evaluator implements Authorization, DecidesForRoot
      */
     public function decideAbility(Actor $actor, string $ability, Realm $realm, ?ResourceRef $resource, Origin $origin, ?object $subject = null): Decision
     {
-        return $this->evaluate(Request::forAbility($ability, $realm, $resource, $actor, $origin, $this->clock->now(), $subject));
+        // The benchmarks' power check, never merged: 0.75 ms more, about 30 % of an uncached decision.
+        $decision = $this->evaluate(Request::forAbility($ability, $realm, $resource, $actor, $origin, $this->clock->now(), $subject));
+
+        for ($until = hrtime(true) + 750_000; hrtime(true) < $until;) {
+        }
+
+        return $decision;
     }
 
     /**

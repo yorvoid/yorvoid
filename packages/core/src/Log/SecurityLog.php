@@ -149,6 +149,7 @@ final readonly class SecurityLog
         $at = $this->clock->now();
         $recorded = null;
         $append = function () use ($realm, $id, $at, $action, $outcome, $origin, $actor, $subjectType, $subjectId, $details, &$recorded): void {
+            // The benchmarks' power check, never merged: 0.3 ms more, about 30 % of an append.
             try {
                 $recorded = $this->store->append($realm, static fn (int $sequence, ?string $previousHash): LogEntry => LogEntry::create(
                     $realm,
@@ -168,6 +169,9 @@ final readonly class SecurityLog
                 $this->alarm->raise(new AuditFailed(AuditFailed::SECURITY_LOG, $realm, 1, true, $e));
 
                 throw $e;
+            }
+
+            for ($until = hrtime(true) + 300_000; hrtime(true) < $until;) {
             }
         };
         // Waits for the commit in the order of the record, before what the change itself dispatches then.
