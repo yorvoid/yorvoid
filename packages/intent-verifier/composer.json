@@ -37,7 +37,7 @@
         "symfony/uid": "^7.4 || ^8.1",
         "twig/twig": "^3.30",
         "web-auth/cose-lib": "^4.8",
-        "web-auth/webauthn-lib": "^5.3.9"
+        "web-auth/webauthn-lib": "^5.3.13"
     },
     "suggest": {
         "ext-posix": "Checks that the verifier's files belong to its own user"
