@@ -24,19 +24,20 @@ declare(strict_types=1);
  *                                                                        than there should be
  *
  * Each of base and head may be several dumps, separated by commas, one per turn, in the order ci.sh
- * measures them (ABBABAAB). A subject with as many turns on each side is compared turn by turn: the k-th
- * of the base with the k-th of the head, which are adjacent (a1 b2, b3 a4, b5 a6, a7 b8), and the change
- * is the median of those pairs' changes. Otherwise its iterations are pooled per side. A subject the base
- * has and the head doesn't is "removed, not gated", and the table says first how many weren't.
+ * measures them (ABBABAAB BAABABBA). A subject with as many turns on each side is compared turn by
+ * turn: the k-th of the base with the k-th of the head, which are adjacent (a1 b2, b3 a4, b5 a6, a7 b8,
+ * ...), and the change is the median of those pairs' changes. Otherwise its iterations are pooled per
+ * side. A subject the base has and the head doesn't is "removed, not gated", and the table says first
+ * how many weren't.
  *
  * The gate compares the lower quartile (p25) of the iterations: the A/A record on GitHub's runners showed
  * the median moving by up to 47 % between runs of the same code, as bursts of the runner's noise slowed
  * whole turns. Paired, a burst over two neighbouring turns of a pair slows both sides of it alike, and
  * one pair's noise is left out by the median; a burst over two turns of one side in a row (b2 b3, a6 a7)
- * moves two pairs, so the median by half as much. A subject over the gate is measured again on its own
- * before it fails (ci.sh): a one-off burst doesn't fail it twice. The cost is power: a real slowdown just
- * over 20 % may pass on a lucky second measure; the power check proves 30 %. The table of the targets gives
- * the median and the p99. <changed> lists the subjects
+ * moves two pairs of eight, which the median leaves out too. A subject over the gate is measured again
+ * on its own before it fails (ci.sh): a one-off burst doesn't fail it twice. The cost is power: a real
+ * slowdown just over 20 % may pass on a lucky second measure; the power check proves 30 %. The table of
+ * the targets gives the median and the p99. <changed> lists the subjects
  * whose benchmark code differs between base and head, one per line, "Class::subject", "Class::*" or
  * "*" for every one: they and the new ones are reported "changed, not gated" (C3). Tables go to stdout as Markdown,
  * for the job summary.

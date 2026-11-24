@@ -36,7 +36,7 @@ The benchmarks are in `tools/bench`:
 - **The verifier's files** are in `/dev/shm` where there is one, so it's the verifier that's measured, not the disk's cache.
 
 **In CI**, a pull request's head is measured against its base on one runner, subject by subject in turns. The runner's drift and bursts then fall on both alike.
-- **Turns:** eight per subject, 50 iterations each: base, head, head, base, head, base, base, head.
+- **Turns:** sixteen per subject, 25 iterations each: base, head, head, base, head, base, base, head, then the same with the sides swapped. Each turn is a process of its own, and a process keeps the speed it lands on, so many short turns outvote a few slow ones.
 - **The gate:** a subject whose lower quartile (p25) is more than 20 % above the base's fails the build. A shared runner's noise only adds time, so the quartile follows the turns it didn't reach.
 - **PostgreSQL without durability:** the gate and its A/A record run with `fsync`, `synchronous_commit` and `full_page_writes` off, so they measure the CPU and the queries, not the runner's disk. OPS-042's p99 and every release judgment use main's numbers, measured with them on. Each run checks the settings before it measures.
 - A subject whose benchmark code changed in the pull request, or that's new or removed, is reported but not gated. The table says first how many weren't.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YorvoID\Bench;
 
+use Symfony\Component\Clock\MockClock;
 use YorvoID\IntentVerifier\CollectingNotifier;
 use YorvoID\IntentVerifier\Operation;
 use YorvoID\IntentVerifier\OperationPolicy;
@@ -19,6 +20,11 @@ use YorvoID\VirtualAuthenticator\VirtualAuthenticator;
  * /dev/shm where there is one:
  * its nonce taken, its assertion checked, its log appended. Intents are prepared and signed ten at a
  * time before the iterations that verify them, so only the verifying is timed (and taking the next).
+ *
+ * The verifier's clock moves a second at each intent prepared. Taking a nonce reads the log back to the
+ * intent's issue, by the second: on the wall clock that's every entry since the second began, so the
+ * subject slowed as the second filled and sped up at the next, by where the seconds fell. Now each
+ * verification reads back over the same few entries, in every turn and every run.
  */
 // Five verifications an iteration: the verifier's files make single ones vary too much to compare.
 #[Measure(revolutions: 5)]
@@ -27,6 +33,8 @@ final class VerifierBench
     private static ?Verifier $shared = null;
 
     private static ?VirtualAuthenticator $owner = null;
+
+    private static ?MockClock $clock = null;
 
     /** @var list<array{string, string}> Nonces and their assertions, ready */
     private static array $signed = [];
@@ -38,6 +46,7 @@ final class VerifierBench
         // Enough for the warm-up and the iteration's revolutions.
         if (\count(self::$signed) < 10) {
             for ($i = 0; $i < 20; ++$i) {
+                self::$clock?->sleep(1);
                 $prepared = $verifier->prepare('acme.site.remove', ['site' => 'jane']);
                 self::$signed[] = [$prepared->intent->nonce, self::$owner?->signIn($prepared->options) ?? throw new \LogicException()];
             }
@@ -61,6 +70,7 @@ final class VerifierBench
             new FileVerifierStore($directory.'/state.json'),
             new FileVerifierLog($directory.'/log.jsonl'),
             new CollectingNotifier(),
+            self::$clock = new MockClock(),
         );
         self::$owner = new VirtualAuthenticator('https://sign.acme.example');
         $secret = $verifier->createBootstrapSecret();
