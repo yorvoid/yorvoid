@@ -63,6 +63,78 @@ final class BenchTest extends TestCase
         self::assertSame(1, self::bench('compare', $this->dump('one', ['A::benchX' => [10, 10]]).','.$this->dump('two', ['A::benchX' => [20, 20]]), $this->dump('three', ['A::benchX' => [13, 14]]))[0], 'Dumps pooled per side: 10 against 13.');
     }
 
+    /**
+     * Turns as ci.sh measures them (a1 b2 b3 a4 b5 a6 a7 b8): each base turn against the head turn next to
+     * it, and the gate on the median of the four pairs' changes. One pair's burst is left out, a burst over
+     * two pairs moves it half as far, and a change in every pair fails.
+     */
+    public function testComparesTurnByTurnAndGatesOnTheMedianPair(): void
+    {
+        [$status, $output] = $this->againstFlatBase([16, 10, 10, 10]);
+        self::assertSame(0, $status, $output);
+        self::assertStringContainsString('| A::benchX | 0.010 ms | 0.010 ms | +0.0 % | ok |', $output, 'One pair\'s burst, left out.');
+
+        [$status, $output] = $this->againstFlatBase([13, 13, 10, 10]);
+        self::assertSame(0, $status, $output);
+        self::assertStringContainsString('+15.0 % | ok |', $output, 'Two pairs\' 30 % burst, half as far.');
+
+        [$status, $output] = $this->againstFlatBase([13, 13, 12, 14]);
+        self::assertSame(1, $status, $output);
+        self::assertStringContainsString('| A::benchX | 0.010 ms | 0.013 ms | +30.0 % | **slower** |', $output, 'Every pair slower.');
+        self::assertSame(['A::benchX' => 30], json_decode((string) file_get_contents($this->directory.'/changes.json'), true), 'The record takes the same number.');
+    }
+
+    /**
+     * A subject over the gate is measured again on its own, and only its second change counts: the gate
+     * fails when it's over again, and the subjects measured again are listed for the record.
+     */
+    public function testASubjectOverTheGateIsJudgedByItsSecondMeasure(): void
+    {
+        $changes = $this->directory.'/changes.json';
+        file_put_contents($changes, '{"A::benchX": 25.0, "A::benchY": 5.0, "A::benchZ": 20.0}');
+        self::assertSame([0, "A::benchX\n"], self::bench('over', $changes), 'Over 20 %, not at it.');
+
+        file_put_contents($this->directory.'/again.json', '{"A::benchX": 12.0}');
+        [$status, $output] = self::bench('confirm', $changes, $this->directory.'/again.json');
+        self::assertSame(0, $status, $output);
+        self::assertSame(['A::benchX' => 12, 'A::benchY' => 5, 'A::benchZ' => 20], json_decode((string) file_get_contents($changes), true), 'The second change, written back.');
+        self::assertSame("A::benchX\n", file_get_contents($this->directory.'/changes.remeasured'));
+
+        file_put_contents($changes, '{"A::benchX": 25.0}');
+        file_put_contents($this->directory.'/again.json', '{"A::benchX": 24.0}');
+        self::assertSame(1, self::bench('confirm', $changes, $this->directory.'/again.json')[0], 'Over again: it fails.');
+
+        file_put_contents($this->directory.'/again.json', '{}');
+        [$status, $output] = self::bench('confirm', $changes, $this->directory.'/again.json');
+        self::assertNotSame(0, $status, 'A second measure that crashed fails the gate.');
+        self::assertStringContainsString('A::benchX wasn\'t measured again.', $output);
+        self::assertNotSame(0, self::bench('confirm', $changes, $this->directory.'/none.json')[0], 'Nor does a second measure that left nothing pass it.');
+    }
+
+    /**
+     * The record trusts the gate only while the second measure stays rare: a subject measured again in
+     * more than 2 runs varies at its source.
+     */
+    public function testTheRecordCountsTheSubjectsMeasuredAgain(): void
+    {
+        mkdir($this->directory.'/record');
+
+        foreach ([1, 2, 3] as $run) {
+            file_put_contents($this->directory.\sprintf('/record/%d.json', $run), '{"A::benchX": 3.0}');
+        }
+
+        file_put_contents($this->directory.'/record/1.remeasured', "A::benchX\n");
+        file_put_contents($this->directory.'/record/2.remeasured', "A::benchX\n");
+        [$status, $output] = self::bench('record', $this->directory.'/record', '3');
+        self::assertSame(0, $status, $output);
+        self::assertStringContainsString('| A::benchX | 3.0 % | 0 | 2 |', $output);
+
+        file_put_contents($this->directory.'/record/3.remeasured', "A::benchX\n");
+        [$status, $output] = self::bench('record', $this->directory.'/record', '3');
+        self::assertSame(1, $status, 'Measured again in 3 runs of 3.');
+        self::assertStringContainsString('| A::benchX | 3.0 % | 0 | 3 |', $output);
+    }
+
     public function testRefusesWhatIsntAMeasurement(): void
     {
         $good = $this->dump('good', ['A::benchX' => [10]]);
@@ -116,6 +188,34 @@ final class BenchTest extends TestCase
         self::assertStringContainsString('| A::benchX | 21.0 % | 1 |', $output, 'A failure, counted.');
         self::assertGreaterThan(0, $failed);
         self::removeDirectory($this->directory.'/record');
+    }
+
+    /**
+     * The head's turns against a base whose four turns all have a lower quartile of 10.
+     *
+     * @param list<int> $head
+     *
+     * @return array{int, string}
+     */
+    private function againstFlatBase(array $head): array
+    {
+        return self::bench('compare', $this->turns('a', [10, 10, 10, 10]), $this->turns('b', $head), $this->directory.'/none.txt', $this->directory.'/changes.json');
+    }
+
+    /**
+     * One dump per turn, each with four iterations from its lower quartile up.
+     *
+     * @param list<int> $p25s
+     */
+    private function turns(string $side, array $p25s): string
+    {
+        $dumps = [];
+
+        foreach ($p25s as $i => $time) {
+            $dumps[] = $this->dump($side.$i, ['A::benchX' => [$time, $time + 1, $time + 2, $time + 3]]);
+        }
+
+        return implode(',', $dumps);
     }
 
     /**

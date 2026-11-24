@@ -61,16 +61,21 @@ jobs:
       - name: Show the table
         if: always()
         run: cat var/bench/summary.md >> "$GITHUB_STEP_SUMMARY" || true
-      - name: Keep the changes
+      # Every turn's dump, beside the changes and the subjects measured again, so that a noisy run can
+      # be read turn by turn.
+      - name: Keep the turns and the changes
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: aa-${{ matrix.run }}
-          path: var/bench/changes.json
+          path: |
+            var/bench/*.json
+            var/bench/changes.remeasured
           retention-days: 30
 
-  # The record: each subject's worst |change| across the runs, and the failures. The gate is trusted
-  # while there's no failure and no subject's worst is over 15 %, three quarters of it.
+  # The record: each subject's worst |change| across the runs, the failures, and how many runs measured
+  # it again. The gate is trusted while there's no failure, no subject's worst is over 15 %, three
+  # quarters of it, and none was measured again in more than 2 runs.
   record:
     name: A/A record
     if: always()
@@ -90,6 +95,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p var/record
-          for run in var/aa/aa-*; do cp "$run/changes.json" "var/record/$(basename "$run").json"; done
+          for run in var/aa/aa-*; do
+            cp "$run/changes.json" "var/record/$(basename "$run").json"
+            if [ -f "$run/changes.remeasured" ]; then cp "$run/changes.remeasured" "var/record/$(basename "$run").remeasured"; fi
+          done
           php tools/bench/bench.php record var/record 20 | tee -a "$GITHUB_STEP_SUMMARY"
           exit "${PIPESTATUS[0]}"
