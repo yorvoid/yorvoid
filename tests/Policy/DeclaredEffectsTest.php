@@ -9,10 +9,13 @@ use YorvoID\Core\Authorization\ChangesAuthority;
 use YorvoID\Core\Authorization\DeclaredEffects;
 use YorvoID\Core\Authorization\DeclaresEffects;
 use YorvoID\Core\Authorization\Effect;
+use YorvoID\Core\Authorization\EffectPart;
 use YorvoID\Core\Authorization\Evaluator;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
@@ -85,6 +88,32 @@ final class DeclaredEffectsTest extends TestCase
         self::assertFalse($escalation->matches($request), 'It gives and takes nothing.');
         $escalation->checkCatalogue(new OperationCatalogue([Delegate::class]));
         new StepUpForSensitiveChanges($world->roles, effects: $effects)->checkCatalogue(new OperationCatalogue([Delegate::class]));
+    }
+
+    /**
+     * A part given through relations says what to verify, never that it's held: no-escalation checks the
+     * relations' definitions and that they're the actor's own, and weighs what they don't give.
+     */
+    public function testWhatRelationsGiveIsVerifiedNotTakenFromTheDeclaration(): void
+    {
+        $world = new PolicyWorld();
+        $ana = $world->principal();
+        $her = new ResourceRef('principal', (string) $ana->principalId);
+        $weigh = static function (array $relations, ?ResourceRef $subject, ?string $type = 'page', ?TestPrincipal $actor = null) use ($world, $ana): TruthValue {
+            $effects = new DeclaredEffects([new PolicyEffects($world->roles), new DelegationEffects(new Effect(gives: [new EffectPart(abilities: ['acme.pages.publish'], viaRelations: array_values(array_filter($relations, \is_string(...))), onType: $type, subject: $subject)]))]);
+            $request = Request::forOperation(self::operation(), new Delegate(new Realm('acme')), $actor ?? $ana, self::web(), new \DateTimeImmutable());
+
+            return new NoEscalation($world->roles, $effects)->evaluate($request)->value;
+        };
+
+        self::assertSame(TruthValue::Fails, $weigh(['editor'], $her), 'An editor\'s relation gives publishing: held.');
+        self::assertSame(TruthValue::Holds, $weigh(['viewer'], $her), 'A relation that gives no publishing: weighed, and she doesn\'t hold it.');
+        self::assertSame(TruthValue::Holds, $weigh(['nonexistent'], $her), 'A relation nothing defines.');
+        self::assertSame(TruthValue::Holds, $weigh(['editor'], new ResourceRef('principal', Ids::next()->toString())), 'Someone else\'s relation.');
+        self::assertSame(TruthValue::Holds, $weigh([], $her), 'No relation.');
+        self::assertSame(TruthValue::Holds, $weigh(['editor'], $her, null), 'Relations on no type.');
+        self::assertSame(TruthValue::Holds, $weigh(['editor'], null), 'Relations to no one.');
+        self::assertSame(TruthValue::Holds, $weigh(['editor'], $her, actor: new TestPrincipal(new Realm('acme'), null)), 'An actor that\'s no principal has no relations.');
     }
 
     /**

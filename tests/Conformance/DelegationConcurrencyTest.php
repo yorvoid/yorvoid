@@ -28,6 +28,7 @@ use YorvoID\Delegation\DelegationRefused;
 use YorvoID\Delegation\Delegations;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
+use YorvoID\Tests\Support\RootsHold;
 use YorvoID\Tests\Support\Stack;
 
 /**
@@ -125,7 +126,7 @@ final class DelegationConcurrencyTest extends DatabaseTestCase
                 return ['acme.pages.publish' => Delegable::Everyone];
             }
         };
-        $delegations = new Delegations($stack->delegations, $stack->principals, new Actions(new OperationCatalogue([]), [$publish]), $log, $stack->transactions);
+        $delegations = new Delegations($stack->delegations, $stack->principals, new Actions(new OperationCatalogue([]), [$publish]), $log, $stack->transactions, roots: new RootsHold());
         $parent = Permits::call($delegations->issue(...), new IssueDelegation($realm, $bea->id, ['acme.pages.publish'], new Selector('page'), new \DateTimeImmutable('+2 days'), redelegable: ['acme.pages.publish'], depth: 1), new Origin(OriginKind::Web), $ana->id);
 
         return [$delegations, $ana, $bea, $bot, $parent];

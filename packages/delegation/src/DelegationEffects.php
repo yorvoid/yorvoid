@@ -10,6 +10,8 @@ use YorvoID\Core\Authorization\Effect;
 use YorvoID\Core\Authorization\EffectPart;
 use YorvoID\Core\Authorization\Request;
 use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\Selector;
+use YorvoID\Core\Authorization\Selector\RelatedTo;
 use YorvoID\Delegation\Change\IssueDelegation;
 use YorvoID\Delegation\Change\RevokeDelegation;
 use YorvoID\Delegation\Change\RevokeDelegationsOf;
@@ -43,7 +45,7 @@ final readonly class DelegationEffects implements DeclaresEffects
         $command = $request->command;
 
         if ($command instanceof IssueDelegation) {
-            return new Effect(gives: $this->parts($command->actions, $command->resources));
+            return new Effect(gives: $this->given($command, $request));
         }
 
         if (null === $this->store) {
@@ -67,13 +69,42 @@ final readonly class DelegationEffects implements DeclaresEffects
     }
 
     /**
+     * What issuing gives. A root delegation of the resources the delegator has a relation to says so, for
+     * no-escalation to verify against the relations' definitions; the decision at each use checks each
+     * resource. Step-up sees every part.
+     *
+     * @return list<EffectPart>
+     */
+    private function given(IssueDelegation $command, Request $request): array
+    {
+        $parts = $this->parts($command->actions, $command->resources);
+
+        if (null !== $command->parent || null !== $command->resources->ids()) {
+            return $parts;
+        }
+
+        // Conditions on other subjects, e.g. a group, only narrow it: the grant is through the principal.
+        $toPrincipals = array_values(array_filter($command->resources->atoms, static fn (Selector\Atom $atom): bool => $atom instanceof RelatedTo && 'principal' === $atom->subject->type));
+        $relations = array_map(static fn (RelatedTo $atom): string => $atom->relation, $toPrincipals);
+        $subjects = array_unique(array_map(static fn (RelatedTo $atom): string => (string) $atom->subject, $toPrincipals));
+
+        if ([] === $relations || 1 !== \count($subjects)) {
+            return $parts;
+        }
+
+        $subject = $toPrincipals[0]->subject;
+
+        return array_map(static fn (EffectPart $part): EffectPart => new EffectPart($part->roles, $part->abilities, $part->on, $part->byRelation, $relations, $command->resources->type, $subject), $parts);
+    }
+
+    /**
      * The actions, as abilities, on each resource named by ID, or in the whole realm.
      *
      * @param list<string> $actions
      *
      * @return list<EffectPart>
      */
-    private function parts(array $actions, \YorvoID\Core\Authorization\Selector\Selector $resources): array
+    private function parts(array $actions, Selector\Selector $resources): array
     {
         $abilities = $this->named($actions);
         $ids = $resources->ids();

@@ -10,6 +10,7 @@ use Psr\Log\NullLogger;
 use Symfony\Component\Clock\NativeClock;
 use YorvoID\Core\Authorization\BuiltIn\AbilityPermit;
 use YorvoID\Core\Authorization\BuiltIn\AuthenticationPermit;
+use YorvoID\Core\Authorization\BuiltIn\DelegatedPermit;
 use YorvoID\Core\Authorization\BuiltIn\OperatorPermit;
 use YorvoID\Core\Authorization\BuiltIn\OwnersKeepTheirAgents;
 use YorvoID\Core\Authorization\BuiltIn\SelfServiceForOwnAccount;
@@ -22,18 +23,23 @@ use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Operation\AbilityPolicy;
 use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
+use YorvoID\Core\Operation\ActsUnderDelegation;
 use YorvoID\Core\Operation\Anonymous;
 use YorvoID\Core\Operation\Authorization;
 use YorvoID\Core\Operation\AuthorizedBy;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\NoSelfService;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\Operator;
+use YorvoID\Core\Operation\SelfOperation;
 use YorvoID\Core\Operation\SelfServicePolicy;
+use YorvoID\Core\Operation\UnderDelegation;
 use YorvoID\Core\Operation\Verdict;
 use YorvoID\Core\Operation\ViewingAs;
+use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\StoreUnreachable;
@@ -60,7 +66,7 @@ use YorvoID\Core\Storage\StoreUnreachable;
  *
  * @api
  */
-final readonly class Evaluator implements Authorization
+final readonly class Evaluator implements Authorization, DecidesForRoot
 {
     /** @var array<string, PolicyElement> By name */
     private array $elements;
@@ -86,19 +92,30 @@ final readonly class Evaluator implements Authorization
 
     private ?VersionMemo $memo;
 
+    /** @var list<MatchesSelectors> */
+    private array $selectors;
+
+    /** @var \WeakMap<Request, DelegatedScope> Each delegated request's scope, for its record */
+    private \WeakMap $scopes;
+
     /**
-     * @param iterable<PolicyElement> $elements  The policy: permits and forbids
-     * @param OfflineDecider|null     $offline   Asked while a store is unreachable, for the operations that accept it
-     * @param iterable<VersionSource> $versions  What each decision records the version of (AUZ-009)
-     * @param IdGenerator             $ids       Each decision's ID
-     * @param DecisionLog|null        $decisions Where decisions are recorded (AUZ-040); without it, nowhere
-     * @param iterable<ProvesActors>  $actors    What proves actors beyond core's own, e.g. sessions (StoredSessions, D-45)
-     * @param DecisionScope|null      $scope     The one the cached stores read in, so that they read at the versions a
-     *                                           decision read before judging (D-44); its own, if not given
-     * @param AttributeMacs|null      $macs      How the attributes a decision read are recorded (M-9); without one, those
-     *                                           that aren't public are withheld
-     * @param VersionMemo|null        $memo      Opt-in: an ability's permit, for showing, decided at the versions the request
-     *                                           first read (pinned); off without one
+     * @param iterable<PolicyElement>    $elements  The policy: permits and forbids
+     * @param OfflineDecider|null        $offline   Asked while a store is unreachable, for the operations that accept it
+     * @param iterable<VersionSource>    $versions  What each decision records the version of (AUZ-009)
+     * @param IdGenerator                $ids       Each decision's ID
+     * @param DecisionLog|null           $decisions Where decisions are recorded (AUZ-040); without it, nowhere
+     * @param iterable<ProvesActors>     $actors    What proves actors beyond core's own, e.g. sessions (StoredSessions, D-45)
+     * @param DecisionScope|null         $scope     The one the cached stores read in, so that they read at the versions a
+     *                                              decision read before judging (D-44); its own, if not given
+     * @param AttributeMacs|null         $macs      How the attributes a decision read are recorded (M-9); without one, those
+     *                                              that aren't public are withheld
+     * @param VersionMemo|null           $memo      Opt-in: an ability's permit, for showing, decided at the versions the request
+     *                                              first read (pinned); off without one
+     * @param ValidatesChains|null       $chains    What validates a delegation's chain at a use; without one, an actor under a
+     *                                              delegation decides nothing (Indeterminate)
+     * @param iterable<MatchesSelectors> $selectors What matches a delegation's conditions core can't: attributes, relations
+     * @param ResolvesRootAnchors|null   $anchors   An outside authority over a chain's root, asked at every use (M3-6)
+     * @param StepUpCheck|null           $stepUp    What checks the proof a delegation asks of its delegate
      *
      * @throws IntegratorError When an element is neither a permit nor a forbid, two share a name, a
      *                         permit authorizes by Consequence, which only another operation's permit gives,
@@ -117,10 +134,16 @@ final readonly class Evaluator implements Authorization
         ?DecisionScope $scope = null,
         ?AttributeMacs $macs = null,
         ?VersionMemo $memo = null,
+        private ?ValidatesChains $chains = null,
+        iterable $selectors = [],
+        private ?ResolvesRootAnchors $anchors = null,
+        private ?StepUpCheck $stepUp = null,
     ) {
         $this->scope = $scope ?? new DecisionScope();
         $this->macs = $macs ?? new AttributeMacs();
         $this->memo = $memo;
+        $this->selectors = iterator_to_array($selectors, false);
+        $this->scopes = new \WeakMap();
         $provers = [];
 
         foreach ($actors as $prover) {
@@ -214,21 +237,25 @@ final readonly class Evaluator implements Authorization
     /**
      * YorvoID's own ways to authorize (#[Operation]'s AuthorizedBy) as permits, and the elements given.
      *
-     * @param AuthorityCheck          $authority   Usually PrincipalAuthority, with the principals' store
-     * @param AbilityPolicy|null      $abilities   Who holds an ability; without one, no ability permits anything
-     * @param iterable<PolicyElement> $elements    The application's own permits and forbids
-     * @param bool|null               $commandLine Whether PHP runs from the command line, as it does for console
-     *                                             commands and workers: the host's operator acts only from there.
-     *                                             Found out if not given
-     * @param OfflineDecider|null     $offline     Asked while a store is unreachable, for the operations that accept it
-     * @param iterable<VersionSource> $versions    What each decision records the version of
-     * @param DecisionLog|null        $decisions   Where decisions are recorded
-     * @param iterable<ProvesActors>  $actors      What proves actors beyond core's own, e.g. sessions (StoredSessions)
-     * @param DecisionScope|null      $scope       The one the cached stores read in
-     * @param AttributeMacs|null      $macs        How the attributes a decision read are recorded
-     * @param VersionMemo|null        $memo        Opt-in: abilities' permits for showing decided at the request's versions
-     * @param PrincipalStore|null     $principals  For the forbid that keeps an owner of agents from being deleted: the
-     *                                             authority check's, if it's PrincipalAuthority, when not given
+     * @param AuthorityCheck             $authority   Usually PrincipalAuthority, with the principals' store
+     * @param AbilityPolicy|null         $abilities   Who holds an ability; without one, no ability permits anything
+     * @param iterable<PolicyElement>    $elements    The application's own permits and forbids
+     * @param bool|null                  $commandLine Whether PHP runs from the command line, as it does for console
+     *                                                commands and workers: the host's operator acts only from there.
+     *                                                Found out if not given
+     * @param OfflineDecider|null        $offline     Asked while a store is unreachable, for the operations that accept it
+     * @param iterable<VersionSource>    $versions    What each decision records the version of
+     * @param DecisionLog|null           $decisions   Where decisions are recorded
+     * @param iterable<ProvesActors>     $actors      What proves actors beyond core's own, e.g. sessions (StoredSessions)
+     * @param DecisionScope|null         $scope       The one the cached stores read in
+     * @param AttributeMacs|null         $macs        How the attributes a decision read are recorded
+     * @param VersionMemo|null           $memo        Opt-in: abilities' permits for showing decided at the request's versions
+     * @param PrincipalStore|null        $principals  For the forbid that keeps an owner of agents from being deleted: the
+     *                                                authority check's, if it's PrincipalAuthority, when not given
+     * @param ValidatesChains|null       $chains      What validates delegations' chains (yorvoid/delegation)
+     * @param iterable<MatchesSelectors> $selectors   What matches a delegation's conditions on attributes and relations
+     * @param ResolvesRootAnchors|null   $anchors     An outside authority over a chain's root (M3-6)
+     * @param StepUpCheck|null           $stepUp      What checks the proof a delegation asks of its delegate
      */
     public static function builtIn(
         AuthorityCheck $authority,
@@ -247,6 +274,10 @@ final readonly class Evaluator implements Authorization
         ?AttributeMacs $macs = null,
         ?VersionMemo $memo = null,
         ?PrincipalStore $principals = null,
+        ?ValidatesChains $chains = null,
+        iterable $selectors = [],
+        ?ResolvesRootAnchors $anchors = null,
+        ?StepUpCheck $stepUp = null,
     ): self {
         $builtIn = [
             new AuthenticationPermit(),
@@ -265,7 +296,7 @@ final readonly class Evaluator implements Authorization
             $builtIn[] = new OwnersKeepTheirAgents($principals);
         }
 
-        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors, $scope, $macs, $memo);
+        return new self([...$builtIn, ...$elements], $authority, $clock, $logger ?? new NullLogger(), $offline, $versions, $ids, $decisions, $actors, $scope, $macs, $memo, $chains, $selectors, $anchors, $stepUp);
     }
 
     public function decide(OperationDescription $operation, Command $command, Actor $actor, Origin $origin): Decision
@@ -298,6 +329,17 @@ final readonly class Evaluator implements Authorization
         $decision = $this->judged($request, fn (): Decision => $this->consequence($request, $parent));
 
         return self::bound(null === $this->decisions ? $decision : $this->decisions->record($request, $decision, $parent->id), $command, $actor);
+    }
+
+    public function rootHolds(PrincipalId $root, string $ability, Realm $realm, ?ResourceRef $resource, Origin $origin): Truth
+    {
+        $decision = $this->judge(Request::forAbility($ability, $realm, $resource, new ActingPrincipal($realm, $root), $origin, $this->clock->now()));
+
+        return match ($decision->verdict) {
+            Verdict::Permit => Truth::holds(\sprintf('The root holds "%s".', $ability)),
+            Verdict::Deny => Truth::fails(\sprintf('The root doesn\'t hold "%s" now: %s', $ability, $decision->reason)),
+            Verdict::Indeterminate, Verdict::PermitOffline => Truth::unknown($decision->indeterminate[0] ?? IndeterminateReason::EvaluationError, \sprintf('Whether the root holds "%s" couldn\'t be established: %s', $ability, $decision->reason)),
+        };
     }
 
     /**
@@ -359,7 +401,7 @@ final readonly class Evaluator implements Authorization
         $checks = array_map(fn (Request $request, array $one): bool => $this->checksWhatMoved($request, $one[0]), $requests, $judged);
         $read = \in_array(true, $checks, true) ? ReadSet::between($before, $this->versionsOf($requests[0])) : null;
         $unchecked = ReadSet::unchecked($before);
-        $decided = array_map(fn (Request $request, array $one, bool $checks): array => [$request, self::identified($one[0], (string) $this->ids->next(), $request->at, $checks && null !== $read ? $this->withAttributes($request, $read, $one[1]) : $unchecked)], $requests, $judged, $checks);
+        $decided = array_map(fn (Request $request, array $one, bool $checks): array => [$request, self::identified($one[0], (string) $this->ids->next(), $request->at, $this->underChain($request, $checks && null !== $read ? $this->withAttributes($request, $read, $one[1]) : $unchecked))], $requests, $judged, $checks);
 
         return null === $this->decisions ? array_map(static fn (array $one): Decision => $one[1], $decided) : $this->decisions->recordAll($decided);
     }
@@ -426,6 +468,19 @@ final readonly class Evaluator implements Authorization
             return $viewer instanceof Truth ? $viewer : new ViewingAs($viewer, $actor->target);
         }
 
+        // Core unwraps a delegation itself (D-47 R1): the actor that authenticated is proven as itself; its
+        // chain is validated when the request is judged.
+        if ($actor instanceof UnderDelegation) {
+            $as = $this->proveActor($actor->as);
+
+            return $as instanceof Truth ? $as : new UnderDelegation($as, $actor->delegation, $actor->purpose, $actor->execution);
+        }
+
+        // Another class that claims to act under a delegation decides nothing: only core's is checked.
+        if ($actor instanceof ActsUnderDelegation) {
+            return Truth::unknown(IndeterminateReason::UnprovenActor, \sprintf('Only UnderDelegation acts under a delegation, not %s.', $actor::class))->grounded(Ground::authority('unproven'));
+        }
+
         // The host's operator is proven by its origin (OperatorPermit); no one, by nothing; a principal a
         // permit acts as, by the permit (Permit::cause()), and in a decision it proves nothing (L-4).
         if ($actor instanceof Operator || $actor instanceof Anonymous || $actor instanceof ActingPrincipal) {
@@ -435,7 +490,10 @@ final readonly class Evaluator implements Authorization
         foreach ($this->actors as $prover) {
             if ($prover->proves($actor)) {
                 try {
-                    return $prover->prove($actor);
+                    $proven = $prover->prove($actor);
+
+                    // A prover never makes an actor act under a delegation: that would skip its chain.
+                    return $proven instanceof ActsUnderDelegation ? Truth::unknown(IndeterminateReason::UnprovenActor, \sprintf('%s proved an actor to act under a delegation: only the evaluator checks one.', $prover::class))->grounded(Ground::authority('unproven')) : $proven;
                 } catch (\Throwable $exception) {
                     // A store that's down, as for any element: unknown, not refused; a mistake in the
                     // setup is thrown on (safely()).
@@ -493,7 +551,17 @@ final readonly class Evaluator implements Authorization
         [$decision, $attributes] = $this->scope->within($request->realm, $before, fn (): array => $this->scope->judging($judge));
         $read = $this->checksWhatMoved($request, $decision) ? $this->withAttributes($request, ReadSet::between($before, $this->versionsOf($request)), $attributes) : ReadSet::unchecked($before);
 
-        return self::identified($decision, (string) $this->ids->next(), $request->at, $read);
+        return self::identified($decision, (string) $this->ids->next(), $request->at, $this->underChain($request, $read));
+    }
+
+    /**
+     * The read set with the chain the request was decided under, if it was: its links and root (I2).
+     */
+    private function underChain(Request $request, ReadSet $read): ReadSet
+    {
+        $scope = $this->scopes[$request] ?? null;
+
+        return null === $scope ? $read : $read->withDelegation(['links' => array_map(strval(...), $scope->links), 'root' => (string) $scope->root]);
     }
 
     /**
@@ -543,7 +611,7 @@ final readonly class Evaluator implements Authorization
         // A pinned permit the log records holds the attributes it read, as a checked one does.
         $read = ReadSet::pinned($memo);
 
-        return self::identified($decision, (string) $this->ids->next(), $request->at, true === $this->decisions?->recordsPermit($request) ? $this->withAttributes($request, $read, $attributes) : $read);
+        return self::identified($decision, (string) $this->ids->next(), $request->at, $this->underChain($request, true === $this->decisions?->recordsPermit($request) ? $this->withAttributes($request, $read, $attributes) : $read));
     }
 
     /**
@@ -651,6 +719,10 @@ final readonly class Evaluator implements Authorization
             return $this->viewingAs($request, $actor);
         }
 
+        if ($actor instanceof UnderDelegation && !isset($this->unproven[$request])) {
+            return $this->delegated($request, $actor);
+        }
+
         $authorizedBy = $request->authorizedBy();
         $reasons = [];
         /** @var array<string, list<Truth>> $forbids */
@@ -708,6 +780,194 @@ final readonly class Evaluator implements Authorization
         $this->logger->warning('YorvoID permitted "{operation}" offline: {reason}', ['operation' => $request->name(), 'reason' => $offline->reason]);
 
         return $offline;
+    }
+
+    /**
+     * A request by an actor under a delegation (06 §5.3, D-47): its chain valid now, the request within
+     * the leaf's scope, the root permitted the same request now, and no forbid on it. The actor's own
+     * permits don't count, and the root's evidence can't be shown for it: the delegation's own proof,
+     * shown by the actor that authenticated, is the only evidence. So it's never more than the root may.
+     */
+    private function delegated(Request $request, UnderDelegation $actor): Decision
+    {
+        $reasons = [];
+        /** @var array<string, list<Truth>> $forbids */
+        $forbids = ['holds' => [], 'unknown' => []];
+
+        foreach ($this->elements as $element) {
+            if (!$element instanceof ForbidElement) {
+                continue;
+            }
+
+            $truth = self::safely(static fn (): ?Truth => $element->matches($request) ? null : Truth::fails('Not about this request.'));
+
+            if (null === $truth) {
+                $truth = self::safely(static fn (): Truth => $element->evaluate($request));
+            } elseif (TruthValue::Fails === $truth->value) {
+                continue;
+            }
+
+            if (TruthValue::Fails !== $truth->value) {
+                $forbids[TruthValue::Holds === $truth->value ? 'holds' : 'unknown'][] = $truth;
+            }
+
+            $reasons[] = new Reason($element->name(), 'forbid', $truth);
+        }
+
+        [$authority, $permit] = $this->delegatedAuthority($request, $actor);
+        $reasons[] = new Reason('authority', 'authority', $authority);
+        $permits = ['holds' => [], 'unknown' => [], 'fails' => []];
+
+        if (null !== $permit) {
+            $permits[match ($permit[1]->value) {
+                TruthValue::Holds => 'holds',
+                TruthValue::Unknown => 'unknown',
+                TruthValue::Fails => 'fails',
+            }][] = $permit;
+            $reasons[] = new Reason($permit[0]->name(), 'permit', $permit[1]);
+        }
+
+        return $this->precedence($request, $forbids, $authority, $permits, $reasons);
+    }
+
+    /**
+     * The delegated actor's authority, and the permit the root's decision gives it, if the authority holds.
+     *
+     * @return array{Truth, array{PermitElement, Truth}|null}
+     */
+    private function delegatedAuthority(Request $request, UnderDelegation $actor): array
+    {
+        $check = $this->stepUp;
+
+        if (null === $this->chains || null === $actor->principalId) {
+            return [Truth::unknown(IndeterminateReason::UnprovenActor, 'Nothing validates delegations here.')->grounded(Ground::authority('unproven')), null];
+        }
+
+        $chains = $this->chains;
+        $delegate = $actor->principalId;
+        try {
+            $scope = $chains->validate($actor->delegation, $delegate, $request);
+        } catch (\Throwable $exception) {
+            // A store that's down is unknown, as for any element; a mistake in the setup is thrown on.
+            $scope = self::safely(static fn (): never => throw $exception);
+        }
+
+        if ($scope instanceof Truth) {
+            return [$scope, null];
+        }
+
+        // The validator answers for this delegation and this actor, or it isn't believed (D-47 R1).
+        if (!$scope->leaf->equals($actor->delegation) || !$scope->delegate->equals($delegate)) {
+            return [Truth::unknown(IndeterminateReason::ConflictingRecords, 'The chain validated isn\'t the one asked for, or not for this actor.')->grounded(Ground::authority('inconsistent_chain')), null];
+        }
+
+        $this->scopes[$request] = $scope;
+
+        foreach ([$this->ownAccountOfRoot($request, $scope), $this->within($request, $scope), $this->anchored($scope, $request)] as $truth) {
+            if (null !== $truth && TruthValue::Holds !== $truth->value) {
+                return [$truth, null];
+            }
+        }
+
+        $asRoot = $request->by(new ActingPrincipal($request->realm, $scope->root));
+
+        // Only a proven actor's request gets here; copied all the same, as every actor change does (D-45).
+        if (isset($this->unproven[$request])) {
+            $this->unproven[$asRoot] = $this->unproven[$request];
+        }
+
+        $root = $this->judge($asRoot);
+        $authority = match ($root->verdict) {
+            Verdict::Permit => Truth::holds(\sprintf('The chain holds, and its root may now: %s', $root->reason)),
+            // The root's evidence can't be shown under a delegation: no remedy of the root's is passed on.
+            Verdict::Deny => Truth::fails(\sprintf('Its root may not now: %s', $root->reason))->grounded(Ground::authority('root_not_permitted')),
+            Verdict::Indeterminate, Verdict::PermitOffline => Truth::unknown($root->indeterminate[0] ?? IndeterminateReason::EvaluationError, \sprintf('Whether its root may now couldn\'t be established: %s', $root->reason)),
+        };
+
+        if (TruthValue::Holds !== $authority->value || null === $root->basis) {
+            return [$authority, null];
+        }
+
+        // The delegation's own proof, shown by the actor that authenticated.
+        $asked = $scope->stepUp;
+        $proof = match (true) {
+            null === $asked => Truth::holds('It asks no proof.'),
+            null === $check => Truth::unknown(IndeterminateReason::EvaluationError, 'Nothing checks the proof the delegation asks.'),
+            default => self::safely(static fn (): Truth => $check->check($actor->as, $asked)),
+        };
+        // The root is judged on the same request, so its basis is one of the request's; if it isn't, no
+        // permit is made on a basis nothing decided.
+        if (!\in_array($root->basis, $request->authorizedBy(), true)) {
+            return [Truth::unknown(IndeterminateReason::ConflictingRecords, 'Its root was permitted on a basis this request isn\'t authorized by.')->grounded(Ground::authority('inconsistent_basis')), null];
+        }
+
+        return [$authority, [new DelegatedPermit($root->basis), $proof]];
+    }
+
+    /**
+     * Whether the request is within the leaf's scope (D3, D5): the request's own action, its purpose and
+     * task, its resource's type and ID (core's own), and the conditions only others can match.
+     */
+    private function within(Request $request, DelegatedScope $scope): Truth
+    {
+        $outside = static fn (string $why): Truth => Truth::fails(\sprintf('Outside the delegation: %s.', $why))->grounded(Ground::authority('outside_delegation'));
+        $actor = $request->actor;
+        $purpose = $request->purpose ?? ($actor instanceof UnderDelegation ? $actor->purpose : null);
+        $execution = $request->execution ?? ($actor instanceof UnderDelegation ? $actor->execution : null);
+
+        if (!\in_array($request->name(), $scope->actions, true)) {
+            return $outside(\sprintf('it doesn\'t delegate "%s"', $request->name()));
+        }
+
+        if (null !== $scope->purposes && (null === $purpose || !\in_array($purpose, $scope->purposes, true))) {
+            return $outside('another purpose, or none');
+        }
+
+        if (null !== $scope->execution && $execution !== $scope->execution) {
+            return $outside('another task, or none');
+        }
+
+        if (null === $request->resource || !$scope->resources->admitsTypeAndId($request->resource)) {
+            return $outside('another resource');
+        }
+
+        foreach ($scope->resources->atoms as $atom) {
+            if ($atom instanceof Selector\IdIn) {
+                continue;
+            }
+
+            $matcher = array_values(array_filter($this->selectors, static fn (MatchesSelectors $m): bool => $m->answers($atom)))[0] ?? null;
+            $truth = null === $matcher ? Truth::unknown(IndeterminateReason::MissingData, 'Nothing matches a condition of the delegation\'s resources.') : self::safely(static fn (): Truth => $matcher->match($atom, $request));
+
+            if (TruthValue::Fails === $truth->value) {
+                return $outside('the resource doesn\'t meet its conditions');
+            }
+
+            if (TruthValue::Unknown === $truth->value) {
+                return $truth;
+            }
+        }
+
+        return Truth::holds('Within the delegation.');
+    }
+
+    /**
+     * An agent never acts on its root's own account: their credentials, recovery, sessions (D2).
+     */
+    private function ownAccountOfRoot(Request $request, DelegatedScope $scope): ?Truth
+    {
+        $command = $request->command;
+        $root = new ActingPrincipal($request->realm, $scope->root);
+        $concerns = ($command instanceof SelfOperation && $command->concerns($root)) || ($command instanceof ConcernsPrincipal && $command->principal()->equals($scope->root));
+
+        return $concerns ? Truth::fails('Under a delegation, nothing is done on its root\'s own account.')->grounded(Ground::authority('own_account_of_root')) : null;
+    }
+
+    private function anchored(DelegatedScope $scope, Request $request): ?Truth
+    {
+        $anchors = $this->anchors;
+
+        return null === $anchors ? null : self::safely(static fn (): ?Truth => $anchors->resolve($scope, $request));
     }
 
     /**

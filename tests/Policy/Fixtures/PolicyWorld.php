@@ -31,13 +31,16 @@ use YorvoID\Core\Principal\Principals;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\VersionedCache;
+use YorvoID\Delegation\ChainValidator;
 use YorvoID\Delegation\DelegationEffects;
 use YorvoID\Delegation\Delegations;
 use YorvoID\Delegation\DelegationStore;
+use YorvoID\Delegation\DelegationsVersion;
 use YorvoID\Policy\AbilityActions;
 use YorvoID\Policy\Attribute\AttributeChanges;
 use YorvoID\Policy\Attribute\AttributeResolver;
 use YorvoID\Policy\Attribute\Attributes;
+use YorvoID\Policy\Attribute\AttributeSelectors;
 use YorvoID\Policy\Change\AssignRole;
 use YorvoID\Policy\GroupChanges;
 use YorvoID\Policy\GroupRelations;
@@ -63,6 +66,7 @@ use YorvoID\Relations\RelationChanges;
 use YorvoID\Relations\RelationPermit;
 use YorvoID\Relations\Relations;
 use YorvoID\Relations\RelationSchema;
+use YorvoID\Relations\RelationSelectors;
 use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationsVersion;
 use YorvoID\Relations\Storage\CachedRelationStore;
@@ -157,7 +161,7 @@ final class PolicyWorld
         }
 
         $authority = new PrincipalAuthority($principals);
-        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore)], actors: [new TrustedActors()], scope: $scope, macs: $macs, memo: $memo);
+        $evaluator = Evaluator::builtIn($mutants?->authority($authority) ?? $authority, elements: $mutants?->elements($elements) ?? $elements, commandLine: true, clock: $this->clock, versions: [new PolicyVersion($this->policyStore), new RelationsVersion($this->relationStore), ...($delegations ? [new DelegationsVersion($stack->delegations ?? $this->memory->delegations)] : [])], actors: [new TrustedActors()], scope: $scope, macs: $macs, memo: $memo, chains: $delegations ? new ChainValidator($stack->delegations ?? $this->memory->delegations, $principals, fn (): Actions => $this->actions()) : null, selectors: [new AttributeSelectors($this->attributes), new RelationSelectors($this->relations)], stepUp: $stepUp);
         $handlers = [
             new Principals($principals, $identifiers, $log, $transactions, clock: $this->clock),
             new PolicyChanges($catalogue, $this->policyStore, $principals, $log, $transactions, $this->clock),
@@ -165,7 +169,7 @@ final class PolicyWorld
             new RelationChanges($this->relations->schema(), $this->relationStore, $log, $transactions),
             new AttributeChanges($this->attributes, $attributes, $principals, $log, $transactions),
             new Views($this->roles, $principals, $log, $this->clock),
-            ...($delegations ? [new Delegations($this->delegationStore = $stack->delegations ?? $this->memory->delegations, $principals, fn (): Actions => $this->actions(), $log, $transactions, $this->clock)] : []),
+            ...($delegations ? [new Delegations($this->delegationStore = $stack->delegations ?? $this->memory->delegations, $principals, fn (): Actions => $this->actions(), $log, $transactions, $this->clock, roots: $evaluator)] : []),
         ];
         $this->handlers = $handlers;
         $this->catalogue = OperationCatalogue::of($handlers);

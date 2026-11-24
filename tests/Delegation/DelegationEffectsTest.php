@@ -7,6 +7,9 @@ namespace YorvoID\Tests\Delegation;
 use PHPUnit\Framework\TestCase;
 use YorvoID\Core\Authorization\EffectPart;
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Authorization\Selector\IdIn;
+use YorvoID\Core\Authorization\Selector\RelatedTo;
 use YorvoID\Core\Authorization\Selector\Selector;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
@@ -35,6 +38,24 @@ final class DelegationEffectsTest extends TestCase
         $gives = $this->effects($world)->effectOf($this->request($world, $bea, new IssueDelegation($world->realm, $bea->principalId ?? throw new \LogicException(), ['yorvoid.principal.*', 'yorvoid.identifier.*', 'acme.nothing.*'], new Selector('page'), new \DateTimeImmutable('2026-11-14 20:00:00'))))->gives;
 
         self::assertEquals([new EffectPart(abilities: ['acme.nothing.*', 'yorvoid.identifier.verify', 'yorvoid.principals.manage'])], $gives, 'Not "yorvoid.principals.recover": a longer name that starts alike.');
+    }
+
+    /**
+     * A delegation of the pages someone has a relation to says so, for no-escalation to verify; one
+     * that names its pages, or is passed on, gives what it names on each, and says nothing of relations.
+     */
+    public function testOnlyARootDelegationWithoutIdsIsThroughARelation(): void
+    {
+        $world = new PolicyWorld(delegations: true);
+        $bea = $world->principal();
+        $id = $bea->principalId ?? throw new \LogicException();
+        $hers = new RelatedTo('editor', new ResourceRef('principal', (string) $id));
+        $gives = fn (IssueDelegation $command): array => $this->effects($world)->effectOf($this->request($world, $bea, $command))->gives;
+        $until = new \DateTimeImmutable('2026-11-14 20:00:00');
+
+        self::assertEquals([new EffectPart(abilities: ['acme.pages.publish'], viaRelations: ['editor'], onType: 'page', subject: new ResourceRef('principal', (string) $id))], $gives(new IssueDelegation($world->realm, $id, ['acme.pages.publish'], new Selector('page', [$hers]), $until)));
+        self::assertEquals([new EffectPart(abilities: ['acme.pages.publish'], on: new ResourceRef('page', 'p-1')), new EffectPart(abilities: ['acme.pages.publish'], on: new ResourceRef('page', 'p-2'))], $gives(new IssueDelegation($world->realm, $id, ['acme.pages.publish'], new Selector('page', [$hers, new IdIn(['p-1', 'p-2'])]), $until)), 'Named by ID.');
+        self::assertEquals([new EffectPart(abilities: ['acme.pages.publish'])], $gives(new IssueDelegation($world->realm, $id, ['acme.pages.publish'], new Selector('page', [$hers]), $until, parent: new DelegationId(Ids::next()))), 'Passed on.');
     }
 
     public function testRevokingTakesWhatEachActiveDelegationGave(): void

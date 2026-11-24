@@ -79,6 +79,7 @@ use YorvoID\Core\Storage\Installation;
 use YorvoID\Core\Storage\StorageLocation;
 use YorvoID\Core\Storage\Transactions;
 use YorvoID\Core\Storage\VersionedCache;
+use YorvoID\Delegation\ChainValidator;
 use YorvoID\Delegation\DelegationEffects;
 use YorvoID\Delegation\Delegations;
 use YorvoID\Delegation\DelegationStore;
@@ -101,6 +102,7 @@ use YorvoID\Passkeys\Storage\DbalPasskeyStore;
 use YorvoID\Policy\AbilityActions;
 use YorvoID\Policy\Attribute\AttributeChanges;
 use YorvoID\Policy\Attribute\Attributes;
+use YorvoID\Policy\Attribute\AttributeSelectors;
 use YorvoID\Policy\Attribute\AttributeStore;
 use YorvoID\Policy\Attribute\ForgetAttributesOfDeletedPrincipals;
 use YorvoID\Policy\ForgetRolesOfDeletedPrincipals;
@@ -127,6 +129,7 @@ use YorvoID\Relations\RelationChanges;
 use YorvoID\Relations\RelationPermit;
 use YorvoID\Relations\Relations;
 use YorvoID\Relations\RelationSchema;
+use YorvoID\Relations\RelationSelectors;
 use YorvoID\Relations\RelationStore;
 use YorvoID\Relations\RelationsVersion;
 use YorvoID\Relations\Storage\CachedRelationStore;
@@ -365,7 +368,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(PolicyEffects::class)->tag('yorvoid.effects');
     // Delegation: its abilities, its handler and what its commands give, with the actions built when first asked.
     $services->set(DelegationDeclarations::class)->tag('yorvoid.policy_declarations');
-    $services->set(Delegations::class)->arg('$actions', service_closure(Actions::class));
+    $services->set(Delegations::class)->arg('$actions', service_closure(Actions::class))->arg('$roots', service_closure(Evaluator::class));
     $services->set(DelegationEffects::class)->arg('$actions', service_closure(Actions::class))->arg('$store', service(Stores::IDS[DelegationStore::class]))->tag('yorvoid.effects');
     $services->set(DeclaredEffects::class)->args([tagged_iterator('yorvoid.effects')]);
     $services->set(StepUpForSensitiveChanges::class)->arg('$window', inline_service()->factory([Factories::class, 'duration'])->args([param('yorvoid.step_up.window')]))->arg('$effects', service(DeclaredEffects::class))->tag('yorvoid.policy_element');
@@ -397,7 +400,16 @@ return static function (ContainerConfigurator $container): void {
         null,
         // An owner of agents isn't deleted (OwnersKeepTheirAgents).
         service(Stores::IDS[PrincipalStore::class]),
+        // Actors under a delegation: its chain, the conditions core can't match, no outside anchor (M3-6),
+        // and the proof a delegation asks.
+        service(ChainValidator::class),
+        tagged_iterator('yorvoid.selector_matcher'),
+        null,
+        service(StepUpCheck::class),
     ]);
+    $services->set(ChainValidator::class)->arg('$actions', service_closure(Actions::class));
+    $services->set(AttributeSelectors::class)->tag('yorvoid.selector_matcher');
+    $services->set(RelationSelectors::class)->tag('yorvoid.selector_matcher');
     $services->set(StoredSessions::class)->args([service(Stores::IDS[SessionStore::class]), service(ClockInterface::class)])->tag('yorvoid.actor_prover');
     $services->alias(Authorization::class, Evaluator::class);
     $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->arg('$transactions', service(Transactions::class))->public();

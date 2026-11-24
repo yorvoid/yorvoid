@@ -59,7 +59,7 @@ $publish = new class implements ListsActions {
         return ['acme.pages.publish' => Delegable::Everyone];
     }
 };
-$delegations = new Delegations(new DbalDelegationStore($database, new DbalVersionStore($database)), new DbalPrincipalStore($database), new Actions(new OperationCatalogue([]), [$publish]), new SecurityLog(new DbalSecurityLogStore($database), $transactions), $transactions);
+$delegations = new Delegations(new DbalDelegationStore($database, new DbalVersionStore($database)), new DbalPrincipalStore($database), new Actions(new OperationCatalogue([]), [$publish]), new SecurityLog(new DbalSecurityLogStore($database), $transactions), $transactions, roots: new YorvoID\Tests\Support\RootsHold());
 $realm = new Realm('acme');
 $deadline = microtime(true) + 10;
 

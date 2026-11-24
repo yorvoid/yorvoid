@@ -9,9 +9,11 @@ use YorvoID\Core\Authorization\ChangesAuthority;
 use YorvoID\Core\Authorization\ChecksCatalogue;
 use YorvoID\Core\Authorization\DeclaredEffects;
 use YorvoID\Core\Authorization\Effect;
+use YorvoID\Core\Authorization\EffectPart;
 use YorvoID\Core\Authorization\ForbidElement;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\Request;
+use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\RevokesDelegation;
 use YorvoID\Core\Authorization\Truth;
 use YorvoID\Core\Authorization\TruthValue;
@@ -97,7 +99,8 @@ final readonly class NoEscalation implements ForbidElement, ChecksCatalogue
         }
 
         foreach ([...$effect->gives, ...$effect->takes] as $part) {
-            $truth = $this->roles(null === $part->on ? $request : $request->on($part->on), $part->roles, $part->abilities, $part->byRelation);
+            $abilities = array_values(array_diff($part->abilities, $this->givenByRelations($request, $part)));
+            $truth = $this->roles(null === $part->on ? $request : $request->on($part->on), $part->roles, $abilities, $part->byRelation);
 
             if (TruthValue::Fails !== $truth->value) {
                 return $truth;
@@ -105,6 +108,31 @@ final readonly class NoEscalation implements ForbidElement, ChecksCatalogue
         }
 
         return Truth::fails('They hold everything they change.');
+    }
+
+    /**
+     * The part's abilities its relations' definitions give the actor on every resource of its type they
+     * have one of them to: those are held wherever the part gives them. Checked here, never taken from the
+     * declaration: a relation that gives none of them, or someone else's, leaves them to be weighed.
+     *
+     * @return list<string>
+     */
+    private function givenByRelations(Request $request, EffectPart $part): array
+    {
+        $schema = $this->roles->relations()?->schema();
+        $principal = $request->actor->principalId;
+
+        if ([] === $part->viaRelations || null === $part->onType || null === $schema || null === $principal || true !== $part->subject?->equals(new ResourceRef('principal', (string) $principal))) {
+            return [];
+        }
+
+        $given = [];
+
+        foreach ($part->viaRelations as $relation) {
+            array_push($given, ...$schema->abilitiesGivenBy($part->onType, $relation));
+        }
+
+        return array_values(array_intersect($part->abilities, $given));
     }
 
     /**
