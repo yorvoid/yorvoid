@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace YorvoID\Tests\Passkeys;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use Symfony\Component\Clock\MockClock;
 use YorvoID\Authn\Attempt\AttemptLimits;
 use YorvoID\Authn\Attempt\Attempts;
@@ -256,6 +257,23 @@ final class PasskeysTest extends DatabaseTestCase
 
             $this->refused(Refusal::UserNotVerified, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $authenticator->signIn($weakened, userVerified: false)), new Origin(OriginKind::Web)));
         }
+    }
+
+    /**
+     * GHSA-rxc4-cg58-jrpw: webauthn-lib before 5.3.13 allocated whatever length an answer's CBOR declared
+     * before checking the bytes were there, so the fuzzer's 553 bytes declaring 2.5 GB ended the process
+     * from an unauthenticated sign-in. It's refused as invalid; in a process of its own, so that a
+     * regression can't end the suite.
+     */
+    #[RunInSeparateProcess]
+    public function testAnAnswerDeclaringMoreThanItHasIsRefused(): void
+    {
+        $passkeys = $this->passkeys('memory');
+        $signIn = $passkeys->beginSignIn(new Realm('acme'));
+        $answer = file_get_contents(__DIR__.'/declared-gigabytes.json');
+        \assert(\is_string($answer));
+
+        $this->refused(Refusal::InvalidResponse, static fn () => Permits::call($passkeys->finishSignIn(...), new SignInWithPasskey(new Realm('acme'), $signIn->id, $answer), new Origin(OriginKind::Web)));
     }
 
     #[DataProvider('implementations')]

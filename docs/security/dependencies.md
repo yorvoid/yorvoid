@@ -68,7 +68,7 @@ Every dependency is code that runs with YorvoID's privileges, so YorvoID has few
 |---|---|
 | `yorvoid/authn` | Credentials and sessions |
 | `yorvoid/flows` | The passkey-first journeys' steps |
-| `web-auth/webauthn-lib` 5.3.9 or later | WebAuthn's checks: the established PHP implementation, MIT-licensed, maintained since 2018. Below 5.3.1, user verification could be downgraded (GHSA-h4fw-6r7f-w494) |
+| `web-auth/webauthn-lib` 5.3.13 or later | WebAuthn's checks: the established PHP implementation, MIT-licensed, maintained since 2018. Below 5.3.1, user verification could be downgraded (GHSA-h4fw-6r7f-w494); below 5.3.13, a few bytes declaring a huge length exhausted memory (GHSA-rxc4-cg58-jrpw), among other fixed advisories |
 | `web-auth/cose-lib`, `spomky-labs/cbor-php` | Which COSE algorithms are accepted, and the public keys' checks: declared, so YorvoID's constraint pins them, not only webauthn-lib's |
 | `symfony/serializer`, `symfony/uid` | WebAuthn's options as JSON; ceremony IDs |
 | `ext-openssl`, `ext-sodium`, `ext-filter` | Checking public keys; EdDSA passkeys (libsodium, through the WebAuthn library); integers in COSE keys |

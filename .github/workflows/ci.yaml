@@ -70,10 +70,10 @@ jobs:
       - name: Check the compatibility promise against the last release
         run: docker compose exec -T php composer bc
       - name: Fuzzing
-        # passkey-responses is skipped here for now; it runs locally. On main and each night, ten times as long.
+        # On main and each night, ten times as long.
         env:
           RUNS: ${{ github.event_name != 'pull_request' && '200000' || '20000' }}
-        run: docker compose exec -T -e FUZZ_SKIP=passkey-responses php composer fuzz -- "$RUNS"
+        run: docker compose exec -T php composer fuzz -- "$RUNS"
       - name: Check the ASVS mapping against OWASP's list
         run: docker compose exec -T php php assurance/check-asvs.php
 
