@@ -89,6 +89,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 
 ### Security
 
+- `yorvoid/mail` and `yorvoid/intent-verifier` require `twig/twig` 3.31.1 or later, which fixes its published sandbox advisories. YorvoID's templates don't use Twig's sandbox; an application's own may.
 - `yorvoid/passkeys` and `yorvoid/intent-verifier` require `web-auth/webauthn-lib` 5.3.13 or later, which fixes its published advisories: a denial of service from the lengths CBOR data declares, forged packed and TPM attestations, decoy credentials that tell usernames apart, and metadata checks that let revoked or untrusted authenticators through.
 - A refusal survives the application's rollback and takes no realm lock, and a decision log that can't be written gives `NotPermitted` and the audit alert, not a storage error (AR-03).
 - A copied passkey stays disabled when the application's transaction rolls back with the refusal (ARC-0058). It's disabled once that transaction has ended, committed or rolled back, in a transaction of its own; if that fails, the audit alert says which passkey is still active.
