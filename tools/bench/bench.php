@@ -6,8 +6,8 @@ declare(strict_types=1);
  * The benchmarks' tables and gate (M2-8), from tools/bench/run.php's dumps (composer bench):
  *
  *   php tools/bench/bench.php report <run.json>                         the table: median, p99, target
- *   php tools/bench/bench.php compare <base.json> <head.json> [<changed>]  fails when a subject's lower quartile is
- *                                                                        more than 20 % above the base's
+ *   php tools/bench/bench.php compare <base.json> <head.json> [<changed>]  fails when a subject is more than 20 %
+ *                                                                        slower than the base, in its lower quartile
  *
  *   php tools/bench/bench.php drift <release.json> <head.json>         the change since a release, in the p25, the
  *                                                                        median and the p99; gates nothing
@@ -16,13 +16,17 @@ declare(strict_types=1);
  *                                                                        worst |change| is over 15 %, or fewer
  *                                                                        runs than there should be
  *
- * Each of base and head may be several dumps, separated by commas: their iterations are pooled, as
- * ci.sh measures base and head in turns (ABBA). A subject the base has and the head doesn't is
- * "removed, not gated", and the table says first how many weren't.
+ * Each of base and head may be several dumps, separated by commas, one per turn, in the order ci.sh
+ * measures them (ABBABAAB). A subject with as many turns on each side is compared turn by turn: the k-th
+ * of the base with the k-th of the head, which are adjacent (a1 b2, b3 a4, b5 a6, a7 b8), and the change
+ * is the median of those pairs' changes. Otherwise its iterations are pooled per side. A subject the base
+ * has and the head doesn't is "removed, not gated", and the table says first how many weren't.
  *
  * The gate compares the lower quartile (p25) of the iterations: the A/A record on GitHub's runners showed
  * the median moving by up to 47 % between runs of the same code, as bursts of the runner's noise slowed
- * whole turns. The table of the targets gives the median and the p99. <changed> lists the subjects
+ * whole turns. Paired, a burst over two neighbouring turns of a pair slows both sides of it alike, and
+ * one pair's noise is left out by the median; a burst over two turns of one side in a row (b2 b3, a6 a7)
+ * moves two pairs, so the median by half as much. The table of the targets gives the median and the p99. <changed> lists the subjects
  * whose benchmark code differs between base and head, one per line, "Class::subject", "Class::*" or
  * "*" for every one: they and the new ones are reported "changed, not gated" (C3). Tables go to stdout as Markdown,
  * for the job summary.
@@ -37,15 +41,48 @@ const THRESHOLD = 20.0;
  */
 function iterations(string $files): array
 {
+    return array_map(static fn (array $turns): array => array_merge(...$turns), turns($files));
+}
+
+/**
+ * @param string $files One dump, or several separated by commas, each a turn
+ *
+ * @return array<string, list<list<float>>> Each subject's turns in the order given, each its iterations
+ */
+function turns(string $files): array
+{
     $subjects = [];
 
     foreach (array_filter(explode(',', $files), static fn (string $file): bool => '' !== $file) as $file) {
         foreach (dump($file) as $subject => $times) {
-            $subjects[$subject] = [...$subjects[$subject] ?? [], ...$times];
+            $subjects[$subject][] = $times;
         }
     }
 
     return $subjects;
+}
+
+/**
+ * The change of a subject from base to head, in %, and the lower quartile each side is shown with: turn
+ * by turn when both sides have as many, the median of the pairs' changes; else pooled.
+ *
+ * @param list<list<float>> $base
+ * @param list<list<float>> $head
+ *
+ * @return array{float, float, float} The change, the base's p25, the head's p25
+ */
+function change(array $base, array $head): array
+{
+    if (count($base) !== count($head)) {
+        $before = p25(array_merge(...$base));
+        $after = p25(array_merge(...$head));
+
+        return [100.0 * ($after - $before) / $before, $before, $after];
+    }
+
+    $changes = array_map(static fn (array $before, array $after): float => 100.0 * (p25($after) - p25($before)) / p25($before), $base, $head);
+
+    return [median($changes), median(array_map(p25(...), $base)), median(array_map(p25(...), $head))];
 }
 
 /**
@@ -139,8 +176,8 @@ if ('report' === $command && isset($argv[2])) {
 }
 
 if ('compare' === $command && isset($argv[2], $argv[3])) {
-    $base = iterations($argv[2]);
-    $head = iterations($argv[3]);
+    $base = turns($argv[2]);
+    $head = turns($argv[3]);
     $lines = isset($argv[4]) && is_file($argv[4]) ? file($argv[4]) : false;
     $changed = array_values(array_filter(array_map(trim(...), false === $lines ? [] : $lines), static fn (string $line): bool => '' !== $line));
     $failed = false;
@@ -152,25 +189,27 @@ if ('compare' === $command && isset($argv[2], $argv[3])) {
         $class = explode('::', $subject)[0].'::*';
 
         if (!isset($base[$subject]) || in_array('*', $changed, true) || in_array($subject, $changed, true) || in_array($class, $changed, true)) {
-            $rows[] = sprintf('| %s | %s | %s | | changed, not gated |', $subject, isset($base[$subject]) ? ms(p25($base[$subject])) : 'new', ms(p25($times)));
+            $rows[] = sprintf('| %s | %s | %s | | changed, not gated |', $subject, isset($base[$subject]) ? ms(p25(array_merge(...$base[$subject]))) : 'new', ms(p25(array_merge(...$times))));
             ++$ungated;
 
             continue;
         }
 
-        $change = 100.0 * (p25($times) - p25($base[$subject])) / p25($base[$subject]);
+        [$change, $before, $after] = change($base[$subject], $times);
         $slower = $change > THRESHOLD;
         $failed = $failed || $slower;
         $changes[$subject] = round($change, 2);
-        $rows[] = sprintf('| %s | %s | %s | %+.1f %% | %s |', $subject, ms(p25($base[$subject])), ms(p25($times)), $change, $slower ? '**slower**' : 'ok');
+        $rows[] = sprintf('| %s | %s | %s | %+.1f %% | %s |', $subject, ms($before), ms($after), $change, $slower ? '**slower**' : 'ok');
     }
 
     // A subject the head doesn't have any more, e.g. renamed, isn't compared: said so, not left out.
     foreach (array_diff_key($base, $head) as $subject => $times) {
-        $rows[] = sprintf('| %s | %s | | | removed, not gated |', $subject, ms(p25($times)));
+        $rows[] = sprintf('| %s | %s | | | removed, not gated |', $subject, ms(p25(array_merge(...$times))));
         ++$ungated;
     }
 
+    // Paired, the sides' quartiles are each the median of their turns', and the change is the median of
+    // the pairs': not the change between the two shown.
     printf("%d of %d subjects not gated.\n\n| Subject | Base (p25) | Head (p25) | Change | |\n|---|---|---|---|---|\n%s\n", $ungated, count($rows), implode("\n", $rows));
 
     // The changes, for the A/A record.

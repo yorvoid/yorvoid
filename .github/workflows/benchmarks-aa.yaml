@@ -61,12 +61,13 @@ jobs:
       - name: Show the table
         if: always()
         run: cat var/bench/summary.md >> "$GITHUB_STEP_SUMMARY" || true
-      - name: Keep the changes
+      # Every turn's dump, beside the changes, so that a noisy run can be read turn by turn.
+      - name: Keep the turns and the changes
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: aa-${{ matrix.run }}
-          path: var/bench/changes.json
+          path: var/bench/*.json
           retention-days: 30
 
   # The record: each subject's worst |change| across the runs, and the failures. The gate is trusted

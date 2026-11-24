@@ -63,6 +63,27 @@ final class BenchTest extends TestCase
         self::assertSame(1, self::bench('compare', $this->dump('one', ['A::benchX' => [10, 10]]).','.$this->dump('two', ['A::benchX' => [20, 20]]), $this->dump('three', ['A::benchX' => [13, 14]]))[0], 'Dumps pooled per side: 10 against 13.');
     }
 
+    /**
+     * Turns as ci.sh measures them (a1 b2 b3 a4 b5 a6 a7 b8): each base turn against the head turn next to
+     * it, and the gate on the median of the four pairs' changes. One pair's burst is left out, a burst over
+     * two pairs moves it half as far, and a change in every pair fails.
+     */
+    public function testComparesTurnByTurnAndGatesOnTheMedianPair(): void
+    {
+        [$status, $output] = $this->againstFlatBase([16, 10, 10, 10]);
+        self::assertSame(0, $status, $output);
+        self::assertStringContainsString('| A::benchX | 0.010 ms | 0.010 ms | +0.0 % | ok |', $output, 'One pair\'s burst, left out.');
+
+        [$status, $output] = $this->againstFlatBase([13, 13, 10, 10]);
+        self::assertSame(0, $status, $output);
+        self::assertStringContainsString('+15.0 % | ok |', $output, 'Two pairs\' 30 % burst, half as far.');
+
+        [$status, $output] = $this->againstFlatBase([13, 13, 12, 14]);
+        self::assertSame(1, $status, $output);
+        self::assertStringContainsString('| A::benchX | 0.010 ms | 0.013 ms | +30.0 % | **slower** |', $output, 'Every pair slower.');
+        self::assertSame(['A::benchX' => 30], json_decode((string) file_get_contents($this->directory.'/changes.json'), true), 'The record takes the same number.');
+    }
+
     public function testRefusesWhatIsntAMeasurement(): void
     {
         $good = $this->dump('good', ['A::benchX' => [10]]);
@@ -116,6 +137,34 @@ final class BenchTest extends TestCase
         self::assertStringContainsString('| A::benchX | 21.0 % | 1 |', $output, 'A failure, counted.');
         self::assertGreaterThan(0, $failed);
         self::removeDirectory($this->directory.'/record');
+    }
+
+    /**
+     * The head's turns against a base whose four turns all have a lower quartile of 10.
+     *
+     * @param list<int> $head
+     *
+     * @return array{int, string}
+     */
+    private function againstFlatBase(array $head): array
+    {
+        return self::bench('compare', $this->turns('a', [10, 10, 10, 10]), $this->turns('b', $head), $this->directory.'/none.txt', $this->directory.'/changes.json');
+    }
+
+    /**
+     * One dump per turn, each with four iterations from its lower quartile up.
+     *
+     * @param list<int> $p25s
+     */
+    private function turns(string $side, array $p25s): string
+    {
+        $dumps = [];
+
+        foreach ($p25s as $i => $time) {
+            $dumps[] = $this->dump($side.$i, ['A::benchX' => [$time, $time + 1, $time + 2, $time + 3]]);
+        }
+
+        return implode(',', $dumps);
     }
 
     /**

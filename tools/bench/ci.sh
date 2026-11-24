@@ -3,7 +3,8 @@
 #
 #   sh tools/bench/ci.sh pr <base>   a pull request: the base and the head on this runner, subject by
 #                                    subject in eight turns (ABBABAAB, C2), so that the runner's drift and
-#                                    bursts fall on both alike; then compared
+#                                    bursts fall on both alike; then compared turn by turn, each base turn
+#                                    with the head turn next to it (bench.php)
 #   sh tools/bench/ci.sh main [<tag>] a push to main: the head's table, and, against the last release's
 #                                    tag if it has benchmarks, the change since, which gates nothing
 #   sh tools/bench/ci.sh aa          the gate's false failures: the head against itself, in the same
@@ -53,7 +54,8 @@ subjects() {
 	done
 }
 
-# Base and head, each subject in turns: their dumps, pooled per side, in $out/a.list and $out/b.list.
+# Base and head, each subject in turns: their dumps, in turn order per side, in $out/a.list and
+# $out/b.list. The k-th of a side's turns of a subject is next to the k-th of the other's.
 turns() {
 	a=$1
 	b=$2
