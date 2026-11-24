@@ -83,14 +83,16 @@ final readonly class DelegationEffects implements DeclaresEffects
             return $parts;
         }
 
-        $relations = array_values(array_map(static fn (RelatedTo $atom): string => $atom->relation, array_filter($command->resources->atoms, static fn (Selector\Atom $atom): bool => $atom instanceof RelatedTo && 'principal' === $atom->subject->type)));
-        $subjects = array_values(array_unique(array_map(static fn (RelatedTo $atom): string => (string) $atom->subject, array_filter($command->resources->atoms, static fn (Selector\Atom $atom): bool => $atom instanceof RelatedTo && 'principal' === $atom->subject->type))));
+        // Conditions on other subjects, e.g. a group, only narrow it: the grant is through the principal.
+        $toPrincipals = array_values(array_filter($command->resources->atoms, static fn (Selector\Atom $atom): bool => $atom instanceof RelatedTo && 'principal' === $atom->subject->type));
+        $relations = array_map(static fn (RelatedTo $atom): string => $atom->relation, $toPrincipals);
+        $subjects = array_unique(array_map(static fn (RelatedTo $atom): string => (string) $atom->subject, $toPrincipals));
 
         if ([] === $relations || 1 !== \count($subjects)) {
             return $parts;
         }
 
-        $subject = array_values(array_filter($command->resources->atoms, static fn (Selector\Atom $atom): bool => $atom instanceof RelatedTo))[0]->subject;
+        $subject = $toPrincipals[0]->subject;
 
         return array_map(static fn (EffectPart $part): EffectPart => new EffectPart($part->roles, $part->abilities, $part->on, $part->byRelation, $relations, $command->resources->type, $subject), $parts);
     }

@@ -226,6 +226,74 @@ final class DelegatedDecisionsTest extends DatabaseTestCase
         }
     }
 
+    /**
+     * A grant by relation is the delegator's own, through one principal, them: a second principal, or
+     * someone else's relation, is weighed as the abilities themselves; more conditions only narrow it, and
+     * a condition on another kind of subject doesn't take its place.
+     */
+    public function testARelationGrantIsThroughTheDelegatorAlone(): void
+    {
+        $world = $this->world('memory');
+        $ana = $world->principal();
+        $bea = $world->principal();
+        $bot = $this->agent($world, $ana);
+        $editor = static fn (TestPrincipal $principal): RelatedTo => new RelatedTo('editor', new ResourceRef('principal', (string) self::id($principal)));
+        $world->asOperator(new AddRelation($world->realm, new ResourceRef('page', 'p-1'), 'editor', Subject::principal(self::id($ana))));
+        $world->asOperator(new AddRelation($world->realm, new ResourceRef('page', 'p-2'), 'editor', Subject::principal(self::id($bea))));
+
+        foreach ([
+            'and a group\'s' => [$editor($ana), new RelatedTo('editor', new ResourceRef('group', 'g-1'))],
+            'two relations of hers' => [$editor($ana), new RelatedTo('viewer', new ResourceRef('principal', (string) self::id($ana)))],
+        ] as $case => $conditions) {
+            try {
+                $this->delegate($world, $ana, $bot, ['acme.pages.publish'], new Selector('page', $conditions));
+            } catch (NotPermitted $refused) {
+                self::fail($case.': '.$refused->decision->reason);
+            }
+        }
+
+        foreach (['someone else\'s' => [$editor($bea)], 'two principals' => [$editor($ana), $editor($bea)]] as $case => $conditions) {
+            try {
+                $this->delegate($world, $ana, $bot, ['acme.pages.publish'], new Selector('page', $conditions));
+                self::fail('Delegated: '.$case);
+            } catch (NotPermitted) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
+
+    /**
+     * Whether the relation a delegation names holds couldn't be told within the bound: unknown, never a
+     * match.
+     */
+    public function testARelationThatCantBeToldIsUnknown(): void
+    {
+        $world = new PolicyWorld(maxDepth: 1, delegations: true);
+        [$ana, $bot] = $this->people($world);
+        $world->asOperator(new AddRelation($world->realm, new ResourceRef('page', 'p-1'), 'parent', new Subject(new ResourceRef('site', 's-1'))));
+        $world->asOperator(new AddRelation($world->realm, new ResourceRef('site', 's-1'), 'viewer', Subject::principal(self::id($ana))));
+        $under = new UnderDelegation($bot, $this->delegate($world, $ana, $bot, ['acme.pages.publish'], new Selector('page', [new RelatedTo('viewer', new ResourceRef('principal', (string) self::id($ana)))]))->id);
+
+        $decision = $this->decide($world, $under, 'acme.pages.publish', 'p-1');
+        self::assertSame(Verdict::Indeterminate, $decision->verdict, $decision->reason);
+        self::assertStringContainsString('Whether the relation holds couldn\'t be established.', $decision->reason);
+    }
+
+    /**
+     * Passing on an operation checks that the root holds its ability now, not an ability of its name.
+     */
+    public function testPassingOnAnOperationChecksTheRootHoldsItsAbility(): void
+    {
+        $world = $this->world('memory');
+        $ana = $world->principal('admin');
+        $bea = $world->principal();
+        $cara = $world->principal();
+        $parent = $world->as($ana, new IssueDelegation($world->realm, self::id($bea), ['yorvoid.principal.suspend'], new Selector('principal'), new \DateTimeImmutable(self::EXPIRES), redelegable: ['yorvoid.principal.suspend'], depth: 1));
+
+        $child = $world->as($bea, new IssueDelegation($world->realm, self::id($cara), ['yorvoid.principal.suspend'], new Selector('principal'), new \DateTimeImmutable('2026-11-10 20:00:00'), parent: $parent->id));
+        self::assertEquals([$parent->id, self::id($ana)], [$child->parent, $child->root]);
+    }
+
     public function testADelegationIsUsedByTheActorThatAuthenticatedNeverNested(): void
     {
         $world = $this->world('memory');
