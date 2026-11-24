@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace YorvoID\Testing\Contract;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Principal\AgentProfile;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -78,11 +80,50 @@ trait PrincipalStoreContract
 
         foreach (PrincipalKind::cases() as $i => $kind) {
             $status = PrincipalStatus::cases()[$i % \count(PrincipalStatus::cases())];
-            $principal = new Principal(new PrincipalId(Ids::next()), new Realm('acme'), $kind, $status, new \DateTimeImmutable('2026-10-27 18:40:01 UTC'), new \DateTimeImmutable('2026-10-28 09:15:30 UTC'), new \DateTimeImmutable('2026-10-28 09:15:29 UTC'), 3 + $i);
+            $principal = new Principal(new PrincipalId(Ids::next()), new Realm('acme'), $kind, $status, new \DateTimeImmutable('2026-10-27 18:40:01 UTC'), new \DateTimeImmutable('2026-10-28 09:15:30 UTC'), new \DateTimeImmutable('2026-10-28 09:15:29 UTC'), 3 + $i, PrincipalKind::Agent === $kind ? new PrincipalId(Ids::next()) : null);
             $store->add($principal);
 
             self::assertEquals($principal, $store->get(new Realm('acme'), $principal->id));
         }
+    }
+
+    /**
+     * An agent's owner and profile are kept, an owner's agents found, and a deleted one no longer counts.
+     */
+    #[DataProvider('implementations')]
+    public function testKeepsAnAgentsOwnerAndProfileAndFindsAnOwnersAgents(string $implementation): void
+    {
+        $store = $this->principalStore($implementation);
+        $acme = new Realm('acme');
+        $owner = self::principal($acme);
+        $store->add($owner);
+        $now = new \DateTimeImmutable('2026-11-23 18:00:00 UTC');
+        $agent = new Principal(new PrincipalId(Ids::next()), $acme, PrincipalKind::Agent, PrincipalStatus::Active, $now, $now, $now, 1, $owner->id, new AgentProfile('Assistant', 'acme-agent', '1.0', 'Docs'));
+        $bare = new Principal(new PrincipalId(Ids::next()), $acme, PrincipalKind::Agent, PrincipalStatus::Active, $now, $now, $now, 1, $owner->id, new AgentProfile('Ünïcode / "quoted"'));
+
+        self::assertFalse($store->ownsAgents($acme, $owner->id));
+        $store->add($agent);
+        $store->add($bare);
+
+        self::assertEquals($agent, $store->get($acme, $agent->id));
+        self::assertEquals($bare, $store->get($acme, $bare->id));
+        self::assertTrue($store->ownsAgents($acme, $owner->id));
+        self::assertFalse($store->ownsAgents(new Realm('globex'), $owner->id), 'Only in its realm.');
+
+        // Moved only from the owner it was read with.
+        $other = self::principal($acme);
+        $store->add($other);
+        $moved = $agent->withOwner($other->id, $now);
+        self::assertTrue($store->changeOwner($agent, $moved));
+        self::assertFalse($store->changeOwner($agent, $agent->withOwner($owner->id, $now)), 'Read before the move: refused.');
+        self::assertEquals($other->id, $store->get($acme, $agent->id)?->owner);
+        self::assertTrue($store->ownsAgents($acme, $other->id));
+
+        // A deleted agent doesn't count.
+        $deleted = $bare->withStatus(PrincipalStatus::Deleted, $now);
+        self::assertTrue($store->changeStatus($bare, $deleted));
+        self::assertFalse($store->ownsAgents($acme, $owner->id));
+        self::assertEquals($owner->id, $store->get($acme, $bare->id)?->owner, 'A tombstone keeps its owner.');
     }
 
     #[DataProvider('implementations')]
@@ -122,7 +163,7 @@ trait PrincipalStoreContract
         $this->expectException(StorageException::class);
         $this->expectExceptionMessage('exists');
 
-        $store->add(new Principal($principal->id, new Realm('globex'), PrincipalKind::Agent, PrincipalStatus::Active, $principal->createdAt, $principal->updatedAt, $principal->statusChangedAt));
+        $store->add(new Principal($principal->id, new Realm('globex'), PrincipalKind::Service, PrincipalStatus::Active, $principal->createdAt, $principal->updatedAt, $principal->statusChangedAt));
     }
 
     #[DataProvider('implementations')]
@@ -180,6 +221,45 @@ trait PrincipalStoreContract
         self::assertFalse($store->changeStatus($unknown, $unknown->withStatus(PrincipalStatus::Deleted, new \DateTimeImmutable())));
         self::assertEquals($principal, $store->get(new Realm('acme'), $principal->id));
         self::assertNull($store->get(new Realm('acme'), $unknown->id));
+    }
+
+    /**
+     * An agent is moved only as it was read: in its realm, from the owner it has, to an owner.
+     */
+    #[DataProvider('implementations')]
+    public function testMovesAnAgentOnlyAsItWasRead(string $implementation): void
+    {
+        $store = $this->principalStore($implementation);
+        $acme = new Realm('acme');
+        $owner = self::principal($acme);
+        $other = self::principal($acme);
+        $human = self::principal($acme);
+        $now = new \DateTimeImmutable('2026-11-23 18:00:00 UTC');
+        $agent = new Principal(new PrincipalId(Ids::next()), $acme, PrincipalKind::Agent, PrincipalStatus::Active, $now, $now, $now, 1, $owner->id, new AgentProfile('Assistant'));
+
+        foreach ([$owner, $other, $human, $agent] as $principal) {
+            $store->add($principal);
+        }
+
+        $elsewhere = new Principal($agent->id, new Realm('globex'), $agent->kind, $agent->status, $agent->createdAt, $agent->updatedAt, $agent->statusChangedAt, $agent->statusVersion, $agent->owner, $agent->profile);
+        $unknown = new Principal(new PrincipalId(Ids::next()), $acme, PrincipalKind::Agent, PrincipalStatus::Active, $now, $now, $now, 1, $owner->id);
+        // As if another kind: the stored one isn't an agent, or the moved one isn't any more.
+        $humanAsAgent = new Principal($human->id, $acme, PrincipalKind::Agent, $human->status, $human->createdAt, $human->updatedAt, $human->statusChangedAt, $human->statusVersion, $owner->id);
+        $unowned = new Principal($agent->id, $acme, PrincipalKind::Human, $agent->status, $agent->createdAt, $now, $agent->statusChangedAt, $agent->statusVersion);
+
+        self::assertFalse($store->changeOwner($elsewhere, $elsewhere->withOwner($other->id, $now)), 'In another realm.');
+        self::assertFalse($store->changeOwner($unknown, $unknown->withOwner($other->id, $now)), 'Unknown.');
+        self::assertFalse($store->changeOwner($humanAsAgent, $humanAsAgent->withOwner($other->id, $now)), 'Stored without an owner.');
+        self::assertFalse($store->changeOwner($agent, $unowned), 'To no owner.');
+        self::assertEquals($agent, $store->get($acme, $agent->id));
+        self::assertNull($store->get($acme, $human->id)?->owner);
+
+        try {
+            new Principal($human->id, $acme, PrincipalKind::Human, $human->status, $now, $now, $now, 1, $owner->id);
+            self::fail('A human with an owner.');
+        } catch (IntegratorError) {
+            // Only an agent has one: no store is given a human that has.
+        }
     }
 
     private static function principal(Realm $realm): Principal

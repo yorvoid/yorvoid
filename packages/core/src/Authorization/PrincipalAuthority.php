@@ -48,6 +48,16 @@ final readonly class PrincipalAuthority implements AuthorityCheck, Preloads
         }
     }
 
+    /**
+     * The principals it reads, for the evaluator's own forbids on principals (OwnersKeepTheirAgents).
+     *
+     * @internal
+     */
+    public function principals(): PrincipalStore
+    {
+        return $this->principals;
+    }
+
     public function check(Request $request): Truth
     {
         $actor = $request->actor;

@@ -39,6 +39,19 @@ interface PrincipalStore
     public function lock(Realm $realm, PrincipalId $id): void;
 
     /**
+     * Whether the principal owns an agent that isn't deleted (AGT-001): an owner can't be deleted while it
+     * does.
+     */
+    public function ownsAgents(Realm $realm, PrincipalId $owner): bool;
+
+    /**
+     * Writes an agent's new owner, if it still has the owner $before has.
+     *
+     * @return bool Whether it was written
+     */
+    public function changeOwner(Principal $before, Principal $after): bool;
+
+    /**
      * Writes the principal's new status, if it's still at the status version $before has: another
      * transaction may have changed it since it was read.
      *

@@ -37,9 +37,12 @@ All of YorvoID's packages are released together, with the same version ([compati
 - MAC keys in the key ring (`MacKey`, `KeyRing::mac()`, `macKey()`, `withMac()`, `withoutMac()`), apart from the signing keys: `yorvoid:keys:rotate --mac` and `--mac --prune`; a new ring has one. `yorvoid:doctor` reports a ring without one, an active one older than a year, and a retired one kept past the decision log's retention. `Mac`: HMAC-SHA256 over OpenSSL's SHA-256.
 - `yorvoid.authorization.version_memo: request` (`VersionMemo`, off by default): an ability's Permit for showing, e.g. `is_granted()` for each link of a page, is decided at the versions the request first read, kept 2 seconds at most (`version_memo_max_age`), and its read set is pinned (`ReadSet::$pinned`, in the record too). Never an operation, a view-as, a batch or a refusal.
 - `yorvoid.decision_log.keep`: how long the decision log keeps a decision, `yorvoid:purge`'s default (90 days, as before).
+- Agents have an owner and a profile (`CreatePrincipal`'s `owner:` and `profile:`, `AgentProfile`, `Principal::$owner` and `$profile`): an agent is registered by an active principal of its realm that isn't an agent, and holds nothing of its owner's. `ChangeAgentOwner` (`yorvoid.principal.change_owner`) moves it. An owner of agents isn't deleted: the decision refuses it (`owns_agents`), before anything is written. `Principal` refuses an agent without an owner, and an owner or a profile on any other kind.
+- `Delegable`, `ListsActions`, `Actions` and `AbilityActions` (`@experimental`): to whom each ability and operation may be delegated, with `Ability`'s and `#[Operation]`'s `delegable:`.
 
 ### Breaking
 
+- An agent created before this release has no owner, and can't be read after upgrading, even deleted: `Principal` refuses an agent without one. After migrating, and before the application reads it, set each one's owner in `principal.owner_id`: an active principal of its realm that isn't an agent.
 - `Transactions` adds `retrying()`: a `Transactions` of your own implements it. A deadlock in YorvoID's work is a `RetryableConflict`, with DBAL's `DeadlockException` as its previous, rather than the `DeadlockException` itself. `Operations` takes the `Transactions` it retries in (`transactions:`).
 - `NoEscalation` and `StepUpForSensitiveChanges` weigh a change by its declared effect: a command that changes authority but whose effect nothing declares makes them Indeterminate, and `Operations` refuses to be built with one in its catalogue. Each takes the effects to read (`$effects`), the policy package's if not given. `PolicyStore`, `RelationStore` and `AttributeStore` extend `HoldsAuthority`, which has no methods.
 - `Operation\Authorization` adds `decideConsequence()`, `requireForbids()`, `checkCatalogue()` and `decidesOffline()`: `Operations` asks them of any `Authorization`, and no longer checks for the Evaluator. An `Authorization` of your own implements them, or extends `AuthorizationDecorator`.
@@ -80,6 +83,7 @@ All of YorvoID's packages are released together, with the same version ([compati
 - `DecisionRecord` is format 4: its read set holds what moved and the resolved attributes (`null` until they're recorded), and a slot for the delegation chain. Records of formats 1 to 3 still read and verify as they were written.
 - The policy and relations versions move to `yorvoid_versions`: the migrations create it and drop `yorvoid_policy_version` and `yorvoid_relation_version`. Run them. `DbalPolicyStore` and `DbalRelationStore` take the `VersionStore` (`versions:`) to share with the evaluator's sources.
 - `CryptoProvider` takes whether the attribute MAC passes its self-test (`hmac`), and `CryptoPolicy::fips()` refuses to start when it doesn't.
+- `PrincipalStore` adds `ownsAgents()` and `changeOwner()`, and keeps a principal's owner and profile: a store of your own implements them. The migrations add `principal.owner_id` and `principal.profile`. Creating an agent needs its owner.
 
 ### Security
 

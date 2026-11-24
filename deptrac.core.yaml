@@ -130,6 +130,8 @@ deptrac:
       - Exception
       - Id
       - Operation
+      # The principals its forbid on deleting an owner of agents reads (OwnersKeepTheirAgents).
+      - Principal
       - Root
       - Storage
     Event:

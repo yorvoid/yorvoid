@@ -18,6 +18,6 @@ final class CoreMigrations
      */
     public static function all(): array
     {
-        return [new CreatePrincipals(), new CreateSecurityLog(), new CreateDecisionLog(), new CreateInstallation(), new CreateDecisionDigests(), new CreateLocks(), new CreateVersions()];
+        return [new CreatePrincipals(), new CreateSecurityLog(), new CreateDecisionLog(), new CreateInstallation(), new CreateDecisionDigests(), new CreateLocks(), new CreateVersions(), new CreateAgentOwners()];
     }
 }

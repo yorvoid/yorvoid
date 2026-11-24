@@ -6,6 +6,8 @@ namespace YorvoID\Core\Principal\Storage;
 
 use Doctrine\DBAL\Types\Types;
 use YorvoID\Core\Exception\IntegratorError;
+use YorvoID\Core\Id\Id;
+use YorvoID\Core\Principal\AgentProfile;
 use YorvoID\Core\Principal\Principal;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Principal\PrincipalKind;
@@ -41,6 +43,8 @@ final readonly class DbalPrincipalStore implements PrincipalStore
             'updated_at' => $principal->updatedAt,
             'status_changed_at' => $principal->statusChangedAt,
             'status_version' => $principal->statusVersion,
+            'owner_id' => $principal->owner?->id->toString(),
+            'profile' => null === $principal->profile ? null : json_encode($principal->profile->toArray(), \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR),
         ], ['id'], self::TIMES)) {
             throw new StorageException(\sprintf('A principal with the ID %s exists.', $principal->id));
         }
@@ -49,7 +53,7 @@ final readonly class DbalPrincipalStore implements PrincipalStore
     public function get(Realm $realm, PrincipalId $id): ?Principal
     {
         $row = $this->database->connection->fetchAssociative(
-            \sprintf('SELECT kind, status, created_at, updated_at, status_changed_at, status_version FROM %s WHERE realm = ? AND id = ?', $this->database->table(self::TABLE)),
+            \sprintf('SELECT kind, status, created_at, updated_at, status_changed_at, status_version, owner_id, profile FROM %s WHERE realm = ? AND id = ?', $this->database->table(self::TABLE)),
             [$realm->name, $id->id->toString()],
         );
 
@@ -66,7 +70,42 @@ final readonly class DbalPrincipalStore implements PrincipalStore
             $this->time($row['updated_at']),
             $this->time($row['status_changed_at']),
             Row::int($row, 'status_version'),
+            null === ($row['owner_id'] ?? null) ? null : new PrincipalId(Id::fromString(Row::string($row, 'owner_id'))),
+            null === ($row['profile'] ?? null) ? null : self::profile(Row::string($row, 'profile')),
         );
+    }
+
+    public function ownsAgents(Realm $realm, PrincipalId $owner): bool
+    {
+        return false !== $this->database->connection->fetchOne(
+            \sprintf('SELECT 1 FROM %s WHERE realm = ? AND owner_id = ? AND status <> ? LIMIT 1', $this->database->table(self::TABLE)),
+            [$realm->name, $owner->id->toString(), PrincipalStatus::Deleted->value],
+        );
+    }
+
+    public function changeOwner(Principal $before, Principal $after): bool
+    {
+        if (null === $before->owner || null === $after->owner) {
+            return false;
+        }
+
+        return 1 === $this->database->connection->update(
+            $this->database->table(self::TABLE),
+            ['owner_id' => $after->owner->id->toString(), 'updated_at' => $after->updatedAt],
+            ['realm' => $before->realm->name, 'id' => $before->id->id->toString(), 'owner_id' => $before->owner->id->toString()],
+            self::TIMES,
+        );
+    }
+
+    private static function profile(string $json): AgentProfile
+    {
+        try {
+            $data = json_decode($json, true, 3, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new \UnexpectedValueException('A stored agent profile isn\'t valid JSON.', previous: $e);
+        }
+
+        return \is_array($data) ? AgentProfile::fromArray($data) : throw new \UnexpectedValueException('A stored agent profile isn\'t an object.');
     }
 
     public function hasActive(Realm $realm): bool

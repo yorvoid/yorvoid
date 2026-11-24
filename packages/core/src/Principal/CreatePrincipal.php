@@ -18,7 +18,9 @@ use YorvoID\Core\Realm;
 final readonly class CreatePrincipal implements Command
 {
     /**
-     * @param bool $emailVerified Whether the person has shown the email address is theirs; see SetIdentifier
+     * @param bool              $emailVerified Whether the person has shown the email address is theirs; see SetIdentifier
+     * @param PrincipalId|null  $owner         An agent's owner, which it needs: an active principal of the realm that isn't an agent (AGT-001)
+     * @param AgentProfile|null $profile       An agent's description (experimental)
      */
     public function __construct(
         public Realm $realm,
@@ -27,6 +29,8 @@ final readonly class CreatePrincipal implements Command
         public ?string $email = null,
         public ?string $username = null,
         public bool $emailVerified = false,
+        public ?PrincipalId $owner = null,
+        public ?AgentProfile $profile = null,
     ) {
     }
 }

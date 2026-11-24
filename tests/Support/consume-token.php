@@ -75,6 +75,16 @@ $slow = new readonly class(new DbalPrincipalStore($database)) implements Princip
         $this->store->lock($realm, $id);
     }
 
+    public function ownsAgents(Realm $realm, PrincipalId $owner): bool
+    {
+        return $this->store->ownsAgents($realm, $owner);
+    }
+
+    public function changeOwner(Principal $before, Principal $after): bool
+    {
+        return $this->store->changeOwner($before, $after);
+    }
+
     public function changeStatus(Principal $before, Principal $after): bool
     {
         return $this->store->changeStatus($before, $after);

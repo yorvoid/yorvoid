@@ -58,6 +58,30 @@ final class InMemoryPrincipalStore implements PrincipalStore, InMemoryStore
     {
     }
 
+    public function ownsAgents(Realm $realm, PrincipalId $owner): bool
+    {
+        foreach ($this->principals as $principal) {
+            if ($principal->realm->equals($realm) && null !== $principal->owner && $principal->owner->equals($owner) && PrincipalStatus::Deleted !== $principal->status) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function changeOwner(Principal $before, Principal $after): bool
+    {
+        $stored = $this->get($before->realm, $before->id);
+
+        if (null === $stored || null === $stored->owner || null === $before->owner || null === $after->owner || !$stored->owner->equals($before->owner)) {
+            return false;
+        }
+
+        $this->principals[(string) $before->id] = $after;
+
+        return true;
+    }
+
     public function changeStatus(Principal $before, Principal $after): bool
     {
         $id = (string) $before->id;

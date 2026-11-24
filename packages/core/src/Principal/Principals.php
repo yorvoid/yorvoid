@@ -67,6 +67,7 @@ final readonly class Principals implements OperationHandler
             ActivatePrincipal::class => $this->activate(...),
             SuspendPrincipal::class => $this->suspend(...),
             DeletePrincipal::class => $this->delete(...),
+            ChangeAgentOwner::class => $this->changeOwner(...),
             SetIdentifier::class => $this->setIdentifier(...),
             RemoveIdentifier::class => $this->removeIdentifier(...),
             VerifyIdentifier::class => $this->verifyIdentifier(...),
@@ -77,6 +78,7 @@ final readonly class Principals implements OperationHandler
      * @throws InvalidIdentifier  When the email address or username isn't valid
      * @throws IdentifierTaken    When another principal in the realm has it
      * @throws OperationCancelled When a listener of PrincipalCreating refuses it
+     * @throws InvalidOwner       When an agent has no owner, or an owner that isn't one, or another kind has one
      */
     public function create(CreatePrincipal $command, Permit $permit, Origin $origin): Principal
     {
@@ -84,13 +86,15 @@ final readonly class Principals implements OperationHandler
         $actor = $permit->actor->principalId;
 
         return $this->transactions->run(function () use ($command, $permit, $origin, $actor): Principal {
-            // An active principal ends a setup that waits for the realm's first (SetupCodes::claimWith()).
-            if (PrincipalStatus::Active === $command->status) {
+            // An active principal ends a setup that waits for the realm's first (SetupCodes::claimWith()); an
+            // agent's owner can't be deleted meanwhile, which takes the realm's lock too.
+            if (PrincipalStatus::Active === $command->status || PrincipalKind::Agent === $command->kind) {
                 $this->transactions->lockRealm($command->realm);
             }
 
+            $owner = $this->owner($command);
             $now = Time::stored($this->clock->now());
-            $principal = new Principal(new PrincipalId($this->ids->next()), $command->realm, $command->kind, $command->status, $now, $now, $now);
+            $principal = new Principal(new PrincipalId($this->ids->next()), $command->realm, $command->kind, $command->status, $now, $now, $now, owner: $owner, profile: $command->profile);
             // Before the events that carry the permit: what follows from it is about this principal only.
             $permit->about($principal->id);
             $identifiers = [];
@@ -113,6 +117,7 @@ final readonly class Principals implements OperationHandler
             $this->log->record($principal->realm, 'yorvoid.principal.create', Outcome::Success, $origin, $actor, 'principal', (string) $principal->id, [
                 'kind' => $principal->kind->value,
                 'status' => $principal->status->value,
+                ...(null === $owner ? [] : ['owner' => (string) $owner]),
                 'identifiers' => array_map(static fn (Identifier $identifier): string => $identifier->kind->value, $identifiers),
             ]);
 
@@ -159,6 +164,39 @@ final readonly class Principals implements OperationHandler
         $permit->use($command);
 
         return $this->changeStatus('yorvoid.principal.delete', $command->realm, $command->principalId, PrincipalStatus::Deleted, $origin, $permit);
+    }
+
+    /**
+     * Moves an agent to another owner.
+     *
+     * @throws UnknownPrincipal|InvalidOwner|ConcurrentChange
+     */
+    public function changeOwner(ChangeAgentOwner $command, Permit $permit, Origin $origin): Principal
+    {
+        $permit->use($command);
+        $actor = $permit->actor->principalId;
+
+        return $this->transactions->run(function () use ($command, $origin, $actor): Principal {
+            // Under the realm's lock, as deleting an owner is: neither reads what the other is changing.
+            $this->transactions->lockRealm($command->realm);
+            $this->store->lock($command->realm, $command->agent);
+            $before = $this->living($command->realm, $command->agent);
+
+            if (null === $before->owner) {
+                throw new InvalidOwner(\sprintf('The principal %s isn\'t an agent: only an agent has an owner.', $before->id));
+            }
+
+            $this->ownerFor($command->realm, $command->owner, $before->id);
+            $after = $before->withOwner($command->owner, $this->clock->now());
+
+            if (!$this->store->changeOwner($before, $after)) {
+                throw new ConcurrentChange($before);
+            }
+
+            $this->log->record($command->realm, 'yorvoid.principal.change_owner', Outcome::Success, $origin, $actor, 'principal', (string) $before->id, ['from' => (string) $before->owner, 'to' => (string) $command->owner]);
+
+            return $after;
+        });
     }
 
     /**
@@ -299,6 +337,11 @@ final readonly class Principals implements OperationHandler
             $before = $this->store->get($realm, $id) ?? throw new UnknownPrincipal($realm, $id);
             $after = $before->withStatus($status, $this->clock->now());
 
+            // The decision refused it already (owns_agents); this is an agent added in between.
+            if (PrincipalStatus::Deleted === $status && $this->store->ownsAgents($realm, $id)) {
+                throw new OwnsAgents($id);
+            }
+
             $this->refuseIfCancelled($operation, new PrincipalStatusChanging($before, $after, $origin, $actor, $permit));
 
             if (!$this->store->changeStatus($before, $after)) {
@@ -363,6 +406,42 @@ final readonly class Principals implements OperationHandler
 
         if (null !== $taken || !$this->identifiers->add($identifier)) {
             throw new IdentifierTaken($identifier->kind);
+        }
+    }
+
+    /**
+     * The new principal's owner: an agent's, checked; none for any other kind.
+     *
+     * @throws InvalidOwner
+     */
+    private function owner(CreatePrincipal $command): ?PrincipalId
+    {
+        if (PrincipalKind::Agent !== $command->kind) {
+            if (null !== $command->owner || null !== $command->profile) {
+                throw new InvalidOwner(\sprintf('Only an agent has an owner and a profile, not a principal of the kind %s.', $command->kind->value));
+            }
+
+            return null;
+        }
+
+        if (null === $command->owner) {
+            throw new InvalidOwner('An agent is registered by its owner: give CreatePrincipal the owner\'s ID.');
+        }
+
+        $this->ownerFor($command->realm, $command->owner, null);
+
+        return $command->owner;
+    }
+
+    /**
+     * @throws InvalidOwner When it isn't an active principal of the realm that isn't an agent, or is the agent itself
+     */
+    private function ownerFor(Realm $realm, PrincipalId $owner, ?PrincipalId $agent): void
+    {
+        $principal = $this->store->get($realm, $owner);
+
+        if (null === $principal || !$principal->isActive() || PrincipalKind::Agent === $principal->kind || (null !== $agent && $agent->equals($owner))) {
+            throw new InvalidOwner(\sprintf('An agent\'s owner is an active principal of the realm "%s" that isn\'t an agent: %s isn\'t.', $realm->name, $owner));
         }
     }
 
