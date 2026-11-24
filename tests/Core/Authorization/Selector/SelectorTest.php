@@ -33,6 +33,8 @@ final class SelectorTest extends TestCase
         self::assertFalse(new Selector('site', [$drafts, new IdIn(['p-1'])])->within($parent), 'Another type.');
         self::assertFalse(new Selector('page', [new AttributeIs('status', 1), new IdIn(['p-1'])])->within(new Selector('page', [new AttributeIs('status', '1')])), 'A number isn\'t its text.');
         self::assertTrue(new Selector('page')->within(new Selector('page')));
+        self::assertTrue(new Selector('page', [$mine, $drafts])->within(new Selector('page', [$mine, $drafts])), 'Every one of the parent\'s conditions, not only the first.');
+        self::assertFalse(new Selector('page', [new IdIn(['p-1'])])->within(new Selector('page', [new IdIn(['p-1', 'p-2']), $mine])), 'IDs within, a condition after them missing.');
     }
 
     public function testItsFormIsCanonicalAndRoundTrips(): void
@@ -46,6 +48,11 @@ final class SelectorTest extends TestCase
         self::assertFalse($a->admitsTypeAndId(new ResourceRef('page', 'p-9')));
         self::assertFalse($a->admitsTypeAndId(new ResourceRef('site', 'p-1')));
         self::assertTrue(new Selector('page')->admitsTypeAndId(new ResourceRef('page', 'any')));
+        self::assertSame([['attribute' => 'a', 'is' => 'z'], ['attribute' => 'a', 'is' => 'é']], new Selector('page', [new AttributeIs('a', 'é'), new AttributeIs('a', 'z')])->toArray()['atoms'], 'Ordered by the text itself, not escaped.');
+
+        foreach ([new AttributeIs('n', 1), new AttributeIs('b', true), new RelatedTo('editor', new ResourceRef('principal', 'ana'))] as $atom) {
+            self::assertEquals(new Selector('page', [$atom]), Selector::fromArray(new Selector('page', [$atom])->toArray()));
+        }
     }
 
     public function testRefusesWhatIsntOne(): void
@@ -65,7 +72,9 @@ final class SelectorTest extends TestCase
             }
         }
 
-        foreach ([['type' => 'page', 'atoms' => [['id_in' => ['a', 1]]]], ['type' => 'page', 'atoms' => [['nothing' => 1]]], ['type' => 1, 'atoms' => []], ['type' => 'page', 'atoms' => 'x']] as $i => $stored) {
+        $conditions = [['id_in' => ['a', 1]], ['nothing' => 1], ['attribute' => 1, 'is' => 'x'], ['attribute' => 'a', 'is' => 1.5], ['attribute' => 'a', 'is' => null], ['to' => ['a', 'b']], ['related' => 1, 'to' => ['a', 'b']], ['related' => 'x', 'to' => 'ab'], ['related' => 'x', 'to' => [1, 'b']], ['related' => 'x', 'to' => ['a', 1]]];
+
+        foreach ([...array_map(static fn (array $condition): array => ['type' => 'page', 'atoms' => [$condition]], $conditions), ['type' => 1, 'atoms' => []], ['type' => 'page', 'atoms' => 'x']] as $i => $stored) {
             try {
                 Selector::fromArray($stored);
                 self::fail('Read stored case '.$i.'.');

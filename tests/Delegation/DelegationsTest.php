@@ -10,7 +10,12 @@ use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\Selector\AttributeIs;
 use YorvoID\Core\Authorization\Selector\IdIn;
 use YorvoID\Core\Authorization\Selector\Selector;
+use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Event\OriginKind;
+use YorvoID\Core\Log\LogEntry;
+use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\DelegationId;
 use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalId;
@@ -22,12 +27,16 @@ use YorvoID\Delegation\Change\RevokeDelegation;
 use YorvoID\Delegation\Change\RevokeDelegationsOf;
 use YorvoID\Delegation\Delegation;
 use YorvoID\Delegation\DelegationEffects;
+use YorvoID\Delegation\DelegationLimits;
 use YorvoID\Delegation\DelegationRefused;
+use YorvoID\Delegation\Delegations;
 use YorvoID\Delegation\DelegationStatus;
 use YorvoID\Policy\Change\GrantAbilities;
 use YorvoID\Policy\Change\UnassignRole;
+use YorvoID\Testing\Ids;
 use YorvoID\Tests\Policy\Fixtures\PolicyWorld;
 use YorvoID\Tests\Support\DatabaseTestCase;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\TestPrincipal;
 
 /**
@@ -219,7 +228,7 @@ final class DelegationsTest extends DatabaseTestCase
         self::assertFalse($world->allows($ana, 'acme.pages.publish', new ResourceRef('page', 'p-1')), 'The role is gone.');
 
         $revoke = new RevokeDelegation($world->realm, $delegation->id, 'left the team');
-        $effect = new DelegationEffects($world->actions(), $world->delegationStore)->effectOf(\YorvoID\Core\Authorization\Request::forOperation($world->catalogue->get('yorvoid.delegation.revoke'), $revoke, $ana, new \YorvoID\Core\Event\Origin(\YorvoID\Core\Event\OriginKind::Web), new \DateTimeImmutable()));
+        $effect = new DelegationEffects($world->actions(), $world->delegationStore)->effectOf(\YorvoID\Core\Authorization\Request::forOperation($world->catalogue->get('yorvoid.delegation.revoke'), $revoke, $ana, new Origin(OriginKind::Web), new \DateTimeImmutable()));
         self::assertEquals([new EffectPart(abilities: ['acme.pages.publish'], on: new ResourceRef('page', 'p-1'))], $effect->takes, 'It takes what it gave.');
         self::assertSame([], $effect->gives);
 
@@ -243,6 +252,152 @@ final class DelegationsTest extends DatabaseTestCase
         self::assertSame(2, $world->asOperator(new RevokeDelegationsOf($world->realm, self::id($ana), 'left the team')));
         self::assertSame([], $world->delegationStore?->involving($world->realm, self::id($ana)));
         self::assertSame(0, $world->asOperator(new RevokeDelegationsOf($world->realm, self::id($ana), 'again')));
+    }
+
+    /**
+     * The actions as written once each, in their order, for people; expanded, sorted and once each; from
+     * when it was asked to start; under the policy version the decision read.
+     */
+    public function testKeepsWhatWasAskedAsWrittenAndWhatItGivesSorted(): void
+    {
+        $world = $this->world('memory');
+        [$ana, $bot] = $this->people($world);
+        $from = new \DateTimeImmutable('2026-11-08 20:00:00');
+
+        $delegation = $this->issue($world, $ana, new IssueDelegation($world->realm, self::id($bot), ['acme.pages.view_drafts', 'acme.pages.view_drafts', 'acme.pages.publish'], new Selector('page'), new \DateTimeImmutable(self::EXPIRES), notBefore: $from));
+        \assert($delegation instanceof Delegation);
+
+        self::assertSame(['acme.pages.view_drafts', 'acme.pages.publish'], $delegation->patterns);
+        self::assertSame(['acme.pages.publish', 'acme.pages.view_drafts'], $delegation->actions);
+        self::assertEquals($from, $delegation->notBefore);
+        self::assertSame($world->policyStore->version($world->realm), $delegation->issuedAtVersion);
+        self::assertGreaterThan(0, $delegation->issuedAtVersion, 'Roles were assigned: the version moved.');
+    }
+
+    /**
+     * A pattern names the actions under its segment, not those of a longer name that starts alike
+     * ("yorvoid.principal.*" isn't "yorvoid.principals.manage"), and an operation that isn't an ability
+     * is delegated as the operation.
+     */
+    public function testAPatternNamesWholeSegmentsOnly(): void
+    {
+        $world = $this->world('memory');
+        $admin = $world->principal('admin');
+        $bea = $world->principal();
+
+        $delegation = $this->issue($world, $admin, $this->to($world, $bea, ['yorvoid.principal.*']));
+        \assert($delegation instanceof Delegation);
+
+        self::assertSame(['yorvoid.principal.activate', 'yorvoid.principal.change_owner', 'yorvoid.principal.create', 'yorvoid.principal.delete', 'yorvoid.principal.suspend'], $delegation->actions);
+    }
+
+    /**
+     * The operator has no authority of its own to pass on; what isn't there is refused by name.
+     */
+    public function testRefusesWhatIsntThere(): void
+    {
+        $world = $this->world('memory');
+        [$ana, $bot] = $this->people($world);
+        $missing = new DelegationId(Ids::next());
+
+        foreach ([
+            'by the operator' => [fn (): mixed => $world->asOperator($this->to($world, $bot, ['acme.pages.publish'])), 'no_delegator', 'Only a principal delegates: the operator has no authority of its own to pass on.'],
+            'an unknown parent' => [static fn (): mixed => $world->as($ana, new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page'), new \DateTimeImmutable(self::EXPIRES), parent: $missing)), 'unknown_parent', \sprintf('There is no delegation %s to pass on.', $missing)],
+            'an unknown delegation' => [static fn (): mixed => $world->asOperator(new RevokeDelegation($world->realm, $missing, 'gone')), 'unknown_delegation', \sprintf('There is no delegation %s in the realm "%s".', $missing, $world->realm->name)],
+        ] as $case => [$run, $reason, $message]) {
+            try {
+                $run();
+                self::fail('Done: '.$case);
+            } catch (DelegationRefused $refused) {
+                self::assertSame([$reason, $message], [$refused->reason, $refused->getMessage()], $case);
+            }
+        }
+    }
+
+    /**
+     * Each limit, at its edge: as many IDs as allowed, as long as allowed, are issued; one more isn't.
+     */
+    public function testLimitsHoldAtTheirEdges(): void
+    {
+        $world = $this->world('memory');
+        [$ana, $bot] = $this->people($world);
+        $now = $world->clock->now();
+
+        $this->issue($world, $ana, new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page', [new IdIn(array_map(strval(...), range(1, 100)))]), $now->modify('+1 day')));
+        $this->issue($world, $ana, new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page'), $now->modify('+30 days')));
+
+        foreach ([
+            'no action' => [new IssueDelegation($world->realm, self::id($bot), [], new Selector('page'), $now->modify('+1 day')), 'It names no action.'],
+            'ends as it starts' => [new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page'), $now), 'It ends before it starts.'],
+            'a second longer than an agent may' => [new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page'), $now->modify('+30 days +1 second')), 'It lasts longer than 30d.'],
+            '101 IDs' => [new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page', [new IdIn(array_map(strval(...), range(1, 101)))]), $now->modify('+1 day')), 'It names more than 100 resources.'],
+            'passed on, but nothing to pass on' => [new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page'), $now->modify('+1 day'), depth: 1), 'It may be passed on, but names nothing to pass on.'],
+        ] as $case => [$command, $why]) {
+            try {
+                $world->as($ana, $command);
+                self::fail('Issued: '.$case);
+            } catch (DelegationRefused $refused) {
+                self::assertSame(['limits', $why], [$refused->reason, $refused->getMessage()], $case);
+            }
+        }
+    }
+
+    /**
+     * The handler alone, with limits of its own: as many actions as allowed, not one more; and a permit
+     * whose decision read no policy version records 0.
+     */
+    public function testTheHandlersOwnLimits(): void
+    {
+        $world = $this->world('memory');
+        [$ana, $bot] = $this->people($world);
+        $handler = $this->handler($world, new DelegationLimits(actions: 2));
+        $origin = new Origin(OriginKind::Web);
+
+        $two = Permits::call($handler->issue(...), $this->to($world, $bot, ['acme.pages.publish', 'acme.pages.view_drafts']), $origin, self::id($ana));
+        self::assertSame(0, $two->issuedAtVersion);
+
+        try {
+            Permits::call($handler->issue(...), $this->to($world, $bot, ['acme.pages.publish', 'acme.pages.view_drafts', 'acme.pages.view']), $origin, self::id($ana));
+            self::fail('Issued three actions.');
+        } catch (DelegationRefused $refused) {
+            self::assertSame(['limits', 'It names more than 2 actions.'], [$refused->reason, $refused->getMessage()]);
+        }
+
+        self::assertSame(1, Permits::call($handler->revokeAllOf(...), new RevokeDelegationsOf($world->realm, self::id($ana), 'left'), $origin));
+    }
+
+    /**
+     * Each issue and revocation is in the security log, with what it was about; a revocation of what
+     * was revoked already isn't.
+     */
+    public function testEachChangeIsLogged(): void
+    {
+        $world = $this->world('memory');
+        [$ana, $bot] = $this->people($world);
+        $bea = $world->principal();
+        $parent = $this->issue($world, $ana, new IssueDelegation($world->realm, self::id($bea), ['acme.pages.publish', 'acme.pages.view_drafts'], new Selector('page'), new \DateTimeImmutable(self::EXPIRES), redelegable: ['acme.pages.publish'], depth: 1));
+        \assert($parent instanceof Delegation);
+        $child = $this->issue($world, $bea, new IssueDelegation($world->realm, self::id($bot), ['acme.pages.publish'], new Selector('page'), new \DateTimeImmutable('2026-11-10 20:00:00'), parent: $parent->id));
+        \assert($child instanceof Delegation);
+
+        self::assertTrue($world->as($ana, new RevokeDelegation($world->realm, $child->id, 'done')));
+        self::assertFalse($world->as($ana, new RevokeDelegation($world->realm, $child->id, 'again')));
+        self::assertSame(1, $world->asOperator(new RevokeDelegationsOf($world->realm, self::id($ana), 'left')));
+
+        $entries = array_values(array_filter(iterator_to_array($world->memory->log->entries($world->realm, 1), false), static fn (LogEntry $entry): bool => str_starts_with($entry->action, 'yorvoid.delegation.')));
+        self::assertEquals([
+            ['yorvoid.delegation.issue', self::id($ana), 'delegation', (string) $parent->id, ['delegate' => (string) self::id($bea), 'parent' => null, 'root' => (string) self::id($ana), 'depth' => 0, 'actions' => 2, 'expires_at' => '2026-11-14T20:00:00+00:00']],
+            ['yorvoid.delegation.issue', self::id($bea), 'delegation', (string) $child->id, ['delegate' => (string) self::id($bot), 'parent' => (string) $parent->id, 'root' => (string) self::id($ana), 'depth' => 1, 'actions' => 1, 'expires_at' => '2026-11-10T20:00:00+00:00']],
+            ['yorvoid.delegation.revoke', self::id($ana), 'delegation', (string) $child->id, ['delegate' => (string) self::id($bot)]],
+            ['yorvoid.delegation.revoke_all', null, 'principal', (string) self::id($ana), ['revoked' => 1]],
+        ], array_map(static fn (LogEntry $entry): array => [$entry->action, $entry->actor, $entry->subjectType, $entry->subjectId, array_diff_key($entry->details, ['decision' => true])], $entries), 'Each with its decision, added by Operations.');
+    }
+
+    private function handler(PolicyWorld $world, DelegationLimits $limits): Delegations
+    {
+        $memory = $world->memory;
+
+        return new Delegations($world->delegationStore ?? throw new \LogicException(), $world->principalStore, $world->actions(), new SecurityLog($memory->log, $memory->transactions, clock: $world->clock), $memory->transactions, $world->clock, limits: $limits);
     }
 
     private function world(string $implementation): PolicyWorld

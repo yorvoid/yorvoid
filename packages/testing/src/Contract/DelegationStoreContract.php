@@ -117,6 +117,10 @@ trait DelegationStoreContract
         $by = new PrincipalId(Ids::next());
         $this->changing($implementation, static fn () => $store->add($delegation));
         $revoked = $delegation->revoked(new \DateTimeImmutable('2026-11-23 19:00:00 UTC'), $by, 'no longer needed');
+        $elsewhere = self::delegation(new Realm('globex'), id: $delegation->id);
+
+        self::assertFalse($this->changing($implementation, static fn (): bool => $store->revoke($elsewhere, $elsewhere->revoked(new \DateTimeImmutable('2026-11-23 19:00:00 UTC'), $by, 'not here')), new Realm('globex')), 'Only in its realm.');
+        self::assertEquals($delegation, $store->get($acme, $delegation->id), 'Still active, as it was.');
 
         self::assertTrue($this->changing($implementation, static fn (): bool => $store->revoke($delegation, $revoked)));
         self::assertFalse($this->changing($implementation, static fn (): bool => $store->revoke($delegation, $delegation->revoked(new \DateTimeImmutable('2026-11-23 19:01:00 UTC'), null, 'again'))));
@@ -136,10 +140,11 @@ trait DelegationStoreContract
         $first = self::delegation($acme, delegator: $ana, issuedAt: '2026-11-23 18:00:00');
         $second = self::delegation($acme, delegate: $ana, issuedAt: '2026-11-23 18:05:00');
         $revoked = self::delegation($acme, delegator: $ana, issuedAt: '2026-11-23 18:10:00');
+        $third = self::delegation($acme, delegate: $ana, issuedAt: '2026-11-23 18:15:00');
         $other = self::delegation($acme);
         $elsewhere = self::delegation(new Realm('globex'), delegator: $ana);
-        $this->changing($implementation, static function () use ($store, $first, $second, $revoked, $other): void {
-            foreach ([$second, $first, $revoked, $other] as $delegation) {
+        $this->changing($implementation, static function () use ($store, $first, $second, $third, $revoked, $other): void {
+            foreach ([$second, $first, $third, $revoked, $other] as $delegation) {
                 $store->add($delegation);
             }
 
@@ -147,7 +152,7 @@ trait DelegationStoreContract
         });
         $this->changing($implementation, static fn () => $store->add($elsewhere), new Realm('globex'));
 
-        self::assertEquals([$first, $second], $store->involving($acme, $ana));
+        self::assertEquals([$first, $second, $third], $store->involving($acme, $ana));
         self::assertSame([], $store->involving($acme, new PrincipalId(Ids::next())));
     }
 
@@ -156,7 +161,9 @@ trait DelegationStoreContract
     {
         $store = $this->delegationStore($implementation);
         $acme = new Realm('acme');
+        $kept = self::delegation($acme);
         $delegation = self::delegation($acme);
+        $this->changing($implementation, static fn () => $store->add($kept));
 
         try {
             $this->changing($implementation, static function () use ($store, $delegation): never {
@@ -168,7 +175,8 @@ trait DelegationStoreContract
         }
 
         self::assertNull($store->get($acme, $delegation->id));
-        self::assertSame(0, $store->version($acme));
+        self::assertEquals($kept, $store->get($acme, $kept->id));
+        self::assertSame(1, $store->version($acme), 'As before it.');
     }
 
     /**
