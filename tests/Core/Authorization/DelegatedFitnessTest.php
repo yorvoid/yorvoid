@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
 use YorvoID\Core\Authorization\DelegatedScope;
 use YorvoID\Core\Authorization\Evaluator;
+use YorvoID\Core\Authorization\ForbidElement;
 use YorvoID\Core\Authorization\IndeterminateReason;
 use YorvoID\Core\Authorization\MatchesSelectors;
 use YorvoID\Core\Authorization\PermitElement;
@@ -17,10 +18,13 @@ use YorvoID\Core\Authorization\ResolvesRootAnchors;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\Selector\Atom;
 use YorvoID\Core\Authorization\Selector\AttributeIs;
+use YorvoID\Core\Authorization\Selector\IdIn;
+use YorvoID\Core\Authorization\Selector\RelatedTo;
 use YorvoID\Core\Authorization\Selector\Selector;
 use YorvoID\Core\Authorization\StepUpCheck;
 use YorvoID\Core\Authorization\StepUpRemedy;
 use YorvoID\Core\Authorization\Truth;
+use YorvoID\Core\Authorization\TruthValue;
 use YorvoID\Core\Authorization\ValidatesChains;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Event\Origin;
@@ -29,6 +33,8 @@ use YorvoID\Core\Operation\ActingPrincipal;
 use YorvoID\Core\Operation\Actor;
 use YorvoID\Core\Operation\ActsUnderDelegation;
 use YorvoID\Core\Operation\AuthorizedBy;
+use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\ConcernsPrincipal;
 use YorvoID\Core\Operation\Decision;
 use YorvoID\Core\Operation\DelegationId;
 use YorvoID\Core\Operation\OperationDescription;
@@ -91,7 +97,9 @@ final class DelegatedFitnessTest extends TestCase
             {
             }
         };
-        self::assertSame([IndeterminateReason::UnprovenActor], $this->evaluator($chains)->decideAbility($claiming, 'acme.read', $this->realm, null, new Origin(OriginKind::Web))->indeterminate, 'An actor class of its own.');
+        $own = $this->evaluator($chains)->decideAbility($claiming, 'acme.read', $this->realm, null, new Origin(OriginKind::Web));
+        self::assertSame([IndeterminateReason::UnprovenActor], $own->indeterminate, 'An actor class of its own.');
+        self::assertStringContainsString('Only UnderDelegation acts under a delegation', $own->reason);
 
         // A prover that makes an actor act under a delegation: that would skip its chain.
         $prover = new class($this->leaf) implements ProvesActors {
@@ -141,6 +149,36 @@ final class DelegatedFitnessTest extends TestCase
 
         self::assertSame(Verdict::Permit, $this->ask($evaluator, 'acme.read')->verdict);
         self::assertSame(Verdict::Deny, $this->ask($evaluator, 'acme.write')->verdict);
+    }
+
+    /**
+     * Matchers from several sources, e.g. a generator of each package's: every one is asked, whatever
+     * their keys.
+     */
+    public function testEveryMatcherIsAskedWhateverItsKey(): void
+    {
+        $holds = static fn (string $kind): MatchesSelectors => new class($kind) implements MatchesSelectors {
+            public function __construct(private string $kind)
+            {
+            }
+
+            public function answers(Atom $atom): bool
+            {
+                return $atom instanceof $this->kind;
+            }
+
+            public function match(Atom $atom, Request $request): Truth
+            {
+                return Truth::holds('It does.');
+            }
+        };
+        $sources = (static function () use ($holds): \Generator {
+            yield from [$holds(AttributeIs::class)];
+            yield from [$holds(RelatedTo::class)];
+        })();
+        $scope = $this->scope(['acme.read'], new Selector('page', [new AttributeIs('status', 'draft'), new RelatedTo('editor', new ResourceRef('principal', 'ana'))]));
+
+        self::assertSame(Verdict::Permit, $this->ask(new Evaluator([new RootReads($this->root)], new StubAuthority(Truth::holds('valid')), new MockClock(), actors: [new TrustedActors()], chains: new FixedChains($scope), selectors: $sources), 'acme.read')->verdict);
     }
 
     /**
@@ -222,6 +260,88 @@ final class DelegatedFitnessTest extends TestCase
         self::assertStringContainsString('root\'s own account', $decision->reason);
     }
 
+    /**
+     * A forbid on the request refuses it under a delegation as for anyone; one about something else, or
+     * that doesn't hold, doesn't; elements of other kinds aren't forbids. Elements are weighed by name:
+     * the permit first, then a forbid about something else.
+     */
+    public function testAForbidOnTheRequestRefusesItUnderADelegation(): void
+    {
+        $elements = [new RootReads($this->root), new Forbids('acme.x_elsewhere', false, Truth::holds('It would forbid.')), new Forbids('acme.x_not_now', true, Truth::fails('Not now.')), new Forbids('acme.x_never', true, Truth::holds('Never.'))];
+        $decision = $this->ask(new Evaluator($elements, new StubAuthority(Truth::holds('valid')), new MockClock(), actors: [new TrustedActors()], chains: new FixedChains($this->scope(['acme.read']))), 'acme.read');
+
+        self::assertSame(Verdict::Deny, $decision->verdict);
+        self::assertSame(['acme.x_never', 'acme.x_not_now'], array_values(array_filter(array_map(static fn (\YorvoID\Core\Authorization\Reason $reason): string => $reason->source, $decision->reasons), static fn (string $name): bool => str_starts_with($name, 'acme.x_'))), 'Each forbid about the request is weighed.');
+        self::assertSame(Verdict::Permit, $this->ask($this->evaluator(new FixedChains($this->scope(['acme.read']))), 'acme.read')->verdict, 'Without them.');
+    }
+
+    /**
+     * Whether the root may couldn't be established: unknown, with its reason, for a decision under a
+     * delegation and for passing one on.
+     */
+    public function testARootThatCantBeDecidedIsUnknownWithItsReason(): void
+    {
+        $root = new Evaluator([new RootReads($this->root, unknown: true)], new StubAuthority(Truth::holds('valid')), new MockClock(), actors: [new TrustedActors()], chains: new FixedChains($this->scope(['acme.read'])));
+
+        $truth = $root->rootHolds($this->root, 'acme.read', $this->realm, null, new Origin(OriginKind::Web));
+        self::assertSame([TruthValue::Unknown, IndeterminateReason::MissingData], [$truth->value, $truth->reason]);
+        self::assertStringStartsWith('Whether the root holds "acme.read" couldn\'t be established', $truth->detail);
+
+        $decision = $this->ask($root, 'acme.read');
+        self::assertSame([Verdict::Indeterminate, [IndeterminateReason::MissingData]], [$decision->verdict, $decision->indeterminate]);
+        self::assertSame([], array_values(array_filter($decision->reasons, static fn (\YorvoID\Core\Authorization\Reason $reason): bool => 'permit' === $reason->effect)), 'No permit made of a root not permitted.');
+        self::assertStringContainsString('Whether its root may now couldn\'t be established', $decision->reason);
+    }
+
+    /**
+     * The request within the leaf's scope: its purpose among the scope's, each condition after the IDs met.
+     */
+    public function testARequestOutsideThePurposeOrAConditionIsOutside(): void
+    {
+        $purposed = new DelegatedScope($this->leaf, $this->agent->principalId ?? throw new \LogicException(), $this->root, ['acme.read'], new Selector('page'), ['triage'], null, null, [$this->leaf]);
+        $evaluator = $this->evaluator(new FixedChains($purposed));
+        $ask = fn (?string $purpose): Decision => $evaluator->decideAbility(new UnderDelegation($this->agent, $this->leaf, $purpose), 'acme.read', $this->realm, new ResourceRef('page', 'p-1'), new Origin(OriginKind::Web));
+
+        self::assertSame(Verdict::Permit, $ask('triage')->verdict);
+        self::assertStringContainsString('another purpose', $ask('billing')->reason);
+
+        $never = new class implements MatchesSelectors {
+            public function answers(Atom $atom): bool
+            {
+                return $atom instanceof RelatedTo;
+            }
+
+            public function match(Atom $atom, Request $request): Truth
+            {
+                return Truth::fails('Not related.');
+            }
+        };
+        $conditioned = $this->scope(['acme.read'], new Selector('page', [new IdIn(['p-1']), new RelatedTo('editor', new ResourceRef('principal', 'ana'))]));
+        $refused = $this->ask(new Evaluator([new RootReads($this->root)], new StubAuthority(Truth::holds('valid')), new MockClock(), actors: [new TrustedActors()], chains: new FixedChains($conditioned), selectors: [$never]), 'acme.read');
+        self::assertStringContainsString('the resource doesn\'t meet its conditions', $refused->reason, 'The condition after the IDs.');
+    }
+
+    public function testAProofNothingChecksIsSaidSo(): void
+    {
+        $unchecked = $this->ask($this->evaluator(new FixedChains($this->scope(['acme.read'], stepUp: new StepUpRemedy(Duration::minutes(5))))), 'acme.read');
+
+        self::assertSame(Verdict::Indeterminate, $unchecked->verdict);
+        self::assertStringContainsString('Nothing checks the proof the delegation asks.', $unchecked->reason);
+    }
+
+    /**
+     * A command about a principal is on the root's own account only when it's the root.
+     */
+    public function testACommandAboutAnotherPrincipalIsntOnTheRootsOwnAccount(): void
+    {
+        $evaluator = $this->evaluator(new FixedChains($this->scope(['acme.note'])));
+        $operation = new OperationDescription('acme.note', 'Note about someone', [AuthorizedBy::Ability], 'acme.read', null, NoteAbout::class, []);
+        $about = fn (PrincipalId $principal): Decision => $evaluator->decide($operation, new NoteAbout($this->realm, $principal), new UnderDelegation($this->agent, $this->leaf), new Origin(OriginKind::Web));
+
+        self::assertStringContainsString('root\'s own account', $about($this->root)->reason);
+        self::assertStringNotContainsString('root\'s own account', $about(new PrincipalId(Ids::next()))->reason);
+    }
+
     private function evaluator(ValidatesChains $chains): Evaluator
     {
         return new Evaluator([new RootReads($this->root)], new StubAuthority(Truth::holds('valid')), new MockClock(), actors: [new TrustedActors()], chains: $chains);
@@ -251,6 +371,7 @@ final readonly class RootReads implements PermitElement
         private PrincipalId $root,
         private ?StepUpRemedy $needs = null,
         private AuthorizedBy $basis = AuthorizedBy::Ability,
+        private bool $unknown = false,
     ) {
     }
 
@@ -275,6 +396,10 @@ final readonly class RootReads implements PermitElement
             return Truth::fails('Not the root reading.');
         }
 
+        if ($this->unknown) {
+            return Truth::unknown(IndeterminateReason::MissingData, 'Whether the root reads isn\'t known.');
+        }
+
         return null === $this->needs || !$request->actor instanceof ActingPrincipal ? Truth::holds('The root reads.') : Truth::fails('A proof first.', $this->needs);
     }
 }
@@ -289,5 +414,50 @@ final readonly class FixedChains implements ValidatesChains
     public function validate(DelegationId $leaf, PrincipalId $delegate, Request $request): DelegatedScope|Truth
     {
         return $this->answer;
+    }
+}
+
+/**
+ * A forbid by name: about the request or not, and what it says when it is.
+ */
+final readonly class Forbids implements ForbidElement
+{
+    public function __construct(
+        private string $name,
+        private bool $about,
+        private Truth $truth,
+    ) {
+    }
+
+    public function name(): string
+    {
+        return $this->name;
+    }
+
+    public function matches(Request $request): bool
+    {
+        return $this->about;
+    }
+
+    public function evaluate(Request $request): Truth
+    {
+        return $this->truth;
+    }
+}
+
+/**
+ * @implements Command<null>
+ */
+final readonly class NoteAbout implements Command, ConcernsPrincipal
+{
+    public function __construct(
+        public Realm $realm,
+        private PrincipalId $about,
+    ) {
+    }
+
+    public function principal(): PrincipalId
+    {
+        return $this->about;
     }
 }

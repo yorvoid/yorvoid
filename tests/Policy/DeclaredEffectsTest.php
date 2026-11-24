@@ -99,9 +99,9 @@ final class DeclaredEffectsTest extends TestCase
         $world = new PolicyWorld();
         $ana = $world->principal();
         $her = new ResourceRef('principal', (string) $ana->principalId);
-        $weigh = static function (array $relations, ResourceRef $subject) use ($world, $ana): TruthValue {
-            $effects = new DeclaredEffects([new PolicyEffects($world->roles), new DelegationEffects(new Effect(gives: [new EffectPart(abilities: ['acme.pages.publish'], viaRelations: array_values(array_filter($relations, \is_string(...))), onType: 'page', subject: $subject)]))]);
-            $request = Request::forOperation(self::operation(), new Delegate(new Realm('acme')), $ana, self::web(), new \DateTimeImmutable());
+        $weigh = static function (array $relations, ?ResourceRef $subject, ?string $type = 'page', ?TestPrincipal $actor = null) use ($world, $ana): TruthValue {
+            $effects = new DeclaredEffects([new PolicyEffects($world->roles), new DelegationEffects(new Effect(gives: [new EffectPart(abilities: ['acme.pages.publish'], viaRelations: array_values(array_filter($relations, \is_string(...))), onType: $type, subject: $subject)]))]);
+            $request = Request::forOperation(self::operation(), new Delegate(new Realm('acme')), $actor ?? $ana, self::web(), new \DateTimeImmutable());
 
             return new NoEscalation($world->roles, $effects)->evaluate($request)->value;
         };
@@ -111,6 +111,9 @@ final class DeclaredEffectsTest extends TestCase
         self::assertSame(TruthValue::Holds, $weigh(['nonexistent'], $her), 'A relation nothing defines.');
         self::assertSame(TruthValue::Holds, $weigh(['editor'], new ResourceRef('principal', Ids::next()->toString())), 'Someone else\'s relation.');
         self::assertSame(TruthValue::Holds, $weigh([], $her), 'No relation.');
+        self::assertSame(TruthValue::Holds, $weigh(['editor'], $her, null), 'Relations on no type.');
+        self::assertSame(TruthValue::Holds, $weigh(['editor'], null), 'Relations to no one.');
+        self::assertSame(TruthValue::Holds, $weigh(['editor'], $her, actor: new TestPrincipal(new Realm('acme'), null)), 'An actor that\'s no principal has no relations.');
     }
 
     /**
