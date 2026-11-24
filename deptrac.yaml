@@ -43,6 +43,10 @@ deptrac:
       collectors:
         - type: classLike
           value: ^YorvoID\\PolicyTesting\\.*
+    - name: Delegation
+      collectors:
+        - type: classLike
+          value: ^YorvoID\\Delegation\\.*
     - name: Relations
       collectors:
         - type: classLike
@@ -103,6 +107,7 @@ deptrac:
     Symfony:
       - Core
       - Authn
+      - Delegation
       - Flows
       - IntentSigning
       - IntentVerifier
@@ -123,11 +128,15 @@ deptrac:
     PolicyTesting:
       - Core
       - Authn
+      - Delegation
       - Passkeys
       - Policy
       - Relations
       - Testing
       - Throttle
+    # Depends on core only, and only narrows what core decides (D-47).
+    Delegation:
+      - Core
     Relations:
       - Core
     Throttle:
@@ -141,6 +150,7 @@ deptrac:
     Testing:
       - Core
       - Authn
+      - Delegation
       - Flows
       - IntentVerifier
       - Passkeys

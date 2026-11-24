@@ -40,6 +40,9 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
         'yorvoid.credential.forget_all' => ['consequence'],
         'yorvoid.credential.remove' => ['self'],
         'yorvoid.credential.rename' => ['self'],
+        'yorvoid.delegation.issue' => ['ability'],
+        'yorvoid.delegation.revoke' => ['ability', 'operator'],
+        'yorvoid.delegation.revoke_all' => ['ability', 'operator'],
         'yorvoid.email_verification.confirm' => ['authentication'],
         'yorvoid.group.add_member' => ['ability', 'operator'],
         'yorvoid.group.assign_role' => ['ability', 'operator'],
@@ -169,7 +172,7 @@ final class WhatAuthorizesYorvoIDsOperationsTest extends TestCase
             }
         }
 
-        self::assertCount(60, $commands, 'The operations moved.');
+        self::assertCount(63, $commands, 'The operations moved.');
 
         return $commands;
     }

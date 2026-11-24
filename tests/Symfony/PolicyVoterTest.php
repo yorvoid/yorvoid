@@ -94,7 +94,7 @@ final class PolicyVoterTest extends TestCase
         $recorded = array_map(static fn (array $row): array => [Row::string($row, 'name'), Row::string($row, 'verdict'), DecisionRecord::fromJson(Row::string($row, 'content'))], $database->connection->fetchAllAssociative(\sprintf('SELECT name, verdict, content FROM %s ORDER BY name', $table)));
         self::assertSame(['acme.pages.publish', 'acme.pages.publish', 'acme.pages.view', 'acme.pages.view', 'acme.pages.view_drafts', 'acme.sites.update', 'yorvoid.principals.manage'], array_column($recorded, 0));
         self::assertSame(['deny'], array_values(array_unique(array_column($recorded, 1))));
-        self::assertSame(['policy', 'relations'], array_keys($recorded[0][2]->versions), 'Each records the versions it read.');
+        self::assertSame(['delegation', 'policy', 'relations'], array_keys($recorded[0][2]->versions), 'Each records the versions it read.');
 
         $voter = $container->get(PolicyVoter::class);
         \assert($voter instanceof PolicyVoter);

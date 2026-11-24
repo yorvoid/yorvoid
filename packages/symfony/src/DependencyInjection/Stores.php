@@ -16,6 +16,7 @@ use YorvoID\Core\Authorization\VersionStore;
 use YorvoID\Core\Log\SecurityLogStore;
 use YorvoID\Core\Principal\IdentifierStore;
 use YorvoID\Core\Principal\PrincipalStore;
+use YorvoID\Delegation\DelegationStore;
 use YorvoID\Flows\FlowStore;
 use YorvoID\Passkeys\CeremonyStore;
 use YorvoID\Passkeys\PasskeyStore;
@@ -56,6 +57,7 @@ final class Stores
         DecisionLogStore::class => 'yorvoid.store.decision_log',
         FlowStore::class => 'yorvoid.store.flow',
         VersionStore::class => 'yorvoid.store.version',
+        DelegationStore::class => 'yorvoid.store.delegation',
     ];
 
     private function __construct()

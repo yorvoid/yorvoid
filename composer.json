@@ -14,6 +14,7 @@
                 "versions": {
                     "yorvoid/authn": "0.5.x-dev",
                     "yorvoid/core": "0.5.x-dev",
+                    "yorvoid/delegation": "0.5.x-dev",
                     "yorvoid/flows": "0.5.x-dev",
                     "yorvoid/intent-signing": "0.5.x-dev",
                     "yorvoid/intent-verifier": "0.5.x-dev",
@@ -38,6 +39,7 @@
         "twig/twig": "^3.30",
         "yorvoid/authn": "^0.5",
         "yorvoid/core": "^0.5",
+        "yorvoid/delegation": "^0.5",
         "yorvoid/flows": "^0.5",
         "yorvoid/intent-signing": "^0.5",
         "yorvoid/intent-verifier": "^0.5",

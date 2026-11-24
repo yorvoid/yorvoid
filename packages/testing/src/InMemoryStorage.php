@@ -17,6 +17,7 @@ use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Principal\Storage\InMemoryIdentifierStore;
 use YorvoID\Core\Principal\Storage\InMemoryPrincipalStore;
 use YorvoID\Core\Storage\InMemory\InMemoryTransactions;
+use YorvoID\Delegation\Storage\InMemoryDelegationStore;
 use YorvoID\Passkeys\Storage\InMemoryCeremonyStore;
 use YorvoID\Passkeys\Storage\InMemoryPasskeyStore;
 use YorvoID\Policy\Storage\InMemoryAttributeStore;
@@ -75,6 +76,8 @@ final readonly class InMemoryStorage
 
     public InMemoryVersionStore $versions;
 
+    public InMemoryDelegationStore $delegations;
+
     public function __construct()
     {
         $this->transactions = new InMemoryTransactions();
@@ -107,6 +110,7 @@ final readonly class InMemoryStorage
         $this->transactions->register($this->relations = new InMemoryRelationStore());
         $this->transactions->register($this->attributes = new InMemoryAttributeStore());
         $this->transactions->register($this->versions = new InMemoryVersionStore());
+        $this->transactions->register($this->delegations = new InMemoryDelegationStore());
         $this->throttle = new InMemoryThrottleStore();
         $this->decisions = new InMemoryDecisionLogStore();
     }

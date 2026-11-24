@@ -27,6 +27,7 @@ use YorvoID\Core\Principal\IdentifierStore;
 use YorvoID\Core\Principal\PrincipalStore;
 use YorvoID\Core\Realm;
 use YorvoID\Core\Storage\Transactions;
+use YorvoID\Delegation\DelegationStore;
 use YorvoID\Passkeys\CeremonyStore;
 use YorvoID\Passkeys\PasskeyStore;
 use YorvoID\Policy\Attribute\AttributeStore;
@@ -70,6 +71,7 @@ final readonly class InMemoryStoresPass implements CompilerPassInterface
         ThrottleStore::class => ['yorvoid.store.throttle', 'throttle'],
         DecisionLogStore::class => ['yorvoid.store.decision_log', 'decisions'],
         VersionStore::class => ['yorvoid.store.version', 'versions'],
+        DelegationStore::class => ['yorvoid.store.delegation', 'delegations'],
     ];
 
     /** The stores mutants change what's read from */

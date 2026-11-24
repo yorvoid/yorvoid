@@ -47,6 +47,9 @@ holds "decisions/precedence.als (Alloy)" alloy decisions/precedence.als
 # non-delegable passed on; its broken variants (no root check, id narrowing reversed) are expected
 # counterexamples within the file ("expect 1").
 holds "delegation/attenuation.als (Alloy)" alloy delegation/attenuation.als
+# The PHP check of one link (yorvoid/delegation's Attenuation) replays the model's sample of links; regenerate
+# it with "node delegation/fixtures.mjs > delegation/fixtures.json".
+holds "delegation: the links the PHP tests check are the model's" sh -c 'node delegation/fixtures.mjs | cmp -s - delegation/fixtures.json'
 # Joins (M3-1): each of R01-R24 and J01-J20 (but R19 and J20, the guard's) exists and has its outcome;
 # no cross-branch substitution, the input grants never authority, P1-P3, in both configurations
 # (XP-16); evidence accepted unbound, input grants taken as synthesis authority and the join's added
