@@ -84,6 +84,57 @@ final class BenchTest extends TestCase
         self::assertSame(['A::benchX' => 30], json_decode((string) file_get_contents($this->directory.'/changes.json'), true), 'The record takes the same number.');
     }
 
+    /**
+     * A subject over the gate is measured again on its own, and only its second change counts: the gate
+     * fails when it's over again, and the subjects measured again are listed for the record.
+     */
+    public function testASubjectOverTheGateIsJudgedByItsSecondMeasure(): void
+    {
+        $changes = $this->directory.'/changes.json';
+        file_put_contents($changes, '{"A::benchX": 25.0, "A::benchY": 5.0, "A::benchZ": 20.0}');
+        self::assertSame([0, "A::benchX\n"], self::bench('over', $changes), 'Over 20 %, not at it.');
+
+        file_put_contents($this->directory.'/again.json', '{"A::benchX": 12.0}');
+        [$status, $output] = self::bench('confirm', $changes, $this->directory.'/again.json');
+        self::assertSame(0, $status, $output);
+        self::assertSame(['A::benchX' => 12, 'A::benchY' => 5, 'A::benchZ' => 20], json_decode((string) file_get_contents($changes), true), 'The second change, written back.');
+        self::assertSame("A::benchX\n", file_get_contents($this->directory.'/changes.remeasured'));
+
+        file_put_contents($changes, '{"A::benchX": 25.0}');
+        file_put_contents($this->directory.'/again.json', '{"A::benchX": 24.0}');
+        self::assertSame(1, self::bench('confirm', $changes, $this->directory.'/again.json')[0], 'Over again: it fails.');
+
+        file_put_contents($this->directory.'/again.json', '{}');
+        [$status, $output] = self::bench('confirm', $changes, $this->directory.'/again.json');
+        self::assertNotSame(0, $status, 'A second measure that crashed fails the gate.');
+        self::assertStringContainsString('A::benchX wasn\'t measured again.', $output);
+        self::assertNotSame(0, self::bench('confirm', $changes, $this->directory.'/none.json')[0], 'Nor does a second measure that left nothing pass it.');
+    }
+
+    /**
+     * The record trusts the gate only while the second measure stays rare: a subject measured again in
+     * more than 2 runs varies at its source.
+     */
+    public function testTheRecordCountsTheSubjectsMeasuredAgain(): void
+    {
+        mkdir($this->directory.'/record');
+
+        foreach ([1, 2, 3] as $run) {
+            file_put_contents($this->directory.\sprintf('/record/%d.json', $run), '{"A::benchX": 3.0}');
+        }
+
+        file_put_contents($this->directory.'/record/1.remeasured', "A::benchX\n");
+        file_put_contents($this->directory.'/record/2.remeasured', "A::benchX\n");
+        [$status, $output] = self::bench('record', $this->directory.'/record', '3');
+        self::assertSame(0, $status, $output);
+        self::assertStringContainsString('| A::benchX | 3.0 % | 0 | 2 |', $output);
+
+        file_put_contents($this->directory.'/record/3.remeasured', "A::benchX\n");
+        [$status, $output] = self::bench('record', $this->directory.'/record', '3');
+        self::assertSame(1, $status, 'Measured again in 3 runs of 3.');
+        self::assertStringContainsString('| A::benchX | 3.0 % | 0 | 3 |', $output);
+    }
+
     public function testRefusesWhatIsntAMeasurement(): void
     {
         $good = $this->dump('good', ['A::benchX' => [10]]);

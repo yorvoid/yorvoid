@@ -11,10 +11,17 @@ declare(strict_types=1);
  *
  *   php tools/bench/bench.php drift <release.json> <head.json>         the change since a release, in the p25, the
  *                                                                        median and the p99; gates nothing
+ *   php tools/bench/bench.php over <changes.json>                       the subjects whose change is over 20 %, one
+ *                                                                        per line: ci.sh measures them again
+ *   php tools/bench/bench.php confirm <changes.json> <again.json>       the changes with each subject measured again
+ *                                                                        taking its second change, written back, and
+ *                                                                        those subjects listed in <changes>.remeasured;
+ *                                                                        fails when one is still over 20 %
  *   php tools/bench/bench.php record <directory> <runs>                the A/A record from the runs' changes:
  *                                                                        fails on a failure, a subject whose
- *                                                                        worst |change| is over 15 %, or fewer
- *                                                                        runs than there should be
+ *                                                                        worst |change| is over 15 %, one measured
+ *                                                                        again in more than 2 runs, or fewer runs
+ *                                                                        than there should be
  *
  * Each of base and head may be several dumps, separated by commas, one per turn, in the order ci.sh
  * measures them (ABBABAAB). A subject with as many turns on each side is compared turn by turn: the k-th
@@ -26,13 +33,41 @@ declare(strict_types=1);
  * the median moving by up to 47 % between runs of the same code, as bursts of the runner's noise slowed
  * whole turns. Paired, a burst over two neighbouring turns of a pair slows both sides of it alike, and
  * one pair's noise is left out by the median; a burst over two turns of one side in a row (b2 b3, a6 a7)
- * moves two pairs, so the median by half as much. The table of the targets gives the median and the p99. <changed> lists the subjects
+ * moves two pairs, so the median by half as much. A subject over the gate is measured again on its own
+ * before it fails (ci.sh): a one-off burst doesn't fail it twice. The cost is power: a real slowdown just
+ * over 20 % may pass on a lucky second measure; the power check proves 30 %. The table of the targets gives
+ * the median and the p99. <changed> lists the subjects
  * whose benchmark code differs between base and head, one per line, "Class::subject", "Class::*" or
  * "*" for every one: they and the new ones are reported "changed, not gated" (C3). Tables go to stdout as Markdown,
  * for the job summary.
  */
 
 const THRESHOLD = 20.0;
+
+// How many runs of the A/A record may measure a subject again: more, and the second measure hides a
+// subject that varies at its source.
+const REMEASURES = 2;
+
+/**
+ * @return array<string, float> A compare's changes, by subject
+ *
+ * @throws RuntimeException
+ */
+function changes(string $file): array
+{
+    $changes = json_decode((string) file_get_contents($file), true, flags: \JSON_THROW_ON_ERROR);
+    $read = [];
+
+    foreach (is_array($changes) ? $changes : [] as $subject => $change) {
+        if (!is_int($change) && !is_float($change)) {
+            throw new RuntimeException(sprintf('%s has a change for %s that isn\'t a number.', $file, $subject));
+        }
+
+        $read[(string) $subject] = (float) $change;
+    }
+
+    return $read;
+}
 
 /**
  * @param string $files One dump, or several separated by commas: their iterations pooled per subject
@@ -220,6 +255,37 @@ if ('compare' === $command && isset($argv[2], $argv[3])) {
     exit($failed ? 1 : 0);
 }
 
+if ('over' === $command && isset($argv[2])) {
+    foreach (changes($argv[2]) as $subject => $change) {
+        if ($change > THRESHOLD) {
+            echo $subject, "\n";
+        }
+    }
+
+    exit(0);
+}
+
+if ('confirm' === $command && isset($argv[2], $argv[3])) {
+    // A subject over the gate, measured again in fresh processes, on its own: its second change is the
+    // one that counts. The first measure is never pooled with it, nor its noise carried over.
+    $changes = changes($argv[2]);
+    $again = changes($argv[3]);
+    $failed = false;
+
+    foreach ($changes as $subject => $change) {
+        if ($change > THRESHOLD) {
+            $changes[$subject] = $again[$subject] ?? throw new RuntimeException(sprintf('%s wasn\'t measured again.', $subject));
+        }
+
+        $failed = $failed || $changes[$subject] > THRESHOLD;
+    }
+
+    file_put_contents($argv[2], json_encode($changes, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR)."\n");
+    file_put_contents(preg_replace('/\.json$/', '', $argv[2]).'.remeasured', implode("\n", array_keys($again))."\n");
+
+    exit($failed ? 1 : 0);
+}
+
 if ('drift' === $command && isset($argv[2], $argv[3])) {
     // Since the last release (main): the change in each statistic, gating nothing. The median and the
     // p99 judge a release, as the lower quartile doesn't see a regression that only lengthens the tail.
@@ -242,39 +308,45 @@ if ('drift' === $command && isset($argv[2], $argv[3])) {
 }
 
 if ('record' === $command && isset($argv[2], $argv[3])) {
-    // The A/A record (C1): each subject's largest |change| across the runs, and how many failed.
+    // The A/A record (C1): each subject's largest |change| across the runs, how many failed, and how
+    // many measured it again (<run>.remeasured beside <run>.json).
     $files = glob(rtrim($argv[2], '/').'/*.json');
     $worst = [];
     $failures = [];
+    $remeasured = [];
     $runs = 0;
 
     foreach (false === $files ? [] : $files as $file) {
-        $changes = json_decode((string) file_get_contents($file), true, flags: \JSON_THROW_ON_ERROR);
         ++$runs;
 
-        foreach (is_array($changes) ? $changes : [] as $subject => $change) {
-            if (!is_int($change) && !is_float($change)) {
-                throw new RuntimeException(sprintf('%s has a change for %s that isn\'t a number.', $file, $subject));
-            }
-
-            $worst[$subject] = max($worst[$subject] ?? 0.0, abs((float) $change));
+        foreach (changes($file) as $subject => $change) {
+            $worst[$subject] = max($worst[$subject] ?? 0.0, abs($change));
             $failures[$subject] = ($failures[$subject] ?? 0) + ($change > THRESHOLD ? 1 : 0);
+            $remeasured[$subject] ??= 0;
+        }
+
+        $again = preg_replace('/\.json$/', '', $file).'.remeasured';
+
+        $lines = is_file($again) ? file($again, \FILE_IGNORE_NEW_LINES | \FILE_SKIP_EMPTY_LINES) : false;
+
+        foreach (false === $lines ? [] : $lines as $subject) {
+            $remeasured[$subject] = ($remeasured[$subject] ?? 0) + 1;
         }
     }
 
     ksort($worst);
-    printf("%d A/A runs.\n\n| Subject | Worst change | Failures |\n|---|---|---|\n", $runs);
+    printf("%d A/A runs.\n\n| Subject | Worst change | Failures | Measured again |\n|---|---|---|---|\n", $runs);
     $over = false;
 
     foreach ($worst as $subject => $change) {
         // Three quarters of the gate: a subject this jumpy is fixed at its source, not by a wider gate.
-        $over = $over || $change > 0.75 * THRESHOLD || $failures[$subject] > 0;
-        printf("| %s | %.1f %% | %d |\n", $subject, $change, $failures[$subject]);
+        $over = $over || $change > 0.75 * THRESHOLD || $failures[$subject] > 0 || $remeasured[$subject] > REMEASURES;
+        printf("| %s | %.1f %% | %d | %d |\n", $subject, $change, $failures[$subject], $remeasured[$subject]);
     }
 
     // A run that left no changes failed before comparing: it counts as a failure.
     exit($over || $runs < (int) $argv[3] ? 1 : 0);
 }
 
-fwrite(\STDERR, "Usage: php tools/bench/bench.php report <run.json> | compare <base.json> <head.json> [<changed>] [<changes.json>] | drift <release.json> <head.json> | record <directory> <runs>\n");
+fwrite(\STDERR, "Usage: php tools/bench/bench.php report <run.json> | compare <base.json> <head.json> [<changed>] [<changes.json>] | over <changes.json> | confirm <changes.json> <again.json> | drift <release.json> <head.json> | record <directory> <runs>\n");
 exit(2);
