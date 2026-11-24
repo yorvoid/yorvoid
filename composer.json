@@ -36,7 +36,7 @@
     ],
     "require": {
         "php": ">=8.4",
-        "twig/twig": "^3.30",
+        "twig/twig": "^3.31.1",
         "yorvoid/authn": "^0.5",
         "yorvoid/core": "^0.5",
         "yorvoid/delegation": "^0.5",

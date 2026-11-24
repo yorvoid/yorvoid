@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "c2562af7fe9bb605f68c4975234a8a90",
+    "content-hash": "f943304654fe846f7e25bdae6147bbce",
     "packages": [
         {
             "name": "brick/math",
@@ -6699,16 +6699,16 @@
         },
         {
             "name": "twig/twig",
-            "version": "v3.30.0",
+            "version": "v3.31.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/twigphp/Twig.git",
-                "reference": "8c737079b726af72ff8ef3c595be9f6a810ea1ef"
+                "reference": "6f6ec372231b53d1d564567a78beb8844cafa132"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/twigphp/Twig/zipball/8c737079b726af72ff8ef3c595be9f6a810ea1ef",
-                "reference": "8c737079b726af72ff8ef3c595be9f6a810ea1ef",
+                "url": "https://api.github.com/repos/twigphp/Twig/zipball/6f6ec372231b53d1d564567a78beb8844cafa132",
+                "reference": "6f6ec372231b53d1d564567a78beb8844cafa132",
                 "shasum": ""
             },
             "require": {
@@ -6763,7 +6763,7 @@
             ],
             "support": {
                 "issues": "https://github.com/twigphp/Twig/issues",
-                "source": "https://github.com/twigphp/Twig/tree/v3.30.0"
+                "source": "https://github.com/twigphp/Twig/tree/v3.31.1"
             },
             "funding": [
                 {
@@ -6775,7 +6775,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-09-25T13:20:01+00:00"
+            "time": "2026-11-24T12:48:40+00:00",
+            "published-time": "2026-11-24T12:48:53+00:00"
         },
         {
             "name": "web-auth/cose-lib",
@@ -7311,7 +7312,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/intent-verifier",
-                "reference": "5727f2085bdd6eb1c5688cbed16937bf7ca505d8"
+                "reference": "8aeb85ee8d12ea3893e10e8fe9325f110617a04b"
             },
             "require": {
                 "ext-dom": "*",
@@ -7324,7 +7325,7 @@
                 "spomky-labs/cbor-php": "^3.4",
                 "symfony/serializer": "^7.4 || ^8.1",
                 "symfony/uid": "^7.4 || ^8.1",
-                "twig/twig": "^3.30",
+                "twig/twig": "^3.31.1",
                 "web-auth/cose-lib": "^4.8",
                 "web-auth/webauthn-lib": "^5.3.13"
             },
@@ -7377,13 +7378,13 @@
             "dist": {
                 "type": "path",
                 "url": "packages/mail",
-                "reference": "ab653f559a5b6eaeba9817672fe91666fdc50fc1"
+                "reference": "25114e56c3facb0efe4d2300bbfc012253137ea6"
             },
             "require": {
                 "ext-filter": "*",
                 "ext-mbstring": "*",
                 "php": ">=8.4",
-                "twig/twig": "^3.30",
+                "twig/twig": "^3.31.1",
                 "yorvoid/core": "^0.5"
             },
             "type": "library",
