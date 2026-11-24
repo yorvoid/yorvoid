@@ -37,7 +37,7 @@
         "symfony/serializer": "^7.4 || ^8.1",
         "symfony/uid": "^7.4 || ^8.1",
         "web-auth/cose-lib": "^4.8",
-        "web-auth/webauthn-lib": "^5.3.9",
+        "web-auth/webauthn-lib": "^5.3.13",
         "yorvoid/authn": "^0.5",
         "yorvoid/core": "^0.5",
         "yorvoid/flows": "^0.5"
