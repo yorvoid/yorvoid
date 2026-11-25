@@ -131,6 +131,7 @@ final readonly class Delegations implements OperationHandler
             }
 
             $this->store->add($delegation);
+            $permit->created(new ResourceRef('delegation', (string) $delegation->id));
             $this->log->record($command->realm, 'yorvoid.delegation.issue', Outcome::Success, $origin, $delegator->id, 'delegation', (string) $delegation->id, [
                 'delegate' => (string) $delegate->id,
                 'parent' => null === $parent ? null : (string) $parent->id,

@@ -92,11 +92,11 @@ The origin's kind says where a request came from. The Symfony bridge marks a req
 
 A handler takes a `Permit` instead of an actor. Only `Operations::run()` issues one, after a Permit decision, for one command and one run: the handler calls `$permit->use($command)` before it changes anything, which fails for another command or a second use. So a handler can't be called around the decision.
 
-What an operation causes runs on a consequence of its permit, e.g. a recovery ending every session: `$permit->consequence($command)` gives a permit for that command, in the same realm. The `Authorization` that issued the operation's permit decides the consequence: the operation's decision holds, so its permits aren't asked again, but the actor is proven again, and a forbid that implements `AppliesToConsequences` is evaluated for it. A consequence it refuses throws `NotPermitted`, and the operation fails with it. Each consequence's decision is recorded under the operation's (its record's `parent`). Only for what the operation declares it causes, `#[Operation(..., causes: ['yorvoid.session.end_all'])]`, and each as many times as it's named there: once, unless it's named twice. A consequence about a principal (a command implementing `ConcernsPrincipal`, e.g. `IssueToken` or `EndSessions`) must be about the operation's own principal: its command's, if that's about one, or the one its handler names with `$permit->about($principalId)` once it knows it, e.g. the principal it created, or whose token it used. Until then, nothing about anyone runs on the permit.
+What an operation causes runs as a consequence of its permit, e.g. a recovery ending every session: `$permit->cause($handler, $command, $origin)` runs the command's handler on a permit for that command, in the same realm, e.g. `$permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, $reason), $origin)`. The `Authorization` that issued the operation's permit decides the consequence: the operation's decision holds, so its permits aren't asked again, but the actor is proven again, and a forbid that implements `AppliesToConsequences` is evaluated for it. A consequence it refuses throws `NotPermitted`, and the operation fails with it. Each consequence's decision is recorded under the operation's (its record's `parent`). Only for what the operation declares it causes, `#[Operation(..., causes: ['yorvoid.session.end_all'])]`, and each as many times as it's named there: once, unless it's named twice. A consequence about a principal (a command implementing `ConcernsPrincipal`, e.g. `IssueToken` or `EndSessions`) must be about the operation's own principal: its command's, if that's about one, or the one its handler names with `$permit->about($principalId)` once it knows it, e.g. the principal it created, or whose token it used. Until then, nothing about anyone runs on the permit.
 
 A permit holds the decision point that issued it, for its consequences: it's for the request it was issued in, and is never serialized.
 
-Principals' events carry their operation's permit, so a listener can run with it what the operation causes, about the same principal, and only what the operation hasn't run already. Whatever runs a consequence first uses it up: a second try fails with an `IntegratorError` naming it. Your listeners run your own operations through `Operations::run()`.
+Principals' events carry their operation's permit, so a listener can run with `$event->permit->cause(...)` what the operation causes, about the same principal, and only what the operation hasn't run already. Whatever runs a consequence first uses it up: a second try fails with an `IntegratorError` naming it. Your listeners run your own operations through `Operations::run()`.
 
 Your own operations plug in the same way: a command with `#[Operation]`, and a service implementing `OperationHandler` that maps each command to a method taking the command, a `Permit` and the `Origin`.
 
@@ -106,6 +106,26 @@ Each operation dispatches PSR-14 events through your application's event dispatc
 
 - **"-ing" events** (e.g. *principal suspending*) run inside the transaction, before the change takes effect. Some can be cancelled (`CancellableEvent::cancel($reason)`), which stops the other listeners and rolls the operation back.
 - **"-ed" events** (e.g. *principal suspended*) run after the transaction committed. Use them for emails and your own audit log.
+
+Principals, sessions, credentials, tokens and recovery have events of their own, with their records. Every operation, also one without events of its own and your own, dispatches **`OperationRan`** once its transaction committed, after the operation's own "-ed" events:
+
+```php
+use YorvoID\Core\Event\OperationRan;
+use YorvoID\Policy\Change\AssignRole;
+
+$events->listen(OperationRan::class, function (OperationRan $ran): void {
+    if ($ran->command instanceof AssignRole) {
+        // $ran->command->role was given to $ran->command->principalId, by $ran->actor.
+    }
+});
+```
+
+It carries IDs, never the records: the operation's name and command, the actor, the origin, the decision that permitted it (`decisionId`), the principal it's about (`about`), and what it created, for an operation that creates something that isn't a principal (`created`, e.g. the role of `CreateRole`; your handler names it with `$permit->created($resource)`). A consequence's names the decision of the operation that caused it (`parent`), and is dispatched before that operation's.
+
+- It's never dispatched for an operation that was refused, threw or rolled back, and once for one that ran again after a conflict.
+- Without `Transactions` given to `Operations`, it's dispatched as soon as the operation's handler returns, with its consequences'. A consequence of an operation that then failed dispatches nothing.
+- A command that holds a `Secret`, e.g. a sign-in's device cookie, isn't handed to your listener: `command` is null. It's found from the properties' declared types: in a command of your own, type such a property as `Secret`. One in an array, or behind an interface, isn't detected.
+- It can't stop anything: only the cancellable "-ing" events above do. To refuse any other operation, write a forbid in the policy, where its decision is recorded ([authorization](authorization.md)).
 
 ## Origins
 

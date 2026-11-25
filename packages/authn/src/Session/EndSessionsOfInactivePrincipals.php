@@ -24,7 +24,7 @@ final readonly class EndSessionsOfInactivePrincipals
     {
         if (!$event->after->isActive()) {
             $command = new EndSessions($event->after->realm, $event->after->id, SessionEndReason::PrincipalDeactivated);
-            $this->sessions->endAll($command, $event->permit->consequence($command), $event->origin);
+            $event->permit->cause($this->sessions->endAll(...), $command, $event->origin);
         }
     }
 }

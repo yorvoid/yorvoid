@@ -49,7 +49,7 @@ final class LoggingBadges implements OperationHandler
         $this->log->record($command->realm, 'acme.badge.issue', Outcome::Success, $origin, $command->principalId);
         $record = new RecordBadge($command->realm);
 
-        return $this->record($record, $permit->consequence($record), $origin);
+        return $permit->cause($this->record(...), $record, $origin);
     }
 
     public function scan(ScanBadge $command, Permit $permit, Origin $origin): never

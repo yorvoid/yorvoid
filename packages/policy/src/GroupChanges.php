@@ -7,6 +7,7 @@ namespace YorvoID\Policy;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
 use YorvoID\Core\Authorization\RequiresForbids;
+use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
@@ -75,6 +76,7 @@ final readonly class GroupChanges implements OperationHandler, RequiresForbids
             $this->store->bump($command->realm);
             $this->store->saveGroup($command->realm, $group->name, $group->label);
             $this->record($command->realm, 'yorvoid.group.create', $permit, $origin, $group->name, ['label' => $group->label]);
+            $permit->created(new ResourceRef('group', $group->name));
         });
     }
 

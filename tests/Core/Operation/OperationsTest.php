@@ -47,6 +47,7 @@ use YorvoID\Tests\Core\Operation\Fixtures\Badges\RecordBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ScanBadge;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\SelfService;
 use YorvoID\Tests\Core\Operation\Fixtures\Badges\ValidAuthority;
+use YorvoID\Tests\Support\Permits;
 use YorvoID\Tests\Support\TrustedActors;
 
 final class OperationsTest extends TestCase
@@ -413,7 +414,7 @@ final class OperationsTest extends TestCase
         $badges = new class implements OperationHandler {
             public function operations(): array
             {
-                return [ScanBadge::class => static fn (ScanBadge $command, Permit $permit): Permit => $permit->consequence(new RecordBadge($command->realm))];
+                return [ScanBadge::class => static fn (ScanBadge $command, Permit $permit): Permit => Permits::consequence($permit, new RecordBadge($command->realm))];
             }
         };
 
@@ -431,7 +432,7 @@ final class OperationsTest extends TestCase
                 return [ScanBadge::class => static function (ScanBadge $command, Permit $permit): Permit {
                     $permit->use($command);
 
-                    return $permit->consequence(new IssueBadge($command->realm, new PrincipalId(Ids::next())));
+                    return Permits::consequence($permit, new IssueBadge($command->realm, new PrincipalId(Ids::next())));
                 }];
             }
         };
@@ -468,7 +469,7 @@ final class OperationsTest extends TestCase
                 return [ScanBadge::class => static function (ScanBadge $command, Permit $permit): Permit {
                     $permit->use($command);
 
-                    return $permit->consequence(new RecordBadge(new Realm('other')));
+                    return Permits::consequence($permit, new RecordBadge(new Realm('other')));
                 }];
             }
         };

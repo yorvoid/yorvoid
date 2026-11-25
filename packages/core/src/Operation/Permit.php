@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace YorvoID\Core\Operation;
 
 use YorvoID\Core\Authorization\ReadSet;
+use YorvoID\Core\Authorization\ResourceRef;
+use YorvoID\Core\Event\OperationRan;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Principal\PrincipalId;
@@ -15,10 +17,10 @@ use YorvoID\Core\Realm;
  * permits, after a Permit decision; a handler takes one and calls use() with its command before it
  * changes anything, so a handler can't be called around the decision point (D-38).
  *
- * What an operation causes, e.g. a recovery ending every session, runs on a consequence() of the
- * handler's permit, which the Authorization that issued it decides as a consequence (D-50): the
+ * What an operation causes, e.g. a recovery ending every session, runs with cause(), on a consequence
+ * of the handler's permit, which the Authorization that issued it decides as a consequence (D-50): the
  * operation's decision holds unless it refuses, and each consequence has its own decision, recorded
- * under the operation's. Only what the operation declares it
+ * under the operation's, and its own OperationRan event. Only what the operation declares it
  * causes (#[Operation(causes: [...])]), so a listener handed the permit can't run anything else with it,
  * and each as many times as it's declared: once, unless it's named twice.
  *
@@ -54,6 +56,9 @@ final class Permit
     /** @var array<string, int> How many times each consequence ran, by operation */
     private array $caused = [];
 
+    /** What the operation created, once its handler says */
+    private ?ResourceRef $created = null;
+
     /**
      * @param Command<mixed> $command
      */
@@ -67,6 +72,7 @@ final class Permit
         public readonly bool $offline = false,
         private readonly ?Decision $decision = null,
         private readonly ?\Closure $consequences = null,
+        private readonly ?\Closure $ran = null,
     ) {
         $this->principal = $command instanceof ConcernsPrincipal ? $command->principal() : null;
     }
@@ -84,6 +90,21 @@ final class Permit
         }
 
         $this->principal = $principal;
+    }
+
+    /**
+     * Says what the operation created, for one that creates something that isn't a principal (that's
+     * about()), e.g. a role: its OperationRan event names it.
+     *
+     * @throws IntegratorError When it was said already
+     */
+    public function created(ResourceRef $resource): void
+    {
+        if (null !== $this->created) {
+            throw new IntegratorError(\sprintf('The permit for "%s" says what it created already.', $this->operation), 'An operation names what it created once: the one thing its OperationRan event names.', 'concepts/operations-and-events.md#events');
+        }
+
+        $this->created = $resource;
     }
 
     /**
@@ -119,7 +140,7 @@ final class Permit
      *                         command's, the command is in another realm, or another actor is named outside
      *                         authentication
      */
-    public function consequence(Command $command, ?PrincipalId $actingAs = null): self
+    private function consequence(Command $command, ?PrincipalId $actingAs = null): self
     {
         if (!$this->used) {
             throw new IntegratorError(\sprintf('A consequence was asked of the permit for "%s" before it was used.', $this->operation), 'Call use() with the command first: only an operation that runs has consequences.', 'concepts/operations-and-events.md#permits');
@@ -178,11 +199,15 @@ final class Permit
 
         $this->caused[$consequence] = $caused + 1;
 
-        return new self($consequence, $actor, AuthorizedBy::Consequence, $decision->id ?? $this->decisionId, $command, $this, $this->offline, $decision, $this->consequences);
+        return new self($consequence, $actor, AuthorizedBy::Consequence, $decision->id ?? $this->decisionId, $command, $this, $this->offline, $decision, $this->consequences, $this->ran);
     }
 
     /**
-     * Runs an operation this one causes: its handler, with a consequence() of this permit.
+     * Runs an operation this one causes: its handler, with a permit for it that's a consequence of this
+     * one, in the same realm, recorded under this permit's decision.
+     *
+     * @param PrincipalId|null $actingAs Who the consequence acts as, for authentication only: the principal it
+     *                                   authenticated, e.g. the invitee accepting; by default this permit's actor
      *
      * ```php
      * $permit->cause($this->sessions->endAll(...), new EndSessions($realm, $principalId, $reason), $origin);
@@ -195,9 +220,30 @@ final class Permit
      * @param C                            $command
      *
      * @return T
+     *
+     * @throws IntegratorError When this permit wasn't used yet, its operation doesn't say it causes the
+     *                         command's, the command is in another realm, or another actor is named outside
+     *                         authentication
+     * @throws NotPermitted    When the Authorization refuses the consequence: the operation fails with it
      */
     public function cause(\Closure $handler, Command $command, Origin $origin, ?PrincipalId $actingAs = null): mixed
     {
-        return $handler($command, $this->consequence($command, $actingAs), $origin);
+        $permit = $this->consequence($command, $actingAs);
+        $result = $handler($command, $permit, $origin);
+        $permit->ran($origin);
+
+        return $result;
+    }
+
+    /**
+     * Its operation ran: hands its event to Operations, which dispatches it once the transaction commits.
+     */
+    private function ran(Origin $origin): void
+    {
+        if (null === $this->ran) {
+            return;
+        }
+
+        ($this->ran)(new OperationRan($this->operation, $this->realm, HoldsSecrets::in($this->command::class) ? null : $this->command, $this->actor->principalId, $origin, $this->decisionId, $this->parent?->decisionId, $this->principal, $this->created));
     }
 }
