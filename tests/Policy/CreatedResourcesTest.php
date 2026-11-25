@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Authorization\Selector\IdIn;
 use YorvoID\Core\Authorization\Selector\Selector;
-use YorvoID\Core\Event\OperationRan;
+use YorvoID\Core\Operation\OperationRan;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\PrincipalKind;
 use YorvoID\Delegation\Change\IssueDelegation;

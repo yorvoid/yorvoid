@@ -2,12 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Tests\Core\Event;
+namespace YorvoID\Tests\Core\Operation;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Finder\Finder;
 use YorvoID\Core\Duration;
-use YorvoID\Core\Event\OperationRan;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Event\OriginKind;
 use YorvoID\Core\Exception\IntegratorError;
@@ -20,6 +19,7 @@ use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\OperationHandler;
+use YorvoID\Core\Operation\OperationRan;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Permit;

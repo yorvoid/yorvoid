@@ -7,7 +7,6 @@ namespace YorvoID\Core\Operation;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use YorvoID\Core\Authorization\RequiresForbids;
 use YorvoID\Core\Event\NoEventListeners;
-use YorvoID\Core\Event\OperationRan;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\IdGenerator;

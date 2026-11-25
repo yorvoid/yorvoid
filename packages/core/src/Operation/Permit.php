@@ -6,7 +6,6 @@ namespace YorvoID\Core\Operation;
 
 use YorvoID\Core\Authorization\ReadSet;
 use YorvoID\Core\Authorization\ResourceRef;
-use YorvoID\Core\Event\OperationRan;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Principal\PrincipalId;
