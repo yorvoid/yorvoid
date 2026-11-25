@@ -9,5 +9,6 @@ declare(strict_types=1);
 return [
     'DecisionBench::benchCachedDecision' => ['p99' => 1000, 'requirement' => 'OPS-042: a cached decision, p99 < 1 ms'],
     'DecisionBench::benchUncachedDecision' => ['p99' => 5000, 'requirement' => 'OPS-042: uncached, p99 < 5 ms; measured on role inheritance, the chain in M3-1'],
+    'DecisionBench::benchDelegatedDecision' => ['p99' => 5000, 'requirement' => 'OPS-042: uncached under a chain of three delegations, p99 < 5 ms'],
     'SignInBench::benchPasskeySignIn' => ['p99' => 50000, 'requirement' => 'OPS-042: the passkey sign-in endpoints < 50 ms'],
 ];
