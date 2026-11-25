@@ -325,6 +325,11 @@ jobs:
         with:
           name: coverage-${{ github.sha }}
           path: var/infection/coverage
+      # Main's full run refuses to start unless every file mutated is in exactly one part: a pull
+      # request that adds a package or moves the sources finds out here, not on main.
+      - name: Check that the full run's parts cover all the code
+        if: github.event_name == 'pull_request'
+        run: docker compose exec -T php php tools/infection/shards.php
       - name: Mutate the lines the pull request changes
         if: github.event_name == 'pull_request'
         env:
