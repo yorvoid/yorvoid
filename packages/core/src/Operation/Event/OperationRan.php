@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Core\Operation;
+namespace YorvoID\Core\Operation\Event;
 
 use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
+use YorvoID\Core\Operation\Command;
 use YorvoID\Core\Principal\PrincipalId;
 use YorvoID\Core\Realm;
 

@@ -13,6 +13,7 @@ use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Event\OperationRan;
 use YorvoID\Core\Storage\RetryableConflict;
 use YorvoID\Core\Storage\Transactions;
 

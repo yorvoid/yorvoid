@@ -110,7 +110,7 @@ Each operation dispatches PSR-14 events through your application's event dispatc
 Principals, sessions, credentials, tokens and recovery have events of their own, with their records. Every operation, also one without events of its own and your own, dispatches **`OperationRan`** once its transaction committed, after the operation's own "-ed" events:
 
 ```php
-use YorvoID\Core\Operation\OperationRan;
+use YorvoID\Core\Operation\Event\OperationRan;
 use YorvoID\Policy\Change\AssignRole;
 
 $events->listen(OperationRan::class, function (OperationRan $ran): void {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YorvoID\Tests\Core\Operation;
+namespace YorvoID\Tests\Core\Operation\Event;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Finder\Finder;
@@ -13,13 +13,13 @@ use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Log\SecurityLog;
 use YorvoID\Core\Log\Storage\InMemorySecurityLogStore;
 use YorvoID\Core\Operation\Command;
+use YorvoID\Core\Operation\Event\OperationRan;
 use YorvoID\Core\Operation\HoldsSecrets;
 use YorvoID\Core\Operation\NotPermitted;
 use YorvoID\Core\Operation\Operation;
 use YorvoID\Core\Operation\OperationCatalogue;
 use YorvoID\Core\Operation\OperationDescription;
 use YorvoID\Core\Operation\OperationHandler;
-use YorvoID\Core\Operation\OperationRan;
 use YorvoID\Core\Operation\Operations;
 use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Operation\Permit;
@@ -301,7 +301,7 @@ final class OperationRanTest extends TestCase
     {
         $commands = [];
 
-        foreach (new Finder()->files()->in(__DIR__.'/../../../packages/*/src')->name('*.php')->contains('#[Operation(')->sortByName() as $file) {
+        foreach (new Finder()->files()->in(__DIR__.'/../../../../packages/*/src')->name('*.php')->contains('#[Operation(')->sortByName() as $file) {
             $class = 1 === preg_match('/^namespace ([^;]+);/m', $file->getContents(), $namespace) ? $namespace[1].'\\'.$file->getBasename('.php') : '';
 
             if (class_exists($class) && [] !== new \ReflectionClass($class)->getAttributes(Operation::class)) {
