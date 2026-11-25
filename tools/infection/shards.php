@@ -43,7 +43,7 @@ $rest = static function (string $directory, array $except) use ($root): array {
 $parts = [
     ['packages/core/src/Authorization/', 'packages/core/src/Storage/'],
     array_merge($rest('packages/core', ['src']), $rest('packages/core/src', ['Authorization', 'Storage'])),
-    ['packages/authn/', 'packages/throttle/', 'packages/mail/'],
+    ['packages/authn/', 'packages/throttle/', 'packages/mail/', 'packages/delegation/'],
     ['packages/symfony/src/Command/', 'packages/symfony/src/Controller/', 'packages/symfony/src/Templates/', 'packages/symfony/src/Factories.php'],
     array_merge($rest('packages/symfony', ['src']), $rest('packages/symfony/src', ['Command', 'Controller', 'Templates', 'Factories.php'])),
     ['packages/policy/', 'packages/policy-testing/', 'packages/relations/', 'packages/phpstan-rules/'],
