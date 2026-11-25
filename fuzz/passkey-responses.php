@@ -45,7 +45,8 @@ require __DIR__.'/bootstrap.php';
 // the registered passkey (for an earlier ceremony, so it never works as it is), so they reach deep into
 // the parsing and the checks: run.sh runs this in var/fuzz/passkey-responses/, next to the corpus.
 $transactions = new InMemoryTransactions();
-$log = new SecurityLog(new InMemorySecurityLogStore(), $transactions);
+$logStore = new InMemorySecurityLogStore();
+$log = new SecurityLog($logStore, $transactions);
 $principals = new Principals(new InMemoryPrincipalStore(), new InMemoryIdentifierStore(), $log, $transactions);
 $sessions = new Sessions(new InMemorySessionStore(), $principals, $log, $transactions);
 $credentials = new Credentials(new InMemoryCredentialStore(), $sessions, $principals, new StepUp($sessions, new InMemoryCoolDownStore(), $log), $log, $transactions);
@@ -60,8 +61,12 @@ if (is_dir('corpus')) {
     file_put_contents('corpus/genuine-answer.json', $authenticator->signIn($passkeys->beginSignIn(Realm::default())->options));
 }
 
+// Every refusal is logged: each run starts from the log as set up, or 200000 runs fill the memory.
+$logged = $logStore->snapshot();
+
 $config->addDictionary(__DIR__.'/passkey-responses.dict');
-$config->setTarget(onlyRefusals(static function (string $input) use ($passkeys): void {
+$config->setTarget(onlyRefusals(static function (string $input) use ($passkeys, $logStore, $logged): void {
+    $logStore->restore($logged);
     $ceremony = $passkeys->beginSignIn(Realm::default());
 
     try {
