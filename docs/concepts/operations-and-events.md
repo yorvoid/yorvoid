@@ -124,7 +124,7 @@ It carries IDs, never the records: the operation's name and command, the actor, 
 
 - It's never dispatched for an operation that was refused, threw or rolled back, and once for one that ran again after a conflict.
 - Without `Transactions` given to `Operations`, it's dispatched as soon as the operation's handler returns, with its consequences'. A consequence of an operation that then failed dispatches nothing.
-- A command that holds a `Secret`, e.g. a sign-in's device cookie, isn't handed to your listener: `command` is null. It's found from the properties' declared types: in a command of your own, type such a property as `Secret`. One in an array, or behind an interface, isn't detected.
+- A command that holds a `Secret`, e.g. a sign-in's device cookie, isn't handed to your listener: `command` is null. It's found from the properties' declared types: in a command of your own, type such a property as `Secret`. One in an array, in a `mixed` or untyped property, or in an object whose declared type (e.g. an interface) doesn't itself declare it, isn't detected.
 - It can't stop anything: only the cancellable "-ing" events above do. To refuse any other operation, write a forbid in the policy, where its decision is recorded ([authorization](authorization.md)).
 
 ## Origins

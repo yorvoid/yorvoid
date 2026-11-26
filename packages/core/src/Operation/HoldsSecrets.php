@@ -32,7 +32,8 @@ final class HoldsSecrets
      */
     private static function holds(string $class, array $seen): bool
     {
-        if (Secret::class === $class || is_a($class, Secret::class, true)) {
+        // Secret is final: no other class is one.
+        if (Secret::class === $class) {
             return true;
         }
 
@@ -40,7 +41,7 @@ final class HoldsSecrets
 
         foreach ((new \ReflectionClass($class))->getProperties() as $property) {
             foreach (self::classes($property->getType()) as $type) {
-                if (!isset($seen[$type]) && self::holds($type, $seen)) {
+                if (!($seen[$type] ?? false) && self::holds($type, $seen)) {
                     return true;
                 }
             }
@@ -60,10 +61,12 @@ final class HoldsSecrets
             return !$type->isBuiltin() && (class_exists($name) || interface_exists($name)) ? [$name] : [];
         }
 
-        if ($type instanceof \ReflectionUnionType || $type instanceof \ReflectionIntersectionType) {
-            return array_merge(...array_map(self::classes(...), $type->getTypes()));
+        if (null === $type) {
+            return [];
         }
 
-        return [];
+        \assert($type instanceof \ReflectionUnionType || $type instanceof \ReflectionIntersectionType);
+
+        return array_merge(...array_map(self::classes(...), $type->getTypes()));
     }
 }

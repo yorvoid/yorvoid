@@ -134,13 +134,21 @@ final class OperationRanTest extends TestCase
         self::assertSame(['AcceptInvitation', 'ClaimSetup', 'RecoverWithCode', 'RedeemRecoveryCode', 'ReportNotMe', 'SignInWithPasskey', 'StartSession', 'UseRecoveryLink', 'VerifyEmail'], $holding);
     }
 
+    public function testSecretIsFinalSinceHoldsSecretsComparesClassNames(): void
+    {
+        self::assertTrue((new \ReflectionClass(Secret::class))->isFinal(), 'HoldsSecrets compares class names: a subclass of Secret would reach listeners.');
+    }
+
     public function testHoldsSecretsLooksThroughTypesAndTheObjectsAPropertyHolds(): void
     {
         self::assertTrue(HoldsSecrets::in(HoldsOne::class));
         self::assertTrue(HoldsSecrets::in(HoldsMaybe::class), 'A nullable one.');
         self::assertTrue(HoldsSecrets::in(HoldsEither::class), 'In a union.');
         self::assertTrue(HoldsSecrets::in(HoldsInside::class), 'In an object it holds.');
+        self::assertTrue(HoldsSecrets::in(HoldsThroughAnInterface::class), 'In an object an interface declares.');
         self::assertFalse(HoldsSecrets::in(HoldsItself::class), 'A cycle ends.');
+        self::assertFalse(HoldsSecrets::in(HoldsAnUnknownClass::class), 'A class that does not exist holds nothing.');
+        self::assertFalse(HoldsSecrets::in(HoldsBuiltins::class));
         self::assertFalse(HoldsSecrets::in(IssueBadge::class));
     }
 
@@ -483,4 +491,29 @@ final readonly class HoldsInside
 final class HoldsItself
 {
     public ?HoldsItself $next = null;
+}
+
+interface DeclaresASecret
+{
+    public Secret $secret { get; }
+}
+
+final readonly class HoldsThroughAnInterface
+{
+    public function __construct(public DeclaresASecret $declares)
+    {
+    }
+}
+
+final class HoldsAnUnknownClass
+{
+    /** @phpstan-ignore class.notFound */
+    public ?NoSuchClass $nothing = null;
+}
+
+final readonly class HoldsBuiltins
+{
+    public function __construct(public int $count, public string|bool $name, public ?float $ratio = null)
+    {
+    }
 }
