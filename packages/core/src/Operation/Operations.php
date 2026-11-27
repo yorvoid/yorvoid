@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace YorvoID\Core\Operation;
 
+use Psr\EventDispatcher\EventDispatcherInterface;
 use YorvoID\Core\Authorization\RequiresForbids;
+use YorvoID\Core\Event\NoEventListeners;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Id\IdGenerator;
 use YorvoID\Core\Id\UuidV7Generator;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Event\OperationRan;
 use YorvoID\Core\Storage\RetryableConflict;
 use YorvoID\Core\Storage\Transactions;
 
@@ -18,6 +21,8 @@ use YorvoID\Core\Storage\Transactions;
  * The way into every operation (D-38): it asks the {@see Authorization} whether the actor may run it,
  * records a refusal in the security log, and on Permit calls the operation's handler with a
  * {@see Permit}. Handlers take nothing else as their authority, so nothing reaches them around it.
+ * Each operation that ran, and each of its consequences, dispatches {@see OperationRan} once the
+ * transaction committed.
  *
  * ```php
  * $operations->run(new SuspendPrincipal($realm, $principalId), $session, $origin);
@@ -36,7 +41,9 @@ final readonly class Operations
     /**
      * @param iterable<OperationHandler> $handlers
      * @param Transactions|null          $transactions Where each operation runs, decided again when it conflicts with
-     *                                                 another transaction; without, conflicts reach the caller
+     *                                                 another transaction; without, conflicts reach the caller, and
+     *                                                 OperationRan is dispatched as soon as the operation's handler
+     *                                                 returns, its consequences' with it
      *
      * @throws IntegratorError When two handlers run one command, an OfflineDecider and the operations that
      *                         accept Permit-offline don't go together, a policy element refuses an operation,
@@ -49,6 +56,7 @@ final readonly class Operations
         iterable $handlers,
         private IdGenerator $ids = new UuidV7Generator(),
         private ?Transactions $transactions = null,
+        private EventDispatcherInterface $events = new NoEventListeners(),
     ) {
         $map = [];
 
@@ -143,7 +151,31 @@ final readonly class Operations
         $this->accept($decision, $command, $actor, $operation->name);
         $basis = $decision->basis;
         // Only here: Permit's constructor is private to everything else.
-        $issue = \Closure::bind(static fn (string $name, Actor $actor, AuthorizedBy $basis, Decision $decision, string $id, Command $command, bool $offline, \Closure $consequences): Permit => new Permit($name, $actor, $basis, $id, $command, offline: $offline, decision: $decision, consequences: $consequences), null, Permit::class);
+        $issue = \Closure::bind(static fn (string $name, Actor $actor, AuthorizedBy $basis, Decision $decision, string $id, Command $command, bool $offline, \Closure $consequences, \Closure $ran): Permit => new Permit($name, $actor, $basis, $id, $command, offline: $offline, decision: $decision, consequences: $consequences, ran: $ran), null, Permit::class);
+        // After the commit: an operation that rolled back, or conflicted and ran again, never ran (D-43).
+        // Without Transactions, once this one's handler returned: a consequence whose operation then
+        // failed never ran either.
+        $held = new class {
+            /** @var list<OperationRan> */
+            public array $events = [];
+
+            public bool $spent = false;
+        };
+        $ran = function (OperationRan $event) use ($held): void {
+            if (null === $this->transactions) {
+                if ($held->spent) {
+                    throw new IntegratorError(\sprintf('"%s" ran on a permit that is spent: the operation that issued it returned.', $event->operation), 'Run what an operation causes inside its handler, on the permit it was given; never keep a permit for later.', 'concepts/operations-and-events.md#permits');
+                }
+
+                $held->events[] = $event;
+
+                return;
+            }
+
+            $this->transactions->afterCommit(function () use ($event): void {
+                $this->events->dispatch($event);
+            });
+        };
         // Its consequences are decided by the same path, from the same origin (D-50).
         $consequences = function (Decision $parent, Command $caused, Actor $by) use ($origin): Decision {
             $operation = $this->describe($caused);
@@ -161,12 +193,26 @@ final readonly class Operations
             return $decision;
         };
 
-        return $this->log->citing($decision, function () use ($command, $actor, $origin, $operation, $handler, $issue, $basis, $decision, $offline, $consequences): mixed {
+        return $this->log->citing($decision, function () use ($command, $actor, $origin, $operation, $handler, $issue, $basis, $decision, $offline, $consequences, $ran, $held): mixed {
             if ($offline) {
                 $this->log->record($command->realm, 'yorvoid.decision.offline', Outcome::Success, $origin, $actor->principalId, 'operation', $operation->name, ['reason' => $decision->reason]);
             }
 
-            return $handler($command, $issue($operation->name, $actor, $basis, $decision, $decision->id ?? (string) $this->ids->next(), $command, $offline, $consequences), $origin);
+            $permit = $issue($operation->name, $actor, $basis, $decision, $decision->id ?? (string) $this->ids->next(), $command, $offline, $consequences, $ran);
+            try {
+                $result = $handler($command, $permit, $origin);
+                // Last, so the operation's own "-ed" events, waiting for the same commit, run before it.
+                \Closure::bind(static fn (Permit $permit) => $permit->ran($origin), null, Permit::class)($permit);
+            } finally {
+                // Also when the handler failed: a permit kept past it causes nothing.
+                $held->spent = true;
+            }
+
+            foreach ($held->events as $event) {
+                $this->events->dispatch($event);
+            }
+
+            return $result;
         });
     }
 

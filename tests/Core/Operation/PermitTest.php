@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use YorvoID\Authn\Session\EndSessions;
 use YorvoID\Authn\Session\SessionEndReason;
 use YorvoID\Authn\Token\IssueToken;
+use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Duration;
 use YorvoID\Core\Exception\IntegratorError;
 use YorvoID\Core\Operation\Command;
@@ -45,11 +46,11 @@ final class PermitTest extends TestCase
     {
         $permit = $this->used(new Twice($this->realm, $this->ana));
 
-        $permit->consequence($this->token($this->ana));
-        $this->refused(fn () => $permit->consequence($this->token($this->bob)), 'A consequence of "acme.test.twice" is about another principal.');
+        Permits::consequence($permit, $this->token($this->ana));
+        $this->refused(fn () => Permits::consequence($permit, $this->token($this->bob)), 'A consequence of "acme.test.twice" is about another principal.');
         $this->refused(fn () => $permit->about($this->bob), 'The permit for "acme.test.twice" is about another principal already.');
         $permit->about($this->ana);
-        $permit->consequence($this->token($this->ana));
+        Permits::consequence($permit, $this->token($this->ana));
     }
 
     /**
@@ -59,28 +60,28 @@ final class PermitTest extends TestCase
     {
         $permit = $this->used(new Unbound($this->realm));
 
-        $this->refused(fn () => $permit->consequence($this->token($this->bob)), 'A consequence of "acme.test.unbound" is about a principal, but "acme.test.unbound" isn\'t about a principal yet.');
+        $this->refused(fn () => Permits::consequence($permit, $this->token($this->bob)), 'A consequence of "acme.test.unbound" is about a principal, but "acme.test.unbound" isn\'t about a principal yet.');
         // What isn't about a principal runs: creating one.
-        $permit->consequence(new CreatePrincipal($this->realm, PrincipalKind::Human, PrincipalStatus::Active));
+        Permits::consequence($permit, new CreatePrincipal($this->realm, PrincipalKind::Human, PrincipalStatus::Active));
 
         $permit->about($this->ana);
-        $this->refused(fn () => $permit->consequence($this->token($this->bob)), 'A consequence of "acme.test.unbound" is about another principal.');
-        self::assertSame('yorvoid.token.issue', $permit->consequence($this->token($this->ana))->operation);
+        $this->refused(fn () => Permits::consequence($permit, $this->token($this->bob)), 'A consequence of "acme.test.unbound" is about another principal.');
+        self::assertSame('yorvoid.token.issue', Permits::consequence($permit, $this->token($this->ana))->operation);
     }
 
     public function testEachConsequenceRunsAsManyTimesAsItsDeclared(): void
     {
         $twice = $this->used(new Twice($this->realm, $this->ana));
-        $twice->consequence($this->token($this->ana));
-        $twice->consequence($this->token($this->ana));
-        $this->refused(fn () => $twice->consequence($this->token($this->ana)), 'This permit for "acme.test.twice" ran its consequence "yorvoid.token.issue" already: as many times as it says it causes it.');
-        $twice->consequence(new EndSessions($this->realm, $this->ana, SessionEndReason::Reported));
-        $this->refused(fn () => $twice->consequence(new EndSessions($this->realm, $this->ana, SessionEndReason::Reported)), 'This permit for "acme.test.twice" ran its consequence "yorvoid.session.end_all" already: as many times as it says it causes it.');
+        Permits::consequence($twice, $this->token($this->ana));
+        Permits::consequence($twice, $this->token($this->ana));
+        $this->refused(fn () => Permits::consequence($twice, $this->token($this->ana)), 'This permit for "acme.test.twice" ran its consequence "yorvoid.token.issue" already: as many times as it says it causes it.');
+        Permits::consequence($twice, new EndSessions($this->realm, $this->ana, SessionEndReason::Reported));
+        $this->refused(fn () => Permits::consequence($twice, new EndSessions($this->realm, $this->ana, SessionEndReason::Reported)), 'This permit for "acme.test.twice" ran its consequence "yorvoid.session.end_all" already: as many times as it says it causes it.');
 
         $once = $this->used(new Unbound($this->realm));
         $once->about($this->ana);
-        $once->consequence($this->token($this->ana));
-        $this->refused(fn () => $once->consequence($this->token($this->ana)), 'This permit for "acme.test.unbound" ran its consequence "yorvoid.token.issue" already: as many times as it says it causes it.');
+        Permits::consequence($once, $this->token($this->ana));
+        $this->refused(fn () => Permits::consequence($once, $this->token($this->ana)), 'This permit for "acme.test.unbound" ran its consequence "yorvoid.token.issue" already: as many times as it says it causes it.');
     }
 
     /**
@@ -89,10 +90,10 @@ final class PermitTest extends TestCase
     public function testARefusedConsequenceIsntCounted(): void
     {
         $permit = $this->used(new Unbound($this->realm));
-        $this->refused(fn () => $permit->consequence($this->token($this->ana)), 'A consequence of "acme.test.unbound" is about a principal, but "acme.test.unbound" isn\'t about a principal yet.');
+        $this->refused(fn () => Permits::consequence($permit, $this->token($this->ana)), 'A consequence of "acme.test.unbound" is about a principal, but "acme.test.unbound" isn\'t about a principal yet.');
         $permit->about($this->ana);
 
-        self::assertSame('yorvoid.token.issue', $permit->consequence($this->token($this->ana))->operation);
+        self::assertSame('yorvoid.token.issue', Permits::consequence($permit, $this->token($this->ana))->operation);
     }
 
     /**
@@ -102,7 +103,7 @@ final class PermitTest extends TestCase
     {
         $parent = $this->used(new Twice($this->realm, $this->ana));
         $token = $this->token($this->ana);
-        $child = $parent->consequence($token);
+        $child = Permits::consequence($parent, $token);
         $child->use($token);
 
         $this->refused(fn () => $child->about($this->bob), 'The permit for "yorvoid.token.issue" is about another principal already.');
@@ -122,6 +123,17 @@ final class PermitTest extends TestCase
     private function token(PrincipalId $principal): IssueToken
     {
         return new IssueToken($this->realm, $principal, 'acme.password_reset', Duration::hours(1));
+    }
+
+    /**
+     * What an operation created is named once: its OperationRan names one thing.
+     */
+    public function testWhatItCreatedIsNamedOnce(): void
+    {
+        $permit = $this->used(new Unbound($this->realm));
+        $permit->created(new ResourceRef('role', 'editor'));
+
+        $this->refused(static fn () => $permit->created(new ResourceRef('role', 'writer')), 'The permit for "acme.test.unbound" says what it created already.');
     }
 
     private function refused(\Closure $run, string $message): void

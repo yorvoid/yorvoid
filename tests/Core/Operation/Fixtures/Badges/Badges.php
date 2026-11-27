@@ -32,7 +32,7 @@ final class Badges implements OperationHandler
 
         $record = new RecordBadge($command->realm);
 
-        return $this->record($record, $permit->consequence($record), $origin);
+        return $permit->cause($this->record(...), $record, $origin);
     }
 
     public function scan(ScanBadge $command, Permit $permit, Origin $origin): string

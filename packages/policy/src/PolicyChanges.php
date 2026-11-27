@@ -7,6 +7,7 @@ namespace YorvoID\Policy;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
 use YorvoID\Core\Authorization\RequiresForbids;
+use YorvoID\Core\Authorization\ResourceRef;
 use YorvoID\Core\Event\Origin;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
@@ -95,6 +96,7 @@ final readonly class PolicyChanges implements OperationHandler, RequiresForbids
             $this->store->saveRole($command->realm, $role->name, $role->label);
             $this->store->saveChanges($command->realm, $changes);
             $this->record($command->realm, 'yorvoid.role.create', $permit, $origin, 'role', $role->name, self::present(['label' => $role->label, 'from' => $command->from]));
+            $permit->created(new ResourceRef('role', $role->name));
 
             return $role;
         });

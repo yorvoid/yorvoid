@@ -27,7 +27,7 @@ final class Doors implements OperationHandler
         $this->permits[] = $permit;
         $log = new LogDoor($command->realm);
 
-        return $this->log($log, $permit->consequence($log), $origin);
+        return $permit->cause($this->log(...), $log, $origin);
     }
 
     public function log(LogDoor $command, Permit $permit, Origin $origin): string

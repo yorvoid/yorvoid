@@ -412,7 +412,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(RelationSelectors::class)->tag('yorvoid.selector_matcher');
     $services->set(StoredSessions::class)->args([service(Stores::IDS[SessionStore::class]), service(ClockInterface::class)])->tag('yorvoid.actor_prover');
     $services->alias(Authorization::class, Evaluator::class);
-    $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->arg('$transactions', service(Transactions::class))->public();
+    $services->set(Operations::class)->arg('$handlers', tagged_iterator('yorvoid.operation_handler'))->arg('$transactions', service(Transactions::class))->arg('$events', service('event_dispatcher'))->public();
     $services->set(Policy::class)->public();
     $services->set(PolicyVoter::class)->tag('security.voter');
 

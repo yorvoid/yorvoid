@@ -73,6 +73,7 @@ use YorvoID\Relations\Storage\CachedRelationStore;
 use YorvoID\Symfony\Delegation\DelegationDeclarations;
 use YorvoID\Testing\InMemoryStorage;
 use YorvoID\Tests\Relations\Fixtures\AcmeRelations;
+use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 use YorvoID\Tests\Support\TestPrincipal;
 use YorvoID\Tests\Support\TrustedActors;
@@ -84,6 +85,9 @@ use YorvoID\Tests\Support\TrustedActors;
 final class PolicyWorld
 {
     public readonly InMemoryStorage $memory;
+
+    /** Every event its operations dispatched */
+    public readonly RecordingDispatcher $events;
 
     public readonly MockClock $clock;
 
@@ -174,7 +178,7 @@ final class PolicyWorld
         $this->handlers = $handlers;
         $this->catalogue = OperationCatalogue::of($handlers);
         $this->actionsOf = new Actions($this->catalogue, [new AbilityActions($catalogue)]);
-        $this->operations = new Operations($this->catalogue, $evaluator, $log, $handlers);
+        $this->operations = new Operations($this->catalogue, $evaluator, $log, $handlers, events: $this->events = new RecordingDispatcher());
         $this->policy = new Policy($evaluator, $this->roles);
     }
 

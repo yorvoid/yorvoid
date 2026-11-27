@@ -67,4 +67,18 @@ final class Permits
 
         return $permit;
     }
+
+    /**
+     * The permit a consequence of this one runs on, as cause() gives its handler: for a test of what
+     * the permit allows, or of a handler run on it later.
+     *
+     * @param Command<mixed> $command
+     */
+    public static function consequence(Permit $permit, Command $command, ?PrincipalId $actingAs = null): Permit
+    {
+        $consequence = $permit->cause(static fn (Command $command, Permit $consequence): Permit => $consequence, $command, Origin::system('test'), $actingAs);
+        \assert($consequence instanceof Permit);
+
+        return $consequence;
+    }
 }

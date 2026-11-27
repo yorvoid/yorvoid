@@ -114,6 +114,12 @@
                 ".*return \\$key \\?\\? throw new IntentRefused\\(Refusal::InvalidKey\\);.*"
             ]
         },
+        "AssignCoalesce": {
+            "ignore": [
+                // Equivalent: the memo only spares reading the same class's properties again.
+                "YorvoID\\Core\\Operation\\HoldsSecrets::in"
+            ]
+        },
         "MatchArmRemoval": {
             "ignore": [
                 // Equivalent: without its default arm the match throws, which accepts() takes as a refusal.

@@ -37,8 +37,12 @@ use YorvoID\Core\Log\Event\SecurityLogEntryRecorded;
 use YorvoID\Core\Log\LogEntry;
 use YorvoID\Core\Log\Outcome;
 use YorvoID\Core\Log\SecurityLog;
+use YorvoID\Core\Operation\Event\OperationRan;
 use YorvoID\Core\Operation\OperationCancelled;
 use YorvoID\Core\Operation\OperationCatalogue;
+use YorvoID\Core\Operation\OperationDescription;
+use YorvoID\Core\Operation\Operations;
+use YorvoID\Core\Operation\Operator;
 use YorvoID\Core\Principal\ActivatePrincipal;
 use YorvoID\Core\Principal\CreatePrincipal;
 use YorvoID\Core\Principal\DeletePrincipal;
@@ -58,6 +62,7 @@ use YorvoID\Core\Secret;
 use YorvoID\Core\Storage\Database;
 use YorvoID\Tests\Support\DatabaseTestCase;
 use YorvoID\Tests\Support\Permits;
+use YorvoID\Tests\Support\PermitsEverything;
 use YorvoID\Tests\Support\RecordingDispatcher;
 use YorvoID\Tests\Support\Stack;
 
@@ -549,6 +554,30 @@ final class SessionsTest extends DatabaseTestCase
         // Deleting a suspended principal has no sessions left to end.
         Permits::call($this->principals->delete(...), new DeletePrincipal(new Realm('acme'), $principal->id), new Origin(OriginKind::Web));
         self::assertCount(5, iterator_to_array($this->stack->log->entries(new Realm('acme'), 1), false));
+    }
+
+    /**
+     * The sessions a suspension ends are its consequence: their OperationRan names the suspension's
+     * decision, and runs before the suspension's, both after the commit.
+     */
+    #[DataProvider('implementations')]
+    public function testEndingTheSessionsOfASuspendedPrincipalIsDispatchedUnderTheSuspension(string $implementation): void
+    {
+        $sessions = $this->sessions($implementation);
+        $this->events->listen(PrincipalStatusChanging::class, new EndSessionsOfInactivePrincipals($sessions)(...));
+        $principal = $this->principal();
+        $this->start($sessions, $principal);
+        $catalogue = OperationCatalogue::of([$this->principals, $sessions]);
+        $operations = new Operations($catalogue, new PermitsEverything(offline: [] !== array_filter($catalogue->all(), static fn (OperationDescription $operation): bool => $operation->acceptsOffline)), new SecurityLog($this->stack->log, $this->stack->transactions), [$this->principals, $sessions], transactions: $this->stack->transactions, events: $this->events);
+
+        $operations->run(new SuspendPrincipal(new Realm('acme'), $principal->id), new Operator(), new Origin(OriginKind::Web));
+
+        [$ended, $suspended] = $this->events->of(OperationRan::class);
+        self::assertSame(['yorvoid.session.end_all', 'yorvoid.principal.suspend'], [$ended->operation, $suspended->operation]);
+        self::assertSame($suspended->decisionId, $ended->parent);
+        self::assertInstanceOf(EndSessions::class, $ended->command);
+        self::assertTrue($principal->id->equals($suspended->about ?? throw new \LogicException('About nobody.')));
+        self::assertCount(2, $this->events->of(OperationRan::class));
     }
 
     #[DataProvider('implementations')]

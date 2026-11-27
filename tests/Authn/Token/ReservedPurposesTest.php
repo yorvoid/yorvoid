@@ -127,7 +127,7 @@ final class ReservedPurposesTest extends DatabaseTestCase
 
             foreach ($parents as $parent) {
                 $owns = \in_array($parent::class, self::OWNED_BY[$key] ?? [], true);
-                $run = fn (): IssuedToken => $this->tokens->issue($command, $this->because($parent)->consequence($command), new Origin(OriginKind::Web));
+                $run = fn (): IssuedToken => $this->tokens->issue($command, Permits::consequence($this->because($parent), $command), new Origin(OriginKind::Web));
 
                 if ($owns) {
                     self::assertSame($purpose, $run()->token->purpose, $purpose.' by '.$parent::class);
@@ -148,7 +148,7 @@ final class ReservedPurposesTest extends DatabaseTestCase
         foreach (['yorvoid.invitation', 'yorvoid.recovery_link', 'yorvoid.email_verification', 'yorvoid.not_me', SecurityNotifications::notMePurpose(CredentialId::fromString((string) new UuidV7()))] as $purpose) {
             $command = new RevokeTokens($this->realm, $this->ana->id, $purpose);
             $this->assertRefused(fn () => Permits::call($this->tokens->revoke(...), $command, new Origin(OriginKind::Web), $this->ana->id), 'revoke', $purpose);
-            $run = fn (): int => $this->tokens->revoke($command, $this->because(new WithdrawInvitation($this->realm, $this->ana->id))->consequence($command), new Origin(OriginKind::Web));
+            $run = fn (): int => $this->tokens->revoke($command, Permits::consequence($this->because(new WithdrawInvitation($this->realm, $this->ana->id)), $command), new Origin(OriginKind::Web));
 
             if ('yorvoid.invitation' === $purpose) {
                 self::assertSame(0, $run());
@@ -193,7 +193,7 @@ final class ReservedPurposesTest extends DatabaseTestCase
                 $command = new IssueToken($this->realm, $whom, $purpose, Duration::days(1));
 
                 try {
-                    $this->tokens->issue($command, $event->permit->consequence($command), $event->origin);
+                    $this->tokens->issue($command, Permits::consequence($event->permit, $command), $event->origin);
                     $outcomes[] = 'issued';
                 } catch (IntegratorError|NotPermitted $refused) {
                     $outcomes[] = strtok($refused->getMessage(), "\n");
@@ -212,7 +212,7 @@ final class ReservedPurposesTest extends DatabaseTestCase
         ], $outcomes);
         // And a recovery link isn't the address change's to issue, once or ever.
         $command = new IssueToken($this->realm, $this->ana->id, 'yorvoid.recovery_link', Duration::days(1));
-        $this->assertRefused(fn (): IssuedToken => $this->tokens->issue($command, $this->because(new SetIdentifier($this->realm, $this->ana->id, IdentifierKind::Email, 'ana@example.com'))->consequence($command), new Origin(OriginKind::Web)), 'issue', 'yorvoid.recovery_link');
+        $this->assertRefused(fn (): IssuedToken => $this->tokens->issue($command, Permits::consequence($this->because(new SetIdentifier($this->realm, $this->ana->id, IdentifierKind::Email, 'ana@example.com')), $command), new Origin(OriginKind::Web)), 'issue', 'yorvoid.recovery_link');
     }
 
     /**
@@ -228,7 +228,7 @@ final class ReservedPurposesTest extends DatabaseTestCase
                 $command = new IssueToken($this->realm, $whom, 'yorvoid.email_verification', Duration::days(1));
 
                 try {
-                    $event->permit->consequence($command);
+                    Permits::consequence($event->permit, $command);
                     $outcomes[] = 'permitted';
                 } catch (IntegratorError $refused) {
                     $outcomes[] = strtok($refused->getMessage(), "\n");
@@ -254,7 +254,7 @@ final class ReservedPurposesTest extends DatabaseTestCase
         $before = \count(iterator_to_array($this->stack->log->entries($this->realm, 1), false));
 
         try {
-            $this->stack->transactions->run(fn (): IssuedToken => $this->tokens->issue($command, $parent->consequence($command), new Origin(OriginKind::Web)));
+            $this->stack->transactions->run(fn (): IssuedToken => $this->tokens->issue($command, Permits::consequence($parent, $command), new Origin(OriginKind::Web)));
             self::fail('Not refused.');
         } catch (NotPermitted) {
         }
@@ -330,7 +330,7 @@ final class ReservedPurposesTest extends DatabaseTestCase
 
         return null === $owner
             ? Permits::call($this->tokens->issue(...), $command, new Origin(OriginKind::Web), $this->ana->id)
-            : $this->tokens->issue($command, $this->because($owner)->consequence($command), new Origin(OriginKind::Web));
+            : $this->tokens->issue($command, Permits::consequence($this->because($owner), $command), new Origin(OriginKind::Web));
     }
 
     /**
